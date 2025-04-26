@@ -6,7 +6,31 @@ export async function POST() {
     const supabase = createServerClient()
 
     // Create projects table
-    const { error: projectsError } = await supabase.rpc("create_projects_table")
+    const { error: projectsError } = await supabase
+      .from("projects")
+      .select("*", { count: "exact", head: true })
+      .then(async (result) => {
+        // If table doesn't exist, create it
+        if (result.error && result.error.message.includes("does not exist")) {
+          return await supabase.sql(`
+            CREATE TABLE IF NOT EXISTS projects (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              title TEXT NOT NULL,
+              category TEXT NOT NULL,
+              type TEXT NOT NULL,
+              role TEXT NOT NULL,
+              image TEXT NOT NULL,
+              video_url TEXT,
+              description TEXT,
+              special_notes TEXT,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+          `)
+        }
+        return result
+      })
+
     if (projectsError) {
       return NextResponse.json(
         { success: false, message: `Error creating projects table: ${projectsError.message}` },
@@ -15,7 +39,27 @@ export async function POST() {
     }
 
     // Create BTS images table
-    const { error: btsError } = await supabase.rpc("create_bts_images_table")
+    const { error: btsError } = await supabase
+      .from("bts_images")
+      .select("*", { count: "exact", head: true })
+      .then(async (result) => {
+        // If table doesn't exist, create it
+        if (result.error && result.error.message.includes("does not exist")) {
+          return await supabase.sql(`
+            CREATE TABLE IF NOT EXISTS bts_images (
+              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+              project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+              image_url TEXT NOT NULL,
+              caption TEXT,
+              size TEXT,
+              aspect_ratio TEXT,
+              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            );
+          `)
+        }
+        return result
+      })
+
     if (btsError) {
       return NextResponse.json(
         { success: false, message: `Error creating BTS images table: ${btsError.message}` },
