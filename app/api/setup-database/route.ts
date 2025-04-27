@@ -5,75 +5,30 @@ export async function POST() {
   try {
     const supabase = createServerClient()
 
-    // Create projects table
-    const { error: projectsError } = await supabase
-      .from("projects")
-      .select("*", { count: "exact", head: true })
-      .then(async (result) => {
-        // If table doesn't exist, create it
-        if (result.error && result.error.message.includes("does not exist")) {
-          return await supabase.sql(`
-            CREATE TABLE IF NOT EXISTS projects (
-              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-              title TEXT NOT NULL,
-              category TEXT NOT NULL,
-              type TEXT NOT NULL,
-              role TEXT NOT NULL,
-              image TEXT NOT NULL,
-              video_url TEXT,
-              description TEXT,
-              special_notes TEXT,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-              updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            );
-          `)
-        }
-        return result
-      })
+    // Check if tables already exist by trying to query them
+    const { error: checkError } = await supabase.from("projects").select("count(*)", { count: "exact", head: true })
 
-    if (projectsError) {
-      return NextResponse.json(
-        { success: false, message: `Error creating projects table: ${projectsError.message}` },
-        { status: 500 },
-      )
+    // If there's no error, tables might already exist
+    if (!checkError) {
+      return NextResponse.json({ success: true, message: "Database tables already exist" })
     }
 
-    // Create BTS images table
-    const { error: btsError } = await supabase
-      .from("bts_images")
-      .select("*", { count: "exact", head: true })
-      .then(async (result) => {
-        // If table doesn't exist, create it
-        if (result.error && result.error.message.includes("does not exist")) {
-          return await supabase.sql(`
-            CREATE TABLE IF NOT EXISTS bts_images (
-              id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-              project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
-              image_url TEXT NOT NULL,
-              caption TEXT,
-              size TEXT,
-              aspect_ratio TEXT,
-              created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-            );
-          `)
-        }
-        return result
-      })
-
-    if (btsError) {
-      return NextResponse.json(
-        { success: false, message: `Error creating BTS images table: ${btsError.message}` },
-        { status: 500 },
-      )
-    }
-
-    return NextResponse.json({ success: true, message: "Database tables created successfully" })
-  } catch (error) {
-    console.error("Error setting up database:", error)
+    // If we get here, tables don't exist, so we need to provide SQL for manual creation
     return NextResponse.json(
       {
         success: false,
-        message: `Error setting up database: ${error instanceof Error ? error.message : String(error)}`,
+        message: "Please create the tables manually using the SQL provided in the setup page",
+        needsManualSetup: true,
+      },
+      { status: 200 }, // Using 200 status since this is an expected path
+    )
+  } catch (error) {
+    console.error("Error checking database:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        message: `Error checking database: ${error instanceof Error ? error.message : String(error)}`,
+        needsManualSetup: true,
       },
       { status: 500 },
     )

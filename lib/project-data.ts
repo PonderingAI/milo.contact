@@ -26,20 +26,20 @@ export interface BtsImage {
   created_at?: string
 }
 
-// Check if database is set up
+// Update the isDatabaseSetup function to actually check the database instead of always returning false
 export async function isDatabaseSetup() {
   try {
     const supabase = createServerClient()
 
-    // Try to query the projects table
-    const { data, error } = await supabase.from("projects").select("count(*)", { count: "exact", head: true })
+    // Try a simple query to check if the table exists
+    const { error } = await supabase.from("projects").select("id").limit(1)
 
-    // If there's a specific error about the relation not existing, the table doesn't exist
-    if (error && error.message.includes('relation "public.projects" does not exist')) {
+    // If there's an error about the relation not existing, the table doesn't exist
+    if (error && error.message && error.message.includes('relation "public.projects" does not exist')) {
       return false
     }
 
-    // If there's some other error, we'll assume the database is not properly set up
+    // If there's some other error, log it and assume the database is not set up
     if (error) {
       console.error("Error checking database setup:", error)
       return false
@@ -47,7 +47,7 @@ export async function isDatabaseSetup() {
 
     return true
   } catch (error) {
-    console.error("Error checking database setup:", error)
+    console.error("Error in isDatabaseSetup:", error)
     return false
   }
 }

@@ -2,21 +2,48 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { ArrowLeft } from "lucide-react"
+import { ArrowLeft, Copy, Check, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export default function SetupDatabasePage() {
   const [isCreating, setIsCreating] = useState(false)
-  const [status, setStatus] = useState<{ success: boolean; message: string } | null>(null)
+  const [status, setStatus] = useState<{ success: boolean; message: string; needsManualSetup?: boolean } | null>(null)
   const [seedingStatus, setSeedingStatus] = useState<{ success: boolean; message: string } | null>(null)
   const [storageStatus, setStorageStatus] = useState<{ success: boolean; message: string } | null>(null)
+  const [copied, setCopied] = useState(false)
+
+  const createTablesSql = `-- Create projects table
+CREATE TABLE IF NOT EXISTS projects (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  category TEXT NOT NULL,
+  type TEXT NOT NULL,
+  role TEXT NOT NULL,
+  image TEXT NOT NULL,
+  video_url TEXT,
+  description TEXT,
+  special_notes TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create BTS images table
+CREATE TABLE IF NOT EXISTS bts_images (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  image_url TEXT NOT NULL,
+  caption TEXT,
+  size TEXT,
+  aspect_ratio TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);`
 
   const createTables = async () => {
     setIsCreating(true)
     setStatus(null)
 
     try {
-      // Call our API route to create tables
+      // Call our API route to check if tables exist
       const response = await fetch("/api/setup-database", {
         method: "POST",
         headers: {
@@ -26,19 +53,17 @@ export default function SetupDatabasePage() {
 
       const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to create database tables")
-      }
-
       setStatus({
-        success: true,
-        message: data.message || "Database tables created successfully!",
+        success: data.success,
+        message: data.message,
+        needsManualSetup: data.needsManualSetup,
       })
     } catch (error) {
       console.error("Error setting up database:", error)
       setStatus({
         success: false,
         message: `Error setting up database: ${error instanceof Error ? error.message : String(error)}`,
+        needsManualSetup: true,
       })
     } finally {
       setIsCreating(false)
@@ -112,6 +137,12 @@ export default function SetupDatabasePage() {
     }
   }
 
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(createTablesSql)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="container mx-auto px-4 py-24">
@@ -128,25 +159,64 @@ export default function SetupDatabasePage() {
           <div className="bg-gray-900 rounded-lg p-8 mb-8">
             <h2 className="text-2xl font-serif mb-4">Step 1: Create Database Tables</h2>
             <p className="mb-6 text-gray-300">
-              This will create the necessary tables in your Supabase database for storing projects and BTS images.
+              This will check if the necessary tables exist in your Supabase database for storing projects and BTS
+              images.
             </p>
 
             <Button onClick={createTables} disabled={isCreating} className="bg-white text-black hover:bg-gray-200 mb-4">
-              {isCreating ? "Creating Tables..." : "Create Tables"}
+              {isCreating ? "Checking Tables..." : "Check Tables"}
             </Button>
 
             {status && (
               <div
                 className={`mt-4 p-4 rounded-md ${
-                  status.success ? "bg-green-900/50 text-green-200" : "bg-red-900/50 text-red-200"
+                  status.success ? "bg-green-900/50 text-green-200" : "bg-amber-900/50 text-amber-200"
                 }`}
               >
                 {status.message}
               </div>
             )}
 
+            {status && status.needsManualSetup && (
+              <div className="mt-6 p-6 bg-gray-800 rounded-lg">
+                <h3 className="text-xl font-medium mb-4">Manual Table Creation</h3>
+                <p className="mb-4 text-gray-300">
+                  You'll need to create the tables manually using the Supabase SQL Editor. Copy the SQL below and
+                  execute it in your Supabase dashboard:
+                </p>
+
+                <div className="relative">
+                  <pre className="bg-gray-950 p-4 rounded-md overflow-x-auto text-sm text-gray-300 mb-4">
+                    {createTablesSql}
+                  </pre>
+                  <Button
+                    onClick={copyToClipboard}
+                    className="absolute top-2 right-2 h-8 w-8 p-0"
+                    variant="ghost"
+                    title="Copy to clipboard"
+                  >
+                    {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+
+                <a
+                  href="https://supabase.com/dashboard/project/_/sql"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 text-blue-400 hover:underline mb-4"
+                >
+                  <ExternalLink className="h-4 w-4" /> Open Supabase SQL Editor
+                </a>
+
+                <p className="text-sm text-gray-400">
+                  After executing the SQL, come back here and try the "Check Tables" button again to verify they were
+                  created successfully.
+                </p>
+              </div>
+            )}
+
             <div className="mt-6 text-sm text-gray-400">
-              <p>This will create the following tables:</p>
+              <p>This will check for the following tables:</p>
               <ul className="list-disc pl-5 mt-2 space-y-1">
                 <li>projects - For storing project information</li>
                 <li>bts_images - For storing behind-the-scenes images</li>

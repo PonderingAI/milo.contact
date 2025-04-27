@@ -46,7 +46,7 @@ export default function AdminLoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-black">
       <div className="w-full max-w-md p-8 bg-gray-900 rounded-lg shadow-lg">
-        <h1 className="text-3xl font-serif mb-6 text-center">Admin Login</h1>
+        <h1 className="text-3xl font-serif mb-6 text-center text-white">Admin Login</h1>
 
         {error && (
           <Alert variant="destructive" className="mb-6">
@@ -66,7 +66,7 @@ export default function AdminLoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
-              className="bg-gray-800 border-gray-700"
+              className="bg-gray-800 border-gray-700 text-white"
             />
           </div>
 
@@ -80,7 +80,7 @@ export default function AdminLoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              className="bg-gray-800 border-gray-700"
+              className="bg-gray-800 border-gray-700 text-white"
             />
           </div>
 

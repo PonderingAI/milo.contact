@@ -31,9 +31,11 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
   return (
     <Alert variant="destructive" className="mb-8 bg-red-900/20 border-red-800">
       <AlertCircle className="h-4 w-4" />
-      <AlertTitle>Database Not Set Up</AlertTitle>
+      <AlertTitle>Database Setup Required</AlertTitle>
       <AlertDescription className="flex flex-col md:flex-row md:items-center gap-4">
-        <span>Your Supabase database tables haven't been created yet. The site is currently using mock data.</span>
+        <span>
+          Your portfolio is currently using mock data. To use your own content, you need to set up the database.
+        </span>
         <div className="flex gap-2">
           <Button asChild variant="outline" className="border-red-400 text-red-100 hover:bg-red-900/30">
             <Link href="/setup-database">Set Up Database</Link>

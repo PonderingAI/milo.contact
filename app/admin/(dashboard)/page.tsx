@@ -1,17 +1,10 @@
 import Link from "next/link"
-import { createServerClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { PlusCircle, ImageIcon, Film, Settings } from "lucide-react"
 
-export default async function AdminDashboard() {
-  const supabase = createServerClient()
-
-  // Get counts
-  const { count: projectCount } = await supabase.from("projects").select("*", { count: "exact", head: true })
-
-  const { count: btsImageCount } = await supabase.from("bts_images").select("*", { count: "exact", head: true })
-
+// Static admin dashboard with no data fetching
+export default function AdminDashboard() {
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
@@ -30,7 +23,7 @@ export default async function AdminDashboard() {
             <Film className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{projectCount || 0}</div>
+            <div className="text-2xl font-bold">0</div>
             <p className="text-xs text-muted-foreground">Across all categories</p>
           </CardContent>
         </Card>
@@ -41,7 +34,7 @@ export default async function AdminDashboard() {
             <ImageIcon className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{btsImageCount || 0}</div>
+            <div className="text-2xl font-bold">0</div>
             <p className="text-xs text-muted-foreground">Behind the scenes photos</p>
           </CardContent>
         </Card>

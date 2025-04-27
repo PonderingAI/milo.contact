@@ -10,8 +10,8 @@ export async function POST() {
 
     if (checkError) {
       return NextResponse.json(
-        { success: false, message: `Tables not created yet: ${checkError.message}` },
-        { status: 500 },
+        { success: false, message: "Tables not created yet. Please create tables first." },
+        { status: 400 },
       )
     }
 
