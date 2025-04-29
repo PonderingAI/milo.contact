@@ -35,11 +35,11 @@ export default function RootLayout({
             httpEquiv="Content-Security-Policy"
             content={`
               default-src 'self'; 
-              script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev;
+              script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev https://clerk.milo.contact https://*.clerk.com;
               style-src 'self' 'unsafe-inline'; 
-              frame-src https://*.clerk.accounts.dev;
+              frame-src https://*.clerk.accounts.dev https://clerk.milo.contact;
               img-src 'self' data: blob: https://*.cloudflareinsights.com https://img.clerk.com;
-              connect-src 'self' https://*.clerk.accounts.dev https://api.clerk.com https://*.supabase.co https://*.cloudflareinsights.com;
+              connect-src 'self' https://*.clerk.accounts.dev https://api.clerk.com https://clerk.milo.contact https://*.supabase.co https://*.cloudflareinsights.com;
               font-src 'self';
             `
               .replace(/\s+/g, " ")
