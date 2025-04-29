@@ -1,5 +1,4 @@
 import { clerkClient } from "@clerk/nextjs"
-import { auth } from "@clerk/nextjs/server"
 
 export type UserRole = {
   id: string
@@ -88,21 +87,4 @@ export async function removeRole(userId: string, roleName: string): Promise<bool
     console.error("Error removing role:", error)
     return false
   }
-}
-
-/**
- * Get the current authenticated user ID
- */
-export async function getCurrentUserId(): Promise<string | null> {
-  const { userId } = auth()
-  return userId
-}
-
-/**
- * Check if the current user is an admin
- */
-export async function isCurrentUserAdmin(): Promise<boolean> {
-  const userId = await getCurrentUserId()
-  if (!userId) return false
-  return isAdmin(userId)
 }
