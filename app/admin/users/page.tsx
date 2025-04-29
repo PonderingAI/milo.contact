@@ -5,7 +5,6 @@ import { useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Shield, UserCheck, UserX } from "lucide-react"
-import { assignRole, removeRole } from "@/lib/auth-utils"
 
 interface ClerkUser {
   id: string
@@ -63,10 +62,21 @@ export default function UsersPage() {
   async function toggleAdminRole(userId: string, hasAdminRole: boolean) {
     setActionInProgress(userId)
     try {
-      if (hasAdminRole) {
-        await removeRole(userId, "admin")
-      } else {
-        await assignRole(userId, "admin")
+      // Call API to toggle admin role
+      const response = await fetch("/api/admin/toggle-role", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          userId,
+          role: "admin",
+          action: hasAdminRole ? "remove" : "add",
+        }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update role")
       }
 
       // Update the local state
