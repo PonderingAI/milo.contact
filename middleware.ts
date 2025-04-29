@@ -19,6 +19,9 @@ const isPublicRoute = createRouteMatcher([
 // Define admin routes that require admin role
 const isAdminRoute = createRouteMatcher(["/admin(.*)"])
 
+// Define special admin routes that require authentication but not admin role
+const isSpecialAdminRoute = createRouteMatcher(["/admin/bootstrap", "/api/bootstrap-admin"])
+
 export default clerkMiddleware(async (auth, req) => {
   const { userId } = auth
 
@@ -38,6 +41,11 @@ export default clerkMiddleware(async (auth, req) => {
 
     // Protect other non-public routes
     await auth.protect()
+    return NextResponse.next()
+  }
+
+  // For special admin routes, only require authentication (not admin role)
+  if (isSpecialAdminRoute(req)) {
     return NextResponse.next()
   }
 
