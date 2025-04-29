@@ -9,20 +9,23 @@ import { Loader2 } from "lucide-react"
 
 export default function AdminCheck({ children }: { children: React.ReactNode }) {
   const { user, isLoaded, isSignedIn } = useUser()
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null)
+  const [hasAccess, setHasAccess] = useState<boolean | null>(null)
   const [isChecking, setIsChecking] = useState(true)
   const router = useRouter()
 
   useEffect(() => {
     if (isLoaded && isSignedIn && user) {
-      // Check if user has admin role
+      // Check if user has admin role or is a super admin
       const roles = (user.publicMetadata?.roles as string[]) || []
-      const hasAdminRole = roles.includes("admin")
-      setIsAdmin(hasAdminRole)
+      const isAdmin = roles.includes("admin")
+      const isSuperAdmin = user.publicMetadata?.superAdmin === true
+
+      const userHasAccess = isAdmin || isSuperAdmin
+      setHasAccess(userHasAccess)
       setIsChecking(false)
 
-      // Redirect if not admin
-      if (!hasAdminRole) {
+      // Redirect if no access
+      if (!userHasAccess) {
         router.push("/admin/permission-denied")
       }
     } else if (isLoaded && !isSignedIn) {
@@ -40,7 +43,7 @@ export default function AdminCheck({ children }: { children: React.ReactNode }) 
     )
   }
 
-  if (!isSignedIn || !isAdmin) {
+  if (!isSignedIn || !hasAccess) {
     return null // Will redirect in useEffect
   }
 
