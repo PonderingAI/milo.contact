@@ -18,7 +18,7 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "Milo Presedo | Film Production & Photography",
   description: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-    generator: 'v0.dev'
+  generator: "v0.dev",
 }
 
 export default function RootLayout({
