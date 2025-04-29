@@ -1,6 +1,6 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
-import { clerkClient } from "@clerk/nextjs"
+import { NextResponse } from "next/server"
+import { auth, clerkClient } from "@clerk/nextjs/server"
+import type { NextRequest } from "next/server"
 
 export async function POST(request: NextRequest) {
   try {

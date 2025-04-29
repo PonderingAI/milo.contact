@@ -1,4 +1,4 @@
-import { clerkClient } from "@clerk/nextjs"
+import { clerkClient } from "@clerk/nextjs/server"
 
 export type UserRole = {
   id: string

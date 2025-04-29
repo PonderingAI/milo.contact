@@ -13,26 +13,20 @@ export default function AdminCheck({ children }: { children: React.ReactNode }) 
   const router = useRouter()
 
   useEffect(() => {
-    async function checkAdminStatus() {
-      if (isLoaded && isSignedIn && user) {
-        try {
-          // Check if the user has the admin role in their metadata
-          const roles = (user.publicMetadata?.roles as string[]) || []
-          const adminStatus = roles.includes("admin")
-          setIsAdmin(adminStatus)
-        } catch (error) {
-          console.error("Error checking admin status:", error)
-          setIsAdmin(false)
-        } finally {
-          setIsChecking(false)
-        }
-      } else if (isLoaded && !isSignedIn) {
-        router.push(`/sign-in?redirect_url=${encodeURIComponent("/admin")}`)
-        setIsChecking(false)
-      }
-    }
+    if (isLoaded && isSignedIn && user) {
+      // Check if the user has the admin role in their metadata
+      const roles = (user.publicMetadata?.roles as string[]) || []
+      const hasAdminRole = roles.includes("admin")
+      setIsAdmin(hasAdminRole)
+      setIsChecking(false)
 
-    checkAdminStatus()
+      if (!hasAdminRole) {
+        router.push("/admin/permission-denied")
+      }
+    } else if (isLoaded && !isSignedIn) {
+      router.push(`/sign-in?redirect_url=${encodeURIComponent("/admin")}`)
+      setIsChecking(false)
+    }
   }, [isLoaded, isSignedIn, user, router])
 
   if (!isLoaded || isChecking) {
@@ -43,13 +37,8 @@ export default function AdminCheck({ children }: { children: React.ReactNode }) 
     )
   }
 
-  if (!isSignedIn) {
+  if (!isSignedIn || !isAdmin) {
     return null // Will redirect in useEffect
-  }
-
-  if (isAdmin === false) {
-    router.push("/admin/permission-denied")
-    return null
   }
 
   return <>{children}</>
