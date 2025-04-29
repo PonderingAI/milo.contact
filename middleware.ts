@@ -10,6 +10,8 @@ const publicRoutes = [
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhook",
+  "/bootstrap-admin",
+  "/api/bootstrap-admin",
 ]
 
 export default authMiddleware({

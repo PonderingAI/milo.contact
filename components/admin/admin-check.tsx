@@ -27,7 +27,7 @@ export default function AdminCheck({ children }: { children: React.ReactNode }) 
           setIsChecking(false)
         }
       } else if (isLoaded && !isSignedIn) {
-        router.push("/sign-in?redirect_url=/admin")
+        router.push(`/sign-in?redirect_url=${encodeURIComponent("/admin")}`)
         setIsChecking(false)
       }
     }

@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
-import { assignRole } from "@/lib/auth-utils"
+import { clerkClient } from "@clerk/nextjs"
 
 export async function POST(request: NextRequest) {
   try {
@@ -25,12 +25,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid bootstrap secret" }, { status: 403 })
     }
 
-    // Assign the admin role to the user
-    const success = await assignRole(userId, "admin")
+    // Get the user
+    const user = await clerkClient.users.getUser(userId)
 
-    if (!success) {
-      return NextResponse.json({ error: "Failed to assign admin role" }, { status: 500 })
+    // Check if user already has admin role
+    const currentRoles = (user.publicMetadata.roles as string[]) || []
+
+    if (currentRoles.includes("admin")) {
+      return NextResponse.json({ message: "User already has admin role" })
     }
+
+    // Add admin role to user
+    await clerkClient.users.updateUser(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        roles: [...currentRoles, "admin"],
+      },
+    })
 
     return NextResponse.json({ message: "Admin role assigned successfully" })
   } catch (error) {
