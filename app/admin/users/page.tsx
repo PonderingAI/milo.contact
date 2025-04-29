@@ -1,60 +1,63 @@
-import { auth, currentUser } from "@clerk/nextjs/server"
-import { Card, CardContent } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+"use client"
 
-export default async function UsersPage() {
-  const { userId } = auth()
-  const user = await currentUser()
+import { useUser } from "@clerk/nextjs"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
 
-  if (!userId || !user) {
+export default function UsersPage() {
+  const { isLoaded, isSignedIn, user } = useUser()
+  const router = useRouter()
+
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.push("/sign-in?redirect_url=/admin/users")
+    }
+  }, [isLoaded, isSignedIn, router])
+
+  if (!isLoaded) {
     return (
-      <div className="text-center py-12">
-        <h1 className="text-3xl font-serif mb-4">User Management</h1>
-        <p className="text-red-500">You must be signed in to view this page.</p>
+      <div className="flex items-center justify-center min-h-screen">
+        <p>Loading...</p>
       </div>
     )
   }
 
+  if (!isSignedIn) {
+    return null // Will redirect in useEffect
+  }
+
   return (
-    <div>
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-serif">User Management</h1>
+    <div className="container mx-auto p-6">
+      <h1 className="text-3xl font-bold mb-6">User Management</h1>
+
+      <div className="bg-gray-800 p-6 rounded-lg mb-8">
+        <h2 className="text-xl font-bold mb-4">Current User</h2>
+        <div className="space-y-2">
+          <p>
+            <strong>Email:</strong> {user.emailAddresses[0].emailAddress}
+          </p>
+          <p>
+            <strong>User ID:</strong> {user.id}
+          </p>
+          <p>
+            <strong>Created:</strong> {new Date(user.createdAt).toLocaleDateString()}
+          </p>
+        </div>
       </div>
 
-      <div className="space-y-6">
-        <Card className="overflow-hidden">
-          <CardContent className="p-6">
-            <div className="flex flex-col md:flex-row justify-between gap-4">
-              <div>
-                <h3 className="font-medium text-lg">{user.emailAddresses[0]?.emailAddress}</h3>
-                <p className="text-sm text-gray-400">User ID: {user.id}</p>
-                <p className="text-sm text-gray-400">Created: {new Date(user.createdAt).toLocaleDateString()}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm">
-                  Current User
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <div className="bg-gray-800 p-6 rounded-lg">
-          <h2 className="text-xl font-medium mb-4">User Management</h2>
-          <p>
-            This page currently shows only your user account. To manage users, you'll need to use the Clerk Dashboard.
-          </p>
-          <div className="mt-4">
-            <a
-              href="https://dashboard.clerk.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 inline-block"
-            >
-              Open Clerk Dashboard
-            </a>
-          </div>
-        </div>
+      <div className="bg-gray-800 p-6 rounded-lg">
+        <h2 className="text-xl font-bold mb-4">User Management</h2>
+        <p className="mb-4">
+          To manage users, please use the Clerk Dashboard. Clerk provides a comprehensive user management interface.
+        </p>
+        <a
+          href="https://dashboard.clerk.com"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 inline-block"
+        >
+          Open Clerk Dashboard
+        </a>
       </div>
     </div>
   )

@@ -1,10 +1,15 @@
-import { createServerClient } from "@/lib/supabase"
 import { assignRole } from "@/lib/auth-utils"
 import { NextResponse } from "next/server"
+import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
   try {
-    const supabase = createServerClient()
+    const { userId: currentUserId } = auth()
+
+    // Check if the current user is authenticated
+    if (!currentUserId) {
+      return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 })
+    }
 
     // Get the request body
     const body = await request.json()

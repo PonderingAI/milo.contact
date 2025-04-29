@@ -1,4 +1,5 @@
-import { createServerClient } from "./supabase"
+import { clerkClient } from "@clerk/nextjs"
+import { auth } from "@clerk/nextjs/server"
 
 export interface UserRole {
   id: string
@@ -6,32 +7,22 @@ export interface UserRole {
   description: string
 }
 
-// Get all roles for a user
+// Get all roles for a user using Clerk's metadata
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
   try {
-    const supabase = createServerClient()
+    const user = await clerkClient.users.getUser(userId)
 
-    const { data, error } = await supabase
-      .from("user_roles")
-      .select(`
-        role_id,
-        roles (
-          id,
-          name,
-          description
-        )
-      `)
-      .eq("user_id", userId)
+    // Get roles from user's public metadata
+    const roles = (user.publicMetadata.roles as string[]) || []
 
-    if (error) {
-      console.error("Error fetching user roles:", error)
-      return []
-    }
-
-    // Extract the roles from the nested structure
-    return data.map((item) => item.roles) || []
+    // Convert to UserRole objects
+    return roles.map((role) => ({
+      id: role,
+      name: role,
+      description: `${role} role`,
+    }))
   } catch (error) {
-    console.error("Error in getUserRoles:", error)
+    console.error("Error fetching user roles:", error)
     return []
   }
 }
@@ -39,31 +30,11 @@ export async function getUserRoles(userId: string): Promise<UserRole[]> {
 // Check if a user has a specific role
 export async function hasRole(userId: string, roleName: string): Promise<boolean> {
   try {
-    const supabase = createServerClient()
-
-    const { data, error } = await supabase
-      .from("user_roles")
-      .select(`
-        roles!inner (
-          name
-        )
-      `)
-      .eq("user_id", userId)
-      .eq("roles.name", roleName)
-      .single()
-
-    if (error) {
-      if (error.code === "PGRST116") {
-        // No matching row found - user doesn't have this role
-        return false
-      }
-      console.error("Error checking user role:", error)
-      return false
-    }
-
-    return !!data
+    const user = await clerkClient.users.getUser(userId)
+    const roles = (user.publicMetadata.roles as string[]) || []
+    return roles.includes(roleName)
   } catch (error) {
-    console.error("Error in hasRole:", error)
+    console.error("Error checking user role:", error)
     return false
   }
 }
@@ -76,34 +47,28 @@ export async function isAdmin(userId: string): Promise<boolean> {
 // Assign a role to a user
 export async function assignRole(userId: string, roleName: string): Promise<boolean> {
   try {
-    const supabase = createServerClient()
+    const user = await clerkClient.users.getUser(userId)
+    const currentRoles = (user.publicMetadata.roles as string[]) || []
 
-    // First, get the role ID
-    const { data: roleData, error: roleError } = await supabase.from("roles").select("id").eq("name", roleName).single()
-
-    if (roleError || !roleData) {
-      console.error("Error finding role:", roleError)
-      return false
+    // If user already has this role, return true
+    if (currentRoles.includes(roleName)) {
+      return true
     }
 
-    // Then assign the role to the user
-    const { error } = await supabase
-      .from("user_roles")
-      .insert({
-        user_id: userId,
-        role_id: roleData.id,
-      })
-      .onConflict(["user_id", "role_id"])
-      .ignore() // If the role is already assigned, just ignore
+    // Add the new role
+    const updatedRoles = [...currentRoles, roleName]
 
-    if (error) {
-      console.error("Error assigning role:", error)
-      return false
-    }
+    // Update the user's metadata
+    await clerkClient.users.updateUser(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        roles: updatedRoles,
+      },
+    })
 
     return true
   } catch (error) {
-    console.error("Error in assignRole:", error)
+    console.error("Error assigning role:", error)
     return false
   }
 }
@@ -111,27 +76,41 @@ export async function assignRole(userId: string, roleName: string): Promise<bool
 // Remove a role from a user
 export async function removeRole(userId: string, roleName: string): Promise<boolean> {
   try {
-    const supabase = createServerClient()
+    const user = await clerkClient.users.getUser(userId)
+    const currentRoles = (user.publicMetadata.roles as string[]) || []
 
-    // First, get the role ID
-    const { data: roleData, error: roleError } = await supabase.from("roles").select("id").eq("name", roleName).single()
-
-    if (roleError || !roleData) {
-      console.error("Error finding role:", roleError)
-      return false
+    // If user doesn't have this role, return true
+    if (!currentRoles.includes(roleName)) {
+      return true
     }
 
-    // Then remove the role from the user
-    const { error } = await supabase.from("user_roles").delete().eq("user_id", userId).eq("role_id", roleData.id)
+    // Remove the role
+    const updatedRoles = currentRoles.filter((role) => role !== roleName)
 
-    if (error) {
-      console.error("Error removing role:", error)
-      return false
-    }
+    // Update the user's metadata
+    await clerkClient.users.updateUser(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        roles: updatedRoles,
+      },
+    })
 
     return true
   } catch (error) {
-    console.error("Error in removeRole:", error)
+    console.error("Error removing role:", error)
     return false
   }
+}
+
+// Get the current user's ID
+export async function getCurrentUserId(): Promise<string | null> {
+  const { userId } = auth()
+  return userId
+}
+
+// Check if the current user is an admin
+export async function isCurrentUserAdmin(): Promise<boolean> {
+  const userId = await getCurrentUserId()
+  if (!userId) return false
+  return isAdmin(userId)
 }
