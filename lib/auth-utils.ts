@@ -1,13 +1,14 @@
-import { clerkClient } from "@clerk/nextjs/server"
-
 export type UserRole = {
   id: string
   name: string
   description: string
 }
 
+import { auth } from "@clerk/nextjs/server"
+import { clerkClient } from "@clerk/nextjs/server"
+
 /**
- * Check if a user has a specific role
+ * Checks if a user has a specific role
  */
 export async function hasRole(userId: string, roleName: string): Promise<boolean> {
   try {
@@ -21,21 +22,21 @@ export async function hasRole(userId: string, roleName: string): Promise<boolean
 }
 
 /**
- * Check if a user is an admin
+ * Checks if a user is an admin
  */
 export async function isAdmin(userId: string): Promise<boolean> {
   return hasRole(userId, "admin")
 }
 
 /**
- * Assign a role to a user
+ * Assigns a role to a user
  */
 export async function assignRole(userId: string, roleName: string): Promise<boolean> {
   try {
     const user = await clerkClient.users.getUser(userId)
     const currentRoles = (user.publicMetadata.roles as string[]) || []
 
-    // Check if user already has the role
+    // Don't add the role if the user already has it
     if (currentRoles.includes(roleName)) {
       return true
     }
@@ -59,17 +60,12 @@ export async function assignRole(userId: string, roleName: string): Promise<bool
 }
 
 /**
- * Remove a role from a user
+ * Removes a role from a user
  */
 export async function removeRole(userId: string, roleName: string): Promise<boolean> {
   try {
     const user = await clerkClient.users.getUser(userId)
     const currentRoles = (user.publicMetadata.roles as string[]) || []
-
-    // Check if user has the role
-    if (!currentRoles.includes(roleName)) {
-      return true
-    }
 
     // Remove the role
     const updatedRoles = currentRoles.filter((role) => role !== roleName)
@@ -87,4 +83,21 @@ export async function removeRole(userId: string, roleName: string): Promise<bool
     console.error("Error removing role:", error)
     return false
   }
+}
+
+/**
+ * Gets the current user ID from the auth context
+ */
+export async function getCurrentUserId(): Promise<string | null> {
+  const { userId } = auth()
+  return userId
+}
+
+/**
+ * Checks if the current user is an admin
+ */
+export async function isCurrentUserAdmin(): Promise<boolean> {
+  const userId = await getCurrentUserId()
+  if (!userId) return false
+  return isAdmin(userId)
 }

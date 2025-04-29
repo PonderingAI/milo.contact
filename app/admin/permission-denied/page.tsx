@@ -12,15 +12,15 @@ export default function PermissionDeniedPage() {
         </CardHeader>
         <CardContent>
           <p className="text-sm text-gray-500 mb-4">
-            If you believe you should have access, please use the setup admin page to gain admin privileges.
+            If you believe you should have access, please use the admin setup page to gain admin privileges.
           </p>
         </CardContent>
         <CardFooter className="flex justify-between">
           <Link href="/">
             <Button variant="outline">Back to Home</Button>
           </Link>
-          <Link href="/setup-admin">
-            <Button>Setup Admin</Button>
+          <Link href="/admin-setup">
+            <Button>Admin Setup</Button>
           </Link>
         </CardFooter>
       </Card>

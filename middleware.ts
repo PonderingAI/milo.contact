@@ -10,7 +10,7 @@ export default authMiddleware({
     "/backend-setup",
     "/setup-database",
     "/api/webhook",
-    "/setup-admin",
+    "/admin-setup",
   ],
 })
 
