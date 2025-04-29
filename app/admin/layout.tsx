@@ -1,18 +1,36 @@
-import type React from "react"
-import { auth } from "@clerk/nextjs/server"
-import { redirect } from "next/navigation"
-import Link from "next/link"
-import { UserButton } from "@clerk/nextjs"
+"use client"
 
-export default async function AdminLayout({
+import type React from "react"
+
+import { UserButton, useUser } from "@clerk/nextjs"
+import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useEffect } from "react"
+
+export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { userId } = auth()
+  const { isLoaded, isSignedIn } = useUser()
+  const router = useRouter()
 
-  if (!userId) {
-    redirect("/sign-in?redirect_url=/admin")
+  useEffect(() => {
+    if (isLoaded && !isSignedIn) {
+      router.push("/sign-in?redirect_url=/admin")
+    }
+  }, [isLoaded, isSignedIn, router])
+
+  if (!isLoaded) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <p>Loading...</p>
+      </div>
+    )
+  }
+
+  if (!isSignedIn) {
+    return null // Will redirect in useEffect
   }
 
   return (
@@ -32,9 +50,6 @@ export default async function AdminLayout({
           <Link href="/admin/media" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
             Media
           </Link>
-          <Link href="/admin/users" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
-            Users
-          </Link>
           <Link href="/admin/settings" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
             Settings
           </Link>
@@ -42,7 +57,7 @@ export default async function AdminLayout({
             Back to Website
           </Link>
         </nav>
-        <div className="mt-auto pt-8">
+        <div className="mt-8">
           <UserButton afterSignOutUrl="/" />
         </div>
       </aside>

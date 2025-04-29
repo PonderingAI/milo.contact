@@ -3,122 +3,69 @@
 import { useAuth, useUser } from "@clerk/nextjs"
 import { useState } from "react"
 
-export default function DebugClerkPage() {
+export default function DebugClerk() {
   const { isLoaded: isAuthLoaded, userId, sessionId } = useAuth()
   const { isLoaded: isUserLoaded, user } = useUser()
-  const [error, setError] = useState<string | null>(null)
+  const [testResult, setTestResult] = useState<string | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleTestSignUp = async () => {
+  const testClerk = async () => {
+    setIsLoading(true)
     try {
-      setError(null)
-      const response = await fetch("/api/test-clerk", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ action: "test-signup" }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Unknown error")
-      }
-
+      const response = await fetch("/api/test-clerk")
       const data = await response.json()
-      alert(`Test successful: ${data.message}`)
-    } catch (err: any) {
-      setError(err.message || "An error occurred")
+      setTestResult(JSON.stringify(data, null, 2))
+    } catch (error) {
+      setTestResult(`Error: ${error instanceof Error ? error.message : String(error)}`)
+    } finally {
+      setIsLoading(false)
     }
   }
 
   return (
-    <div className="min-h-screen p-8 bg-black text-white">
+    <div className="container mx-auto p-6 max-w-4xl">
       <h1 className="text-3xl font-bold mb-6">Clerk Debug Page</h1>
 
-      <div className="space-y-8">
-        <div className="bg-gray-900 p-6 rounded-lg">
-          <h2 className="text-xl font-bold mb-4">Authentication Status</h2>
-          {!isAuthLoaded ? (
-            <p>Loading auth data...</p>
-          ) : userId ? (
-            <div className="space-y-2">
-              <p className="text-green-500">✓ Authenticated</p>
-              <p>
-                <strong>User ID:</strong> {userId}
-              </p>
-              <p>
-                <strong>Session ID:</strong> {sessionId}
-              </p>
-            </div>
-          ) : (
-            <p className="text-red-500">✗ Not authenticated</p>
-          )}
+      <div className="bg-gray-800 p-6 rounded-lg mb-6">
+        <h2 className="text-xl font-bold mb-4">Authentication Status</h2>
+        <p>Auth Loaded: {isAuthLoaded ? "Yes" : "No"}</p>
+        <p>User Loaded: {isUserLoaded ? "Yes" : "No"}</p>
+        <p>User ID: {userId || "Not authenticated"}</p>
+        <p>Session ID: {sessionId || "No active session"}</p>
+      </div>
+
+      {isUserLoaded && user && (
+        <div className="bg-gray-800 p-6 rounded-lg mb-6">
+          <h2 className="text-xl font-bold mb-4">User Information</h2>
+          <p>Email: {user.primaryEmailAddress?.emailAddress}</p>
+          <p>
+            Name: {user.firstName} {user.lastName}
+          </p>
+          <p>Created: {new Date(user.createdAt).toLocaleString()}</p>
         </div>
+      )}
 
-        <div className="bg-gray-900 p-6 rounded-lg">
-          <h2 className="text-xl font-bold mb-4">User Data</h2>
-          {!isUserLoaded ? (
-            <p>Loading user data...</p>
-          ) : user ? (
-            <div className="space-y-2">
-              <p>
-                <strong>Email:</strong> {user.primaryEmailAddress?.emailAddress}
-              </p>
-              <p>
-                <strong>Created:</strong> {new Date(user.createdAt).toLocaleString()}
-              </p>
-              <p>
-                <strong>Last Updated:</strong> {new Date(user.updatedAt).toLocaleString()}
-              </p>
-              <div className="mt-4">
-                <h3 className="text-lg font-semibold mb-2">Raw User Data:</h3>
-                <pre className="bg-gray-800 p-4 rounded overflow-auto max-h-60 text-xs">
-                  {JSON.stringify(user, null, 2)}
-                </pre>
-              </div>
-            </div>
-          ) : (
-            <p>No user data available</p>
-          )}
-        </div>
+      <div className="bg-gray-800 p-6 rounded-lg mb-6">
+        <h2 className="text-xl font-bold mb-4">Test Clerk API</h2>
+        <button
+          onClick={testClerk}
+          disabled={isLoading}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+        >
+          {isLoading ? "Testing..." : "Test Clerk Connection"}
+        </button>
+        {testResult && <pre className="mt-4 p-4 bg-gray-900 rounded overflow-auto max-h-60">{testResult}</pre>}
+      </div>
 
-        <div className="bg-gray-900 p-6 rounded-lg">
-          <h2 className="text-xl font-bold mb-4">Troubleshooting</h2>
-
-          <div className="space-y-4">
-            <button onClick={handleTestSignUp} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
-              Test Clerk API
-            </button>
-
-            {error && (
-              <div className="bg-red-900/50 border border-red-700 p-4 rounded">
-                <p className="text-red-400">{error}</p>
-              </div>
-            )}
-
-            <div className="space-y-2 mt-4">
-              <h3 className="text-lg font-semibold">Common Issues:</h3>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>Check that your Clerk keys are correctly set in environment variables</li>
-                <li>Verify that your application domain is added to Clerk's allowed domains</li>
-                <li>Ensure your browser allows cookies and JavaScript</li>
-                <li>Try clearing your browser cache and cookies</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
-        <div className="flex space-x-4">
-          <a href="/sign-in" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 inline-block">
-            Go to Sign In
-          </a>
-          <a href="/sign-up" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 inline-block">
-            Go to Sign Up
-          </a>
-          <a href="/" className="px-4 py-2 bg-gray-600 text-white rounded hover:bg-gray-700 inline-block">
-            Back to Home
-          </a>
-        </div>
+      <div className="bg-gray-800 p-6 rounded-lg">
+        <h2 className="text-xl font-bold mb-4">Troubleshooting</h2>
+        <ul className="list-disc pl-6 space-y-2">
+          <li>Make sure your Clerk environment variables are correctly set</li>
+          <li>Check that your domain is added to the allowed domains in your Clerk dashboard</li>
+          <li>Clear your browser cache and cookies</li>
+          <li>Check the browser console for any CSP or CORS errors</li>
+          <li>Verify that your Clerk webhook is properly configured</li>
+        </ul>
       </div>
     </div>
   )
