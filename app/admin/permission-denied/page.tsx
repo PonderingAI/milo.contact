@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 
 export default function PermissionDeniedPage() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center p-4">
+    <div className="flex min-h-screen flex-col items-center justify-center p-4 bg-gray-100">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Permission Denied</CardTitle>

@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useUser, SignIn } from "@clerk/nextjs"
+import { useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -32,13 +32,6 @@ export default function SetupAdminPage() {
       })
 
       const data = await response.json()
-
-      console.log("API Response:", {
-        status: response.status,
-        ok: response.ok,
-        data,
-      })
-
       setResult(data)
 
       if (data.success) {
@@ -75,9 +68,9 @@ export default function SetupAdminPage() {
             <CardDescription>You need to sign in to set up an admin account.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="w-full">
-              <SignIn redirectUrl="/setup-admin" />
-            </div>
+            <Link href="/sign-in?redirect_url=/setup-admin" className="w-full">
+              <Button className="w-full">Sign In</Button>
+            </Link>
           </CardContent>
         </Card>
       </div>

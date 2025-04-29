@@ -4,8 +4,8 @@ import type React from "react"
 
 import { useUser } from "@clerk/nextjs"
 import { useEffect, useState } from "react"
-import { Loader2 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { Loader2 } from "lucide-react"
 
 export default function AdminCheck({ children }: { children: React.ReactNode }) {
   const { user, isLoaded, isSignedIn } = useUser()
@@ -16,7 +16,7 @@ export default function AdminCheck({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (isLoaded && isSignedIn && user) {
       // Check if user has admin role
-      const roles = (user.publicMetadata.roles as string[]) || []
+      const roles = (user.publicMetadata?.roles as string[]) || []
       const hasAdminRole = roles.includes("admin")
       setIsAdmin(hasAdminRole)
       setIsChecking(false)
@@ -27,12 +27,12 @@ export default function AdminCheck({ children }: { children: React.ReactNode }) 
       }
     } else if (isLoaded && !isSignedIn) {
       // Redirect to sign in if not signed in
-      router.push("/sign-in?redirect_url=/admin")
+      router.push(`/sign-in?redirect_url=${encodeURIComponent("/admin")}`)
       setIsChecking(false)
     }
   }, [isLoaded, isSignedIn, user, router])
 
-  if (isChecking) {
+  if (!isLoaded || isChecking) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-gray-500" />
@@ -40,9 +40,9 @@ export default function AdminCheck({ children }: { children: React.ReactNode }) 
     )
   }
 
-  if (isAdmin) {
-    return <>{children}</>
+  if (!isSignedIn || !isAdmin) {
+    return null // Will redirect in useEffect
   }
 
-  return null
+  return <>{children}</>
 }
