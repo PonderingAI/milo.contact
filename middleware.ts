@@ -9,8 +9,9 @@ export default authMiddleware({
     "/media-hosting",
     "/backend-setup",
     "/setup-database",
+    "/api/webhook",
+    "/direct-admin-setup",
     "/setup-admin",
-    "/api/setup-admin",
   ],
 })
 

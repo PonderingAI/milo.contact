@@ -3,13 +3,28 @@ import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   try {
+    // Get authentication details
     const { userId } = auth()
+    console.log("Auth check - userId:", userId)
 
+    // Check if user is authenticated
     if (!userId) {
+      console.log("Authentication failed - no userId")
       return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
-    const { secret } = await request.json()
+    // Parse request body
+    const body = await request.json().catch((err) => {
+      console.error("Error parsing request body:", err)
+      return {}
+    })
+
+    const { secret } = body
+
+    if (!secret) {
+      return NextResponse.json({ success: false, message: "Bootstrap secret is required" }, { status: 400 })
+    }
+
     const bootstrapSecret = process.env.BOOTSTRAP_SECRET || "initial-setup-secret-change-me"
 
     if (secret !== bootstrapSecret) {
@@ -17,6 +32,7 @@ export async function POST(request: Request) {
     }
 
     // Get the user
+    console.log("Fetching user data for:", userId)
     const user = await clerkClient.users.getUser(userId)
 
     // Check if user already has admin role
@@ -26,6 +42,7 @@ export async function POST(request: Request) {
     }
 
     // Add admin role
+    console.log("Adding admin role to user:", userId)
     await clerkClient.users.updateUser(userId, {
       publicMetadata: {
         ...user.publicMetadata,

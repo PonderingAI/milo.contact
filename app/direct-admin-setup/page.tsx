@@ -3,15 +3,16 @@
 import type React from "react"
 
 import { useState } from "react"
-import { useUser, SignIn } from "@clerk/nextjs"
+import { useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Loader2 } from "lucide-react"
 import Link from "next/link"
+import { verifyBootstrapSecret } from "./actions"
 
-export default function SetupAdminPage() {
+export default function DirectAdminSetupPage() {
   const { user, isLoaded, isSignedIn } = useUser()
   const [secret, setSecret] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -23,32 +24,48 @@ export default function SetupAdminPage() {
     setResult(null)
 
     try {
-      const response = await fetch("/api/setup-admin", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ secret }),
-      })
+      // Verify the secret using a server action
+      const verificationResult = await verifyBootstrapSecret(secret)
 
-      const data = await response.json()
-
-      console.log("API Response:", {
-        status: response.status,
-        ok: response.ok,
-        data,
-      })
-
-      setResult(data)
-
-      if (data.success) {
-        // Redirect to admin after a short delay
-        setTimeout(() => {
-          window.location.href = "/admin"
-        }, 2000)
+      if (!verificationResult.success) {
+        setResult({
+          success: false,
+          message: verificationResult.message,
+        })
+        return
       }
+
+      // Get the current roles
+      const currentRoles = (user?.publicMetadata?.roles as string[]) || []
+
+      // Check if user already has admin role
+      if (currentRoles.includes("admin")) {
+        setResult({
+          success: true,
+          message: "You already have admin privileges",
+        })
+        return
+      }
+
+      // Add admin role
+      await user?.update({
+        publicMetadata: {
+          ...user.publicMetadata,
+          roles: [...currentRoles, "admin"],
+        },
+      })
+
+      setResult({
+        success: true,
+        message: "Admin privileges granted successfully! Redirecting to admin dashboard...",
+      })
+
+      // Redirect to admin after a short delay
+      setTimeout(() => {
+        window.location.href = "/admin"
+      }, 2000)
     } catch (error) {
-      console.error("Error submitting form:", error)
+      console.error("Error setting up admin:", error)
       setResult({
         success: false,
         message: "An error occurred. Please try again.",
@@ -74,11 +91,11 @@ export default function SetupAdminPage() {
             <CardTitle>Authentication Required</CardTitle>
             <CardDescription>You need to sign in to set up an admin account.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <div className="w-full">
-              <SignIn redirectUrl="/setup-admin" />
-            </div>
-          </CardContent>
+          <CardFooter>
+            <Link href={`/sign-in?redirect_url=${encodeURIComponent("/direct-admin-setup")}`} className="w-full">
+              <Button className="w-full">Sign In</Button>
+            </Link>
+          </CardFooter>
         </Card>
       </div>
     )
@@ -88,7 +105,7 @@ export default function SetupAdminPage() {
     <div className="flex min-h-screen flex-col items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <CardTitle>Set Up Admin Access</CardTitle>
+          <CardTitle>Direct Admin Setup</CardTitle>
           <CardDescription>Enter the bootstrap secret to grant admin privileges to your account.</CardDescription>
         </CardHeader>
         <CardContent>

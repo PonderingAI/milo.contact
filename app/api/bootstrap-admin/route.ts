@@ -1,41 +1,55 @@
-import { NextResponse } from "next/server"
 import { auth, clerkClient } from "@clerk/nextjs/server"
-import type { NextRequest } from "next/server"
+import { NextResponse } from "next/server"
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
-    // Get the current user
+    // Get authentication details
     const { userId } = auth()
+    console.log("Auth check - userId:", userId)
 
+    // Check if user is authenticated
     if (!userId) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+      console.log("Authentication failed - no userId")
+      return NextResponse.json({ success: false, message: "Authentication required" }, { status: 401 })
     }
 
-    // Get the secret from the request body
-    const { secret } = await request.json()
+    // Parse request body
+    const body = await request.json().catch((err) => {
+      console.error("Error parsing request body:", err)
+      return {}
+    })
 
-    // Check if the secret is valid
+    const { secret } = body
+
+    if (!secret) {
+      return NextResponse.json({ success: false, message: "Bootstrap secret is required" }, { status: 400 })
+    }
+
     const bootstrapSecret = process.env.BOOTSTRAP_SECRET
 
     if (!bootstrapSecret) {
-      return NextResponse.json({ error: "Bootstrap secret not configured on the server" }, { status: 500 })
+      return NextResponse.json(
+        { success: false, message: "Bootstrap secret not configured on the server" },
+        { status: 500 },
+      )
     }
 
     if (secret !== bootstrapSecret) {
-      return NextResponse.json({ error: "Invalid bootstrap secret" }, { status: 403 })
+      return NextResponse.json({ success: false, message: "Invalid bootstrap secret" }, { status: 400 })
     }
 
     // Get the user
+    console.log("Fetching user data for:", userId)
     const user = await clerkClient.users.getUser(userId)
 
     // Check if user already has admin role
     const currentRoles = (user.publicMetadata.roles as string[]) || []
-
     if (currentRoles.includes("admin")) {
-      return NextResponse.json({ message: "User already has admin role" })
+      return NextResponse.json({ success: true, message: "You already have admin privileges" }, { status: 200 })
     }
 
-    // Add admin role to user
+    // Add admin role
+    console.log("Adding admin role to user:", userId)
     await clerkClient.users.updateUser(userId, {
       publicMetadata: {
         ...user.publicMetadata,
@@ -43,9 +57,18 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    return NextResponse.json({ message: "Admin role assigned successfully" })
+    return NextResponse.json(
+      {
+        success: true,
+        message: "Admin privileges granted successfully! Redirecting to admin dashboard...",
+      },
+      { status: 200 },
+    )
   } catch (error) {
-    console.error("Error in bootstrap-admin:", error)
-    return NextResponse.json({ error: "An unexpected error occurred" }, { status: 500 })
+    console.error("Error setting up admin:", error)
+    return NextResponse.json(
+      { success: false, message: "An error occurred while setting up admin access" },
+      { status: 500 },
+    )
   }
 }
