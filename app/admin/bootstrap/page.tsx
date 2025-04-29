@@ -2,24 +2,20 @@
 
 import type React from "react"
 
+import { useUser } from "@clerk/nextjs"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { useUser } from "@clerk/nextjs"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { AlertCircle, CheckCircle } from "lucide-react"
+import Link from "next/link"
 
-export default function BootstrapAdmin() {
+export default function BootstrapAdminPage() {
+  const { isLoaded, isSignedIn, user } = useUser()
   const [secret, setSecret] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const router = useRouter()
-  const { isSignedIn, user, isLoaded } = useUser()
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setIsSubmitting(true)
     setError(null)
@@ -37,7 +33,7 @@ export default function BootstrapAdmin() {
       const data = await response.json()
 
       if (!response.ok) {
-        setError(data.message || "An error occurred")
+        setError(data.error || "Something went wrong")
       } else {
         setSuccess(data.message || "Admin role assigned successfully")
         // Redirect to admin dashboard after a short delay
@@ -55,7 +51,7 @@ export default function BootstrapAdmin() {
 
   if (!isLoaded) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
         <p>Loading...</p>
       </div>
     )
@@ -63,76 +59,68 @@ export default function BootstrapAdmin() {
 
   if (!isSignedIn) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle>Authentication Required</CardTitle>
-            <CardDescription>You need to sign in to access this page.</CardDescription>
-          </CardHeader>
-          <CardFooter>
-            <Button onClick={() => router.push("/sign-in")} className="w-full">
-              Sign In
-            </Button>
-          </CardFooter>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center bg-gray-100">
+        <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+          <h1 className="text-2xl font-bold mb-4">Authentication Required</h1>
+          <p className="mb-4">You need to sign in before accessing this page.</p>
+          <Link
+            href="/sign-in?redirect_url=/admin/bootstrap"
+            className="block w-full bg-gray-900 text-white py-2 px-4 rounded text-center hover:bg-gray-800"
+          >
+            Sign In
+          </Link>
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <CardTitle>Bootstrap Admin Access</CardTitle>
-          <CardDescription>Enter the bootstrap secret to grant admin privileges to your account.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {error && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertTitle>Error</AlertTitle>
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <h1 className="text-2xl font-bold mb-6">Bootstrap Admin Access</h1>
+
+        <div className="mb-6 p-4 bg-gray-50 rounded-md">
+          <p className="text-sm text-gray-600">
+            Signed in as: <span className="font-medium">{user.primaryEmailAddress?.emailAddress}</span>
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label htmlFor="secret" className="block text-sm font-medium text-gray-700 mb-1">
+              Bootstrap Secret
+            </label>
+            <input
+              type="password"
+              id="secret"
+              value={secret}
+              onChange={(e) => setSecret(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-gray-400"
+              required
+            />
+          </div>
+
+          {error && <div className="p-3 bg-red-50 border border-red-200 text-red-700 rounded-md text-sm">{error}</div>}
+
           {success && (
-            <Alert className="mb-4 border-green-500 text-green-500">
-              <CheckCircle className="h-4 w-4" />
-              <AlertTitle>Success</AlertTitle>
-              <AlertDescription>{success}</AlertDescription>
-            </Alert>
+            <div className="p-3 bg-green-50 border border-green-200 text-green-700 rounded-md text-sm">{success}</div>
           )}
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label htmlFor="secret" className="text-sm font-medium">
-                  Bootstrap Secret
-                </label>
-                <Input
-                  id="secret"
-                  type="password"
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                  required
-                  placeholder="Enter the bootstrap secret"
-                  disabled={isSubmitting}
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isSubmitting}>
-                {isSubmitting ? "Processing..." : "Submit"}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-        <CardFooter className="flex-col items-start space-y-2 text-sm text-muted-foreground">
-          <p>
-            This page is used to set up the first admin user. After an admin is created, additional admins can be
-            managed through the admin panel.
-          </p>
-          <p>
-            Current user: <span className="font-medium">{user?.primaryEmailAddress?.emailAddress}</span>
-          </p>
-        </CardFooter>
-      </Card>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full bg-gray-900 text-white py-2 px-4 rounded hover:bg-gray-800 disabled:opacity-50"
+          >
+            {isSubmitting ? "Processing..." : "Assign Admin Role"}
+          </button>
+        </form>
+
+        <div className="mt-6 text-center">
+          <Link href="/" className="text-sm text-gray-600 hover:text-gray-900">
+            Return to Website
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }

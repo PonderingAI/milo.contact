@@ -1,54 +1,63 @@
 "use client"
 
-import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { AlertCircle } from "lucide-react"
+import Link from "next/link"
 
-export default function PermissionDenied() {
-  const router = useRouter()
-  const { user, isSignedIn } = useUser()
+export default function PermissionDeniedPage() {
+  const { user } = useUser()
 
   return (
-    <div className="flex min-h-screen items-center justify-center p-4">
-      <Card className="w-full max-w-md">
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <AlertCircle className="h-5 w-5 text-red-500" />
-            <CardTitle>Permission Denied</CardTitle>
-          </div>
-          <CardDescription>
-            You don't have permission to access the admin area. Only users with admin privileges can access this
-            section.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isSignedIn && (
-            <p className="text-sm text-muted-foreground">
-              Signed in as: <span className="font-medium">{user?.primaryEmailAddress?.emailAddress}</span>
-            </p>
-          )}
-          <div className="mt-4 rounded-md bg-amber-50 p-4 text-sm text-amber-800">
-            <p>
-              If you believe you should have admin access, please contact the site administrator or use the bootstrap
-              process if you're setting up the site for the first time.
-            </p>
-          </div>
-        </CardContent>
-        <CardFooter className="flex flex-col space-y-2 sm:flex-row sm:justify-between sm:space-x-2 sm:space-y-0">
-          <Button variant="outline" onClick={() => router.push("/")}>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md w-full max-w-md">
+        <div className="text-red-500 mb-4">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-12 w-12 mx-auto"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+            />
+          </svg>
+        </div>
+
+        <h1 className="text-2xl font-bold text-center mb-4">Permission Denied</h1>
+
+        <div className="mb-6 p-4 bg-gray-50 rounded-md">
+          <p className="text-sm text-gray-600">
+            Signed in as: <span className="font-medium">{user?.primaryEmailAddress?.emailAddress}</span>
+          </p>
+        </div>
+
+        <p className="text-gray-600 mb-6">
+          You don't have permission to access the admin area. Only users with admin privileges can access this section.
+        </p>
+
+        <div className="space-y-4">
+          <Link
+            href="/"
+            className="block w-full bg-gray-900 text-white py-2 px-4 rounded text-center hover:bg-gray-800"
+          >
             Return to Website
-          </Button>
-          {isSignedIn ? (
-            <Button variant="outline" onClick={() => router.push("/admin/bootstrap")}>
-              Bootstrap Admin
-            </Button>
-          ) : (
-            <Button onClick={() => router.push("/sign-in")}>Sign In</Button>
-          )}
-        </CardFooter>
-      </Card>
+          </Link>
+
+          <Link
+            href="/admin/bootstrap"
+            className="block w-full bg-white border border-gray-300 text-gray-700 py-2 px-4 rounded text-center hover:bg-gray-50"
+          >
+            Try Bootstrap Process
+          </Link>
+
+          <Link href="/sign-in" className="block w-full text-center text-sm text-gray-500 hover:text-gray-700">
+            Sign in with a different account
+          </Link>
+        </div>
+      </div>
     </div>
   )
 }
