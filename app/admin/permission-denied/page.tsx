@@ -1,50 +1,54 @@
 "use client"
 
-import { UserButton, useUser } from "@clerk/nextjs"
-import Link from "next/link"
+import { useRouter } from "next/navigation"
+import { useUser } from "@clerk/nextjs"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { AlertCircle } from "lucide-react"
 
 export default function PermissionDenied() {
-  const { user } = useUser()
+  const router = useRouter()
+  const { user, isSignedIn } = useUser()
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
-      <div className="max-w-md w-full p-8 bg-gray-800 rounded-lg shadow-lg">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold mb-2">Permission Denied</h1>
-          <p className="text-gray-400">You don't have permission to access the admin area.</p>
-        </div>
-
-        <div className="bg-gray-700 p-4 rounded-lg mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <p className="font-medium">Signed in as:</p>
-              <p className="text-sm text-gray-400">{user?.emailAddresses[0]?.emailAddress}</p>
-            </div>
-            <UserButton afterSignOutUrl="/" />
+    <div className="flex min-h-screen items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-5 w-5 text-red-500" />
+            <CardTitle>Permission Denied</CardTitle>
           </div>
-          <p className="text-sm text-gray-400">Your account doesn't have administrator privileges.</p>
-        </div>
-
-        <div className="space-y-4">
-          <Link
-            href="/"
-            className="block w-full py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-          >
+          <CardDescription>
+            You don't have permission to access the admin area. Only users with admin privileges can access this
+            section.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isSignedIn && (
+            <p className="text-sm text-muted-foreground">
+              Signed in as: <span className="font-medium">{user?.primaryEmailAddress?.emailAddress}</span>
+            </p>
+          )}
+          <div className="mt-4 rounded-md bg-amber-50 p-4 text-sm text-amber-800">
+            <p>
+              If you believe you should have admin access, please contact the site administrator or use the bootstrap
+              process if you're setting up the site for the first time.
+            </p>
+          </div>
+        </CardContent>
+        <CardFooter className="flex flex-col space-y-2 sm:flex-row sm:justify-between sm:space-x-2 sm:space-y-0">
+          <Button variant="outline" onClick={() => router.push("/")}>
             Return to Website
-          </Link>
-
-          <Link
-            href="/sign-in"
-            className="block w-full py-2 px-4 bg-gray-700 hover:bg-gray-600 rounded text-center transition-colors"
-          >
-            Sign in with a different account
-          </Link>
-
-          <div className="text-xs text-gray-500 text-center mt-4">
-            If you believe you should have access, please contact the site administrator.
-          </div>
-        </div>
-      </div>
+          </Button>
+          {isSignedIn ? (
+            <Button variant="outline" onClick={() => router.push("/admin/bootstrap")}>
+              Bootstrap Admin
+            </Button>
+          ) : (
+            <Button onClick={() => router.push("/sign-in")}>Sign In</Button>
+          )}
+        </CardFooter>
+      </Card>
     </div>
   )
 }
