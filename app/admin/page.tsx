@@ -40,6 +40,7 @@ export default function AdminDashboard() {
         <AdminCard title="Projects" description="Manage your portfolio projects" link="/admin/projects" />
         <AdminCard title="Media" description="Upload and manage media files" link="/admin/media" />
         <AdminCard title="Settings" description="Configure site settings" link="/admin/settings" />
+        <AdminCard title="Users" description="Manage user access and permissions" link="/admin/users" />
       </div>
     </div>
   )

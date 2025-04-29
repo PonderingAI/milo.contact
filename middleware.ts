@@ -1,4 +1,6 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server"
+import { NextResponse } from "next/server"
+import { isAdmin } from "./lib/auth-utils"
 
 // Define public routes that don't require authentication
 const isPublicRoute = createRouteMatcher([
@@ -11,12 +13,45 @@ const isPublicRoute = createRouteMatcher([
   "/sign-in(.*)",
   "/sign-up(.*)",
   "/api/webhook",
+  "/admin/permission-denied",
 ])
 
+// Define admin routes that require admin role
+const isAdminRoute = createRouteMatcher(["/admin(.*)"])
+
 export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect()
+  const { userId } = auth
+
+  // Allow public routes without authentication
+  if (isPublicRoute(req)) {
+    return NextResponse.next()
   }
+
+  // Check if user is authenticated
+  if (!userId) {
+    // Redirect to sign-in for admin routes
+    if (isAdminRoute(req)) {
+      const signInUrl = new URL("/sign-in", req.url)
+      signInUrl.searchParams.set("redirect_url", req.url)
+      return NextResponse.redirect(signInUrl)
+    }
+
+    // Protect other non-public routes
+    await auth.protect()
+    return NextResponse.next()
+  }
+
+  // For admin routes, check if user has admin role
+  if (isAdminRoute(req) && !req.url.includes("/admin/permission-denied")) {
+    const isUserAdmin = await isAdmin(userId)
+
+    if (!isUserAdmin) {
+      // Redirect to permission denied page
+      return NextResponse.redirect(new URL("/admin/permission-denied", req.url))
+    }
+  }
+
+  return NextResponse.next()
 })
 
 export const config = {

@@ -5,23 +5,41 @@ import type React from "react"
 import { UserButton, useUser } from "@clerk/nextjs"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
+import { isAdmin } from "@/lib/auth-utils"
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const { isLoaded, isSignedIn } = useUser()
+  const { isLoaded, isSignedIn, user } = useUser()
   const router = useRouter()
+  const [isAdminUser, setIsAdminUser] = useState<boolean | null>(null)
+  const [isChecking, setIsChecking] = useState(true)
 
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push("/sign-in?redirect_url=/admin")
+    async function checkAdminStatus() {
+      if (isLoaded && isSignedIn && user) {
+        try {
+          const adminStatus = await isAdmin(user.id)
+          setIsAdminUser(adminStatus)
+        } catch (error) {
+          console.error("Error checking admin status:", error)
+          setIsAdminUser(false)
+        } finally {
+          setIsChecking(false)
+        }
+      } else if (isLoaded && !isSignedIn) {
+        router.push("/sign-in?redirect_url=/admin")
+        setIsChecking(false)
+      }
     }
-  }, [isLoaded, isSignedIn, router])
 
-  if (!isLoaded) {
+    checkAdminStatus()
+  }, [isLoaded, isSignedIn, user, router])
+
+  if (!isLoaded || isChecking) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <p>Loading...</p>
@@ -31,6 +49,11 @@ export default function AdminLayout({
 
   if (!isSignedIn) {
     return null // Will redirect in useEffect
+  }
+
+  if (isAdminUser === false) {
+    router.push("/admin/permission-denied")
+    return null
   }
 
   return (
