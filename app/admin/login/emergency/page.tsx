@@ -2,42 +2,19 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
 import Link from "next/link"
 
-export default function AdminLoginPage() {
+export default function EmergencyLoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const [skipCaptcha, setSkipCaptcha] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const redirectTo = searchParams.get("redirectTo") || "/admin"
-
-  // Check if we should skip CAPTCHA
-  useEffect(() => {
-    const checkSkipCaptcha = async () => {
-      try {
-        // Check environment variable
-        const response = await fetch("/api/get-turnstile-key")
-        const data = await response.json()
-
-        if (data.skipCaptcha) {
-          console.log("CAPTCHA is disabled via environment variable")
-          setSkipCaptcha(true)
-        }
-      } catch (error) {
-        console.error("Error checking CAPTCHA status:", error)
-        // Default to skipping CAPTCHA if we can't check
-        setSkipCaptcha(true)
-      }
-    }
-
-    checkSkipCaptcha()
-  }, [])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -64,10 +41,43 @@ export default function AdminLoginPage() {
     }
   }
 
+  const handleDirectSignup = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/direct-signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.message || "Failed to create account")
+      }
+
+      // Try to login immediately after signup
+      const supabase = getSupabaseBrowserClient()
+      await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      router.push(redirectTo)
+    } catch (err: any) {
+      setError(err.message || "Failed to sign up")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-black p-4">
       <div className="w-full max-w-md p-8 bg-gray-900 rounded-lg shadow-lg">
-        <h1 className="text-3xl font-bold mb-6 text-center text-white">Admin Login</h1>
+        <h1 className="text-3xl font-bold mb-6 text-center text-white">Emergency Login</h1>
 
         {error && <div className="mb-4 p-3 bg-red-900/50 border border-red-700 rounded text-white">{error}</div>}
 
@@ -100,27 +110,28 @@ export default function AdminLoginPage() {
             />
           </div>
 
-          {!skipCaptcha && (
-            <div className="text-center text-yellow-400 text-sm">
-              <p>CAPTCHA is currently disabled.</p>
-              <p>Using direct authentication.</p>
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-          >
-            {loading ? "Signing in..." : "Sign In"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="submit"
+              disabled={loading}
+              className="flex-1 py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {loading ? "Signing in..." : "Sign In"}
+            </button>
+            <button
+              type="button"
+              onClick={handleDirectSignup}
+              disabled={loading}
+              className="flex-1 py-2 px-4 bg-gray-800 text-white rounded hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              {loading ? "Creating..." : "Create Account"}
+            </button>
+          </div>
         </form>
 
         <div className="mt-6 space-y-4">
-          <div className="text-center">
-            <Link href="/admin/login/auth" className="text-blue-400 hover:underline">
-              Emergency Login
-            </Link>
+          <div className="text-center text-sm text-gray-400">
+            <p>This is an emergency login page without captcha verification.</p>
           </div>
           <div className="text-center">
             <Link href="/admin/debug" className="text-blue-400 hover:underline">

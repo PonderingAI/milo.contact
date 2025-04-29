@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState, useRef } from "react"
-import { usePathname } from "next/navigation"
 
 export default function CustomCursor() {
   const [position, setPosition] = useState({ x: -100, y: -100 })
@@ -9,7 +8,6 @@ export default function CustomCursor() {
   const [isClicking, setIsClicking] = useState(false)
   const trailsRef = useRef<{ x: number; y: number; opacity: number }[]>([])
   const requestRef = useRef<number>()
-  const pathname = usePathname()
 
   // Initialize trails
   useEffect(() => {
@@ -68,7 +66,7 @@ export default function CustomCursor() {
     }
   }, [position])
 
-  if (pathname.includes("/admin")) return null
+  // Removed the pathname check that was disabling the cursor on admin pages
 
   return (
     <div className="cursor-container" style={{ opacity: isVisible ? 1 : 0 }}>

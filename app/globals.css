@@ -50,33 +50,23 @@ body {
   transition: opacity 0.2s ease;
 }
 
-/* Hide default cursor on interactive elements */
-a,
-button,
-input,
-textarea,
-select,
-[role="button"] {
-  cursor: none;
+/* Hide default cursor on all elements */
+html,
+body,
+* {
+  cursor: none !important;
 }
 
 /* But show default cursor on mobile devices */
 @media (max-width: 768px) {
-  body {
-    cursor: auto;
+  html,
+  body,
+  * {
+    cursor: auto !important;
   }
 
   .cursor-container {
     display: none;
-  }
-
-  a,
-  button,
-  input,
-  textarea,
-  select,
-  [role="button"] {
-    cursor: auto;
   }
 }
 

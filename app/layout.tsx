@@ -4,6 +4,7 @@ import type { Metadata } from "next"
 import { Inter, Playfair_Display } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import CustomCursor from "@/components/custom-cursor"
+import { ClerkProvider } from "@clerk/nextjs"
 
 const inter = Inter({
   subsets: ["latin"],
@@ -18,7 +19,7 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "Milo Presedo | Film Production & Photography",
   description: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-  generator: "v0.dev",
+    generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -27,13 +28,31 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.variable} ${playfair.variable} font-sans`}>
-        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-          {children}
-          <CustomCursor />
-        </ThemeProvider>
-      </body>
-    </html>
+    <ClerkProvider>
+      <html lang="en" suppressHydrationWarning>
+        <head>
+          <meta
+            httpEquiv="Content-Security-Policy"
+            content={`
+              default-src 'self'; 
+              script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.clerk.accounts.dev;
+              style-src 'self' 'unsafe-inline'; 
+              frame-src https://*.clerk.accounts.dev;
+              img-src 'self' data: blob: https://*.cloudflareinsights.com https://img.clerk.com;
+              connect-src 'self' https://*.clerk.accounts.dev https://api.clerk.com https://*.supabase.co https://*.cloudflareinsights.com;
+              font-src 'self';
+            `
+              .replace(/\s+/g, " ")
+              .trim()}
+          />
+        </head>
+        <body className={`${inter.variable} ${playfair.variable} font-sans`}>
+          <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
+            {children}
+            <CustomCursor />
+          </ThemeProvider>
+        </body>
+      </html>
+    </ClerkProvider>
   )
 }

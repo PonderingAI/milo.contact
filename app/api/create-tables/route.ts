@@ -31,11 +31,9 @@ export async function POST() {
       )
     }
 
-    // Create BTS images table
+    // Create BTS images table - Fixed duplicate CREATE TABLE line
     const { error: btsError } = await supabase.rpc("exec_sql", {
       sql_query: `
-        CREATE TABLE IF NOT EXISTS bts_images (
-          id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
         CREATE TABLE IF NOT EXISTS bts_images (
           id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
           project_id UUID REFERENCES projects(id) ON DELETE CASCADE,

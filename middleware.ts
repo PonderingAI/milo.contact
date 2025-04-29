@@ -1,13 +1,26 @@
-import { NextResponse } from "next/server"
-import type { NextRequest } from "next/server"
+import { authMiddleware } from "@clerk/nextjs/server"
 
-// Simplified middleware that just passes through all requests
-export async function middleware(req: NextRequest) {
-  // Simply pass through all requests without any authentication checks
-  return NextResponse.next()
-}
+export default authMiddleware({
+  // Routes that can be accessed while signed out
+  publicRoutes: [
+    "/",
+    "/projects",
+    "/projects/(.*)",
+    "/media-hosting",
+    "/backend-setup",
+    "/setup-database",
+    "/sign-in(.*)",
+    "/sign-up(.*)",
+    "/api/webhook",
+    "/api/setup-database",
+    "/api/setup-storage",
+    "/api/seed-database",
+    "/api/create-tables",
+    "/api/check-environment",
+    "/api/fix-environment",
+  ],
+})
 
-// Only run middleware on admin routes
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
 }
