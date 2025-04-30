@@ -60,6 +60,31 @@ export default function AppIconsUploader() {
     }
   }
 
+  const ensureBucketExists = async (bucketName: string) => {
+    try {
+      // Check if bucket exists
+      const { data: buckets } = await supabase.storage.listBuckets()
+      const bucketExists = buckets?.some((bucket) => bucket.name === bucketName)
+
+      if (!bucketExists) {
+        // Create the bucket if it doesn't exist
+        const { error } = await supabase.storage.createBucket(bucketName, {
+          public: true,
+          fileSizeLimit: 10485760, // 10MB
+        })
+
+        if (error) {
+          throw new Error(`Failed to create bucket: ${error.message}`)
+        }
+      }
+
+      return true
+    } catch (err: any) {
+      console.error("Error ensuring bucket exists:", err)
+      throw new Error(`Failed to set up storage: ${err.message}`)
+    }
+  }
+
   const uploadIcons = async () => {
     if (!file) return
 
@@ -67,12 +92,14 @@ export default function AppIconsUploader() {
       setUploading(true)
       setError(null)
 
+      // Ensure the bucket exists
+      await ensureBucketExists("public")
+
       // Read the zip file
       const zip = new JSZip()
       const contents = await zip.loadAsync(file)
 
       // Upload each file in the zip
-      const uploadPromises = []
       const uploadedFiles: { [key: string]: string } = {}
 
       for (const [filename, zipFile] of Object.entries(contents.files)) {
@@ -85,7 +112,7 @@ export default function AppIconsUploader() {
         const blob = await zipFile.async("blob")
 
         // Upload to Supabase Storage
-        const { data, error: uploadError } = await supabase.storage.from("public").upload(filename, blob, {
+        const { data, error: uploadError } = await supabase.storage.from("public").upload(`icons/${filename}`, blob, {
           cacheControl: "3600",
           upsert: true,
         })
@@ -97,7 +124,7 @@ export default function AppIconsUploader() {
         // Get public URL
         const {
           data: { publicUrl },
-        } = supabase.storage.from("public").getPublicUrl(data.path)
+        } = supabase.storage.from("public").getPublicUrl(`icons/${filename}`)
 
         uploadedFiles[filename] = publicUrl
       }
