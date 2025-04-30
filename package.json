@@ -59,10 +59,11 @@
     "vaul": "^0.9.6",
     "zod": "^3.24.1",
     "@emotion/is-prop-valid": "latest",
+    "@supabase/supabase-js": "latest",
     "framer-motion": "latest",
     "uuid": "latest",
-    "@supabase/supabase-js": "latest",
-    "@clerk/nextjs": "latest"
+    "@clerk/nextjs": "latest",
+    "@supabase/auth-helpers-nextjs": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

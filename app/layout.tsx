@@ -19,6 +19,9 @@ const playfair = Playfair_Display({
 export const metadata: Metadata = {
   title: "Milo Presedo | Film Production & Photography",
   description: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+  icons: {
+    icon: [{ url: "/api/favicon" }],
+  },
     generator: 'v0.dev'
 }
 
