@@ -70,7 +70,7 @@ export default function NewProjectPage() {
 
       // Success
       alert("Project created successfully!")
-      router.push("/admin/projects")
+      router.push(`/admin/edit-project/${data[0].id}`)
     } catch (err: any) {
       console.error("Error creating project:", err)
       setError(err.message || "Failed to create project")
@@ -88,19 +88,21 @@ export default function NewProjectPage() {
           <span>Back to Projects</span>
         </Link>
 
-        <Button onClick={handleSave} disabled={saving} size="sm">
-          {saving ? (
-            <>
-              <Loader2 size={16} className="mr-1 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Save size={16} className="mr-1" />
-              Create Project
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? (
+              <>
+                <Loader2 size={16} className="mr-1 animate-spin" />
+                Creating...
+              </>
+            ) : (
+              <>
+                <Save size={16} className="mr-1" />
+                Create Project
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -113,7 +115,7 @@ export default function NewProjectPage() {
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
           <h1 className="text-3xl font-serif mb-2">New Project</h1>
-          <p className="text-gray-400">Create a new project to showcase in your portfolio.</p>
+          <p className="text-gray-400">Create a new project for your portfolio.</p>
         </div>
 
         {/* Project header section */}

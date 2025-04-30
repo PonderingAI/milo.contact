@@ -5,14 +5,23 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, Trash2 } from "lucide-react"
+import { Loader2, ArrowLeft, Save, Trash2, Plus, X, Edit } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { mockProjects } from "@/lib/project-data"
+import { mockProjects, mockBtsImages } from "@/lib/project-data"
 import ImageUploader from "@/components/admin/image-uploader"
 import Link from "next/link"
+
+interface BtsImage {
+  id?: string
+  project_id: string
+  image_url: string
+  caption?: string
+  size?: "small" | "medium" | "large"
+  aspect_ratio?: "square" | "portrait" | "landscape"
+}
 
 export default function EditProjectPage() {
   const params = useParams()
@@ -24,6 +33,18 @@ export default function EditProjectPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [project, setProject] = useState<any>(null)
+  const [btsImages, setBtsImages] = useState<BtsImage[]>([])
+  const [showAddBtsForm, setShowAddBtsForm] = useState(false)
+  const [editingBtsId, setEditingBtsId] = useState<string | null>(null)
+
+  // New BTS image form state
+  const [newBtsImage, setNewBtsImage] = useState<BtsImage>({
+    project_id: id,
+    image_url: "",
+    caption: "",
+    size: "medium",
+    aspect_ratio: "landscape",
+  })
 
   // Form state
   const [formData, setFormData] = useState({
@@ -62,6 +83,11 @@ export default function EditProjectPage() {
               description: mockProject.description || "",
               special_notes: mockProject.special_notes || "",
             })
+
+            // Get mock BTS images
+            const mockBts = mockBtsImages.filter((img) => img.project_id === id)
+            setBtsImages(mockBts)
+
             setError("Using mock data - database connection failed")
           } else {
             setError("Project not found")
@@ -78,6 +104,19 @@ export default function EditProjectPage() {
             description: data.description || "",
             special_notes: data.special_notes || "",
           })
+
+          // Fetch BTS images
+          const { data: btsData, error: btsError } = await supabase
+            .from("bts_images")
+            .select("*")
+            .eq("project_id", id)
+            .order("created_at", { ascending: true })
+
+          if (btsError) {
+            console.error("Error fetching BTS images:", btsError)
+          } else {
+            setBtsImages(btsData || [])
+          }
         }
       } catch (err) {
         console.error("Error fetching project:", err)
@@ -159,6 +198,96 @@ export default function EditProjectPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // BTS Image functions
+  const handleBtsImageUpload = (url: string) => {
+    setNewBtsImage((prev) => ({ ...prev, image_url: url }))
+  }
+
+  const handleBtsChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setNewBtsImage((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleBtsSelectChange = (name: string, value: string) => {
+    setNewBtsImage((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleAddBtsImage = async () => {
+    if (!newBtsImage.image_url) {
+      alert("Please upload an image")
+      return
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("bts_images")
+        .insert([{ ...newBtsImage, project_id: id }])
+        .select()
+
+      if (error) throw error
+
+      // Add to state
+      setBtsImages((prev) => [...prev, data[0]])
+
+      // Reset form
+      setNewBtsImage({
+        project_id: id,
+        image_url: "",
+        caption: "",
+        size: "medium",
+        aspect_ratio: "landscape",
+      })
+
+      setShowAddBtsForm(false)
+    } catch (err: any) {
+      console.error("Error adding BTS image:", err)
+      alert(`Failed to add image: ${err.message}`)
+    }
+  }
+
+  const handleDeleteBtsImage = async (btsId: string) => {
+    if (!confirm("Are you sure you want to delete this image?")) return
+
+    try {
+      const { error } = await supabase.from("bts_images").delete().eq("id", btsId)
+
+      if (error) throw error
+
+      // Remove from state
+      setBtsImages((prev) => prev.filter((img) => img.id !== btsId))
+    } catch (err: any) {
+      console.error("Error deleting BTS image:", err)
+      alert(`Failed to delete image: ${err.message}`)
+    }
+  }
+
+  const handleUpdateBtsImage = async (btsId: string) => {
+    const imageToUpdate = btsImages.find((img) => img.id === btsId)
+    if (!imageToUpdate) return
+
+    try {
+      const { error } = await supabase
+        .from("bts_images")
+        .update({
+          caption: imageToUpdate.caption,
+          size: imageToUpdate.size,
+          aspect_ratio: imageToUpdate.aspect_ratio,
+        })
+        .eq("id", btsId)
+
+      if (error) throw error
+
+      setEditingBtsId(null)
+    } catch (err: any) {
+      console.error("Error updating BTS image:", err)
+      alert(`Failed to update image: ${err.message}`)
+    }
+  }
+
+  const handleBtsImageChange = (id: string, field: string, value: string) => {
+    setBtsImages((images) => images.map((img) => (img.id === id ? { ...img, [field]: value } : img)))
   }
 
   if (loading) {
@@ -324,6 +453,188 @@ export default function EditProjectPage() {
             placeholder="Any special notes about this project..."
             className="min-h-[150px]"
           />
+        </div>
+
+        {/* BTS Images Section */}
+        <div className="mt-16 mb-12">
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-serif">Behind the Scenes Images</h2>
+            <Button onClick={() => setShowAddBtsForm(!showAddBtsForm)} variant="outline" size="sm">
+              {showAddBtsForm ? (
+                <>Cancel</>
+              ) : (
+                <>
+                  <Plus size={16} className="mr-1" /> Add BTS Image
+                </>
+              )}
+            </Button>
+          </div>
+
+          {/* Add new BTS image form */}
+          {showAddBtsForm && (
+            <div className="bg-gray-900 rounded-lg p-6 mb-8">
+              <h3 className="text-lg font-medium mb-4">Add New BTS Image</h3>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-400">Image *</label>
+                  <ImageUploader onImageUploaded={handleBtsImageUpload} folder="bts-images" />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-400">Caption</label>
+                  <Input
+                    name="caption"
+                    value={newBtsImage.caption || ""}
+                    onChange={handleBtsChange}
+                    placeholder="Image caption"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-400">Size</label>
+                    <Select value={newBtsImage.size} onValueChange={(value) => handleBtsSelectChange("size", value)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select size" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="small">Small</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="large">Large</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-400">Aspect Ratio</label>
+                    <Select
+                      value={newBtsImage.aspect_ratio}
+                      onValueChange={(value) => handleBtsSelectChange("aspect_ratio", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select aspect ratio" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="square">Square</SelectItem>
+                        <SelectItem value="portrait">Portrait</SelectItem>
+                        <SelectItem value="landscape">Landscape</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end">
+                  <Button onClick={handleAddBtsImage} disabled={!newBtsImage.image_url}>
+                    Add Image
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* BTS images grid */}
+          {btsImages.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {btsImages.map((image) => (
+                <div key={image.id} className="bg-gray-900 rounded-lg overflow-hidden">
+                  <div className="relative h-48">
+                    <img
+                      src={image.image_url || "/placeholder.svg"}
+                      alt={image.caption || "BTS image"}
+                      className="w-full h-full object-cover"
+                    />
+                  </div>
+
+                  {editingBtsId === image.id ? (
+                    <div className="p-4 space-y-4">
+                      <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-400">Caption</label>
+                        <Input
+                          value={image.caption || ""}
+                          onChange={(e) => handleBtsImageChange(image.id!, "caption", e.target.value)}
+                          placeholder="Image caption"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-400">Size</label>
+                          <Select
+                            value={image.size || "medium"}
+                            onValueChange={(value) => handleBtsImageChange(image.id!, "size", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="small">Small</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="large">Large</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <label className="block text-sm font-medium text-gray-400">Aspect Ratio</label>
+                          <Select
+                            value={image.aspect_ratio || "landscape"}
+                            onValueChange={(value) => handleBtsImageChange(image.id!, "aspect_ratio", value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select aspect ratio" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="square">Square</SelectItem>
+                              <SelectItem value="portrait">Portrait</SelectItem>
+                              <SelectItem value="landscape">Landscape</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end gap-2">
+                        <Button variant="ghost" size="sm" onClick={() => setEditingBtsId(null)}>
+                          Cancel
+                        </Button>
+                        <Button variant="default" size="sm" onClick={() => handleUpdateBtsImage(image.id!)}>
+                          <Save className="mr-2 h-4 w-4" /> Save
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4">
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <p className="text-sm text-gray-300">{image.caption || "No caption"}</p>
+                          <p className="text-xs text-gray-500">
+                            {image.size || "medium"} • {image.aspect_ratio || "landscape"}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="icon" onClick={() => setEditingBtsId(image.id!)}>
+                            <Edit className="h-4 w-4" />
+                            <span className="sr-only">Edit</span>
+                          </Button>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteBtsImage(image.id!)}>
+                            <X className="h-4 w-4 text-red-500" />
+                            <span className="sr-only">Delete</span>
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 bg-gray-900 rounded-lg">
+              <p className="text-gray-400 mb-4">No BTS images added yet</p>
+              <Button onClick={() => setShowAddBtsForm(true)} variant="outline">
+                <Plus className="mr-2 h-4 w-4" /> Add Your First BTS Image
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Bottom save button */}

@@ -1,5 +1,5 @@
-import ClientProjectsPage from "./client-page"
+import ProjectsClientPage from "./client-page"
 
 export default function ProjectsPage() {
-  return <ClientProjectsPage />
+  return <ProjectsClientPage />
 }

@@ -7,7 +7,7 @@ import { Loader2, Plus, Edit, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { mockProjects } from "@/lib/project-data"
 
-export default function ClientProjectsPage() {
+export default function ProjectsClientPage() {
   const [projects, setProjects] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -17,6 +17,8 @@ export default function ClientProjectsPage() {
     async function fetchProjects() {
       try {
         setLoading(true)
+        setError(null)
+
         const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: false })
 
         if (error) {
@@ -29,7 +31,7 @@ export default function ClientProjectsPage() {
       } catch (err) {
         console.error("Error in fetchProjects:", err)
         setProjects(mockProjects)
-        setError("An unexpected error occurred")
+        setError("Failed to load projects")
       } finally {
         setLoading(false)
       }
@@ -40,8 +42,8 @@ export default function ClientProjectsPage() {
 
   if (loading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
   }
@@ -49,10 +51,13 @@ export default function ClientProjectsPage() {
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-serif">Projects</h1>
+        <div>
+          <h1 className="text-3xl font-serif mb-2">Projects</h1>
+          <p className="text-gray-400">Manage your portfolio projects</p>
+        </div>
         <Link href="/admin/projects/new">
           <Button>
-            <Plus className="mr-2 h-4 w-4" />
+            <Plus size={16} className="mr-2" />
             New Project
           </Button>
         </Link>
@@ -65,41 +70,48 @@ export default function ClientProjectsPage() {
       )}
 
       {projects.length === 0 ? (
-        <div className="text-center py-12 bg-gray-900/50 rounded-lg">
-          <p className="text-gray-400 mb-4">No projects found</p>
+        <div className="text-center py-12 bg-gray-900 rounded-lg">
+          <h3 className="text-xl font-medium mb-2">No projects found</h3>
+          <p className="text-gray-400 mb-6">Get started by creating your first project</p>
           <Link href="/admin/projects/new">
             <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Create Your First Project
+              <Plus size={16} className="mr-2" />
+              Create Project
             </Button>
           </Link>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {projects.map((project) => (
-            <div key={project.id} className="bg-gray-900 rounded-lg overflow-hidden border border-gray-800">
-              <div className="aspect-video relative">
+            <div key={project.id} className="bg-gray-900 rounded-lg overflow-hidden">
+              <div className="relative aspect-video">
                 <img
                   src={project.image || "/placeholder.svg"}
                   alt={project.title}
                   className="w-full h-full object-cover"
                 />
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+                <div className="absolute bottom-0 left-0 p-4">
+                  <h3 className="text-lg font-medium text-white">{project.title}</h3>
+                  <p className="text-sm text-gray-300">
+                    {project.category} • {project.role}
+                  </p>
+                </div>
               </div>
-              <div className="p-4">
-                <h3 className="text-lg font-medium mb-1">{project.title}</h3>
-                <p className="text-gray-400 text-sm mb-3">
-                  {project.category} • {project.role}
-                </p>
-                <div className="flex justify-between items-center">
+              <div className="p-4 flex justify-between items-center">
+                <div className="text-sm text-gray-400">
+                  <span className="capitalize">{project.type}</span>
+                </div>
+                <div className="flex gap-2">
                   <Link href={`/projects/${project.id}`} target="_blank">
-                    <Button variant="outline" size="sm">
-                      <ExternalLink className="h-4 w-4 mr-1" />
-                      View
+                    <Button variant="ghost" size="icon">
+                      <ExternalLink size={16} />
+                      <span className="sr-only">View</span>
                     </Button>
                   </Link>
                   <Link href={`/admin/edit-project/${project.id}`}>
-                    <Button size="sm">
-                      <Edit className="h-4 w-4 mr-1" />
+                    <Button variant="outline" size="sm">
+                      <Edit size={16} className="mr-1" />
                       Edit
                     </Button>
                   </Link>
