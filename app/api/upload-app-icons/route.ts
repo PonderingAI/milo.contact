@@ -1,4 +1,4 @@
-import { createServerClient } from "@/lib/supabase"
+import { createAdminClient } from "@/lib/supabase"
 import { type NextRequest, NextResponse } from "next/server"
 import JSZip from "jszip"
 
@@ -16,7 +16,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: "File must be a zip archive" }, { status: 400 })
     }
 
-    const supabase = createServerClient()
+    const supabase = createAdminClient()
 
     // Ensure the public bucket exists
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()

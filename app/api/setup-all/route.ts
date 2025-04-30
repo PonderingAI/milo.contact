@@ -1,9 +1,9 @@
-import { createServerClient } from "@/lib/supabase"
+import { createAdminClient } from "@/lib/supabase"
 import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const supabase = createServerClient()
+    const supabase = createAdminClient()
 
     // 1. Create site_settings table if it doesn't exist
     const { error: createTableError } = await supabase.rpc("create_site_settings_table").maybeSingle()

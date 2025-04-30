@@ -4,6 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs"
 import { ThemeProvider } from "@/components/theme-provider"
 import CustomCursor from "@/components/custom-cursor"
 import { Suspense } from "react"
+import { cookies } from "next/headers"
 import { createServerClient } from "@/lib/supabase"
 
 export const metadata = {
@@ -12,33 +13,24 @@ export const metadata = {
     generator: 'v0.dev'
 }
 
-async function getFaviconLinks() {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Try to get app icons from site_settings
+  let icons = null
   try {
-    const supabase = createServerClient()
+    const cookieStore = cookies()
+    const supabase = createServerClient(cookieStore)
     const { data, error } = await supabase.from("site_settings").select("key, value").like("key", "icon_%")
 
-    if (error || !data || data.length === 0) {
-      return null
-    }
-
-    // Convert data to a map for easier access
-    const icons = data.reduce(
-      (acc, { key, value }) => {
-        acc[key.replace("icon_", "")] = value
+    if (!error && data && data.length > 0) {
+      icons = data.reduce((acc: Record<string, string>, item) => {
+        const key = item.key.replace("icon_", "")
+        acc[key] = item.value
         return acc
-      },
-      {} as Record<string, string>,
-    )
-
-    return icons
-  } catch (error) {
-    console.error("Error fetching favicon links:", error)
-    return null
+      }, {})
+    }
+  } catch (err) {
+    console.error("Error loading app icons:", err)
   }
-}
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const icons = await getFaviconLinks()
 
   return (
     <ClerkProvider>
