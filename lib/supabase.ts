@@ -1,60 +1,17 @@
-import { createClient } from "@supabase/supabase-js"
-import { type CookieOptions, createServerClient as _createServerClient } from "@supabase/ssr"
-import { cookies } from "next/headers"
+// This file serves as a compatibility layer for existing imports
+// It re-exports functions from the new separated files
 
-// For client components
-export function getSupabaseBrowserClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { createServerClient as serverClient, createAdminClient } from "./supabase-server"
+import { getSupabaseBrowserClient } from "./supabase-browser"
 
-  return createClient(supabaseUrl, supabaseAnonKey, {
-    auth: {
-      persistSession: true,
-    },
-  })
-}
+// Re-export for backward compatibility
+export const createServerClient = serverClient
+export { getSupabaseBrowserClient, createAdminClient }
 
-// For server components
-export function createServerClient(cookieStore?: any) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-  if (!cookieStore) {
-    cookieStore = cookies()
-  }
-
-  return _createServerClient(supabaseUrl, supabaseAnonKey, {
-    cookies: {
-      get(name: string) {
-        return cookieStore.get(name)?.value
-      },
-      set(name: string, value: string, options: CookieOptions) {
-        try {
-          cookieStore.set({ name, value, ...options })
-        } catch (error) {
-          // Handle cookies in read-only contexts
-        }
-      },
-      remove(name: string, options: CookieOptions) {
-        try {
-          cookieStore.set({ name, value: "", ...options })
-        } catch (error) {
-          // Handle cookies in read-only contexts
-        }
-      },
-    },
-  })
-}
-
-// For server actions and API routes
-export function createAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  })
+// For backward compatibility with any code that might be importing createClient directly
+export function createClient() {
+  console.warn(
+    "Direct usage of createClient is deprecated. Please use createServerClient, createAdminClient, or getSupabaseBrowserClient instead.",
+  )
+  return serverClient()
 }

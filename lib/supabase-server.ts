@@ -1,10 +1,7 @@
 import { createClient } from "@supabase/supabase-js"
-import { cookies } from "next/headers"
 
 // For server components and API routes
 export function createServerClient() {
-  const cookieStore = cookies()
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
