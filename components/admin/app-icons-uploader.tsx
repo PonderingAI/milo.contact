@@ -73,13 +73,24 @@ export default function AppIconsUploader() {
       const formData = new FormData()
       formData.append("zipFile", file)
 
-      // Upload using the server-side API
+      // Upload using the server-side API - FIX: Don't set Content-Type header
       const response = await fetch("/api/upload-app-icons", {
         method: "POST",
         body: formData,
+        // Let the browser set the Content-Type header automatically with boundary
       })
 
+      // Simulate progress for better UX
+      const progressInterval = setInterval(() => {
+        setProgress((prev) => {
+          const newProgress = Math.min(prev + 10, 90)
+          return newProgress
+        })
+      }, 300)
+
       const result = await response.json()
+
+      clearInterval(progressInterval)
 
       if (!response.ok) {
         throw new Error(result.message || "Failed to upload app icons")

@@ -4,8 +4,9 @@ import JSZip from "jszip"
 
 export async function POST(request: NextRequest) {
   try {
+    // Ensure we're properly parsing the multipart form data
     const formData = await request.formData()
-    const zipFile = formData.get("zipFile") as File
+    const zipFile = formData.get("zipFile") as File | null
 
     if (!zipFile) {
       return NextResponse.json({ success: false, message: "No file provided" }, { status: 400 })
