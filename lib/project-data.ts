@@ -1,5 +1,15 @@
-import { createServerClient } from "./supabase"
+/**
+ * Project Data Utilities
+ *
+ * This file contains types and functions for working with project data.
+ * It handles fetching projects from Supabase and provides fallback to mock data.
+ */
 
+import { createServerClient } from "./supabase-server"
+
+/**
+ * Project interface representing a portfolio project
+ */
 export interface Project {
   id: string
   title: string
@@ -16,6 +26,9 @@ export interface Project {
   updated_at?: string
 }
 
+/**
+ * Behind-the-scenes image interface
+ */
 export interface BtsImage {
   id: string
   project_id: string
@@ -26,8 +39,10 @@ export interface BtsImage {
   created_at?: string
 }
 
-// Update the isDatabaseSetup function to actually check the database instead of always returning false
-export async function isDatabaseSetup() {
+/**
+ * Check if the database is set up by testing if the projects table exists
+ */
+export async function isDatabaseSetup(): Promise<boolean> {
   try {
     const supabase = createServerClient()
 
@@ -52,8 +67,10 @@ export async function isDatabaseSetup() {
   }
 }
 
-// Server-side data fetching functions
-export async function getProjects() {
+/**
+ * Get all projects from the database or fallback to mock data
+ */
+export async function getProjects(): Promise<Project[]> {
   try {
     // First check if database is set up
     const isDbSetup = await isDatabaseSetup()
@@ -77,7 +94,10 @@ export async function getProjects() {
   }
 }
 
-export async function getProjectById(id: string) {
+/**
+ * Get a project by ID with its BTS images
+ */
+export async function getProjectById(id: string): Promise<(Project & { bts_images: BtsImage[] }) | null> {
   try {
     // First check if database is set up
     const isDbSetup = await isDatabaseSetup()
@@ -136,7 +156,10 @@ export async function getProjectById(id: string) {
   }
 }
 
-export async function getProjectsByType(type: string) {
+/**
+ * Get projects filtered by type
+ */
+export async function getProjectsByType(type: string): Promise<Project[]> {
   try {
     // First check if database is set up
     const isDbSetup = await isDatabaseSetup()
@@ -164,7 +187,10 @@ export async function getProjectsByType(type: string) {
   }
 }
 
-export async function getProjectsByRole(role: string | string[]) {
+/**
+ * Get projects filtered by role
+ */
+export async function getProjectsByRole(role: string | string[]): Promise<Project[]> {
   try {
     // First check if database is set up
     const isDbSetup = await isDatabaseSetup()
@@ -212,8 +238,10 @@ export async function getProjectsByRole(role: string | string[]) {
   }
 }
 
-// Helper function to extract video ID from YouTube or Vimeo URL
-export function extractVideoInfo(url: string | undefined) {
+/**
+ * Extract video platform and ID from a video URL
+ */
+export function extractVideoInfo(url: string | undefined): { platform: "youtube" | "vimeo"; id: string } | null {
   if (!url) return null
 
   // YouTube

@@ -1,11 +1,23 @@
+/**
+ * Supabase Browser Client
+ *
+ * This file provides a singleton pattern for the Supabase client in browser environments.
+ * It ensures only one instance of the client is created to prevent multiple GoTrueClient warnings.
+ */
+
 import { createClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from "@supabase/supabase-js"
 
-// For client-side usage - using singleton pattern
-let browserClient: ReturnType<typeof createClient> | null = null
+// Singleton instance
+let browserClient: SupabaseClient | null = null
 
-export function getSupabaseBrowserClient() {
+/**
+ * Get a Supabase client for browser usage
+ * Uses singleton pattern to prevent multiple instances
+ */
+export function getSupabaseBrowserClient(): SupabaseClient {
+  // For SSR, create a temporary non-persistent client
   if (typeof window === "undefined") {
-    // For SSR, return a temporary client that won't be stored
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
@@ -32,4 +44,11 @@ export function getSupabaseBrowserClient() {
   }
 
   return browserClient
+}
+
+/**
+ * Reset the browser client (useful for testing and debugging)
+ */
+export function resetBrowserClient(): void {
+  browserClient = null
 }

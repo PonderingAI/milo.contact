@@ -1,3 +1,10 @@
+/**
+ * Comprehensive Setup API
+ *
+ * This endpoint initializes all necessary database tables and storage buckets.
+ * It's designed to be a one-click setup solution for the portfolio.
+ */
+
 import { createAdminClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
 
@@ -106,41 +113,39 @@ export async function GET() {
 
     // 3. Create storage buckets
     try {
-      // Create projects bucket
-      const { error: projectsBucketError } = await supabase.storage.createBucket("projects", {
-        public: true,
-        fileSizeLimit: 10485760, // 10MB
-      })
+      // Check existing buckets
+      const { data: buckets } = await supabase.storage.listBuckets()
+      const existingBuckets = new Set(buckets?.map((b) => b.name) || [])
 
-      // Create icons bucket
-      const { error: iconsBucketError } = await supabase.storage.createBucket("icons", {
-        public: true,
-        fileSizeLimit: 1048576, // 1MB
-      })
+      // Create required buckets if they don't exist
+      const requiredBuckets = [
+        { name: "projects", public: true, fileSizeLimit: 10485760 }, // 10MB
+        { name: "icons", public: true, fileSizeLimit: 1048576 }, // 1MB
+        { name: "media", public: true, fileSizeLimit: 52428800 }, // 50MB
+        { name: "public", public: true, fileSizeLimit: 10485760 }, // 10MB
+      ]
 
-      if (projectsBucketError || iconsBucketError) {
-        results.storage = {
-          success: false,
-          message: `Error creating storage buckets: ${projectsBucketError?.message || iconsBucketError?.message}`,
-        }
-      } else {
-        results.storage = {
-          success: true,
-          message: "Storage buckets created successfully",
+      for (const bucket of requiredBuckets) {
+        if (!existingBuckets.has(bucket.name)) {
+          const { error } = await supabase.storage.createBucket(bucket.name, {
+            public: bucket.public,
+            fileSizeLimit: bucket.fileSizeLimit,
+          })
+
+          if (error && !error.message.includes("already exists")) {
+            throw error
+          }
         }
       }
+
+      results.storage = {
+        success: true,
+        message: "Storage buckets created or verified successfully",
+      }
     } catch (storageError: any) {
-      // If buckets already exist, this is fine
-      if (storageError.message && storageError.message.includes("already exists")) {
-        results.storage = {
-          success: true,
-          message: "Storage buckets already exist",
-        }
-      } else {
-        results.storage = {
-          success: false,
-          message: `Error with storage buckets: ${storageError.message}`,
-        }
+      results.storage = {
+        success: false,
+        message: `Error with storage buckets: ${storageError.message}`,
       }
     }
 
