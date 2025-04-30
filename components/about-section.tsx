@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 export default function AboutSection() {
   const [settings, setSettings] = useState({
@@ -15,19 +15,26 @@ export default function AboutSection() {
       "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature, which often inspires my landscape and product photography work.",
     image_profile: "/images/profile.jpg",
   })
-
-  const supabase = createClientComponentClient()
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function loadSettings() {
       try {
+        setIsLoading(true)
+        const supabase = getSupabaseBrowserClient()
+
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
           .in("key", ["about_heading", "about_text1", "about_text2", "about_text3", "image_profile"])
 
         if (error) {
-          console.error("Error loading about settings:", error)
+          // If table doesn't exist, we'll use default values
+          if (error.code === "42P01") {
+            console.log("Site settings table doesn't exist yet. Using default values.")
+          } else {
+            console.error("Error loading about settings:", error)
+          }
           return
         }
 
@@ -44,6 +51,8 @@ export default function AboutSection() {
         }
       } catch (err) {
         console.error("Error in loadSettings:", err)
+      } finally {
+        setIsLoading(false)
       }
     }
 

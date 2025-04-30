@@ -4,7 +4,8 @@ import AboutSection from "@/components/about-section"
 import ServicesSection from "@/components/services-section"
 import ContactSection from "@/components/contact-section"
 import { getProjects, isDatabaseSetup } from "@/lib/project-data"
-import DatabaseSetupAlert from "@/components/database-setup-alert"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 export default async function Home() {
   // Check if database is set up
@@ -18,7 +19,18 @@ export default async function Home() {
       <HeroSection />
 
       <div className="container mx-auto px-4 py-24">
-        <DatabaseSetupAlert isSetup={dbSetup} />
+        {!dbSetup && (
+          <div className="mb-12 p-6 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+            <h2 className="text-xl font-bold mb-2">Database Setup Required</h2>
+            <p className="mb-4">
+              Your portfolio database needs to be set up before all features will work correctly. This will create the
+              necessary tables and default settings.
+            </p>
+            <Button asChild>
+              <Link href="/setup">Run Setup</Link>
+            </Button>
+          </div>
+        )}
 
         <AboutSection />
         <Suspense fallback={<div>Loading services...</div>}>

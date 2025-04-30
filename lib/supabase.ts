@@ -1,17 +1,18 @@
-// This file serves as a compatibility layer for existing imports
-// It re-exports functions from the new separated files
-
-import { createServerClient as serverClient, createAdminClient } from "./supabase-server"
+import { createServerClient as createServerClientOriginal } from "./supabase-server"
 import { getSupabaseBrowserClient } from "./supabase-browser"
 
-// Re-export for backward compatibility
-export const createServerClient = serverClient
-export { getSupabaseBrowserClient, createAdminClient }
+// Re-export the functions from the new files
+export { getSupabaseBrowserClient }
 
-// For backward compatibility with any code that might be importing createClient directly
+// For server components and API routes
+export function createServerClient() {
+  return createServerClientOriginal()
+}
+
+// For backward compatibility - with warning
 export function createClient() {
   console.warn(
-    "Direct usage of createClient is deprecated. Please use createServerClient, createAdminClient, or getSupabaseBrowserClient instead.",
+    "Direct usage of createClient is deprecated. Use createServerClient or getSupabaseBrowserClient instead.",
   )
-  return serverClient()
+  return createServerClientOriginal()
 }

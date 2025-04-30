@@ -1,10 +1,9 @@
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { createAdminClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    const supabase = createAdminClient()
 
     // Check if the site_settings table exists
     const { data: tableExists, error: tableCheckError } = await supabase

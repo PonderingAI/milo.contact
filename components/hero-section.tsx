@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { ArrowDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { extractVideoInfo } from "@/lib/project-data"
 
 export default function HeroSection() {
@@ -15,8 +15,7 @@ export default function HeroSection() {
   })
   const [isVimeoBackground, setIsVimeoBackground] = useState(false)
   const [vimeoId, setVimeoId] = useState<string | null>(null)
-
-  const supabase = createClientComponentClient()
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -30,13 +29,21 @@ export default function HeroSection() {
   useEffect(() => {
     async function loadSettings() {
       try {
+        setIsLoading(true)
+        const supabase = getSupabaseBrowserClient()
+
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
           .in("key", ["hero_heading", "hero_subheading", "image_hero_bg"])
 
         if (error) {
-          console.error("Error loading hero settings:", error)
+          // If table doesn't exist, we'll use default values
+          if (error.code === "42P01") {
+            console.log("Site settings table doesn't exist yet. Using default values.")
+          } else {
+            console.error("Error loading hero settings:", error)
+          }
           return
         }
 
@@ -63,6 +70,8 @@ export default function HeroSection() {
         }
       } catch (err) {
         console.error("Error in loadSettings:", err)
+      } finally {
+        setIsLoading(false)
       }
     }
 

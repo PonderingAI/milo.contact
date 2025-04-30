@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import ProjectMiniCard from "@/components/project-mini-card"
 import { motion, AnimatePresence } from "framer-motion"
 import type { Project } from "@/lib/project-data"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 interface ServicesSectionProps {
   projects: Project[]
@@ -64,19 +64,26 @@ export default function ServicesSection({ projects }: ServicesSectionProps) {
     services_heading: "Services",
     services_text: "",
   })
-
-  const supabase = createClientComponentClient()
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function loadSettings() {
       try {
+        setIsLoading(true)
+        const supabase = getSupabaseBrowserClient()
+
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
           .in("key", ["services_heading", "services_text"])
 
         if (error) {
-          console.error("Error loading services settings:", error)
+          // If table doesn't exist, we'll use default values
+          if (error.code === "42P01") {
+            console.log("Site settings table doesn't exist yet. Using default values.")
+          } else {
+            console.error("Error loading services settings:", error)
+          }
           return
         }
 
@@ -90,6 +97,8 @@ export default function ServicesSection({ projects }: ServicesSectionProps) {
         }
       } catch (err) {
         console.error("Error in loadSettings:", err)
+      } finally {
+        setIsLoading(false)
       }
     }
 

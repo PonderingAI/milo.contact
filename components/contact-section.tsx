@@ -5,7 +5,7 @@ import { Mail, Phone, MessageSquare } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 export default function ContactSection() {
   const [settings, setSettings] = useState({
@@ -16,19 +16,26 @@ export default function ContactSection() {
     contact_phone: "+41 77 422 68 03",
     chatgpt_url: "https://chatgpt.com/g/g-vOF4lzRBG-milo",
   })
-
-  const supabase = createClientComponentClient()
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function loadSettings() {
       try {
+        setIsLoading(true)
+        const supabase = getSupabaseBrowserClient()
+
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
           .in("key", ["contact_heading", "contact_text", "contact_email", "contact_phone", "chatgpt_url"])
 
         if (error) {
-          console.error("Error loading contact settings:", error)
+          // If table doesn't exist, we'll use default values
+          if (error.code === "42P01") {
+            console.log("Site settings table doesn't exist yet. Using default values.")
+          } else {
+            console.error("Error loading contact settings:", error)
+          }
           return
         }
 
@@ -45,6 +52,8 @@ export default function ContactSection() {
         }
       } catch (err) {
         console.error("Error in loadSettings:", err)
+      } finally {
+        setIsLoading(false)
       }
     }
 

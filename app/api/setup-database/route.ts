@@ -1,9 +1,9 @@
-import { createServerClient } from "@/lib/supabase"
+import { createAdminClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
 
 export async function POST() {
   try {
-    const supabase = createServerClient()
+    const supabase = createAdminClient()
 
     // Check if tables already exist by trying to query them
     const { error: checkError } = await supabase.from("projects").select("count(*)", { count: "exact", head: true })
