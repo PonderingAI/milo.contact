@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/use-toast"
 import { Loader2, Film } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 
-interface ImageUploadProps {
+interface MediaUploaderProps {
   label: string
   settingKey: string
   currentValue: string
@@ -22,7 +22,7 @@ interface ImageUploadProps {
   allowVideo?: boolean
 }
 
-function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo = false }: ImageUploadProps) {
+function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo = false }: MediaUploaderProps) {
   const [uploading, setUploading] = useState(false)
   const [mediaType, setMediaType] = useState<"image" | "video">(currentValue.includes("vimeo.com") ? "video" : "image")
   const [videoUrl, setVideoUrl] = useState(currentValue.includes("vimeo.com") ? currentValue : "")

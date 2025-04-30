@@ -1,12 +1,68 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Camera, Film, Smartphone, Waves, DrillIcon as Drone } from "lucide-react"
 import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import ProjectMiniCard from "@/components/project-mini-card"
+import { motion, AnimatePresence } from "framer-motion"
+import type { Project } from "@/lib/project-data"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-export default function ServicesSection() {
+interface ServicesSectionProps {
+  projects: Project[]
+}
+
+const services = [
+  {
+    icon: <Film className="w-8 h-8" />,
+    title: "Director of Photography",
+    description: "Crafting visual narratives through expert cinematography and lighting design.",
+    type: "camera",
+    filter: "DP",
+  },
+  {
+    icon: <Camera className="w-8 h-8" />,
+    title: "Camera Assistant",
+    description: "Providing technical support as 1AC & 2AC to ensure smooth production workflows.",
+    type: "camera",
+    filter: ["1st AC", "2nd AC", "Camera Operator"],
+  },
+  {
+    icon: <Drone className="w-8 h-8" />,
+    title: "Drone Operator",
+    description: "Capturing breathtaking aerial footage with precision and creative vision.",
+    type: "camera",
+    filter: "Drone Operator",
+  },
+  {
+    icon: <Waves className="w-8 h-8" />,
+    title: "Underwater Operator",
+    description: "Specialized in capturing stunning underwater imagery for unique perspectives.",
+    type: "camera",
+    filter: "Underwater Operator",
+  },
+  {
+    icon: <Camera className="w-8 h-8" />,
+    title: "Landscape Photography",
+    description: "Creating compelling visual stories through nature and landscape imagery.",
+    type: "photography",
+    filter: "Landscape",
+  },
+  {
+    icon: <Smartphone className="w-8 h-8" />,
+    title: "Product Photography",
+    description: "Showcasing products with attention to detail and professional lighting.",
+    type: "photography",
+    filter: "Product",
+  },
+]
+
+export default function ServicesSection({ projects }: ServicesSectionProps) {
+  const [activeService, setActiveService] = useState<number | null>(null)
   const [settings, setSettings] = useState({
     services_heading: "Services",
+    services_text: "",
   })
 
   const supabase = createClientComponentClient()
@@ -14,92 +70,117 @@ export default function ServicesSection() {
   useEffect(() => {
     async function loadSettings() {
       try {
-        const { data, error } = await supabase.from("site_settings").select("key, value").eq("key", "services_heading")
+        const { data, error } = await supabase
+          .from("site_settings")
+          .select("key, value")
+          .in("key", ["services_heading", "services_text"])
 
-        if (!error && data && data.length > 0) {
-          setSettings({
-            ...settings,
-            services_heading: data[0].value,
+        if (error) {
+          console.error("Error loading services settings:", error)
+          return
+        }
+
+        if (data && data.length > 0) {
+          const newSettings = { ...settings }
+          data.forEach((item) => {
+            if (item.key === "services_heading") newSettings.services_heading = item.value
+            if (item.key === "services_text") newSettings.services_text = item.value
           })
+          setSettings(newSettings)
         }
       } catch (err) {
-        console.error("Error loading services settings:", err)
+        console.error("Error in loadSettings:", err)
       }
     }
 
     loadSettings()
   }, [])
 
+  // Filter projects based on active service
+  const getFilteredProjects = (index: number) => {
+    const service = services[index]
+
+    if (Array.isArray(service.filter)) {
+      return projects.filter((project) => project.type === service.type && service.filter.includes(project.role))
+    }
+
+    return projects.filter(
+      (project) =>
+        project.type === service.type && (project.role === service.filter || project.category === service.filter),
+    )
+  }
+
+  const handleServiceClick = (index: number) => {
+    if (activeService === index) {
+      setActiveService(null)
+    } else {
+      setActiveService(index)
+    }
+  }
+
   return (
-    <section id="services" className="py-20 bg-black">
-      <div className="container mx-auto px-4">
-        <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">{settings.services_heading}</h2>
+    <section id="services" className="py-24">
+      <h2 className="text-5xl md:text-7xl font-serif mb-16">{settings.services_heading}</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-          <Link href="/projects?type=directed" className="group">
-            <div className="bg-gray-900 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-105">
-              <div className="h-48 overflow-hidden">
-                <img
-                  src="/images/project1.jpg"
-                  alt="Directing"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-semibold mb-2">Directing</h3>
-                <p className="text-gray-400">Creative direction for films, commercials, and music videos.</p>
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {services.map((service, index) => (
+          <div key={index} className="relative">
+            <div
+              className={`border ${activeService === index ? "border-white" : "border-gray-800"} rounded-lg p-8 hover:border-white transition-colors cursor-pointer`}
+              onClick={() => handleServiceClick(index)}
+            >
+              <div className="mb-6">{service.icon}</div>
+              <h3 className="text-2xl font-serif mb-4">{service.title}</h3>
+              <p className="text-gray-400">{service.description}</p>
             </div>
-          </Link>
 
-          <Link href="/projects?type=camera" className="group">
-            <div className="bg-gray-900 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-105">
-              <div className="h-48 overflow-hidden">
-                <img
-                  src="/images/project2.jpg"
-                  alt="Camera Work"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-semibold mb-2">Camera Work</h3>
-                <p className="text-gray-400">Professional camera operation and cinematography services.</p>
-              </div>
-            </div>
-          </Link>
+            <AnimatePresence>
+              {activeService === index && (
+                <motion.div
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: 20 }}
+                  className="absolute left-0 right-0 mt-2 bg-gray-900 rounded-lg p-4 z-20 shadow-xl border border-gray-800"
+                >
+                  <div className="grid grid-cols-2 gap-2">
+                    {getFilteredProjects(index)
+                      .slice(0, 4)
+                      .map((project) => (
+                        <ProjectMiniCard
+                          key={project.id}
+                          id={project.id}
+                          title={project.title}
+                          image={project.image}
+                          role={project.role}
+                        />
+                      ))}
+                  </div>
+                  {getFilteredProjects(index).length > 4 && (
+                    <div className="mt-3 text-center">
+                      <Link
+                        href={`/projects?category=${services[index].type}&role=${services[index].filter}`}
+                        className="text-sm text-gray-400 hover:text-white"
+                      >
+                        + {getFilteredProjects(index).length - 4} more projects
+                      </Link>
+                    </div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        ))}
+      </div>
 
-          <Link href="/projects?type=production" className="group">
-            <div className="bg-gray-900 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-105">
-              <div className="h-48 overflow-hidden">
-                <img
-                  src="/images/project3.jpg"
-                  alt="Production"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-semibold mb-2">Production</h3>
-                <p className="text-gray-400">End-to-end production services for various media projects.</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link href="/projects?type=photography" className="group">
-            <div className="bg-gray-900 rounded-lg overflow-hidden transition-transform duration-300 group-hover:scale-105">
-              <div className="h-48 overflow-hidden">
-                <img
-                  src="/images/project4.jpg"
-                  alt="Photography"
-                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-                />
-              </div>
-              <div className="p-6">
-                <h3 className="text-xl font-semibold mb-2">Photography</h3>
-                <p className="text-gray-400">Professional photography for various subjects and occasions.</p>
-              </div>
-            </div>
-          </Link>
-        </div>
+      <div className="mt-16 text-center">
+        <Button
+          asChild
+          variant="outline"
+          size="lg"
+          className="rounded-full border-white hover:bg-white hover:text-black transition-colors"
+        >
+          <Link href="/projects">View All Projects</Link>
+        </Button>
       </div>
     </section>
   )
