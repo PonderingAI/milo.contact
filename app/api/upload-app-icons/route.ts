@@ -83,10 +83,9 @@ export async function POST(request: NextRequest) {
 
       uploadedFiles[filename] = publicUrl
 
-      // Also add to the unified media library
-      await supabase
-        .from("media")
-        .insert({
+      // Also add to the unified media library - FIX: Proper async/await error handling
+      try {
+        await supabase.from("media").insert({
           filename: filename,
           filepath: `icons/${filename}`,
           filesize: blob.size,
@@ -99,7 +98,10 @@ export async function POST(request: NextRequest) {
             source: "favicon-generator",
           },
         })
-        .catch((err) => console.error(`Error adding ${filename} to media library:`, err))
+      } catch (err) {
+        console.error(`Error adding ${filename} to media library:`, err)
+        // Continue with the process even if media library insert fails
+      }
     }
 
     // Update site settings with the uploaded files
