@@ -50,7 +50,7 @@ export default function HeroSection() {
           setSettings(newSettings)
 
           // Check if background is a Vimeo URL
-          if (newSettings.image_hero_bg.includes("vimeo.com")) {
+          if (newSettings.image_hero_bg && newSettings.image_hero_bg.includes("vimeo.com")) {
             setIsVimeoBackground(true)
             const videoInfo = extractVideoInfo(newSettings.image_hero_bg)
             if (videoInfo && videoInfo.platform === "vimeo") {

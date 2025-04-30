@@ -3,7 +3,6 @@
 import type React from "react"
 
 import { useState } from "react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/use-toast"
@@ -17,7 +16,6 @@ export default function AppIconsUploader() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
-  const supabase = createClientComponentClient()
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -62,29 +60,6 @@ export default function AppIconsUploader() {
     }
   }
 
-  const ensureBucketExists = async (bucketName: string) => {
-    try {
-      // Call the API route to set up the bucket with server-side permissions
-      const response = await fetch("/api/setup-icons-bucket", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.message || "Failed to set up storage bucket")
-      }
-
-      return true
-    } catch (err: any) {
-      console.error("Error ensuring bucket exists:", err)
-      throw new Error(`Failed to set up storage: ${err.message}`)
-    }
-  }
-
   const uploadIcons = async () => {
     if (!file) return
 
@@ -94,66 +69,24 @@ export default function AppIconsUploader() {
       setProgress(0)
       setSuccess(false)
 
-      // Ensure the bucket exists
-      await ensureBucketExists("public")
+      // Create FormData to send the file
+      const formData = new FormData()
+      formData.append("zipFile", file)
 
-      // Read the zip file
-      const zip = new JSZip()
-      const contents = await zip.loadAsync(file)
-
-      // Count total files for progress tracking
-      let totalFiles = 0
-      let processedFiles = 0
-      contents.forEach((_, zipFile) => {
-        if (!zipFile.dir) totalFiles++
+      // Upload using the server-side API
+      const response = await fetch("/api/upload-app-icons", {
+        method: "POST",
+        body: formData,
       })
 
-      // Upload each file in the zip
-      const uploadedFiles: { [key: string]: string } = {}
+      const result = await response.json()
 
-      for (const [filename, zipFile] of Object.entries(contents.files)) {
-        // Skip directories
-        if (zipFile.dir) continue
-
-        // Skip manifest.json and browserconfig.xml for now
-        if (filename === "manifest.json" || filename === "browserconfig.xml") {
-          processedFiles++
-          continue
-        }
-
-        const blob = await zipFile.async("blob")
-
-        // Upload to Supabase Storage
-        const { data, error: uploadError } = await supabase.storage.from("public").upload(`icons/${filename}`, blob, {
-          cacheControl: "3600",
-          upsert: true,
-        })
-
-        if (uploadError) {
-          throw new Error(`Failed to upload ${filename}: ${uploadError.message}`)
-        }
-
-        // Get public URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("public").getPublicUrl(`icons/${filename}`)
-
-        uploadedFiles[filename] = publicUrl
-
-        // Update progress
-        processedFiles++
-        setProgress(Math.round((processedFiles / totalFiles) * 100))
-      }
-
-      // Update site settings with the uploaded files
-      for (const [filename, url] of Object.entries(uploadedFiles)) {
-        await supabase.from("site_settings").upsert({
-          key: `icon_${filename.replace(/[^a-zA-Z0-9]/g, "_")}`,
-          value: url,
-        })
+      if (!response.ok) {
+        throw new Error(result.message || "Failed to upload app icons")
       }
 
       setSuccess(true)
+      setProgress(100)
       toast({
         title: "Success",
         description: "App icons uploaded successfully!",
