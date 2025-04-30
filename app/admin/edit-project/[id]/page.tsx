@@ -2,23 +2,28 @@
 
 import type React from "react"
 
-import { useState } from "react"
-import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
+import { useParams, useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save } from "lucide-react"
+import { Loader2, ArrowLeft, Save, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { mockProjects } from "@/lib/project-data"
 import ImageUploader from "@/components/admin/image-uploader"
 import Link from "next/link"
 
-export default function NewProjectPage() {
+export default function EditProjectPage() {
+  const params = useParams()
   const router = useRouter()
+  const id = params.id as string
   const supabase = createClientComponentClient()
 
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [project, setProject] = useState<any>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -31,6 +36,59 @@ export default function NewProjectPage() {
     description: "",
     special_notes: "",
   })
+
+  useEffect(() => {
+    async function fetchProject() {
+      try {
+        setLoading(true)
+        setError(null)
+
+        // Try to get from Supabase
+        const { data, error } = await supabase.from("projects").select("*").eq("id", id).single()
+
+        if (error) {
+          console.error("Supabase error:", error)
+          // Try to find in mock data as fallback
+          const mockProject = mockProjects.find((p) => p.id === id)
+          if (mockProject) {
+            setProject(mockProject)
+            setFormData({
+              title: mockProject.title || "",
+              category: mockProject.category || "",
+              type: mockProject.type || "directed",
+              role: mockProject.role || "",
+              image: mockProject.image || "",
+              video_url: mockProject.video_url || "",
+              description: mockProject.description || "",
+              special_notes: mockProject.special_notes || "",
+            })
+            setError("Using mock data - database connection failed")
+          } else {
+            setError("Project not found")
+          }
+        } else {
+          setProject(data)
+          setFormData({
+            title: data.title || "",
+            category: data.category || "",
+            type: data.type || "directed",
+            role: data.role || "",
+            image: data.image || "",
+            video_url: data.video_url || "",
+            description: data.description || "",
+            special_notes: data.special_notes || "",
+          })
+        }
+      } catch (err) {
+        console.error("Error fetching project:", err)
+        setError("Failed to load project")
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchProject()
+  }, [id, supabase])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -61,22 +119,68 @@ export default function NewProjectPage() {
         return
       }
 
-      // Create in Supabase
-      const { data, error } = await supabase.from("projects").insert([formData]).select()
+      // Update in Supabase
+      const { error } = await supabase.from("projects").update(formData).eq("id", id)
 
       if (error) {
         throw error
       }
 
       // Success
-      alert("Project created successfully!")
+      alert("Project updated successfully!")
       router.push("/admin/projects")
     } catch (err: any) {
-      console.error("Error creating project:", err)
-      setError(err.message || "Failed to create project")
+      console.error("Error saving project:", err)
+      setError(err.message || "Failed to save project")
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleDelete = async () => {
+    if (!confirm("Are you sure you want to delete this project?")) {
+      return
+    }
+
+    try {
+      setSaving(true)
+
+      const { error } = await supabase.from("projects").delete().eq("id", id)
+
+      if (error) {
+        throw error
+      }
+
+      alert("Project deleted successfully!")
+      router.push("/admin/projects")
+    } catch (err: any) {
+      console.error("Error deleting project:", err)
+      setError(err.message || "Failed to delete project")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!project && !loading) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-900/20 border border-red-800 rounded-lg p-6">
+          <h2 className="text-xl font-bold text-red-400 mb-2">Error</h2>
+          <p>{error || "Project not found"}</p>
+          <Button variant="outline" className="mt-4" onClick={() => router.push("/admin/projects")}>
+            Back to Projects
+          </Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -88,19 +192,26 @@ export default function NewProjectPage() {
           <span>Back to Projects</span>
         </Link>
 
-        <Button onClick={handleSave} disabled={saving} size="sm">
-          {saving ? (
-            <>
-              <Loader2 size={16} className="mr-1 animate-spin" />
-              Creating...
-            </>
-          ) : (
-            <>
-              <Save size={16} className="mr-1" />
-              Create Project
-            </>
-          )}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="destructive" size="sm" onClick={handleDelete} disabled={saving}>
+            <Trash2 size={16} className="mr-1" />
+            Delete
+          </Button>
+
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving ? (
+              <>
+                <Loader2 size={16} className="mr-1 animate-spin" />
+                Saving...
+              </>
+            ) : (
+              <>
+                <Save size={16} className="mr-1" />
+                Save Changes
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {error && (
@@ -109,11 +220,11 @@ export default function NewProjectPage() {
         </div>
       )}
 
-      {/* Project form */}
+      {/* Project preview with editable fields */}
       <div className="max-w-5xl mx-auto">
         <div className="mb-8">
-          <h1 className="text-3xl font-serif mb-2">New Project</h1>
-          <p className="text-gray-400">Create a new project to showcase in your portfolio.</p>
+          <h1 className="text-3xl font-serif mb-2">Edit Project</h1>
+          <p className="text-gray-400">Make changes to your project and click Save Changes when done.</p>
         </div>
 
         {/* Project header section */}
@@ -225,12 +336,12 @@ export default function NewProjectPage() {
             {saving ? (
               <>
                 <Loader2 size={16} className="mr-2 animate-spin" />
-                Creating...
+                Saving...
               </>
             ) : (
               <>
                 <Save size={16} className="mr-2" />
-                Create Project
+                Save Changes
               </>
             )}
           </Button>
