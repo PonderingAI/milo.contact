@@ -64,20 +64,18 @@ export default function AppIconsUploader() {
 
   const ensureBucketExists = async (bucketName: string) => {
     try {
-      // Check if bucket exists
-      const { data: buckets } = await supabase.storage.listBuckets()
-      const bucketExists = buckets?.some((bucket) => bucket.name === bucketName)
+      // Call the API route to set up the bucket with server-side permissions
+      const response = await fetch("/api/setup-icons-bucket", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
 
-      if (!bucketExists) {
-        // Create the bucket if it doesn't exist
-        const { error } = await supabase.storage.createBucket(bucketName, {
-          public: true,
-          fileSizeLimit: 10485760, // 10MB
-        })
+      const data = await response.json()
 
-        if (error) {
-          throw new Error(`Failed to create bucket: ${error.message}`)
-        }
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to set up storage bucket")
       }
 
       return true
