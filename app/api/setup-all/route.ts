@@ -4,139 +4,156 @@ import { NextResponse } from "next/server"
 export async function GET() {
   try {
     const supabase = createAdminClient()
-
-    // 1. Create site_settings table if it doesn't exist
-    const { error: createTableError } = await supabase.rpc("create_site_settings_table").maybeSingle()
-
-    if (createTableError && createTableError.code !== "42P01" && !createTableError.message.includes("already exists")) {
-      console.error("Error creating site_settings table:", createTableError)
+    const results = {
+      database: { success: false, message: "" },
+      siteSettings: { success: false, message: "" },
+      storage: { success: false, message: "" },
     }
 
-    // 2. Create media table for unified media management
-    const { error: createMediaTableError } = await supabase.query(`
-      CREATE TABLE IF NOT EXISTS media (
-        id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-        filename TEXT NOT NULL,
-        filepath TEXT NOT NULL,
-        filesize INTEGER NOT NULL,
-        filetype TEXT NOT NULL,
-        public_url TEXT NOT NULL,
-        thumbnail_url TEXT,
-        tags TEXT[] DEFAULT '{}',
-        metadata JSONB DEFAULT '{}'::jsonb,
-        usage_locations JSONB DEFAULT '{}'::jsonb,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `)
+    // 1. Check if site_settings table exists
+    const { error: settingsCheckError } = await supabase.from("site_settings").select("key").limit(1).maybeSingle()
 
-    if (createMediaTableError) {
-      console.error("Error creating media table:", createMediaTableError)
-    }
+    if (settingsCheckError && settingsCheckError.code === "42P01") {
+      // Create site_settings table
+      const { error: createTableError } = await supabase.rpc("create_site_settings_table")
 
-    // 3. Create RLS policies for media table
-    const { error: createPolicyError } = await supabase.query(`
-      BEGIN;
-      -- Drop existing policies if they exist
-      DROP POLICY IF EXISTS "Allow authenticated read access" ON media;
-      DROP POLICY IF EXISTS "Allow authenticated insert access" ON media;
-      DROP POLICY IF EXISTS "Allow authenticated update access" ON media;
-      DROP POLICY IF EXISTS "Allow authenticated delete access" ON media;
-      
-      -- Enable RLS on the table
-      ALTER TABLE media ENABLE ROW LEVEL SECURITY;
-      
-      -- Create policies
-      CREATE POLICY "Allow authenticated read access" 
-        ON media FOR SELECT 
-        USING (auth.role() = 'authenticated');
-        
-      CREATE POLICY "Allow authenticated insert access" 
-        ON media FOR INSERT 
-        WITH CHECK (auth.role() = 'authenticated');
-        
-      CREATE POLICY "Allow authenticated update access" 
-        ON media FOR UPDATE 
-        USING (auth.role() = 'authenticated');
-        
-      CREATE POLICY "Allow authenticated delete access" 
-        ON media FOR DELETE 
-        USING (auth.role() = 'authenticated');
-      COMMIT;
-    `)
+      if (createTableError) {
+        results.siteSettings = {
+          success: false,
+          message: `Error creating site_settings table: ${createTableError.message}`,
+        }
+      } else {
+        // Insert default settings
+        const defaultSettings = [
+          { key: "hero_heading", value: "Film Production & Photography" },
+          { key: "hero_subheading", value: "Director of Photography, Camera Assistant, Drone & Underwater Operator" },
+          { key: "image_hero_bg", value: "/images/hero-bg.jpg" },
+          { key: "about_heading", value: "About Me" },
+          {
+            key: "about_text1",
+            value:
+              "I'm Milo Presedo, an AI Solutions Architect and film production professional. Fluent in German, Spanish and English, I love diving into the latest AI models, VR technologies, and complex problem-solving.",
+          },
+          {
+            key: "about_text2",
+            value:
+              "My journey combines a solid educational background with hands-on experience in computer science, graphic design, and film production. I work as a Director of Photography (DP), 1st and 2nd Assistant Camera (1AC & 2AC), as well as a drone and underwater operator.",
+          },
+          {
+            key: "about_text3",
+            value:
+              "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature, which often inspires my landscape and product photography work.",
+          },
+          { key: "image_profile", value: "/images/profile.jpg" },
+          { key: "services_heading", value: "Services" },
+          { key: "contact_heading", value: "Get in Touch" },
+          {
+            key: "contact_text",
+            value:
+              "Connect with me to discuss AI, VR, film production, or photography projects. I'm always open to new collaborations and opportunities.",
+          },
+          { key: "contact_email", value: "milo.presedo@mailbox.org" },
+          { key: "contact_phone", value: "+41 77 422 68 03" },
+          { key: "chatgpt_url", value: "https://chatgpt.com/g/g-vOF4lzRBG-milo" },
+          { key: "footer_text", value: `© ${new Date().getFullYear()} Milo Presedo. All rights reserved.` },
+        ]
 
-    if (createPolicyError) {
-      console.error("Error creating RLS policies:", createPolicyError)
-    }
+        const { error: insertError } = await supabase.from("site_settings").insert(defaultSettings)
 
-    // 4. Create storage buckets
-    const buckets = ["public", "media"]
-
-    for (const bucket of buckets) {
-      // Check if bucket exists
-      const { data: existingBuckets } = await supabase.storage.listBuckets()
-      const bucketExists = existingBuckets?.some((b) => b.name === bucket)
-
-      if (!bucketExists) {
-        const { error: createBucketError } = await supabase.storage.createBucket(bucket, {
-          public: true,
-          fileSizeLimit: 50 * 1024 * 1024, // 50MB
-        })
-
-        if (createBucketError) {
-          console.error(`Error creating ${bucket} bucket:`, createBucketError)
+        if (insertError) {
+          results.siteSettings = {
+            success: false,
+            message: `Error inserting default settings: ${insertError.message}`,
+          }
+        } else {
+          results.siteSettings = {
+            success: true,
+            message: "Site settings table created and populated with defaults",
+          }
         }
       }
-
-      // Set bucket policies
-      const { error: policyError } = await supabase.storage.from(bucket).createSignedUploadUrl("test-policy")
-      if (policyError && !policyError.message.includes("The resource already exists")) {
-        console.error(`Error setting policy for ${bucket} bucket:`, policyError)
+    } else {
+      results.siteSettings = {
+        success: true,
+        message: "Site settings table already exists",
       }
     }
 
-    // 5. Insert default settings if they don't exist
-    const { data: existingSettings } = await supabase.from("site_settings").select("key")
-    const existingKeys = new Set(existingSettings?.map((s) => s.key) || [])
+    // 2. Check if projects table exists
+    const { error: projectsCheckError } = await supabase.from("projects").select("id").limit(1).maybeSingle()
 
-    const defaultSettings = [
-      { key: "hero_heading", value: "Film Production & Photography" },
-      { key: "hero_subheading", value: "Director of Photography, Camera Assistant, Drone & Underwater Operator" },
-      { key: "image_hero_bg", value: "/images/hero-bg.jpg" },
-      { key: "about_heading", value: "About Me" },
-      { key: "about_text1", value: "I'm Milo Presedo, an AI Solutions Architect and film production professional." },
-      { key: "about_text2", value: "My journey combines a solid educational background with hands-on experience." },
-      { key: "about_text3", value: "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature." },
-      { key: "image_profile", value: "/images/profile.jpg" },
-      { key: "services_heading", value: "Services" },
-      { key: "contact_heading", value: "Get in Touch" },
-      { key: "contact_text", value: "Connect with me to discuss AI, VR, film production, or photography projects." },
-      { key: "contact_email", value: "milo.presedo@mailbox.org" },
-      { key: "contact_phone", value: "+41 77 422 68 03" },
-      { key: "chatgpt_url", value: "https://chatgpt.com/g/g-vOF4lzRBG-milo" },
-      { key: "footer_text", value: `© ${new Date().getFullYear()} Milo Presedo. All rights reserved.` },
-    ]
+    if (projectsCheckError && projectsCheckError.code === "42P01") {
+      // Create projects table using RPC
+      const { error: createProjectsError } = await supabase.rpc("create_projects_table")
 
-    const missingSettings = defaultSettings.filter((setting) => !existingKeys.has(setting.key))
+      if (createProjectsError) {
+        results.database = {
+          success: false,
+          message: `Error creating projects table: ${createProjectsError.message}`,
+        }
+      } else {
+        results.database = {
+          success: true,
+          message: "Projects table created successfully",
+        }
+      }
+    } else {
+      results.database = {
+        success: true,
+        message: "Projects table already exists",
+      }
+    }
 
-    if (missingSettings.length > 0) {
-      const { error: insertError } = await supabase.from("site_settings").insert(missingSettings)
+    // 3. Create storage buckets
+    try {
+      // Create projects bucket
+      const { error: projectsBucketError } = await supabase.storage.createBucket("projects", {
+        public: true,
+        fileSizeLimit: 10485760, // 10MB
+      })
 
-      if (insertError) {
-        console.error("Error inserting default settings:", insertError)
+      // Create icons bucket
+      const { error: iconsBucketError } = await supabase.storage.createBucket("icons", {
+        public: true,
+        fileSizeLimit: 1048576, // 1MB
+      })
+
+      if (projectsBucketError || iconsBucketError) {
+        results.storage = {
+          success: false,
+          message: `Error creating storage buckets: ${projectsBucketError?.message || iconsBucketError?.message}`,
+        }
+      } else {
+        results.storage = {
+          success: true,
+          message: "Storage buckets created successfully",
+        }
+      }
+    } catch (storageError: any) {
+      // If buckets already exist, this is fine
+      if (storageError.message && storageError.message.includes("already exists")) {
+        results.storage = {
+          success: true,
+          message: "Storage buckets already exist",
+        }
+      } else {
+        results.storage = {
+          success: false,
+          message: `Error with storage buckets: ${storageError.message}`,
+        }
       }
     }
 
     return NextResponse.json({
-      success: true,
-      message: "Setup completed successfully",
+      success: results.database.success && results.siteSettings.success && results.storage.success,
+      results,
     })
   } catch (error: any) {
-    console.error("Setup error:", error)
+    console.error("Error in setup-all:", error)
     return NextResponse.json(
       {
         success: false,
-        message: error.message,
+        error: error.message,
       },
       { status: 500 },
     )

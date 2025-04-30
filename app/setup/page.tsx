@@ -10,44 +10,37 @@ export default function SetupPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [results, setResults] = useState<{
     database?: { success: boolean; message: string }
+    siteSettings?: { success: boolean; message: string }
     storage?: { success: boolean; message: string }
-    settings?: { success: boolean; message: string }
-    icons?: { success: boolean; message: string }
   }>({})
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
 
   const runSetup = async () => {
     setIsLoading(true)
     setResults({})
+    setError(null)
+    setSuccess(false)
 
     try {
-      // Setup database
-      const dbRes = await fetch("/api/setup-database")
-      const dbData = await dbRes.json()
-      setResults((prev) => ({ ...prev, database: dbData }))
+      // Run the comprehensive setup endpoint
+      const response = await fetch("/api/setup-all")
+      const data = await response.json()
 
-      // Setup storage
-      const storageRes = await fetch("/api/setup-storage")
-      const storageData = await storageRes.json()
-      setResults((prev) => ({ ...prev, storage: storageData }))
-
-      // Setup site settings
-      const settingsRes = await fetch("/api/setup-site-settings")
-      const settingsData = await settingsRes.json()
-      setResults((prev) => ({ ...prev, settings: settingsData }))
-
-      // Setup icons bucket
-      const iconsRes = await fetch("/api/setup-icons-bucket")
-      const iconsData = await iconsRes.json()
-      setResults((prev) => ({ ...prev, icons: iconsData }))
-    } catch (error) {
-      console.error("Setup error:", error)
+      if (data.success) {
+        setSuccess(true)
+        setResults(data.results)
+      } else {
+        setError(data.error || "Setup failed. Please check the console for details.")
+        setResults(data.results || {})
+      }
+    } catch (err) {
+      console.error("Setup error:", err)
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
     } finally {
       setIsLoading(false)
     }
   }
-
-  const allSuccess =
-    results.database?.success && results.storage?.success && results.settings?.success && results.icons?.success
 
   return (
     <div className="min-h-screen bg-black text-white flex items-center justify-center p-4">
@@ -59,11 +52,28 @@ export default function SetupPage() {
         <CardContent className="space-y-4">
           <p>This setup process will:</p>
           <ul className="list-disc pl-5 space-y-2">
-            <li>Create necessary database tables</li>
-            <li>Set up storage buckets for media</li>
+            <li>Create necessary database tables (projects, site_settings)</li>
+            <li>Set up storage buckets for media and icons</li>
             <li>Initialize default site settings</li>
-            <li>Prepare the icons storage</li>
           </ul>
+
+          {error && (
+            <div className="mt-4 p-3 bg-red-900/20 border border-red-800 rounded-md">
+              <p className="text-red-400 flex items-center">
+                <XCircle className="w-5 h-5 mr-2" />
+                {error}
+              </p>
+            </div>
+          )}
+
+          {success && (
+            <div className="mt-4 p-3 bg-green-900/20 border border-green-800 rounded-md">
+              <p className="text-green-400 flex items-center">
+                <CheckCircle className="w-5 h-5 mr-2" />
+                Setup completed successfully!
+              </p>
+            </div>
+          )}
 
           {Object.entries(results).length > 0 && (
             <div className="mt-6 space-y-4 border border-gray-800 rounded-md p-4">
@@ -71,41 +81,31 @@ export default function SetupPage() {
               {results.database && (
                 <div className="flex items-center gap-2">
                   {results.database.success ? (
-                    <CheckCircle className="text-green-500" />
+                    <CheckCircle className="text-green-500 w-5 h-5" />
                   ) : (
-                    <XCircle className="text-red-500" />
+                    <XCircle className="text-red-500 w-5 h-5" />
                   )}
                   <span>Database: {results.database.message}</span>
+                </div>
+              )}
+              {results.siteSettings && (
+                <div className="flex items-center gap-2">
+                  {results.siteSettings.success ? (
+                    <CheckCircle className="text-green-500 w-5 h-5" />
+                  ) : (
+                    <XCircle className="text-red-500 w-5 h-5" />
+                  )}
+                  <span>Settings: {results.siteSettings.message}</span>
                 </div>
               )}
               {results.storage && (
                 <div className="flex items-center gap-2">
                   {results.storage.success ? (
-                    <CheckCircle className="text-green-500" />
+                    <CheckCircle className="text-green-500 w-5 h-5" />
                   ) : (
-                    <XCircle className="text-red-500" />
+                    <XCircle className="text-red-500 w-5 h-5" />
                   )}
                   <span>Storage: {results.storage.message}</span>
-                </div>
-              )}
-              {results.settings && (
-                <div className="flex items-center gap-2">
-                  {results.settings.success ? (
-                    <CheckCircle className="text-green-500" />
-                  ) : (
-                    <XCircle className="text-red-500" />
-                  )}
-                  <span>Settings: {results.settings.message}</span>
-                </div>
-              )}
-              {results.icons && (
-                <div className="flex items-center gap-2">
-                  {results.icons.success ? (
-                    <CheckCircle className="text-green-500" />
-                  ) : (
-                    <XCircle className="text-red-500" />
-                  )}
-                  <span>Icons: {results.icons.message}</span>
                 </div>
               )}
             </div>
@@ -115,18 +115,17 @@ export default function SetupPage() {
           <Button variant="outline" asChild>
             <Link href="/">Back to Home</Link>
           </Button>
-          <Button
-            onClick={runSetup}
-            disabled={isLoading || allSuccess}
-            className="bg-white text-black hover:bg-gray-200"
-          >
+          <Button onClick={runSetup} disabled={isLoading || success} className="bg-white text-black hover:bg-gray-200">
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 Setting Up...
               </>
-            ) : allSuccess ? (
-              "Setup Complete"
+            ) : success ? (
+              <>
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Setup Complete
+              </>
             ) : (
               "Run Setup"
             )}
