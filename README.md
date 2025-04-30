@@ -1,185 +1,94 @@
 # Milo Presedo Portfolio
 
-A modern, responsive portfolio website for showcasing film production and photography work. Built with Next.js, Supabase, and Clerk authentication.
+A professional portfolio website for Milo Presedo, showcasing film production and photography work.
 
-![Portfolio Preview](/public/images/portfolio-preview.jpg)
+## Features
 
-## 🚀 Features
+- Responsive design optimized for all devices
+- Project showcase with filtering by category
+- Admin dashboard for content management
+- Dynamic site settings management
+- Custom favicon and app icon support
+- Media library for image and video management
+- Authentication and role-based access control
 
-- **Project Showcase**: Display film, photography, and production projects with detailed pages
-- **Media Management**: Unified media library for images and videos
-- **Admin Dashboard**: Secure admin area for content management
-- **Authentication**: User authentication with role-based access control
-- **Responsive Design**: Optimized for all devices with a custom cursor
-- **Dynamic Content**: All site content is editable through the admin interface
-- **Custom Favicons**: Upload and manage custom favicons
+## App Icons and Favicons
 
-## 🛠️ Tech Stack
+The site supports custom app icons and favicons that persist across deployments. These are stored in the Supabase database and storage, ensuring they remain available even after updates to the site.
 
-- **Frontend**: Next.js 14 (App Router), React, TypeScript, Tailwind CSS
-- **Backend**: Supabase (PostgreSQL, Storage)
-- **Authentication**: Clerk
-- **Styling**: Tailwind CSS, shadcn/ui components
-- **Deployment**: Vercel
+### How App Icons Work
 
-## 📋 Project Structure
+1. Icons are uploaded through the admin dashboard
+2. Files are stored in Supabase Storage in the `public/icons` directory
+3. References to these icons are saved in the `site_settings` table with keys prefixed with `icon_`
+4. The `DynamicFavicons` component loads these icons client-side
+5. Default icons are used as fallback if custom icons aren't available
 
-\`\`\`
-milo-portfolio/
-├── app/                    # Next.js App Router
-│   ├── admin/              # Admin dashboard pages
-│   ├── api/                # API routes
-│   ├── auth/               # Authentication pages
-│   ├── projects/           # Project pages
-│   ├── setup/              # Setup page
-│   └── layout.tsx          # Root layout
-├── components/             # React components
-│   ├── admin/              # Admin-specific components
-│   ├── ui/                 # UI components (shadcn)
-│   └── ...                 # Other components
-├── lib/                    # Utility functions
-│   ├── supabase-browser.ts # Browser Supabase client
-│   ├── supabase-server.ts  # Server Supabase client
-│   ├── supabase.ts         # Compatibility layer
-│   └── ...                 # Other utilities
-├── public/                 # Static assets
-│   └── images/             # Default images
-├── setup/                  # Database setup SQL files
-└── ...                     # Config files
-\`\`\`
+### Uploading New Icons
 
-## 🚦 Getting Started
+1. Generate a favicon package from [favicon-generator.org](https://www.favicon-generator.org/)
+2. Upload the zip file through the Admin Dashboard > Settings > App Icons tab
+3. The system will automatically extract and store all icons
+4. Icons will be immediately available after upload
+
+## Setup and Installation
 
 ### Prerequisites
 
 - Node.js 18+ and npm
 - Supabase account
-- Clerk account
+- Vercel account (for deployment)
 
 ### Environment Variables
 
 Create a `.env.local` file with the following variables:
 
 \`\`\`
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
-
-# Clerk
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your_clerk_publishable_key
-CLERK_SECRET_KEY=your_clerk_secret_key
-CLERK_WEBHOOK_SECRET=your_clerk_webhook_secret
-
-# Site URL
-NEXT_PUBLIC_SITE_URL=your_site_url
+NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+BOOTSTRAP_SECRET=your-bootstrap-secret
 \`\`\`
 
 ### Installation
 
 1. Clone the repository
-   \`\`\`bash
-   git clone https://github.com/yourusername/milo-portfolio.git
-   cd milo-portfolio
-   \`\`\`
+2. Install dependencies: `npm install`
+3. Run the development server: `npm run dev`
+4. Open [http://localhost:3000](http://localhost:3000)
 
-2. Install dependencies
-   \`\`\`bash
-   npm install
-   \`\`\`
+### Database Setup
 
-3. Run the development server
-   \`\`\`bash
-   npm run dev
-   \`\`\`
+1. Visit `/setup` to initialize the database tables and storage buckets
+2. Follow the on-screen instructions to complete setup
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+## Development
 
-### Initial Setup
+### Project Structure
 
-1. Visit `/setup` to initialize the database and storage
-2. Create an admin user at `/admin/bootstrap` using the bootstrap secret
-3. Log in and start managing your content
+- `/app` - Next.js App Router pages and API routes
+- `/components` - Reusable React components
+- `/lib` - Utility functions and shared code
+- `/public` - Static assets
+- `/setup` - Database setup SQL files
 
-## 🔄 Development Workflow
+### Key Components
 
-### Adding New Features
+- `DynamicFavicons` - Loads custom favicons from the database
+- `AppIconsUploader` - Handles uploading and managing app icons
+- `SiteInformationForm` - Manages site content and settings
 
-1. Create a new branch for your feature
-2. Implement your changes
-3. Test thoroughly
-4. Create a pull request
+## Deployment
 
-### Database Changes
+The site is deployed on Vercel. The app icons and site settings are stored in Supabase and will persist across deployments.
 
-All database changes should be made through SQL files in the `setup/` directory and corresponding API routes in `app/api/`.
+### Deployment Steps
 
-## 📱 Key Components
+1. Connect your GitHub repository to Vercel
+2. Add the required environment variables
+3. Deploy the site
+4. Visit `/setup` on the deployed site to initialize the database
 
-### Media Library
+## License
 
-The unified media library (`components/admin/unified-media-library.tsx`) provides a central place to manage all media assets. It supports:
-
-- Image uploads
-- Vimeo video integration
-- Tagging and filtering
-- Usage tracking
-
-### Project Management
-
-Projects are managed through the admin interface with:
-
-- Project creation and editing
-- Behind-the-scenes (BTS) image management
-- Category and role filtering
-
-### Site Settings
-
-All site content is editable through the admin interface:
-
-- Hero section
-- About section
-- Services section
-- Contact information
-- Custom favicons
-
-## 🔒 Authentication and Authorization
-
-The site uses Clerk for authentication with custom role-based access control:
-
-- **Public**: Anyone can view the portfolio
-- **Admin**: Can manage all content
-- **Editor**: Can edit projects but not users
-
-## 🚀 Deployment
-
-The site is deployed on Vercel. To deploy your own instance:
-
-1. Push your code to GitHub
-2. Connect your repository to Vercel
-3. Configure the environment variables
-4. Deploy
-
-## 🧩 Extending the Site
-
-### Adding New Project Types
-
-1. Update the project type options in `components/admin/project-form.tsx`
-2. Add corresponding filtering in `app/projects/page.tsx`
-
-### Adding New Sections
-
-1. Create a new component in the `components/` directory
-2. Add the component to `app/page.tsx`
-3. Add corresponding settings in `components/admin/site-information-form.tsx`
-
-## 🤝 Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-\`\`\`
-
-### Now, let's clean up the Supabase client files for better organization:
+All rights reserved. This code is not open for redistribution.

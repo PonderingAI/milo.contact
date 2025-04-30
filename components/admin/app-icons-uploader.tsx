@@ -2,12 +2,19 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Upload, Check, AlertCircle, ExternalLink } from "lucide-react"
+import { Loader2, Upload, Check, AlertCircle, ExternalLink, Info } from "lucide-react"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import JSZip from "jszip"
+
+interface ActiveIcon {
+  key: string
+  value: string
+  displayName: string
+}
 
 export default function AppIconsUploader() {
   const [file, setFile] = useState<File | null>(null)
@@ -16,6 +23,70 @@ export default function AppIconsUploader() {
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState(0)
+  const [activeIcons, setActiveIcons] = useState<ActiveIcon[]>([])
+  const [loadingIcons, setLoadingIcons] = useState(true)
+
+  // Fetch current active icons on component mount
+  useEffect(() => {
+    async function fetchActiveIcons() {
+      try {
+        setLoadingIcons(true)
+        const supabase = getSupabaseBrowserClient()
+        const { data, error } = await supabase
+          .from("site_settings")
+          .select("key, value")
+          .like("key", "icon_%")
+          .order("key")
+
+        if (error) {
+          console.error("Error fetching active icons:", error)
+          return
+        }
+
+        if (data && data.length > 0) {
+          // Format the icons data for display
+          const formattedIcons = data.map((item) => {
+            // Extract the filename from the key (remove "icon_" prefix)
+            const keyWithoutPrefix = item.key.replace("icon_", "")
+            // Make it more readable by replacing underscores with spaces and capitalizing
+            const displayName = keyWithoutPrefix
+              .replace(/_/g, " ")
+              .replace(/(\d+)x(\d+)/g, "$1×$2") // Replace "x" with "×" in dimensions
+              .replace(/\b\w/g, (c) => c.toUpperCase()) // Capitalize first letter of each word
+
+            return {
+              key: item.key,
+              value: item.value,
+              displayName,
+            }
+          })
+
+          // Sort icons by common types first
+          const commonIcons = ["favicon.ico", "apple-touch-icon.png", "favicon-32x32.png", "favicon-16x16.png"]
+          const sortedIcons = [...formattedIcons].sort((a, b) => {
+            const aName = a.key.replace("icon_", "").replace(/_/g, "-")
+            const bName = b.key.replace("icon_", "").replace(/_/g, "-")
+
+            const aIndex = commonIcons.findIndex((name) => aName.includes(name))
+            const bIndex = commonIcons.findIndex((name) => bName.includes(name))
+
+            if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex
+            if (aIndex !== -1) return -1
+            if (bIndex !== -1) return 1
+            return a.displayName.localeCompare(b.displayName)
+          })
+
+          setActiveIcons(sortedIcons)
+        }
+      } catch (err) {
+        console.error("Error in fetchActiveIcons:", err)
+      } finally {
+        setLoadingIcons(false)
+      }
+    }
+
+    fetchActiveIcons()
+  }, [])
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -73,7 +144,7 @@ export default function AppIconsUploader() {
       const formData = new FormData()
       formData.append("zipFile", file)
 
-      // Upload using the server-side API - FIX: Don't set Content-Type header
+      // Upload using the server-side API
       const response = await fetch("/api/upload-app-icons", {
         method: "POST",
         body: formData,
@@ -120,10 +191,78 @@ export default function AppIconsUploader() {
     }
   }
 
+  // Group icons by type for better display
+  const groupedIcons = activeIcons.reduce((groups: Record<string, ActiveIcon[]>, icon) => {
+    const key = icon.key.toLowerCase()
+    let group = "other"
+
+    if (key.includes("favicon")) group = "favicon"
+    else if (key.includes("apple")) group = "apple"
+    else if (key.includes("android")) group = "android"
+    else if (key.includes("ms")) group = "microsoft"
+
+    if (!groups[group]) groups[group] = []
+    groups[group].push(icon)
+    return groups
+  }, {})
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
+      {/* Current Active Icons Section */}
+      <div className="bg-gray-800/30 rounded-lg p-4 border border-gray-700">
+        <h3 className="text-lg font-medium mb-3 flex items-center">
+          <Info className="h-5 w-5 mr-2 text-blue-400" />
+          Currently Active App Icons
+        </h3>
+
+        {loadingIcons ? (
+          <div className="flex justify-center py-4">
+            <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+          </div>
+        ) : activeIcons.length === 0 ? (
+          <p className="text-gray-400 text-sm py-2">
+            No custom app icons are currently active. Default icons are being used.
+          </p>
+        ) : (
+          <div className="space-y-4">
+            {/* Display icons grouped by type */}
+            {Object.entries(groupedIcons).map(([group, icons]) => (
+              <div key={group} className="space-y-2">
+                <h4 className="text-sm font-medium text-gray-300 capitalize">{group} Icons</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {icons.map((icon) => (
+                    <div key={icon.key} className="bg-gray-900/50 rounded p-2 flex items-center">
+                      <div className="h-8 w-8 mr-2 flex-shrink-0 bg-gray-800 rounded overflow-hidden">
+                        <img
+                          src={icon.value || "/placeholder.svg"}
+                          alt={icon.displayName}
+                          className="h-full w-full object-contain"
+                          onError={(e) => {
+                            // If image fails to load, show a placeholder
+                            ;(e.target as HTMLImageElement).src = "/generic-icon.png"
+                          }}
+                        />
+                      </div>
+                      <div className="overflow-hidden">
+                        <p className="text-xs text-gray-300 truncate" title={icon.displayName}>
+                          {icon.displayName}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate" title={icon.value}>
+                          {new URL(icon.value).pathname.split("/").pop()}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Upload New Icons Section */}
       <div className="bg-gray-900/50 rounded-lg p-4 mb-4">
-        <h3 className="text-lg font-medium mb-2">App Icons Instructions</h3>
+        <h3 className="text-lg font-medium mb-2">Upload New App Icons</h3>
         <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
           <li>
             Visit{" "}
@@ -188,7 +327,7 @@ export default function AppIconsUploader() {
 
       {Object.keys(previews).length > 0 && (
         <div className="mt-4">
-          <p className="text-sm text-gray-400 mb-2">Preview:</p>
+          <p className="text-sm text-gray-400 mb-2">Preview of new icons:</p>
           <div className="flex gap-4 items-end flex-wrap">
             {previews["favicon.ico"] && (
               <div className="text-center">
