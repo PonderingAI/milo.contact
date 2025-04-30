@@ -10,7 +10,20 @@ A professional portfolio website for Milo Presedo, showcasing film production an
 - Dynamic site settings management
 - Custom favicon and app icon support
 - Media library for image and video management
+- Automatic WebP conversion for optimal image quality
 - Authentication and role-based access control
+
+## Media Management
+
+The site includes a comprehensive media management system:
+
+- **Automatic WebP Conversion**: All uploaded images are automatically converted to WebP format with high quality (90%) to ensure they look great on large displays while maintaining good performance.
+- **Media Library**: A unified media library for managing all images and videos.
+- **URL Copying**: Easy access to media URLs for use in other applications.
+- **Vimeo Integration**: Add Vimeo videos directly to the media library.
+- **Image Preview**: Preview images before using them.
+
+For detailed information about media storage and retrieval, see [MEDIA-STORAGE.md](./docs/MEDIA-STORAGE.md).
 
 ## App Icons and Favicons
 
@@ -71,16 +84,18 @@ BOOTSTRAP_SECRET=your-bootstrap-secret
 - `/lib` - Utility functions and shared code
 - `/public` - Static assets
 - `/setup` - Database setup SQL files
+- `/docs` - Documentation files
 
 ### Key Components
 
 - `DynamicFavicons` - Loads custom favicons from the database
 - `AppIconsUploader` - Handles uploading and managing app icons
 - `SiteInformationForm` - Manages site content and settings
+- `UnifiedMediaLibrary` - Media management system
 
 ## Deployment
 
-The site is deployed on Vercel. The app icons and site settings are stored in Supabase and will persist across deployments.
+The site is deployed on Vercel. The app icons, media files, and site settings are stored in Supabase and will persist across deployments.
 
 ### Deployment Steps
 

@@ -8,9 +8,10 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Copy, Trash2, Search, Filter } from "lucide-react"
+import { Copy, Trash2, Search, Filter, CheckCircle, Link, ImageIcon } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface MediaItem {
   id: string
@@ -36,6 +37,8 @@ export default function UnifiedMediaLibrary() {
   const [uploadingFile, setUploadingFile] = useState(false)
   const [uploadingVimeo, setUploadingVimeo] = useState(false)
   const [vimeoUrl, setVimeoUrl] = useState("")
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
+  const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null)
   const supabase = getSupabaseBrowserClient()
 
   useEffect(() => {
@@ -91,53 +94,59 @@ export default function UnifiedMediaLibrary() {
 
     setUploadingFile(true)
     try {
-      // 1. Upload file to storage
-      const fileExt = file.name.split(".").pop()
-      const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
-      const filePath = `uploads/${fileName}`
+      // Check if file is an image that can be converted to WebP
+      const isConvertibleImage =
+        file.type.startsWith("image/") &&
+        !file.type.includes("svg") &&
+        !file.type.includes("webp") &&
+        !file.type.includes("gif")
 
-      const { error: uploadError, data } = await supabase.storage.from("media").upload(filePath, file)
+      // If it's a convertible image, send it to the conversion API
+      if (isConvertibleImage) {
+        const formData = new FormData()
+        formData.append("image", file)
 
-      if (uploadError) throw uploadError
+        const response = await fetch("/api/convert-to-webp", {
+          method: "POST",
+          body: formData,
+        })
 
-      // 2. Get public URL
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("media").getPublicUrl(filePath)
+        if (!response.ok) {
+          throw new Error("Failed to convert image to WebP")
+        }
 
-      // 3. Generate thumbnail for images
-      let thumbnailUrl = null
-      if (file.type.startsWith("image/")) {
-        thumbnailUrl = publicUrl
+        const result = await response.json()
+
+        // Update the media library with the converted image
+        await handleMediaUpload(result.filename, result.filepath, result.filesize, result.publicUrl)
+
+        toast({
+          title: "Success",
+          description: "Image converted to WebP and uploaded successfully",
+        })
+      } else {
+        // For non-convertible files, proceed with regular upload
+        const fileExt = file.name.split(".").pop()
+        const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
+        const filePath = `uploads/${fileName}`
+
+        const { error: uploadError, data } = await supabase.storage.from("media").upload(filePath, file)
+
+        if (uploadError) throw uploadError
+
+        // Get public URL
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("media").getPublicUrl(filePath)
+
+        // Add to media library
+        await handleMediaUpload(file.name, filePath, file.size, publicUrl)
+
+        toast({
+          title: "Success",
+          description: "File uploaded successfully",
+        })
       }
-
-      // 4. Determine file type category
-      let fileType = "other"
-      if (file.type.startsWith("image/")) fileType = "image"
-      else if (file.type.startsWith("video/")) fileType = "video"
-      else if (file.type.startsWith("audio/")) fileType = "audio"
-
-      // 5. Save to media table
-      const { error: dbError } = await supabase.from("media").insert({
-        filename: file.name,
-        filepath: filePath,
-        filesize: file.size,
-        filetype: fileType,
-        public_url: publicUrl,
-        thumbnail_url: thumbnailUrl,
-        tags: [fileType],
-        metadata: {
-          contentType: file.type,
-          lastModified: file.lastModified,
-        },
-      })
-
-      if (dbError) throw dbError
-
-      toast({
-        title: "Success",
-        description: "File uploaded successfully",
-      })
 
       // Refresh the media list
       fetchMedia()
@@ -153,6 +162,37 @@ export default function UnifiedMediaLibrary() {
       // Reset the input
       e.target.value = ""
     }
+  }
+
+  const handleMediaUpload = async (filename: string, filepath: string, filesize: number, publicUrl: string) => {
+    // Determine file type category
+    let fileType = "other"
+    if (filepath.match(/\.(jpg|jpeg|png|webp|avif|gif)$/i)) fileType = "image"
+    else if (filepath.match(/\.(mp4|webm|mov|avi)$/i)) fileType = "video"
+    else if (filepath.match(/\.(mp3|wav|ogg)$/i)) fileType = "audio"
+
+    // Generate thumbnail for images
+    let thumbnailUrl = null
+    if (fileType === "image") {
+      thumbnailUrl = publicUrl
+    }
+
+    // Save to media table
+    const { error: dbError } = await supabase.from("media").insert({
+      filename: filename,
+      filepath: filepath,
+      filesize: filesize,
+      filetype: fileType,
+      public_url: publicUrl,
+      thumbnail_url: thumbnailUrl,
+      tags: [fileType],
+      metadata: {
+        contentType: fileType,
+        uploadedAt: new Date().toISOString(),
+      },
+    })
+
+    if (dbError) throw dbError
   }
 
   const handleVimeoAdd = async () => {
@@ -224,6 +264,9 @@ export default function UnifiedMediaLibrary() {
 
   const handleCopyUrl = (url: string) => {
     navigator.clipboard.writeText(url)
+    setCopiedUrl(url)
+    setTimeout(() => setCopiedUrl(null), 2000)
+
     toast({
       title: "URL copied",
       description: "Media URL copied to clipboard",
@@ -293,7 +336,7 @@ export default function UnifiedMediaLibrary() {
 
     return (
       <div key={item.id} className="bg-gray-900 rounded-lg overflow-hidden">
-        <div className="relative h-40">
+        <div className="relative h-40 cursor-pointer" onClick={() => (isImage ? setSelectedImage(item) : null)}>
           {item.thumbnail_url ? (
             <Image src={item.thumbnail_url || "/placeholder.svg"} alt={item.filename} fill className="object-cover" />
           ) : (
@@ -303,6 +346,11 @@ export default function UnifiedMediaLibrary() {
           )}
           {isVimeo && (
             <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">Vimeo</div>
+          )}
+          {isImage && (
+            <div className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center">
+              <ImageIcon size={12} className="mr-1" /> Click to preview
+            </div>
           )}
         </div>
         <div className="p-3">
@@ -323,11 +371,26 @@ export default function UnifiedMediaLibrary() {
             </div>
           )}
 
-          <div className="flex justify-end gap-2 mt-2">
-            <Button variant="ghost" size="icon" onClick={() => handleCopyUrl(item.public_url)}>
-              <Copy className="h-4 w-4" />
-              <span className="sr-only">Copy URL</span>
+          <div className="flex justify-between items-center mt-3">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1 text-xs"
+              onClick={() => handleCopyUrl(item.public_url)}
+            >
+              {copiedUrl === item.public_url ? (
+                <>
+                  <CheckCircle className="h-3 w-3 text-green-500" />
+                  Copied
+                </>
+              ) : (
+                <>
+                  <Link className="h-3 w-3" />
+                  Copy URL
+                </>
+              )}
             </Button>
+
             <Button variant="ghost" size="icon" onClick={() => handleDeleteMedia(item.id, item.filepath)}>
               <Trash2 className="h-4 w-4 text-red-500" />
               <span className="sr-only">Delete</span>
@@ -345,14 +408,20 @@ export default function UnifiedMediaLibrary() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-gray-900 p-4 rounded-lg">
           <h2 className="text-xl mb-4">Upload File</h2>
-          <div className="flex items-center gap-4">
-            <Input
-              type="file"
-              onChange={handleFileUpload}
-              disabled={uploadingFile}
-              className="bg-gray-800 border-gray-700"
-            />
-            {uploadingFile && <span className="text-sm text-gray-400">Uploading...</span>}
+          <div className="space-y-4">
+            <div className="flex items-center gap-4">
+              <Input
+                type="file"
+                onChange={handleFileUpload}
+                disabled={uploadingFile}
+                className="bg-gray-800 border-gray-700"
+              />
+              {uploadingFile && <span className="text-sm text-gray-400">Uploading...</span>}
+            </div>
+            <div className="text-sm text-gray-400">
+              <p>Images will be automatically converted to WebP format for optimal quality and performance.</p>
+              <p>High quality compression is used to ensure images look great on large displays.</p>
+            </div>
           </div>
         </div>
 
@@ -441,6 +510,49 @@ export default function UnifiedMediaLibrary() {
           {renderMediaGrid()}
         </TabsContent>
       </Tabs>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
+        <DialogContent className="max-w-4xl w-full">
+          <DialogHeader>
+            <DialogTitle>{selectedImage?.filename}</DialogTitle>
+            <DialogDescription>
+              {selectedImage?.filepath} •{" "}
+              {selectedImage?.filesize ? `${(selectedImage.filesize / 1024).toFixed(2)} KB` : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="relative w-full h-[60vh] bg-black/50 rounded-md overflow-hidden">
+            {selectedImage?.public_url && (
+              <Image
+                src={selectedImage.public_url || "/placeholder.svg"}
+                alt={selectedImage.filename}
+                fill
+                className="object-contain"
+              />
+            )}
+          </div>
+
+          <div className="flex justify-between items-center">
+            <div className="text-sm">
+              <p>
+                <strong>URL:</strong> <span className="text-gray-400">{selectedImage?.public_url}</span>
+              </p>
+              <p>
+                <strong>Path:</strong> <span className="text-gray-400">{selectedImage?.filepath}</span>
+              </p>
+            </div>
+
+            <Button
+              onClick={() => selectedImage && handleCopyUrl(selectedImage.public_url)}
+              className="flex items-center gap-2"
+            >
+              <Copy className="h-4 w-4" />
+              Copy URL
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 
