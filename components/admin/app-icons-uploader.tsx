@@ -3,149 +3,145 @@
 import type React from "react"
 
 import { useState } from "react"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Loader2, Upload, Check, AlertCircle, ExternalLink } from "lucide-react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Label } from "@/components/ui/label"
+import { toast } from "@/components/ui/use-toast"
+import { Loader2 } from "lucide-react"
 import JSZip from "jszip"
 
 export default function AppIconsUploader() {
   const [file, setFile] = useState<File | null>(null)
-  const [previews, setPreviews] = useState<{ [key: string]: string }>({})
   const [uploading, setUploading] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState(0)
+  const [totalFiles, setTotalFiles] = useState(0)
+  const [uploadedFiles, setUploadedFiles] = useState(0)
   const supabase = createClientComponentClient()
 
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0]
-    if (!selectedFile) return
-
-    // Check if file is a zip
-    if (selectedFile.type !== "application/zip" && !selectedFile.name.endsWith(".zip")) {
-      setError("Please select a zip file")
-      return
-    }
-
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setError("File size should be less than 10MB")
-      return
-    }
-
-    setFile(selectedFile)
-    setError(null)
-
-    try {
-      // Read the zip file
-      const zip = new JSZip()
-      const contents = await zip.loadAsync(selectedFile)
-
-      // Create previews for some of the icons
-      const previewFiles = ["favicon-32x32.png", "apple-icon-180x180.png", "android-icon-192x192.png"]
-      const newPreviews: { [key: string]: string } = {}
-
-      for (const filename of previewFiles) {
-        const zipFile = contents.file(filename)
-        if (zipFile) {
-          const blob = await zipFile.async("blob")
-          const url = URL.createObjectURL(blob)
-          newPreviews[filename] = url
-        }
-      }
-
-      setPreviews(newPreviews)
-    } catch (err) {
-      console.error("Error reading zip file:", err)
-      setError("Failed to read zip file")
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setFile(e.target.files[0])
     }
   }
 
-  const ensureBucketExists = async (bucketName: string) => {
+  // Function to ensure the bucket exists
+  const ensureBucketExists = async () => {
     try {
       // Check if bucket exists
-      const { data: buckets } = await supabase.storage.listBuckets()
-      const bucketExists = buckets?.some((bucket) => bucket.name === bucketName)
+      const { data: buckets, error: listError } = await supabase.storage.listBuckets()
 
-      if (!bucketExists) {
+      if (listError) {
+        console.error("Error listing buckets:", listError)
+        throw listError
+      }
+
+      const publicBucket = buckets?.find((bucket) => bucket.name === "public")
+
+      if (!publicBucket) {
         // Create the bucket if it doesn't exist
-        const { error } = await supabase.storage.createBucket(bucketName, {
+        const { data, error: createError } = await supabase.storage.createBucket("public", {
           public: true,
-          fileSizeLimit: 10485760, // 10MB
+          allowedMimeTypes: [
+            "image/png",
+            "image/jpeg",
+            "image/jpg",
+            "image/svg+xml",
+            "image/x-icon",
+            "image/vnd.microsoft.icon",
+          ],
+          fileSizeLimit: 5242880, // 5MB
         })
 
-        if (error) {
-          throw new Error(`Failed to create bucket: ${error.message}`)
+        if (createError) {
+          console.error("Error creating bucket:", createError)
+          throw createError
         }
+
+        console.log("Created public bucket:", data)
       }
 
       return true
-    } catch (err: any) {
-      console.error("Error ensuring bucket exists:", err)
-      throw new Error(`Failed to set up storage: ${err.message}`)
+    } catch (error) {
+      console.error("Error ensuring bucket exists:", error)
+      return false
     }
   }
 
-  const uploadIcons = async () => {
+  const handleUpload = async () => {
     if (!file) return
 
     try {
       setUploading(true)
-      setError(null)
+      setProgress(0)
+      setTotalFiles(0)
+      setUploadedFiles(0)
 
       // Ensure the bucket exists
-      await ensureBucketExists("public")
+      const bucketExists = await ensureBucketExists()
+      if (!bucketExists) {
+        toast({
+          title: "Error",
+          description: "Failed to create storage bucket. Please check your Supabase configuration.",
+          variant: "destructive",
+        })
+        return
+      }
 
-      // Read the zip file
       const zip = new JSZip()
       const contents = await zip.loadAsync(file)
 
-      // Upload each file in the zip
-      const uploadedFiles: { [key: string]: string } = {}
-
-      for (const [filename, zipFile] of Object.entries(contents.files)) {
-        // Skip directories
-        if (zipFile.dir) continue
-
-        // Skip manifest.json and browserconfig.xml for now
-        if (filename === "manifest.json" || filename === "browserconfig.xml") continue
-
-        const blob = await zipFile.async("blob")
-
-        // Upload to Supabase Storage
-        const { data, error: uploadError } = await supabase.storage.from("public").upload(`icons/${filename}`, blob, {
-          cacheControl: "3600",
-          upsert: true,
-        })
-
-        if (uploadError) {
-          throw new Error(`Failed to upload ${filename}: ${uploadError.message}`)
+      // Count total files for progress tracking
+      let iconFiles = 0
+      contents.forEach((path, file) => {
+        if (!file.dir && (path.endsWith(".png") || path.endsWith(".ico") || path.endsWith(".svg"))) {
+          iconFiles++
         }
+      })
 
-        // Get public URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("public").getPublicUrl(`icons/${filename}`)
+      setTotalFiles(iconFiles)
 
-        uploadedFiles[filename] = publicUrl
+      // Process each file in the zip
+      const uploadPromises = []
+      let currentFile = 0
+
+      for (const [path, zipEntry] of Object.entries(contents.files)) {
+        if (!zipEntry.dir && (path.endsWith(".png") || path.endsWith(".ico") || path.endsWith(".svg"))) {
+          const blob = await zipEntry.async("blob")
+          const fileName = path.split("/").pop() || path
+
+          // Upload to Supabase storage
+          const { error } = await supabase.storage.from("public").upload(`icons/${fileName}`, blob, {
+            cacheControl: "3600",
+            upsert: true,
+          })
+
+          if (error) {
+            console.error(`Failed to upload ${fileName}:`, error)
+            toast({
+              title: `Failed to upload ${fileName}`,
+              description: error.message,
+              variant: "destructive",
+            })
+          } else {
+            currentFile++
+            setUploadedFiles(currentFile)
+            setProgress(Math.round((currentFile / iconFiles) * 100))
+          }
+        }
       }
 
-      // Update site settings with the uploaded files
-      for (const [filename, url] of Object.entries(uploadedFiles)) {
-        await supabase.from("site_settings").upsert({
-          key: `icon_${filename.replace(/[^a-zA-Z0-9]/g, "_")}`,
-          value: url,
-        })
-      }
-
-      setSuccess(true)
-
-      // Reload the page after 2 seconds to show the new icons
-      setTimeout(() => {
-        window.location.reload()
-      }, 2000)
-    } catch (err: any) {
-      console.error("Error uploading app icons:", err)
-      setError(err.message || "Failed to upload app icons")
+      toast({
+        title: "Upload complete",
+        description: `Successfully uploaded ${uploadedFiles} app icons.`,
+      })
+    } catch (error: any) {
+      console.error("Error uploading app icons:", error)
+      toast({
+        title: "Upload failed",
+        description: error.message || "An unknown error occurred",
+        variant: "destructive",
+      })
     } finally {
       setUploading(false)
     }
@@ -153,96 +149,31 @@ export default function AppIconsUploader() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-900/50 rounded-lg p-4 mb-4">
-        <h3 className="text-lg font-medium mb-2">App Icons Instructions</h3>
-        <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
-          <li>
-            Visit{" "}
-            <a
-              href="https://www.favicon-generator.org/"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-blue-400 hover:underline inline-flex items-center"
-            >
-              favicon-generator.org <ExternalLink className="h-3 w-3 ml-1" />
-            </a>
-          </li>
-          <li>Upload your image (at least 260x260 pixels for best results)</li>
-          <li>Generate your favicon package and download the zip file</li>
-          <li>Upload the zip file below</li>
-        </ol>
+      <div className="space-y-2">
+        <Label htmlFor="app-icons">Upload App Icons Package</Label>
+        <Input id="app-icons" type="file" accept=".zip" onChange={handleFileChange} disabled={uploading} />
+        <p className="text-sm text-gray-500">Upload a .zip file containing app icons from favicon-generator.org</p>
       </div>
 
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <Input type="file" accept=".zip,application/zip" onChange={handleFileChange} disabled={uploading} />
-          <p className="text-xs text-gray-400 mt-1">Upload the favicon package zip file from favicon-generator.org</p>
-        </div>
+      <Button onClick={handleUpload} disabled={!file || uploading} className="w-full">
+        {uploading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Uploading... {progress}%
+          </>
+        ) : (
+          "Upload Icons"
+        )}
+      </Button>
 
-        <Button onClick={uploadIcons} disabled={!file || uploading}>
-          {uploading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Uploading...
-            </>
-          ) : (
-            <>
-              <Upload className="mr-2 h-4 w-4" />
-              Upload
-            </>
-          )}
-        </Button>
-      </div>
-
-      {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 flex items-center">
-          <AlertCircle className="h-4 w-4 text-red-400 mr-2" />
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-900/20 border border-green-800 rounded-lg p-3 flex items-center">
-          <Check className="h-4 w-4 text-green-400 mr-2" />
-          <p className="text-green-400 text-sm">App icons uploaded successfully!</p>
-        </div>
-      )}
-
-      {Object.keys(previews).length > 0 && (
+      {uploading && totalFiles > 0 && (
         <div className="mt-4">
-          <p className="text-sm text-gray-400 mb-2">Preview:</p>
-          <div className="flex gap-4 items-center">
-            {previews["favicon-32x32.png"] && (
-              <div className="text-center">
-                <img
-                  src={previews["favicon-32x32.png"] || "/placeholder.svg"}
-                  alt="Favicon preview"
-                  className="w-8 h-8 mx-auto"
-                />
-                <p className="text-xs text-gray-500 mt-1">32x32</p>
-              </div>
-            )}
-            {previews["apple-icon-180x180.png"] && (
-              <div className="text-center">
-                <img
-                  src={previews["apple-icon-180x180.png"] || "/placeholder.svg"}
-                  alt="Apple icon preview"
-                  className="w-16 h-16 mx-auto"
-                />
-                <p className="text-xs text-gray-500 mt-1">180x180</p>
-              </div>
-            )}
-            {previews["android-icon-192x192.png"] && (
-              <div className="text-center">
-                <img
-                  src={previews["android-icon-192x192.png"] || "/placeholder.svg"}
-                  alt="Android icon preview"
-                  className="w-20 h-20 mx-auto"
-                />
-                <p className="text-xs text-gray-500 mt-1">192x192</p>
-              </div>
-            )}
+          <div className="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-600 rounded-full" style={{ width: `${progress}%` }} />
           </div>
+          <p className="text-sm text-center mt-1">
+            Uploaded {uploadedFiles} of {totalFiles} files
+          </p>
         </div>
       )}
     </div>

@@ -3,233 +3,86 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
-import { Loader2, Save, Check, AlertCircle } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent } from "@/components/ui/card"
-
-interface SiteSettings {
-  site_title: string
-  site_description: string
-  contact_email: string
-  instagram_url: string
-  hero_heading: string
-  hero_subheading: string
-  about_heading: string
-  about_text: string
-  services_heading: string
-  services_text: string
-  contact_heading: string
-  contact_text: string
-  footer_text: string
-}
-
-interface ImageUploadProps {
-  label: string
-  settingKey: string
-  description?: string
-  currentUrl?: string
-  onUpload: (url: string) => void
-}
-
-function ImageUploader({ label, settingKey, description, currentUrl, onUpload }: ImageUploadProps) {
-  const [uploading, setUploading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [preview, setPreview] = useState<string | null>(currentUrl || null)
-  const supabase = createClientComponentClient()
-
-  useEffect(() => {
-    if (currentUrl) {
-      setPreview(currentUrl)
-    }
-  }, [currentUrl])
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Check if file is an image
-    if (!file.type.startsWith("image/")) {
-      setError("Please select an image file")
-      return
-    }
-
-    // Check file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      setError("Image size should be less than 5MB")
-      return
-    }
-
-    try {
-      setUploading(true)
-      setError(null)
-
-      // Ensure the bucket exists
-      const { data: buckets } = await supabase.storage.listBuckets()
-      const bucketExists = buckets?.some((bucket) => bucket.name === "public")
-
-      if (!bucketExists) {
-        const { error } = await supabase.storage.createBucket("public", {
-          public: true,
-          fileSizeLimit: 5242880, // 5MB
-        })
-
-        if (error) {
-          throw new Error(`Failed to create bucket: ${error.message}`)
-        }
-      }
-
-      // Upload the file
-      const { data, error: uploadError } = await supabase.storage.from("public").upload(`site/${settingKey}`, file, {
-        cacheControl: "3600",
-        upsert: true,
-      })
-
-      if (uploadError) {
-        throw new Error(`Failed to upload image: ${uploadError.message}`)
-      }
-
-      // Get the public URL
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("public").getPublicUrl(`site/${settingKey}`)
-
-      // Update the preview
-      setPreview(publicUrl)
-
-      // Call the onUpload callback
-      onUpload(publicUrl)
-    } catch (err: any) {
-      console.error("Error uploading image:", err)
-      setError(err.message || "Failed to upload image")
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  return (
-    <div className="space-y-2">
-      <Label htmlFor={`image-${settingKey}`}>{label}</Label>
-
-      <div className="flex items-center gap-4">
-        <div className="flex-1">
-          <Input
-            id={`image-${settingKey}`}
-            type="file"
-            accept="image/*"
-            onChange={handleFileChange}
-            disabled={uploading}
-          />
-          {description && <p className="text-xs text-gray-400 mt-1">{description}</p>}
-        </div>
-
-        {uploading && <Loader2 className="h-5 w-5 animate-spin text-gray-400" />}
-      </div>
-
-      {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded-lg p-2 flex items-center text-sm">
-          <AlertCircle className="h-4 w-4 text-red-400 mr-2 flex-shrink-0" />
-          <p className="text-red-400">{error}</p>
-        </div>
-      )}
-
-      {preview && (
-        <div className="mt-2">
-          <p className="text-xs text-gray-400 mb-1">Preview:</p>
-          <div className="relative bg-gray-900/50 rounded-lg p-2 w-full max-w-xs">
-            <img src={preview || "/placeholder.svg"} alt={`${label} preview`} className="w-full h-auto rounded" />
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/use-toast"
+import { Loader2 } from "lucide-react"
 
 export default function SiteInformationForm() {
-  const [settings, setSettings] = useState<SiteSettings>({
-    site_title: "Milo Presedo",
-    site_description: "Filmmaker & Photographer",
-    contact_email: "milo.presedo@mailbox.org",
-    instagram_url: "https://instagram.com/milo.presedo",
-    hero_heading: "Milo Presedo",
-    hero_subheading: "Filmmaker & Photographer",
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [settings, setSettings] = useState({
+    // Hero section
+    hero_heading: "Film Production & Photography",
+    hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+    image_hero_bg: "/images/hero-bg.jpg",
+
+    // About section
     about_heading: "About Me",
-    about_text: "I'm a filmmaker and photographer based in...",
-    services_heading: "My Work",
-    services_text: "Explore my portfolio of projects...",
+    about_text1:
+      "I'm Milo Presedo, an AI Solutions Architect and film production professional. Fluent in German, Spanish and English, I love diving into the latest AI models, VR technologies, and complex problem-solving.",
+    about_text2:
+      "My journey combines a solid educational background with hands-on experience in computer science, graphic design, and film production. I work as a Director of Photography (DP), 1st and 2nd Assistant Camera (1AC & 2AC), as well as a drone and underwater operator.",
+    about_text3:
+      "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature, which often inspires my landscape and product photography work.",
+    image_profile: "/images/profile.jpg",
+
+    // Services section
+    services_heading: "Services",
+
+    // Contact section
     contact_heading: "Get in Touch",
-    contact_text: "Interested in working together? Let's talk!",
+    contact_text:
+      "Connect with me to discuss AI, VR, film production, or photography projects. I'm always open to new collaborations and opportunities.",
+    contact_email: "milo.presedo@mailbox.org",
+    contact_phone: "+41 77 422 68 03",
+    chatgpt_url: "https://chatgpt.com/g/g-vOF4lzRBG-milo",
+
+    // Footer
     footer_text: "© 2023 Milo Presedo. All rights reserved.",
   })
 
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [imageSettings, setImageSettings] = useState<Record<string, string>>({})
-
   const supabase = createClientComponentClient()
 
-  // Load settings from database
   useEffect(() => {
     async function loadSettings() {
       try {
         setLoading(true)
+        const { data, error } = await supabase.from("site_settings").select("key, value")
 
-        // Get text settings
-        const { data: textData, error: textError } = await supabase
-          .from("site_settings")
-          .select("key, value")
-          .in("key", [
-            "site_title",
-            "site_description",
-            "contact_email",
-            "instagram_url",
-            "hero_heading",
-            "hero_subheading",
-            "about_heading",
-            "about_text",
-            "services_heading",
-            "services_text",
-            "contact_heading",
-            "contact_text",
-            "footer_text",
-          ])
-
-        if (textError) {
-          console.error("Error loading text settings:", textError)
-        } else if (textData) {
-          const loadedSettings = { ...settings }
-          textData.forEach((item) => {
-            if (item.key in loadedSettings) {
-              loadedSettings[item.key as keyof SiteSettings] = item.value
-            }
+        if (error) {
+          console.error("Error loading settings:", error)
+          toast({
+            title: "Error loading settings",
+            description: error.message,
+            variant: "destructive",
           })
-          setSettings(loadedSettings)
+          return
         }
 
-        // Get image settings
-        const { data: imageData, error: imageError } = await supabase
-          .from("site_settings")
-          .select("key, value")
-          .like("key", "image_%")
-
-        if (imageError) {
-          console.error("Error loading image settings:", imageError)
-        } else if (imageData) {
-          const images: Record<string, string> = {}
-          imageData.forEach((item) => {
-            const key = item.key.replace("image_", "")
-            images[key] = item.value
+        if (data && data.length > 0) {
+          const newSettings = { ...settings }
+          data.forEach((item) => {
+            // @ts-ignore
+            if (newSettings.hasOwnProperty(item.key)) {
+              // @ts-ignore
+              newSettings[item.key] = item.value
+            }
           })
-          setImageSettings(images)
+          setSettings(newSettings)
         }
       } catch (err) {
         console.error("Error in loadSettings:", err)
+        toast({
+          title: "Error",
+          description: "Failed to load settings",
+          variant: "destructive",
+        })
       } finally {
         setLoading(false)
       }
@@ -240,46 +93,41 @@ export default function SiteInformationForm() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setSettings((prev) => ({ ...prev, [name]: value }))
+    setSettings((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
   }
 
-  const handleImageUpload = async (key: string, url: string) => {
-    setImageSettings((prev) => ({ ...prev, [key]: url }))
-
-    // Save to database immediately
-    try {
-      await supabase.from("site_settings").upsert({
-        key: `image_${key}`,
-        value: url,
-      })
-    } catch (err) {
-      console.error(`Error saving image setting ${key}:`, err)
-    }
-  }
-
-  const saveSettings = async () => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
     try {
       setSaving(true)
-      setError(null)
 
-      // Prepare settings for database
-      const settingsToSave = Object.entries(settings).map(([key, value]) => ({
+      // Convert settings object to array of {key, value} pairs
+      const settingsArray = Object.entries(settings).map(([key, value]) => ({
         key,
         value,
       }))
 
-      // Save to database
-      const { error: saveError } = await supabase.from("site_settings").upsert(settingsToSave)
+      // Use upsert to insert or update settings
+      const { error } = await supabase.from("site_settings").upsert(settingsArray, { onConflict: "key" })
 
-      if (saveError) {
-        throw new Error(`Failed to save settings: ${saveError.message}`)
+      if (error) {
+        throw error
       }
 
-      setSuccess(true)
-      setTimeout(() => setSuccess(false), 3000)
+      toast({
+        title: "Settings saved",
+        description: "Your site information has been updated successfully.",
+      })
     } catch (err: any) {
       console.error("Error saving settings:", err)
-      setError(err.message || "Failed to save settings")
+      toast({
+        title: "Error saving settings",
+        description: err.message || "An unknown error occurred",
+        variant: "destructive",
+      })
     } finally {
       setSaving(false)
     }
@@ -287,107 +135,36 @@ export default function SiteInformationForm() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     )
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-xl font-medium">Site Information</h2>
-        <Button onClick={saveSettings} disabled={saving}>
-          {saving ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Saving...
-            </>
-          ) : (
-            <>
-              <Save className="mr-2 h-4 w-4" />
-              Save Changes
-            </>
-          )}
-        </Button>
-      </div>
-
-      {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 flex items-center">
-          <AlertCircle className="h-4 w-4 text-red-400 mr-2" />
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
-      )}
-
-      {success && (
-        <div className="bg-green-900/20 border border-green-800 rounded-lg p-3 flex items-center">
-          <Check className="h-4 w-4 text-green-400 mr-2" />
-          <p className="text-green-400 text-sm">Settings saved successfully!</p>
-        </div>
-      )}
-
-      <Tabs defaultValue="general">
+    <form onSubmit={handleSubmit}>
+      <Tabs defaultValue="hero">
         <TabsList className="mb-4">
-          <TabsTrigger value="general">General</TabsTrigger>
-          <TabsTrigger value="hero">Hero Section</TabsTrigger>
-          <TabsTrigger value="about">About Section</TabsTrigger>
-          <TabsTrigger value="services">Services Section</TabsTrigger>
-          <TabsTrigger value="contact">Contact Section</TabsTrigger>
+          <TabsTrigger value="hero">Hero</TabsTrigger>
+          <TabsTrigger value="about">About</TabsTrigger>
+          <TabsTrigger value="services">Services</TabsTrigger>
+          <TabsTrigger value="contact">Contact</TabsTrigger>
+          <TabsTrigger value="footer">Footer</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="general" className="space-y-4">
+        <TabsContent value="hero">
           <Card>
-            <CardContent className="pt-6 space-y-4">
+            <CardHeader>
+              <CardTitle>Hero Section</CardTitle>
+              <CardDescription>Update the main heading and background image of your site.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="site_title">Site Title</Label>
-                <Input id="site_title" name="site_title" value={settings.site_title} onChange={handleChange} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="site_description">Site Description</Label>
-                <Textarea
-                  id="site_description"
-                  name="site_description"
-                  value={settings.site_description}
-                  onChange={handleChange}
-                  rows={3}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="contact_email">Contact Email</Label>
-                <Input
-                  id="contact_email"
-                  name="contact_email"
-                  type="email"
-                  value={settings.contact_email}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="instagram_url">Instagram URL</Label>
-                <Input id="instagram_url" name="instagram_url" value={settings.instagram_url} onChange={handleChange} />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="footer_text">Footer Text</Label>
-                <Input id="footer_text" name="footer_text" value={settings.footer_text} onChange={handleChange} />
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="hero" className="space-y-4">
-          <Card>
-            <CardContent className="pt-6 space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="hero_heading">Hero Heading</Label>
+                <Label htmlFor="hero_heading">Heading</Label>
                 <Input id="hero_heading" name="hero_heading" value={settings.hero_heading} onChange={handleChange} />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="hero_subheading">Hero Subheading</Label>
+                <Label htmlFor="hero_subheading">Subheading</Label>
                 <Input
                   id="hero_subheading"
                   name="hero_subheading"
@@ -395,53 +172,74 @@ export default function SiteInformationForm() {
                   onChange={handleChange}
                 />
               </div>
-
-              <ImageUploader
-                label="Hero Background Image"
-                settingKey="hero_bg"
-                description="Recommended size: 1920x1080px"
-                currentUrl={imageSettings.hero_bg}
-                onUpload={(url) => handleImageUpload("hero_bg", url)}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="image_hero_bg">Background Image URL</Label>
+                <Input id="image_hero_bg" name="image_hero_bg" value={settings.image_hero_bg} onChange={handleChange} />
+                <p className="text-sm text-gray-500">Enter the URL of the image (e.g., /images/hero-bg.jpg)</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="about" className="space-y-4">
+        <TabsContent value="about">
           <Card>
-            <CardContent className="pt-6 space-y-4">
+            <CardHeader>
+              <CardTitle>About Section</CardTitle>
+              <CardDescription>Update your profile information and image.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="about_heading">About Heading</Label>
+                <Label htmlFor="about_heading">Heading</Label>
                 <Input id="about_heading" name="about_heading" value={settings.about_heading} onChange={handleChange} />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="about_text">About Text</Label>
+                <Label htmlFor="about_text1">Paragraph 1</Label>
                 <Textarea
-                  id="about_text"
-                  name="about_text"
-                  value={settings.about_text}
+                  id="about_text1"
+                  name="about_text1"
+                  value={settings.about_text1}
                   onChange={handleChange}
-                  rows={6}
+                  rows={3}
                 />
               </div>
-
-              <ImageUploader
-                label="Profile Image"
-                settingKey="profile"
-                description="Recommended size: 500x500px"
-                currentUrl={imageSettings.profile}
-                onUpload={(url) => handleImageUpload("profile", url)}
-              />
+              <div className="space-y-2">
+                <Label htmlFor="about_text2">Paragraph 2</Label>
+                <Textarea
+                  id="about_text2"
+                  name="about_text2"
+                  value={settings.about_text2}
+                  onChange={handleChange}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="about_text3">Paragraph 3</Label>
+                <Textarea
+                  id="about_text3"
+                  name="about_text3"
+                  value={settings.about_text3}
+                  onChange={handleChange}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="image_profile">Profile Image URL</Label>
+                <Input id="image_profile" name="image_profile" value={settings.image_profile} onChange={handleChange} />
+                <p className="text-sm text-gray-500">Enter the URL of the image (e.g., /images/profile.jpg)</p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="services" className="space-y-4">
+        <TabsContent value="services">
           <Card>
-            <CardContent className="pt-6 space-y-4">
+            <CardHeader>
+              <CardTitle>Services Section</CardTitle>
+              <CardDescription>Update your services section heading.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="services_heading">Services Heading</Label>
+                <Label htmlFor="services_heading">Heading</Label>
                 <Input
                   id="services_heading"
                   name="services_heading"
@@ -449,26 +247,19 @@ export default function SiteInformationForm() {
                   onChange={handleChange}
                 />
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="services_text">Services Text</Label>
-                <Textarea
-                  id="services_text"
-                  name="services_text"
-                  value={settings.services_text}
-                  onChange={handleChange}
-                  rows={4}
-                />
-              </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="contact" className="space-y-4">
+        <TabsContent value="contact">
           <Card>
-            <CardContent className="pt-6 space-y-4">
+            <CardHeader>
+              <CardTitle>Contact Section</CardTitle>
+              <CardDescription>Update your contact information.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="contact_heading">Contact Heading</Label>
+                <Label htmlFor="contact_heading">Heading</Label>
                 <Input
                   id="contact_heading"
                   name="contact_heading"
@@ -476,21 +267,54 @@ export default function SiteInformationForm() {
                   onChange={handleChange}
                 />
               </div>
-
               <div className="space-y-2">
-                <Label htmlFor="contact_text">Contact Text</Label>
+                <Label htmlFor="contact_text">Description</Label>
                 <Textarea
                   id="contact_text"
                   name="contact_text"
                   value={settings.contact_text}
                   onChange={handleChange}
-                  rows={4}
+                  rows={3}
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact_email">Email</Label>
+                <Input id="contact_email" name="contact_email" value={settings.contact_email} onChange={handleChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="contact_phone">Phone</Label>
+                <Input id="contact_phone" name="contact_phone" value={settings.contact_phone} onChange={handleChange} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="chatgpt_url">ChatGPT URL</Label>
+                <Input id="chatgpt_url" name="chatgpt_url" value={settings.chatgpt_url} onChange={handleChange} />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="footer">
+          <Card>
+            <CardHeader>
+              <CardTitle>Footer</CardTitle>
+              <CardDescription>Update your footer text.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="footer_text">Footer Text</Label>
+                <Input id="footer_text" name="footer_text" value={settings.footer_text} onChange={handleChange} />
               </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+
+      <div className="mt-6 flex justify-end">
+        <Button type="submit" disabled={saving}>
+          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+          Save Changes
+        </Button>
+      </div>
+    </form>
   )
 }

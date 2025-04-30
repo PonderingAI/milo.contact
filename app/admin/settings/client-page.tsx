@@ -1,31 +1,25 @@
 "use client"
-
-import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import FaviconUploader from "@/components/admin/favicon-uploader"
 import AppIconsUploader from "@/components/admin/app-icons-uploader"
 import SiteInformationForm from "@/components/admin/site-information-form"
 
 export default function SettingsClientPage() {
-  const [activeTab, setActiveTab] = useState("site-info")
-
   return (
-    <div className="container py-10">
-      <h1 className="text-3xl font-serif mb-6">Site Settings</h1>
+    <div className="container mx-auto py-10">
+      <h1 className="text-3xl font-bold mb-6">Settings</h1>
 
-      <Tabs defaultValue="site-info" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
+      <Tabs defaultValue="site-info">
+        <TabsList className="mb-4">
           <TabsTrigger value="site-info">Site Information</TabsTrigger>
-          <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+          <TabsTrigger value="app-icons">App Icons</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="site-info" className="space-y-4">
+        <TabsContent value="site-info">
           <Card>
             <CardHeader>
               <CardTitle>Site Information</CardTitle>
-              <CardDescription>Manage your site's content and images</CardDescription>
+              <CardDescription>Update your site content, images, and contact information.</CardDescription>
             </CardHeader>
             <CardContent>
               <SiteInformationForm />
@@ -33,36 +27,14 @@ export default function SettingsClientPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="appearance" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Favicon</CardTitle>
-              <CardDescription>Upload a favicon for your site</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FaviconUploader />
-            </CardContent>
-          </Card>
-
+        <TabsContent value="app-icons">
           <Card>
             <CardHeader>
               <CardTitle>App Icons</CardTitle>
-              <CardDescription>Upload app icons for iOS, Android, and other platforms</CardDescription>
+              <CardDescription>Upload app icons generated from favicon-generator.org</CardDescription>
             </CardHeader>
             <CardContent>
               <AppIconsUploader />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="advanced" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Advanced Settings</CardTitle>
-              <CardDescription>Advanced configuration options</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-400">Coming soon: Custom CSS, analytics integration, and more</p>
             </CardContent>
           </Card>
         </TabsContent>

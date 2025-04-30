@@ -4,6 +4,10 @@ import { ClerkProvider } from "@clerk/nextjs"
 import { ThemeProvider } from "@/components/theme-provider"
 import type { Metadata } from "next"
 import { createServerClient } from "@/lib/supabase"
+import { Inter } from "next/font/google"
+import CustomCursor from "@/components/custom-cursor"
+
+const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Milo Presedo | Filmmaker & Photographer",
@@ -89,10 +93,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Theme Color */}
         <meta name="theme-color" content="#ffffff" />
       </head>
-      <body>
+      <body className={inter.className}>
         <ClerkProvider>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
             {children}
+            <CustomCursor />
           </ThemeProvider>
         </ClerkProvider>
       </body>

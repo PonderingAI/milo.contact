@@ -1,22 +1,28 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useEffect, useState } from "react"
+import { ArrowDown } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
-interface HeroSettings {
-  hero_heading?: string
-  hero_subheading?: string
-  image_hero_bg?: string
-}
-
 export default function HeroSection() {
-  const [settings, setSettings] = useState<HeroSettings>({
-    hero_heading: "Milo Presedo",
-    hero_subheading: "Filmmaker & Photographer",
+  const [scrolled, setScrolled] = useState(false)
+  const [settings, setSettings] = useState({
+    hero_heading: "Film Production & Photography",
+    hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
     image_hero_bg: "/images/hero-bg.jpg",
   })
 
   const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setScrolled(window.scrollY > 50)
+    }
+
+    window.addEventListener("scroll", handleScroll)
+    return () => window.removeEventListener("scroll", handleScroll)
+  }, [])
 
   useEffect(() => {
     async function loadSettings() {
@@ -32,7 +38,7 @@ export default function HeroSection() {
         }
 
         if (data && data.length > 0) {
-          const newSettings: HeroSettings = { ...settings }
+          const newSettings = { ...settings }
           data.forEach((item) => {
             if (item.key === "hero_heading") newSettings.hero_heading = item.value
             if (item.key === "hero_subheading") newSettings.hero_subheading = item.value
@@ -49,19 +55,70 @@ export default function HeroSection() {
   }, [])
 
   return (
-    <div
-      className="relative h-screen flex items-center justify-center text-center"
-      style={{
-        backgroundImage: `url(${settings.image_hero_bg || "/images/hero-bg.jpg"})`,
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
-      <div className="absolute inset-0 bg-black bg-opacity-50"></div>
-      <div className="relative z-10 px-4">
-        <h1 className="text-5xl md:text-7xl font-bold mb-4 font-serif">{settings.hero_heading}</h1>
-        <p className="text-xl md:text-2xl">{settings.hero_subheading}</p>
+    <section className="relative h-screen flex items-center justify-center overflow-hidden">
+      <div
+        className="absolute inset-0 z-0 bg-gradient-to-b from-black/70 to-black"
+        style={{
+          backgroundImage: `url(${settings.image_hero_bg})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+          backgroundBlendMode: "overlay",
+        }}
+      />
+
+      <header
+        className={cn(
+          "fixed top-0 left-0 right-0 z-50 transition-all duration-300",
+          scrolled ? "py-4 bg-black/90 backdrop-blur-sm" : "py-6",
+        )}
+      >
+        <div className="container mx-auto px-4 flex justify-between items-center">
+          <a href="#" className="text-2xl font-serif">
+            Milo Presedo
+          </a>
+          <nav className="hidden md:block">
+            <ul className="flex gap-8">
+              <li>
+                <a href="#about" className="hover:text-gray-300 transition-colors">
+                  About
+                </a>
+              </li>
+              <li>
+                <a href="#services" className="hover:text-gray-300 transition-colors">
+                  Services
+                </a>
+              </li>
+              <li>
+                <a href="#work" className="hover:text-gray-300 transition-colors">
+                  Work
+                </a>
+              </li>
+              <li>
+                <a href="#contact" className="hover:text-gray-300 transition-colors">
+                  Contact
+                </a>
+              </li>
+            </ul>
+          </nav>
+          <button className="md:hidden">Menu</button>
+        </div>
+      </header>
+
+      <div className="container mx-auto px-4 relative z-10">
+        <h1 className="text-6xl md:text-9xl font-serif leading-tight max-w-4xl">
+          <span className="block">{settings.hero_heading.split(" & ")[0]}</span>
+          <span className="block">& {settings.hero_heading.split(" & ")[1] || "Photography"}</span>
+        </h1>
+        <p className="mt-6 text-xl md:text-2xl max-w-xl text-gray-300">{settings.hero_subheading}</p>
       </div>
-    </div>
+
+      <a
+        href="#about"
+        className="absolute bottom-12 left-1/2 transform -translate-x-1/2 flex flex-col items-center text-sm gap-2 animate-pulse"
+      >
+        <span>Scroll Down</span>
+        <ArrowDown className="w-4 h-4" />
+      </a>
+    </section>
   )
 }
