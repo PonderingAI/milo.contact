@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Image from "next/image"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 export default function AboutSection() {
@@ -26,24 +25,19 @@ export default function AboutSection() {
           .select("key, value")
           .in("key", ["about_heading", "about_text1", "about_text2", "about_text3", "image_profile"])
 
-        if (error) {
-          console.error("Error loading about settings:", error)
-          return
-        }
-
-        if (data && data.length > 0) {
+        if (!error && data && data.length > 0) {
           const newSettings = { ...settings }
           data.forEach((item) => {
-            if (item.key === "about_heading") newSettings.about_heading = item.value
-            if (item.key === "about_text1") newSettings.about_text1 = item.value
-            if (item.key === "about_text2") newSettings.about_text2 = item.value
-            if (item.key === "about_text3") newSettings.about_text3 = item.value
-            if (item.key === "image_profile") newSettings.image_profile = item.value
+            // @ts-ignore
+            if (newSettings.hasOwnProperty(item.key)) {
+              // @ts-ignore
+              newSettings[item.key] = item.value
+            }
           })
           setSettings(newSettings)
         }
       } catch (err) {
-        console.error("Error in loadSettings:", err)
+        console.error("Error loading about settings:", err)
       }
     }
 
@@ -51,16 +45,26 @@ export default function AboutSection() {
   }, [])
 
   return (
-    <section id="about" className="py-24">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        <div>
-          <h2 className="text-5xl md:text-7xl font-serif mb-8">{settings.about_heading}</h2>
-          <p className="text-xl text-gray-300 mb-6">{settings.about_text1}</p>
-          <p className="text-xl text-gray-300 mb-6">{settings.about_text2}</p>
-          <p className="text-xl text-gray-300">{settings.about_text3}</p>
-        </div>
-        <div className="relative h-[600px] rounded-lg overflow-hidden">
-          <Image src={settings.image_profile || "/placeholder.svg"} alt="Milo Presedo" fill className="object-cover" />
+    <section id="about" className="py-20 bg-gray-900">
+      <div className="container mx-auto px-4">
+        <h2 className="text-3xl md:text-4xl font-bold text-center mb-12">{settings.about_heading}</h2>
+
+        <div className="flex flex-col md:flex-row items-center gap-8 md:gap-12">
+          <div className="w-full md:w-1/3">
+            <div className="relative aspect-square overflow-hidden rounded-xl">
+              <img
+                src={settings.image_profile || "/placeholder.svg"}
+                alt="Milo Presedo"
+                className="object-cover w-full h-full"
+              />
+            </div>
+          </div>
+
+          <div className="w-full md:w-2/3 space-y-4">
+            <p className="text-gray-300">{settings.about_text1}</p>
+            <p className="text-gray-300">{settings.about_text2}</p>
+            <p className="text-gray-300">{settings.about_text3}</p>
+          </div>
         </div>
       </div>
     </section>

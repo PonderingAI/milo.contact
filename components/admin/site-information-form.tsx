@@ -11,7 +11,211 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2 } from "lucide-react"
+import { Loader2, Film } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+
+interface ImageUploadProps {
+  label: string
+  settingKey: string
+  currentValue: string
+  onUpload: (url: string) => void
+  allowVideo?: boolean
+}
+
+function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo = false }: ImageUploadProps) {
+  const [uploading, setUploading] = useState(false)
+  const [mediaType, setMediaType] = useState<"image" | "video">(currentValue.includes("vimeo.com") ? "video" : "image")
+  const [videoUrl, setVideoUrl] = useState(currentValue.includes("vimeo.com") ? currentValue : "")
+  const [preview, setPreview] = useState<string | null>(!currentValue.includes("vimeo.com") ? currentValue : null)
+  const supabase = createClientComponentClient()
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Check if file is an image
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image size should be less than 5MB",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setUploading(true)
+
+      // Ensure the bucket exists
+      const { data: buckets } = await supabase.storage.listBuckets()
+      const bucketExists = buckets?.some((bucket) => bucket.name === "public")
+
+      if (!bucketExists) {
+        const { error } = await supabase.storage.createBucket("public", {
+          public: true,
+          fileSizeLimit: 5242880, // 5MB
+        })
+
+        if (error) {
+          throw new Error(`Failed to create bucket: ${error.message}`)
+        }
+      }
+
+      // Upload the file
+      const { data, error: uploadError } = await supabase.storage.from("public").upload(`site/${settingKey}`, file, {
+        cacheControl: "3600",
+        upsert: true,
+      })
+
+      if (uploadError) {
+        throw new Error(`Failed to upload image: ${uploadError.message}`)
+      }
+
+      // Get the public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("public").getPublicUrl(`site/${settingKey}`)
+
+      // Update the preview
+      setPreview(publicUrl)
+
+      // Call the onUpload callback
+      onUpload(publicUrl)
+
+      toast({
+        title: "Upload successful",
+        description: "Image has been uploaded successfully",
+      })
+    } catch (err: any) {
+      console.error("Error uploading image:", err)
+      toast({
+        title: "Upload failed",
+        description: err.message || "Failed to upload image",
+        variant: "destructive",
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVideoUrl(e.target.value)
+  }
+
+  const saveVideoUrl = () => {
+    if (!videoUrl) {
+      toast({
+        title: "Missing URL",
+        description: "Please enter a Vimeo URL",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Simple validation for Vimeo URL
+    if (!videoUrl.includes("vimeo.com")) {
+      toast({
+        title: "Invalid URL",
+        description: "Please enter a valid Vimeo URL",
+        variant: "destructive",
+      })
+      return
+    }
+
+    onUpload(videoUrl)
+    toast({
+      title: "Video URL saved",
+      description: "Vimeo URL has been saved successfully",
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <Label>{label}</Label>
+
+      {allowVideo && (
+        <RadioGroup
+          value={mediaType}
+          onValueChange={(value) => setMediaType(value as "image" | "video")}
+          className="flex space-x-4 mb-4"
+        >
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="image" id={`${settingKey}-image`} />
+            <Label htmlFor={`${settingKey}-image`} className="cursor-pointer">
+              Image
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="video" id={`${settingKey}-video`} />
+            <Label htmlFor={`${settingKey}-video`} className="cursor-pointer">
+              Vimeo Video
+            </Label>
+          </div>
+        </RadioGroup>
+      )}
+
+      {mediaType === "image" ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-4">
+            <Input
+              id={`image-${settingKey}`}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              disabled={uploading}
+            />
+            {uploading && <Loader2 className="h-5 w-5 animate-spin text-gray-400" />}
+          </div>
+
+          {preview && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 mb-1">Preview:</p>
+              <div className="relative bg-gray-900/50 rounded-lg p-2 w-full max-w-xs">
+                <img src={preview || "/placeholder.svg"} alt={`${label} preview`} className="w-full h-auto rounded" />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Input
+              id={`video-${settingKey}`}
+              type="text"
+              placeholder="https://vimeo.com/123456789"
+              value={videoUrl}
+              onChange={handleVideoUrlChange}
+            />
+            <Button type="button" onClick={saveVideoUrl} size="sm">
+              <Film className="h-4 w-4 mr-2" />
+              Save
+            </Button>
+          </div>
+          <p className="text-xs text-gray-400">Enter a Vimeo URL for the background</p>
+
+          {videoUrl && videoUrl.includes("vimeo.com") && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 mb-1">Current Vimeo URL:</p>
+              <div className="bg-gray-900/50 rounded-lg p-2">
+                <p className="text-sm break-all">{videoUrl}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 export default function SiteInformationForm() {
   const [loading, setLoading] = useState(true)
@@ -99,6 +303,13 @@ export default function SiteInformationForm() {
     }))
   }
 
+  const handleMediaUpload = (key: string, value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
@@ -172,11 +383,13 @@ export default function SiteInformationForm() {
                   onChange={handleChange}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="image_hero_bg">Background Image URL</Label>
-                <Input id="image_hero_bg" name="image_hero_bg" value={settings.image_hero_bg} onChange={handleChange} />
-                <p className="text-sm text-gray-500">Enter the URL of the image (e.g., /images/hero-bg.jpg)</p>
-              </div>
+              <MediaUploader
+                label="Background Media"
+                settingKey="image_hero_bg"
+                currentValue={settings.image_hero_bg}
+                onUpload={(url) => handleMediaUpload("image_hero_bg", url)}
+                allowVideo={true}
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -222,11 +435,12 @@ export default function SiteInformationForm() {
                   rows={3}
                 />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="image_profile">Profile Image URL</Label>
-                <Input id="image_profile" name="image_profile" value={settings.image_profile} onChange={handleChange} />
-                <p className="text-sm text-gray-500">Enter the URL of the image (e.g., /images/profile.jpg)</p>
-              </div>
+              <MediaUploader
+                label="Profile Image"
+                settingKey="image_profile"
+                currentValue={settings.image_profile}
+                onUpload={(url) => handleMediaUpload("image_profile", url)}
+              />
             </CardContent>
           </Card>
         </TabsContent>
