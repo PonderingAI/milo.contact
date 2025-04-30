@@ -1,22 +1,71 @@
 "use client"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+
+import { useState } from "react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import FaviconUploader from "@/components/admin/favicon-uploader"
+import AppIconsUploader from "@/components/admin/app-icons-uploader"
 
-export default function ClientSettingsPage() {
+export default function SettingsClientPage() {
+  const [activeTab, setActiveTab] = useState("general")
+
   return (
-    <div className="space-y-8">
-      <h1 className="text-3xl font-serif">Site Settings</h1>
+    <div className="container py-10">
+      <h1 className="text-3xl font-serif mb-6">Site Settings</h1>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Favicon</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <FaviconUploader />
-        </CardContent>
-      </Card>
+      <Tabs defaultValue="general" value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="general">General</TabsTrigger>
+          <TabsTrigger value="appearance">Appearance</TabsTrigger>
+          <TabsTrigger value="advanced">Advanced</TabsTrigger>
+        </TabsList>
 
-      {/* Add more settings cards here as needed */}
+        <TabsContent value="general" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Site Information</CardTitle>
+              <CardDescription>Basic information about your site</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-gray-400">Coming soon: Site title, description, and contact information</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="appearance" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Favicon</CardTitle>
+              <CardDescription>Upload a favicon for your site</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FaviconUploader />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>App Icons</CardTitle>
+              <CardDescription>Upload app icons for iOS, Android, and other platforms</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <AppIconsUploader />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="advanced" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Advanced Settings</CardTitle>
+              <CardDescription>Advanced configuration options</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-400">Coming soon: Custom CSS, analytics integration, and more</p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { mockProjects, mockBtsImages } from "@/lib/project-data"
+import { mockProjects } from "@/lib/project-data"
 import ImageUploader from "@/components/admin/image-uploader"
 import Link from "next/link"
 
@@ -26,7 +26,7 @@ interface BtsImage {
 export default function EditProjectPage() {
   const params = useParams()
   const router = useRouter()
-  const id = params.id as string
+  const id = Array.isArray(params.id) ? params.id[0] : params.id
   const supabase = createClientComponentClient()
 
   const [loading, setLoading] = useState(true)
@@ -85,9 +85,19 @@ export default function EditProjectPage() {
             })
 
             // Get mock BTS images
-            const mockBts = mockBtsImages.filter((img) => img.project_id === id)
-            setBtsImages(mockBts)
+            const mockBts = mockProjects
+              .filter((p) => p.id === id && p.bts_images)
+              .flatMap((p) => p.bts_images || [])
+              .map((img) => ({
+                id: `mock-${Math.random().toString(36).substring(2, 9)}`,
+                project_id: id,
+                image_url: img,
+                caption: "Mock BTS image",
+                size: "medium",
+                aspect_ratio: "landscape",
+              }))
 
+            setBtsImages(mockBts)
             setError("Using mock data - database connection failed")
           } else {
             setError("Project not found")
@@ -105,17 +115,22 @@ export default function EditProjectPage() {
             special_notes: data.special_notes || "",
           })
 
-          // Fetch BTS images
-          const { data: btsData, error: btsError } = await supabase
-            .from("bts_images")
-            .select("*")
-            .eq("project_id", id)
-            .order("created_at", { ascending: true })
+          try {
+            // Fetch BTS images
+            const { data: btsData, error: btsError } = await supabase
+              .from("bts_images")
+              .select("*")
+              .eq("project_id", id)
+              .order("created_at", { ascending: true })
 
-          if (btsError) {
-            console.error("Error fetching BTS images:", btsError)
-          } else {
-            setBtsImages(btsData || [])
+            if (btsError) {
+              console.error("Error fetching BTS images:", btsError)
+            } else {
+              setBtsImages(btsData || [])
+            }
+          } catch (btsErr) {
+            console.error("Failed to fetch BTS images:", btsErr)
+            // Continue without BTS images
           }
         }
       } catch (err) {
@@ -126,7 +141,9 @@ export default function EditProjectPage() {
       }
     }
 
-    fetchProject()
+    if (id) {
+      fetchProject()
+    }
   }, [id, supabase])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -150,11 +167,13 @@ export default function EditProjectPage() {
       // Validate form
       if (!formData.title) {
         setError("Title is required")
+        setSaving(false)
         return
       }
 
       if (!formData.image) {
         setError("Image is required")
+        setSaving(false)
         return
       }
 
@@ -183,6 +202,14 @@ export default function EditProjectPage() {
 
     try {
       setSaving(true)
+
+      // First delete BTS images
+      try {
+        await supabase.from("bts_images").delete().eq("project_id", id)
+      } catch (btsErr) {
+        console.error("Error deleting BTS images:", btsErr)
+        // Continue with project deletion
+      }
 
       const { error } = await supabase.from("projects").delete().eq("id", id)
 
@@ -221,15 +248,30 @@ export default function EditProjectPage() {
     }
 
     try {
-      const { data, error } = await supabase
-        .from("bts_images")
-        .insert([{ ...newBtsImage, project_id: id }])
-        .select()
+      // Check if bts_images table exists
+      const { error: tableCheckError } = await supabase.from("bts_images").select("id").limit(1)
 
-      if (error) throw error
+      if (tableCheckError) {
+        // Table doesn't exist, create it
+        console.error("BTS images table doesn't exist:", tableCheckError)
 
-      // Add to state
-      setBtsImages((prev) => [...prev, data[0]])
+        // Add to state anyway (will be lost on refresh)
+        const mockId = `temp-${Math.random().toString(36).substring(2, 9)}`
+        setBtsImages((prev) => [...prev, { ...newBtsImage, id: mockId }])
+
+        alert("BTS images will be displayed but not saved permanently until the database is set up.")
+      } else {
+        // Table exists, insert data
+        const { data, error } = await supabase
+          .from("bts_images")
+          .insert([{ ...newBtsImage, project_id: id }])
+          .select()
+
+        if (error) throw error
+
+        // Add to state
+        setBtsImages((prev) => [...prev, data[0]])
+      }
 
       // Reset form
       setNewBtsImage({
@@ -251,6 +293,12 @@ export default function EditProjectPage() {
     if (!confirm("Are you sure you want to delete this image?")) return
 
     try {
+      // If it's a mock ID (starts with 'mock-' or 'temp-'), just remove from state
+      if (btsId.startsWith("mock-") || btsId.startsWith("temp-")) {
+        setBtsImages((prev) => prev.filter((img) => img.id !== btsId))
+        return
+      }
+
       const { error } = await supabase.from("bts_images").delete().eq("id", btsId)
 
       if (error) throw error
@@ -268,6 +316,12 @@ export default function EditProjectPage() {
     if (!imageToUpdate) return
 
     try {
+      // If it's a mock ID (starts with 'mock-' or 'temp-'), just update state
+      if (btsId.startsWith("mock-") || btsId.startsWith("temp-")) {
+        setEditingBtsId(null)
+        return
+      }
+
       const { error } = await supabase
         .from("bts_images")
         .update({

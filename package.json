@@ -63,7 +63,8 @@
     "framer-motion": "latest",
     "uuid": "latest",
     "@clerk/nextjs": "latest",
-    "@supabase/auth-helpers-nextjs": "latest"
+    "@supabase/auth-helpers-nextjs": "latest",
+    "jszip": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
