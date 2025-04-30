@@ -7,6 +7,7 @@ import Head from "next/head"
 export default function DynamicFavicons() {
   const [icons, setIcons] = useState<Record<string, string> | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadIcons() {
@@ -14,7 +15,18 @@ export default function DynamicFavicons() {
         const supabase = getSupabaseBrowserClient()
         const { data, error } = await supabase.from("site_settings").select("key, value").like("key", "icon_%")
 
-        if (!error && data && data.length > 0) {
+        if (error) {
+          // If table doesn't exist, we'll use default icons
+          if (error.code === "42P01") {
+            console.log("Site settings table doesn't exist yet. Using default values.")
+          } else {
+            console.error("Error loading app icons:", error)
+            setError(error.message)
+          }
+          return
+        }
+
+        if (data && data.length > 0) {
           const iconData = data.reduce((acc: Record<string, string>, item) => {
             const key = item.key.replace("icon_", "")
             acc[key] = item.value
@@ -24,6 +36,7 @@ export default function DynamicFavicons() {
         }
       } catch (err) {
         console.error("Error loading app icons:", err)
+        setError(err instanceof Error ? err.message : String(err))
       } finally {
         setLoading(false)
       }
@@ -32,7 +45,9 @@ export default function DynamicFavicons() {
     loadIcons()
   }, [])
 
-  if (loading || !icons) return null
+  // If we're still loading or there was an error or no icons found, return null
+  // The default icons in layout.tsx will be used
+  if (loading || error || !icons || Object.keys(icons).length === 0) return null
 
   return (
     <Head>
