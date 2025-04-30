@@ -82,6 +82,24 @@ export async function POST(request: NextRequest) {
       } = supabase.storage.from("public").getPublicUrl(`icons/${filename}`)
 
       uploadedFiles[filename] = publicUrl
+
+      // Also add to the unified media library
+      await supabase
+        .from("media")
+        .insert({
+          filename: filename,
+          filepath: `icons/${filename}`,
+          filesize: blob.size,
+          filetype: "image",
+          public_url: publicUrl,
+          thumbnail_url: publicUrl,
+          tags: ["icon", "favicon"],
+          metadata: {
+            contentType: blob.type,
+            source: "favicon-generator",
+          },
+        })
+        .catch((err) => console.error(`Error adding ${filename} to media library:`, err))
     }
 
     // Update site settings with the uploaded files
@@ -111,10 +129,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     )
   }
-}
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
 }

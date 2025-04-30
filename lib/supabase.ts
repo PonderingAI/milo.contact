@@ -1,4 +1,6 @@
 import { createClient } from "@supabase/supabase-js"
+import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
 
 // Debug flag - set to true to see client creation logs
 const DEBUG = true
@@ -10,16 +12,11 @@ const logClientCreation = (context: string) => {
   }
 }
 
-// Completely isolated client for server components
+// For server-side usage with service role (admin privileges)
 export const createServerClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
   logClientCreation("server")
-
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Missing Supabase environment variables")
-  }
 
   return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
@@ -30,21 +27,14 @@ export const createServerClient = () => {
   })
 }
 
-// Singleton browser client
-let browserClientInstance: ReturnType<typeof createClient> | null = null
-
-// Get the browser client with singleton pattern
+// For client-side usage
 export const getSupabaseBrowserClient = () => {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+
   // For server-side rendering, create a non-persistent client
   if (typeof window === "undefined") {
     logClientCreation("ssr")
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error("Missing Supabase environment variables")
-    }
 
     return createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -56,15 +46,10 @@ export const getSupabaseBrowserClient = () => {
   }
 
   // For client-side, use the singleton pattern
+  let browserClientInstance: ReturnType<typeof createClient> | null = null
+
   if (!browserClientInstance) {
     logClientCreation("browser-singleton")
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error("Missing Supabase environment variables")
-    }
 
     // Create the singleton instance with a unique storage key
     browserClientInstance = createClient(supabaseUrl, supabaseAnonKey, {
@@ -80,6 +65,11 @@ export const getSupabaseBrowserClient = () => {
   }
 
   return browserClientInstance
+}
+
+// For server components with user auth
+export const getSupabaseServerClient = () => {
+  return createServerComponentClient({ cookies })
 }
 
 // Create a dedicated admin client for server operations
@@ -104,5 +94,6 @@ export const createAdminClient = () => {
 
 // Reset the browser client (useful for testing and debugging)
 export const resetBrowserClient = () => {
+  let browserClientInstance: ReturnType<typeof createClient> | null = null
   browserClientInstance = null
 }
