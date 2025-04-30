@@ -1,23 +1,14 @@
 import Link from "next/link"
 import Image from "next/image"
-import { createServerClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { PlusCircle, Edit } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import DeleteProjectButton from "@/components/admin/delete-project-button"
+import { getProjects } from "@/lib/project-data"
 
 export default async function ProjectsPage() {
-  const supabase = createServerClient()
-
-  // Get all projects
-  const { data: projects, error } = await supabase
-    .from("projects")
-    .select("*")
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    console.error("Error fetching projects:", error)
-  }
+  // Get projects using the existing getProjects function
+  const projects = await getProjects()
 
   return (
     <div>
