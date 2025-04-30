@@ -4,8 +4,7 @@ import { ClerkProvider } from "@clerk/nextjs"
 import { ThemeProvider } from "@/components/theme-provider"
 import CustomCursor from "@/components/custom-cursor"
 import { Suspense } from "react"
-import { cookies } from "next/headers"
-import { createServerClient } from "@/lib/supabase"
+import { createServerClient } from "@/lib/supabase-server"
 
 export const metadata = {
   title: "Milo Presedo | Film Production & Photography",
@@ -17,8 +16,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Try to get app icons from site_settings
   let icons = null
   try {
-    const cookieStore = cookies()
-    const supabase = createServerClient(cookieStore)
+    const supabase = createServerClient()
     const { data, error } = await supabase.from("site_settings").select("key, value").like("key", "icon_%")
 
     if (!error && data && data.length > 0) {

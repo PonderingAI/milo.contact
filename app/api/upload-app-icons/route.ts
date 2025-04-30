@@ -1,4 +1,4 @@
-import { createAdminClient } from "@/lib/supabase"
+import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
 import JSZip from "jszip"
 

@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import Image from "next/image"
-import { getSupabaseBrowserClient } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
