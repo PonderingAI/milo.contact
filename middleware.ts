@@ -17,6 +17,8 @@ export default authMiddleware({
     "/api/setup-storage",
     "/api/setup-bts-images-table",
     "/api/setup-site-settings",
+    "/api/setup-media-table",
+    "/api/setup-media-storage-policy",
     "/api/upload-app-icons",
     "/api/favicon",
     "/setup-database",

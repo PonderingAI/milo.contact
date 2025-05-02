@@ -16,6 +16,7 @@ export async function GET() {
       siteSettings: { success: false, message: "" },
       storage: { success: false, message: "" },
       mediaTable: { success: false, message: "" },
+      mediaPolicy: { success: false, message: "" },
     }
 
     // 1. Check if site_settings table exists
@@ -133,8 +134,18 @@ export async function GET() {
             tags TEXT[] DEFAULT '{}',
             metadata JSONB DEFAULT '{}',
             usage_locations JSONB DEFAULT '{}',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
           );
+          
+          -- Add index on filepath for faster lookups
+          CREATE INDEX IF NOT EXISTS media_filepath_idx ON public.media(filepath);
+          
+          -- Add index on filetype for filtering
+          CREATE INDEX IF NOT EXISTS media_filetype_idx ON public.media(filetype);
+          
+          -- Add index on tags for filtering
+          CREATE INDEX IF NOT EXISTS media_tags_idx ON public.media USING GIN(tags);
         `)
 
         if (directCreateError) {
@@ -199,12 +210,57 @@ export async function GET() {
       }
     }
 
+    // 5. Set up media storage policy for public access
+    try {
+      // Create SQL to set up the storage policies
+      const createPolicySql = `
+        BEGIN;
+        
+        -- Drop existing policies if they exist
+        DROP POLICY IF EXISTS "Public Read Media" ON storage.objects;
+        DROP POLICY IF EXISTS "Admin Insert Media" ON storage.objects;
+        
+        -- Create a policy that allows public read access to the media bucket
+        CREATE POLICY "Public Read Media" 
+        ON storage.objects 
+        FOR SELECT 
+        USING (bucket_id = 'media');
+        
+        -- Create a policy that allows insertion into the media bucket
+        -- We rely on application-level checks for admin status
+        CREATE POLICY "Admin Insert Media" 
+        ON storage.objects 
+        FOR INSERT 
+        WITH CHECK (bucket_id = 'media');
+        
+        COMMIT;
+      `
+
+      // Execute the SQL to create the policies
+      const { error } = await supabase.rpc("exec_sql", { sql: createPolicySql })
+
+      if (error) {
+        throw error
+      }
+
+      results.mediaPolicy = {
+        success: true,
+        message: "Media storage policies configured successfully",
+      }
+    } catch (policyError: any) {
+      results.mediaPolicy = {
+        success: false,
+        message: `Error with media policies: ${policyError.message}`,
+      }
+    }
+
     return NextResponse.json({
       success:
         results.database.success &&
         results.siteSettings.success &&
         results.storage.success &&
-        results.mediaTable.success,
+        results.mediaTable.success &&
+        results.mediaPolicy.success,
       results,
     })
   } catch (error: any) {

@@ -1,8 +1,7 @@
 import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
 import sharp from "sharp"
-import { cookies } from "next/headers"
-import { createServerClient } from "@/lib/supabase-server"
+import { currentUser } from "@clerk/nextjs/server"
 
 export const config = {
   api: {
@@ -12,6 +11,13 @@ export const config = {
 
 export async function POST(request: NextRequest) {
   try {
+    // Check if user is a superAdmin
+    const user = await currentUser()
+
+    if (!user || user.publicMetadata.superAdmin !== true) {
+      return NextResponse.json({ error: "Only super admins can upload images" }, { status: 403 })
+    }
+
     const formData = await request.formData()
     const file = formData.get("image") as File
 
@@ -22,19 +28,6 @@ export async function POST(request: NextRequest) {
     // Check if file is an image
     if (!file.type.startsWith("image/") || file.type.includes("svg")) {
       return NextResponse.json({ error: "File is not a supported image format" }, { status: 400 })
-    }
-
-    // Get the user's ID for folder structure
-    const cookieStore = cookies()
-    const supabase = createServerClient()
-
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    const userId = session?.user?.id
-
-    if (!userId) {
-      return NextResponse.json({ error: "User not authenticated" }, { status: 401 })
     }
 
     // Convert to buffer
@@ -49,8 +42,8 @@ export async function POST(request: NextRequest) {
     const originalName = file.name.split(".")[0]
     const webpFilename = `${originalName}-${Date.now()}.webp`
 
-    // Include user ID in the file path
-    const filePath = `${userId}/uploads/${webpFilename}`
+    // Store in a common 'uploads' folder (not segregated by user)
+    const filePath = `uploads/${webpFilename}`
 
     // Upload to Supabase
     const adminClient = createAdminClient()
@@ -75,7 +68,6 @@ export async function POST(request: NextRequest) {
       filepath: filePath,
       filesize: webpBuffer.byteLength,
       publicUrl,
-      userId,
     })
   } catch (error) {
     console.error("Error converting image:", error)

@@ -13,6 +13,7 @@ import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { useAuth, useUser } from "@clerk/nextjs"
 
 interface MediaItem {
   id: string
@@ -42,31 +43,34 @@ export default function UnifiedMediaLibrary() {
   const [vimeoUrl, setVimeoUrl] = useState("")
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
   const supabase = getSupabaseBrowserClient()
+  const { isSignedIn } = useAuth()
+  const { user } = useUser()
 
   useEffect(() => {
-    // Get the user ID on component mount
-    async function getUserId() {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const uid = session?.user?.id || null
-      setUserId(uid)
-
-      if (!uid) {
-        setError("User not authenticated. Please sign in to access the media library.")
-        setLoading(false)
-        return
-      }
-
-      fetchMedia()
+    // Check if user is a superAdmin
+    if (user) {
+      const userMetadata = user.publicMetadata || {}
+      setIsAdmin(userMetadata.superAdmin === true)
+    } else {
+      setIsAdmin(false)
     }
 
-    getUserId()
-  }, [])
+    // Fetch media regardless of authentication status
+    fetchMedia()
+  }, [user])
 
   const setupDatabase = async () => {
+    if (!isAdmin) {
+      toast({
+        title: "Permission denied",
+        description: "Only super admins can set up the database",
+        variant: "destructive",
+      })
+      return
+    }
+
     setSetupInProgress(true)
     setError(null)
 
@@ -104,12 +108,6 @@ export default function UnifiedMediaLibrary() {
   }
 
   const fetchMedia = async () => {
-    if (!userId) {
-      setError("User not authenticated. Please sign in to access the media library.")
-      setLoading(false)
-      return
-    }
-
     setLoading(true)
     setError(null)
 
@@ -149,8 +147,17 @@ export default function UnifiedMediaLibrary() {
   }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      toast({
+        title: "Permission denied",
+        description: "Only super admins can upload files",
+        variant: "destructive",
+      })
+      return
+    }
+
     const file = e.target.files?.[0]
-    if (!file || !userId) return
+    if (!file) return
 
     setUploadingFile(true)
     try {
@@ -189,8 +196,8 @@ export default function UnifiedMediaLibrary() {
         const fileExt = file.name.split(".").pop()
         const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
 
-        // Include user ID in the file path
-        const filePath = `${userId}/uploads/${fileName}`
+        // Use 'uploads' folder for all media, without user segmentation
+        const filePath = `uploads/${fileName}`
 
         const { error: uploadError, data } = await supabase.storage.from("media").upload(filePath, file)
 
@@ -251,7 +258,7 @@ export default function UnifiedMediaLibrary() {
       metadata: {
         contentType: fileType,
         uploadedAt: new Date().toISOString(),
-        userId: userId,
+        uploadedBy: user?.id || "anonymous",
       },
     })
 
@@ -259,7 +266,16 @@ export default function UnifiedMediaLibrary() {
   }
 
   const handleVimeoAdd = async () => {
-    if (!vimeoUrl.includes("vimeo.com") || !userId) {
+    if (!isAdmin) {
+      toast({
+        title: "Permission denied",
+        description: "Only super admins can add videos",
+        variant: "destructive",
+      })
+      return
+    }
+
+    if (!vimeoUrl.includes("vimeo.com")) {
       toast({
         title: "Error",
         description: "Please enter a valid Vimeo URL",
@@ -300,7 +316,7 @@ export default function UnifiedMediaLibrary() {
           description: video.description,
           duration: video.duration,
           uploadDate: video.upload_date,
-          userId: userId,
+          uploadedBy: user?.id || "anonymous",
         },
       })
 
@@ -338,6 +354,15 @@ export default function UnifiedMediaLibrary() {
   }
 
   const handleDeleteMedia = async (id: string, filepath: string) => {
+    if (!isAdmin) {
+      toast({
+        title: "Permission denied",
+        description: "Only super admins can delete media",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!confirm("Are you sure you want to delete this media item?")) return
 
     try {
@@ -455,10 +480,12 @@ export default function UnifiedMediaLibrary() {
               )}
             </Button>
 
-            <Button variant="ghost" size="icon" onClick={() => handleDeleteMedia(item.id, item.filepath)}>
-              <Trash2 className="h-4 w-4 text-red-500" />
-              <span className="sr-only">Delete</span>
-            </Button>
+            {isAdmin && (
+              <Button variant="ghost" size="icon" onClick={() => handleDeleteMedia(item.id, item.filepath)}>
+                <Trash2 className="h-4 w-4 text-red-500" />
+                <span className="sr-only">Delete</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>
@@ -474,7 +501,7 @@ export default function UnifiedMediaLibrary() {
           <AlertTitle>Error</AlertTitle>
           <AlertDescription className="flex flex-col gap-4">
             <p>{error}</p>
-            {error.includes("database") && (
+            {error.includes("database") && isAdmin && (
               <Button onClick={setupDatabase} disabled={setupInProgress} className="w-fit flex items-center gap-2">
                 {setupInProgress ? (
                   <>
@@ -493,51 +520,54 @@ export default function UnifiedMediaLibrary() {
         </Alert>
       )}
 
-      {!userId && !error && (
-        <Alert variant="warning" className="mb-6">
-          <AlertTitle>Authentication Required</AlertTitle>
-          <AlertDescription>Please sign in to access the media library.</AlertDescription>
+      {!isAdmin && (
+        <Alert className="mb-6">
+          <AlertTitle>View-Only Mode</AlertTitle>
+          <AlertDescription>
+            You are viewing the media library in read-only mode. Only super admins can upload, modify, or delete media.
+          </AlertDescription>
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-gray-900 p-4 rounded-lg">
-          <h2 className="text-xl mb-4">Upload File</h2>
-          <div className="space-y-4">
+      {isAdmin && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div className="bg-gray-900 p-4 rounded-lg">
+            <h2 className="text-xl mb-4">Upload File</h2>
+            <div className="space-y-4">
+              <div className="flex items-center gap-4">
+                <Input
+                  type="file"
+                  onChange={handleFileUpload}
+                  disabled={uploadingFile || !!error}
+                  className="bg-gray-800 border-gray-700"
+                />
+                {uploadingFile && <span className="text-sm text-gray-400">Uploading...</span>}
+              </div>
+              <div className="text-sm text-gray-400">
+                <p>Images will be automatically converted to WebP format for optimal quality and performance.</p>
+                <p>High quality compression is used to ensure images look great on large displays.</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-gray-900 p-4 rounded-lg">
+            <h2 className="text-xl mb-4">Add Vimeo Video</h2>
             <div className="flex items-center gap-4">
               <Input
-                type="file"
-                onChange={handleFileUpload}
-                disabled={uploadingFile || !!error || !userId}
+                type="text"
+                placeholder="Paste Vimeo URL"
+                value={vimeoUrl}
+                onChange={(e) => setVimeoUrl(e.target.value)}
+                disabled={uploadingVimeo || !!error}
                 className="bg-gray-800 border-gray-700"
               />
-              {uploadingFile && <span className="text-sm text-gray-400">Uploading...</span>}
-            </div>
-            <div className="text-sm text-gray-400">
-              <p>Images will be automatically converted to WebP format for optimal quality and performance.</p>
-              <p>High quality compression is used to ensure images look great on large displays.</p>
-              {userId && <p className="mt-2 text-blue-400">Files will be uploaded to your personal folder: {userId}</p>}
+              <Button onClick={handleVimeoAdd} disabled={!vimeoUrl || uploadingVimeo || !!error}>
+                {uploadingVimeo ? "Adding..." : "Add"}
+              </Button>
             </div>
           </div>
         </div>
-
-        <div className="bg-gray-900 p-4 rounded-lg">
-          <h2 className="text-xl mb-4">Add Vimeo Video</h2>
-          <div className="flex items-center gap-4">
-            <Input
-              type="text"
-              placeholder="Paste Vimeo URL"
-              value={vimeoUrl}
-              onChange={(e) => setVimeoUrl(e.target.value)}
-              disabled={uploadingVimeo || !!error || !userId}
-              className="bg-gray-800 border-gray-700"
-            />
-            <Button onClick={handleVimeoAdd} disabled={!vimeoUrl || uploadingVimeo || !!error || !userId}>
-              {uploadingVimeo ? "Adding..." : "Add"}
-            </Button>
-          </div>
-        </div>
-      </div>
+      )}
 
       <div className="flex flex-col md:flex-row gap-4 mb-8">
         <div className="flex-1">
@@ -661,14 +691,6 @@ export default function UnifiedMediaLibrary() {
       return (
         <div className="text-center py-8 bg-gray-900 rounded-lg">
           <p className="text-gray-400">Please resolve the error to view media</p>
-        </div>
-      )
-    }
-
-    if (!userId) {
-      return (
-        <div className="text-center py-8 bg-gray-900 rounded-lg">
-          <p className="text-gray-400">Please sign in to view media</p>
         </div>
       )
     }
