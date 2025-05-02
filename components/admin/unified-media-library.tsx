@@ -2,18 +2,34 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import Image from "next/image"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Copy, Trash2, Search, Filter, CheckCircle, Link, ImageIcon, RefreshCw } from "lucide-react"
+import {
+  Copy,
+  Trash2,
+  Search,
+  Filter,
+  CheckCircle,
+  Link,
+  ImageIcon,
+  RefreshCw,
+  UploadCloud,
+  Loader2,
+  AlertCircle,
+  FolderOpen,
+  FileUp,
+} from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAuth, useUser } from "@clerk/nextjs"
+import { Progress } from "@/components/ui/progress"
+import { Textarea } from "@/components/ui/textarea"
 
 interface MediaItem {
   id: string
@@ -29,6 +45,14 @@ interface MediaItem {
   created_at: string
 }
 
+interface UploadStatus {
+  file: File
+  status: "pending" | "uploading" | "success" | "error"
+  progress: number
+  error?: string
+  response?: any
+}
+
 export default function UnifiedMediaLibrary() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -40,10 +64,15 @@ export default function UnifiedMediaLibrary() {
   const [activeTab, setActiveTab] = useState("all")
   const [uploadingFile, setUploadingFile] = useState(false)
   const [uploadingVimeo, setUploadingVimeo] = useState(false)
-  const [vimeoUrl, setVimeoUrl] = useState("")
+  const [vimeoUrls, setVimeoUrls] = useState("")
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<UploadStatus[]>([])
+  const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
+  const [isProcessingQueue, setIsProcessingQueue] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const supabase = getSupabaseBrowserClient()
   const { isSignedIn } = useAuth()
   const { user } = useUser()
@@ -146,7 +175,7 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSingleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!isAdmin) {
       toast({
         title: "Permission denied",
@@ -189,7 +218,9 @@ export default function UnifiedMediaLibrary() {
 
         toast({
           title: "Success",
-          description: "Image converted to WebP and uploaded successfully",
+          description: result.converted
+            ? "Image converted to WebP and uploaded successfully"
+            : "Image uploaded successfully",
         })
       } else {
         // For non-convertible files, proceed with regular upload
@@ -231,6 +262,189 @@ export default function UnifiedMediaLibrary() {
       // Reset the input
       e.target.value = ""
     }
+  }
+
+  const handleBulkFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      toast({
+        title: "Permission denied",
+        description: "Only super admins can upload files",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    // Convert FileList to array and create upload status objects
+    const newUploads: UploadStatus[] = Array.from(files).map((file) => ({
+      file,
+      status: "pending",
+      progress: 0,
+    }))
+
+    setUploadQueue((prev) => [...prev, ...newUploads])
+    setIsUploadDialogOpen(true)
+
+    // Reset the input
+    e.target.value = ""
+  }
+
+  const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!isAdmin) {
+      toast({
+        title: "Permission denied",
+        description: "Only super admins can upload files",
+        variant: "destructive",
+      })
+      return
+    }
+
+    const files = e.target.files
+    if (!files || files.length === 0) return
+
+    // Convert FileList to array and create upload status objects
+    const newUploads: UploadStatus[] = Array.from(files).map((file) => ({
+      file,
+      status: "pending",
+      progress: 0,
+    }))
+
+    setUploadQueue((prev) => [...prev, ...newUploads])
+    setIsUploadDialogOpen(true)
+
+    // Reset the input
+    e.target.value = ""
+  }
+
+  const processBulkUpload = async () => {
+    if (isProcessingQueue || uploadQueue.length === 0) return
+
+    setIsProcessingQueue(true)
+
+    // Process files in parallel with a limit (5 at a time)
+    const batchSize = 5
+    const totalFiles = uploadQueue.length
+
+    for (let i = 0; i < totalFiles; i += batchSize) {
+      const batch = uploadQueue.slice(i, i + batchSize)
+
+      // Only process pending files
+      const pendingBatch = batch.filter((item) => item.status === "pending")
+
+      // Process batch in parallel
+      await Promise.all(
+        pendingBatch.map(async (item, idx) => {
+          const batchIndex = i + idx
+
+          // Update status to uploading
+          setUploadQueue((prev) => {
+            const updated = [...prev]
+            updated[batchIndex] = { ...updated[batchIndex], status: "uploading", progress: 10 }
+            return updated
+          })
+
+          try {
+            const formData = new FormData()
+            formData.append("file", item.file)
+            formData.append("index", batchIndex.toString())
+            formData.append("total", totalFiles.toString())
+
+            // Update progress to 30%
+            setUploadQueue((prev) => {
+              const updated = [...prev]
+              updated[batchIndex] = { ...updated[batchIndex], progress: 30 }
+              return updated
+            })
+
+            const response = await fetch("/api/bulk-upload", {
+              method: "POST",
+              body: formData,
+            })
+
+            // Update progress to 80%
+            setUploadQueue((prev) => {
+              const updated = [...prev]
+              updated[batchIndex] = { ...updated[batchIndex], progress: 80 }
+              return updated
+            })
+
+            const result = await response.json()
+
+            if (result.success) {
+              // Success
+              setUploadQueue((prev) => {
+                const updated = [...prev]
+                updated[batchIndex] = {
+                  ...updated[batchIndex],
+                  status: "success",
+                  progress: 100,
+                  response: result,
+                }
+                return updated
+              })
+            } else {
+              // Error from API
+              setUploadQueue((prev) => {
+                const updated = [...prev]
+                updated[batchIndex] = {
+                  ...updated[batchIndex],
+                  status: "error",
+                  progress: 100,
+                  error: result.error,
+                  response: result,
+                }
+                return updated
+              })
+            }
+          } catch (error) {
+            // Exception
+            setUploadQueue((prev) => {
+              const updated = [...prev]
+              updated[batchIndex] = {
+                ...updated[batchIndex],
+                status: "error",
+                progress: 100,
+                error: error instanceof Error ? error.message : "Unknown error",
+              }
+              return updated
+            })
+          }
+        }),
+      )
+    }
+
+    // Refresh media list after all uploads
+    fetchMedia()
+    setIsProcessingQueue(false)
+
+    // Count results
+    const successful = uploadQueue.filter((item) => item.status === "success").length
+    const failed = uploadQueue.filter((item) => item.status === "error").length
+
+    toast({
+      title: "Bulk upload complete",
+      description: `${successful} files uploaded successfully, ${failed} files failed`,
+      variant: successful > 0 ? "default" : "destructive",
+    })
+  }
+
+  const clearUploadQueue = () => {
+    // Only clear completed uploads
+    setUploadQueue((prev) => prev.filter((item) => item.status === "pending" || item.status === "uploading"))
+  }
+
+  const resetUploadQueue = () => {
+    if (isProcessingQueue) {
+      toast({
+        title: "Upload in progress",
+        description: "Please wait for the current upload to complete",
+        variant: "destructive",
+      })
+      return
+    }
+    setUploadQueue([])
   }
 
   const handleMediaUpload = async (filename: string, filepath: string, filesize: number, publicUrl: string) => {
@@ -275,66 +489,97 @@ export default function UnifiedMediaLibrary() {
       return
     }
 
-    if (!vimeoUrl.includes("vimeo.com")) {
+    // Validate input
+    if (!vimeoUrls.trim()) {
       toast({
         title: "Error",
-        description: "Please enter a valid Vimeo URL",
+        description: "Please enter at least one Vimeo URL",
         variant: "destructive",
       })
       return
     }
 
     setUploadingVimeo(true)
+    let successCount = 0
+    let failCount = 0
+
     try {
-      const videoInfo = extractVideoInfo(vimeoUrl)
+      // Extract potential Vimeo URLs
+      const urlRegex =
+        /(?:https?:)?\/\/(?:www\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:[a-zA-Z0-9_-]+)?/gi
+      const matches = vimeoUrls.match(urlRegex) || []
 
-      if (!videoInfo || videoInfo.platform !== "vimeo") {
-        throw new Error("Invalid Vimeo URL")
+      if (matches.length === 0) {
+        toast({
+          title: "No valid Vimeo URLs found",
+          description: "Please check your input and try again",
+          variant: "destructive",
+        })
+        return
       }
 
-      // Get video thumbnail and metadata
-      const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+      // Process each Vimeo URL
+      for (const url of matches) {
+        try {
+          const videoInfo = extractVideoInfo(url)
 
-      if (!response.ok) {
-        throw new Error("Failed to fetch Vimeo video info")
+          if (!videoInfo || videoInfo.platform !== "vimeo") {
+            throw new Error("Invalid Vimeo URL")
+          }
+
+          // Get video thumbnail and metadata
+          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+
+          if (!response.ok) {
+            throw new Error("Failed to fetch Vimeo video info")
+          }
+
+          const videoData = await response.json()
+          const video = videoData[0]
+
+          // Save to media table
+          const { error: dbError } = await supabase.from("media").insert({
+            filename: video.title || `Vimeo ${videoInfo.id}`,
+            filepath: url,
+            filesize: 0, // Not applicable for external videos
+            filetype: "vimeo",
+            public_url: url,
+            thumbnail_url: video.thumbnail_large,
+            tags: ["video", "vimeo"],
+            metadata: {
+              vimeoId: videoInfo.id,
+              description: video.description,
+              duration: video.duration,
+              uploadDate: video.upload_date,
+              uploadedBy: user?.id || "anonymous",
+            },
+          })
+
+          if (dbError) throw dbError
+          successCount++
+        } catch (err) {
+          console.error("Error processing Vimeo URL:", url, err)
+          failCount++
+        }
       }
 
-      const videoData = await response.json()
-      const video = videoData[0]
-
-      // Save to media table
-      const { error: dbError } = await supabase.from("media").insert({
-        filename: video.title || `Vimeo ${videoInfo.id}`,
-        filepath: vimeoUrl,
-        filesize: 0, // Not applicable for external videos
-        filetype: "vimeo",
-        public_url: vimeoUrl,
-        thumbnail_url: video.thumbnail_large,
-        tags: ["video", "vimeo"],
-        metadata: {
-          vimeoId: videoInfo.id,
-          description: video.description,
-          duration: video.duration,
-          uploadDate: video.upload_date,
-          uploadedBy: user?.id || "anonymous",
-        },
-      })
-
-      if (dbError) throw dbError
-
+      // Show summary toast
       toast({
-        title: "Success",
-        description: "Vimeo video added successfully",
+        title: successCount > 0 ? "Success" : "Error",
+        description: `${successCount} videos added successfully${failCount > 0 ? `, ${failCount} failed` : ""}`,
+        variant: successCount > 0 ? "default" : "destructive",
       })
 
-      // Reset form and refresh
-      setVimeoUrl("")
-      fetchMedia()
+      // Reset form if any successful and refresh
+      if (successCount > 0) {
+        setVimeoUrls("")
+        fetchMedia()
+      }
     } catch (error) {
-      console.error("Error adding Vimeo video:", error)
+      console.error("Error adding Vimeo videos:", error)
       toast({
         title: "Error",
-        description: "Failed to add Vimeo video",
+        description: "Failed to add Vimeo videos",
         variant: "destructive",
       })
     } finally {
@@ -429,7 +674,11 @@ export default function UnifiedMediaLibrary() {
           {item.thumbnail_url ? (
             <Image src={item.thumbnail_url || "/placeholder.svg"} alt={item.filename} fill className="object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-800">
+            <div
+              className="w-full
+</cut_off_point>
+h-full flex items-center justify-center bg-gray-800"
+            >
               <span className="text-gray-400">{item.filetype}</span>
             </div>
           )}
@@ -532,38 +781,82 @@ export default function UnifiedMediaLibrary() {
       {isAdmin && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div className="bg-gray-900 p-4 rounded-lg">
-            <h2 className="text-xl mb-4">Upload File</h2>
+            <h2 className="text-xl mb-4">Upload Files</h2>
             <div className="space-y-4">
-              <div className="flex items-center gap-4">
-                <Input
+              <div className="flex flex-col gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2"
+                    variant="secondary"
+                    disabled={!!error}
+                  >
+                    <FileUp className="h-4 w-4" />
+                    Single File
+                  </Button>
+                  <Button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2"
+                    variant="secondary"
+                    disabled={!!error}
+                    multiple
+                  >
+                    <UploadCloud className="h-4 w-4" />
+                    Multiple Files
+                  </Button>
+                </div>
+                <Button
+                  onClick={() => folderInputRef.current?.click()}
+                  className="flex items-center gap-2 w-full"
+                  variant="outline"
+                  disabled={!!error}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  Upload Folder
+                </Button>
+                <input ref={fileInputRef} type="file" multiple onChange={handleBulkFileSelect} className="hidden" />
+                <input
+                  ref={folderInputRef}
                   type="file"
-                  onChange={handleFileUpload}
-                  disabled={uploadingFile || !!error}
-                  className="bg-gray-800 border-gray-700"
+                  directory=""
+                  webkitdirectory=""
+                  onChange={handleFolderSelect}
+                  className="hidden"
                 />
-                {uploadingFile && <span className="text-sm text-gray-400">Uploading...</span>}
               </div>
               <div className="text-sm text-gray-400">
-                <p>Images will be automatically converted to WebP format for optimal quality and performance.</p>
-                <p>High quality compression is used to ensure images look great on large displays.</p>
+                <p>Images are automatically converted to WebP for optimal quality and performance.</p>
+                <p className="mt-1">For bulk uploads, choose multiple files or a folder to begin.</p>
               </div>
             </div>
           </div>
 
           <div className="bg-gray-900 p-4 rounded-lg">
-            <h2 className="text-xl mb-4">Add Vimeo Video</h2>
-            <div className="flex items-center gap-4">
-              <Input
-                type="text"
-                placeholder="Paste Vimeo URL"
-                value={vimeoUrl}
-                onChange={(e) => setVimeoUrl(e.target.value)}
+            <h2 className="text-xl mb-4">Add Vimeo Videos</h2>
+            <div className="space-y-4">
+              <Textarea
+                placeholder="Paste one or more Vimeo URLs (one per line or separated by spaces)"
+                value={vimeoUrls}
+                onChange={(e) => setVimeoUrls(e.target.value)}
                 disabled={uploadingVimeo || !!error}
-                className="bg-gray-800 border-gray-700"
+                className="bg-gray-800 border-gray-700 min-h-[100px]"
               />
-              <Button onClick={handleVimeoAdd} disabled={!vimeoUrl || uploadingVimeo || !!error}>
-                {uploadingVimeo ? "Adding..." : "Add"}
+              <Button onClick={handleVimeoAdd} disabled={!vimeoUrls || uploadingVimeo || !!error} className="w-full">
+                {uploadingVimeo ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processing...
+                  </span>
+                ) : (
+                  "Add Vimeo Videos"
+                )}
               </Button>
+              <div className="text-sm text-gray-400">
+                <p>
+                  You can paste multiple Vimeo URLs. The system will automatically detect and process all valid Vimeo
+                  links.
+                </p>
+              </div>
             </div>
           </div>
         </div>
@@ -676,6 +969,95 @@ export default function UnifiedMediaLibrary() {
               <Copy className="h-4 w-4" />
               Copy URL
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Upload Dialog */}
+      <Dialog
+        open={isUploadDialogOpen}
+        onOpenChange={(open) => {
+          if (!isProcessingQueue) setIsUploadDialogOpen(open)
+          else
+            toast({
+              title: "Upload in progress",
+              description: "Please wait for uploads to complete before closing",
+              variant: "destructive",
+            })
+        }}
+      >
+        <DialogContent className="max-w-3xl w-full">
+          <DialogHeader>
+            <DialogTitle>Bulk Upload</DialogTitle>
+            <DialogDescription>{uploadQueue.length} files selected for upload</DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] overflow-y-auto pr-2">
+            {uploadQueue.map((item, index) => (
+              <div key={index} className="mb-2 p-3 bg-gray-900 rounded-md">
+                <div className="flex justify-between items-start mb-1">
+                  <div className="truncate mr-2 text-sm" title={item.file.name}>
+                    {item.file.name}
+                  </div>
+                  <div className="text-xs whitespace-nowrap">{(item.file.size / 1024).toFixed(2)} KB</div>
+                </div>
+
+                <div className="flex items-center gap-2 mb-1">
+                  <Progress value={item.progress} className="h-2 flex-grow" />
+                  <span className="text-xs whitespace-nowrap">
+                    {item.status === "pending" && "Pending"}
+                    {item.status === "uploading" && "Uploading..."}
+                    {item.status === "success" && "Complete"}
+                    {item.status === "error" && "Failed"}
+                  </span>
+                </div>
+
+                {item.status === "error" && (
+                  <div className="text-xs text-red-400 flex items-center gap-1 mt-1">
+                    <AlertCircle className="h-3 w-3" />
+                    {item.error || "Upload failed"}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <div className="text-sm">
+              <div className="flex justify-between">
+                <span>Status:</span>
+                <span>
+                  {uploadQueue.filter((i) => i.status === "success").length} completed,{" "}
+                  {uploadQueue.filter((i) => i.status === "error").length} failed,{" "}
+                  {uploadQueue.filter((i) => i.status === "pending").length} pending
+                </span>
+              </div>
+            </div>
+
+            <div className="flex justify-between gap-2 mt-2">
+              <div className="space-x-2">
+                <Button variant="outline" onClick={clearUploadQueue} disabled={isProcessingQueue}>
+                  Clear Completed
+                </Button>
+                <Button variant="outline" onClick={resetUploadQueue} disabled={isProcessingQueue}>
+                  Reset All
+                </Button>
+              </div>
+
+              <Button
+                onClick={processBulkUpload}
+                disabled={isProcessingQueue || uploadQueue.filter((i) => i.status === "pending").length === 0}
+              >
+                {isProcessingQueue ? (
+                  <span className="flex items-center gap-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </span>
+                ) : (
+                  "Start Upload"
+                )}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

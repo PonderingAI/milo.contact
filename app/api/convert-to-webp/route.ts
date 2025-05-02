@@ -33,16 +33,57 @@ export async function POST(request: NextRequest) {
     // Convert to buffer
     const buffer = await file.arrayBuffer()
 
-    // Use sharp to convert to WebP with high quality
-    const webpBuffer = await sharp(buffer)
-      .webp({ quality: 90 }) // High quality for large displays
-      .toBuffer()
+    let webpBuffer
+
+    try {
+      // Use sharp to convert to WebP with high quality
+      webpBuffer = await sharp(buffer)
+        .webp({ quality: 90 }) // High quality for large displays
+        .toBuffer()
+    } catch (sharpError) {
+      console.error("Error converting with sharp:", sharpError)
+
+      // Fall back to original file if conversion fails
+      webpBuffer = Buffer.from(buffer)
+
+      // Use original file extension instead of webp
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || "jpg"
+      const originalName = file.name.split(".")[0]
+      const fallbackFilename = `${originalName}-${Date.now()}.${fileExt}`
+      const filePath = `uploads/${fallbackFilename}`
+
+      // Upload original file to Supabase
+      const adminClient = createAdminClient()
+      const { error: uploadError } = await adminClient.storage.from("media").upload(filePath, webpBuffer, {
+        contentType: file.type,
+        cacheControl: "3600",
+        upsert: false,
+      })
+
+      if (uploadError) {
+        return NextResponse.json({ error: uploadError.message }, { status: 500 })
+      }
+
+      // Get public URL
+      const {
+        data: { publicUrl },
+      } = adminClient.storage.from("media").getPublicUrl(filePath)
+
+      return NextResponse.json({
+        success: true,
+        filename: fallbackFilename,
+        filepath: filePath,
+        filesize: webpBuffer.byteLength,
+        publicUrl,
+        converted: false,
+      })
+    }
 
     // Generate filename
     const originalName = file.name.split(".")[0]
     const webpFilename = `${originalName}-${Date.now()}.webp`
 
-    // Store in a common 'uploads' folder (not segregated by user)
+    // Store in a common 'uploads' folder
     const filePath = `uploads/${webpFilename}`
 
     // Upload to Supabase
@@ -68,6 +109,7 @@ export async function POST(request: NextRequest) {
       filepath: filePath,
       filesize: webpBuffer.byteLength,
       publicUrl,
+      converted: true,
     })
   } catch (error) {
     console.error("Error converting image:", error)
