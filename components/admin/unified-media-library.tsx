@@ -8,10 +8,11 @@ import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Copy, Trash2, Search, Filter, CheckCircle, Link, ImageIcon } from "lucide-react"
+import { Copy, Trash2, Search, Filter, CheckCircle, Link, ImageIcon, RefreshCw } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface MediaItem {
   id: string
@@ -30,6 +31,8 @@ interface MediaItem {
 export default function UnifiedMediaLibrary() {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [setupInProgress, setSetupInProgress] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [allTags, setAllTags] = useState<string[]>([])
@@ -39,18 +42,85 @@ export default function UnifiedMediaLibrary() {
   const [vimeoUrl, setVimeoUrl] = useState("")
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null)
+  const [userId, setUserId] = useState<string | null>(null)
   const supabase = getSupabaseBrowserClient()
 
   useEffect(() => {
-    fetchMedia()
+    // Get the user ID on component mount
+    async function getUserId() {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      const uid = session?.user?.id || null
+      setUserId(uid)
+
+      if (!uid) {
+        setError("User not authenticated. Please sign in to access the media library.")
+        setLoading(false)
+        return
+      }
+
+      fetchMedia()
+    }
+
+    getUserId()
   }, [])
 
+  const setupDatabase = async () => {
+    setSetupInProgress(true)
+    setError(null)
+
+    try {
+      // First try the comprehensive setup
+      const setupResponse = await fetch("/api/setup-all")
+
+      if (!setupResponse.ok) {
+        // If that fails, try the specific media table setup
+        const mediaSetupResponse = await fetch("/api/setup-media-table")
+
+        if (!mediaSetupResponse.ok) {
+          throw new Error("Failed to set up media table")
+        }
+      }
+
+      toast({
+        title: "Setup complete",
+        description: "Database tables have been created successfully",
+      })
+
+      // Refresh media after setup
+      fetchMedia()
+    } catch (error) {
+      console.error("Setup error:", error)
+      setError("Failed to set up database. Please check console for details.")
+      toast({
+        title: "Setup failed",
+        description: "Could not set up database tables",
+        variant: "destructive",
+      })
+    } finally {
+      setSetupInProgress(false)
+    }
+  }
+
   const fetchMedia = async () => {
+    if (!userId) {
+      setError("User not authenticated. Please sign in to access the media library.")
+      setLoading(false)
+      return
+    }
+
     setLoading(true)
+    setError(null)
+
     try {
       const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
 
       if (error) {
+        if (error.code === "42P01") {
+          setError("Media table does not exist. Please set up the database.")
+          return
+        }
         throw error
       }
 
@@ -67,22 +137,12 @@ export default function UnifiedMediaLibrary() {
       setAllTags(Array.from(tags))
     } catch (error) {
       console.error("Error fetching media:", error)
+      setError("Failed to load media library. Please check console for details.")
       toast({
         title: "Error",
         description: "Failed to load media library",
         variant: "destructive",
       })
-
-      // If the table doesn't exist, try to set it up
-      if ((error as any)?.code === "42P01") {
-        try {
-          await fetch("/api/setup-all")
-          // Try fetching again after setup
-          fetchMedia()
-        } catch (setupError) {
-          console.error("Error setting up database:", setupError)
-        }
-      }
     } finally {
       setLoading(false)
     }
@@ -90,7 +150,7 @@ export default function UnifiedMediaLibrary() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file || !userId) return
 
     setUploadingFile(true)
     try {
@@ -128,7 +188,9 @@ export default function UnifiedMediaLibrary() {
         // For non-convertible files, proceed with regular upload
         const fileExt = file.name.split(".").pop()
         const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
-        const filePath = `uploads/${fileName}`
+
+        // Include user ID in the file path
+        const filePath = `${userId}/uploads/${fileName}`
 
         const { error: uploadError, data } = await supabase.storage.from("media").upload(filePath, file)
 
@@ -189,6 +251,7 @@ export default function UnifiedMediaLibrary() {
       metadata: {
         contentType: fileType,
         uploadedAt: new Date().toISOString(),
+        userId: userId,
       },
     })
 
@@ -196,7 +259,7 @@ export default function UnifiedMediaLibrary() {
   }
 
   const handleVimeoAdd = async () => {
-    if (!vimeoUrl.includes("vimeo.com")) {
+    if (!vimeoUrl.includes("vimeo.com") || !userId) {
       toast({
         title: "Error",
         description: "Please enter a valid Vimeo URL",
@@ -237,6 +300,7 @@ export default function UnifiedMediaLibrary() {
           description: video.description,
           duration: video.duration,
           uploadDate: video.upload_date,
+          userId: userId,
         },
       })
 
@@ -405,6 +469,37 @@ export default function UnifiedMediaLibrary() {
     <div>
       <h1 className="text-3xl font-serif mb-8">Media Library</h1>
 
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription className="flex flex-col gap-4">
+            <p>{error}</p>
+            {error.includes("database") && (
+              <Button onClick={setupDatabase} disabled={setupInProgress} className="w-fit flex items-center gap-2">
+                {setupInProgress ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    Setting up...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="h-4 w-4" />
+                    Set up database
+                  </>
+                )}
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {!userId && !error && (
+        <Alert variant="warning" className="mb-6">
+          <AlertTitle>Authentication Required</AlertTitle>
+          <AlertDescription>Please sign in to access the media library.</AlertDescription>
+        </Alert>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-gray-900 p-4 rounded-lg">
           <h2 className="text-xl mb-4">Upload File</h2>
@@ -413,7 +508,7 @@ export default function UnifiedMediaLibrary() {
               <Input
                 type="file"
                 onChange={handleFileUpload}
-                disabled={uploadingFile}
+                disabled={uploadingFile || !!error || !userId}
                 className="bg-gray-800 border-gray-700"
               />
               {uploadingFile && <span className="text-sm text-gray-400">Uploading...</span>}
@@ -421,6 +516,7 @@ export default function UnifiedMediaLibrary() {
             <div className="text-sm text-gray-400">
               <p>Images will be automatically converted to WebP format for optimal quality and performance.</p>
               <p>High quality compression is used to ensure images look great on large displays.</p>
+              {userId && <p className="mt-2 text-blue-400">Files will be uploaded to your personal folder: {userId}</p>}
             </div>
           </div>
         </div>
@@ -433,10 +529,10 @@ export default function UnifiedMediaLibrary() {
               placeholder="Paste Vimeo URL"
               value={vimeoUrl}
               onChange={(e) => setVimeoUrl(e.target.value)}
-              disabled={uploadingVimeo}
+              disabled={uploadingVimeo || !!error || !userId}
               className="bg-gray-800 border-gray-700"
             />
-            <Button onClick={handleVimeoAdd} disabled={!vimeoUrl || uploadingVimeo}>
+            <Button onClick={handleVimeoAdd} disabled={!vimeoUrl || uploadingVimeo || !!error || !userId}>
               {uploadingVimeo ? "Adding..." : "Add"}
             </Button>
           </div>
@@ -559,6 +655,22 @@ export default function UnifiedMediaLibrary() {
   function renderMediaGrid() {
     if (loading) {
       return <div className="text-center py-8">Loading media...</div>
+    }
+
+    if (error) {
+      return (
+        <div className="text-center py-8 bg-gray-900 rounded-lg">
+          <p className="text-gray-400">Please resolve the error to view media</p>
+        </div>
+      )
+    }
+
+    if (!userId) {
+      return (
+        <div className="text-center py-8 bg-gray-900 rounded-lg">
+          <p className="text-gray-400">Please sign in to view media</p>
+        </div>
+      )
     }
 
     if (filteredMedia.length === 0) {

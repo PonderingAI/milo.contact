@@ -15,6 +15,7 @@ export async function GET() {
       database: { success: false, message: "" },
       siteSettings: { success: false, message: "" },
       storage: { success: false, message: "" },
+      mediaTable: { success: false, message: "" },
     }
 
     // 1. Check if site_settings table exists
@@ -111,7 +112,56 @@ export async function GET() {
       }
     }
 
-    // 3. Create storage buckets
+    // 3. Check if media table exists
+    const { error: mediaCheckError } = await supabase.from("media").select("id").limit(1).maybeSingle()
+
+    if (mediaCheckError && mediaCheckError.code === "42P01") {
+      // Create media table
+      const { error: createMediaError } = await supabase.rpc("create_media_table")
+
+      if (createMediaError) {
+        // If the RPC doesn't exist, create the table directly
+        const { error: directCreateError } = await supabase.query(`
+          CREATE TABLE IF NOT EXISTS media (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            filesize INTEGER NOT NULL,
+            filetype TEXT NOT NULL,
+            public_url TEXT NOT NULL,
+            thumbnail_url TEXT,
+            tags TEXT[] DEFAULT '{}',
+            metadata JSONB DEFAULT '{}',
+            usage_locations JSONB DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+        `)
+
+        if (directCreateError) {
+          results.mediaTable = {
+            success: false,
+            message: `Error creating media table: ${directCreateError.message}`,
+          }
+        } else {
+          results.mediaTable = {
+            success: true,
+            message: "Media table created successfully via direct SQL",
+          }
+        }
+      } else {
+        results.mediaTable = {
+          success: true,
+          message: "Media table created successfully via RPC",
+        }
+      }
+    } else {
+      results.mediaTable = {
+        success: true,
+        message: "Media table already exists",
+      }
+    }
+
+    // 4. Create storage buckets
     try {
       // Check existing buckets
       const { data: buckets } = await supabase.storage.listBuckets()
@@ -150,7 +200,11 @@ export async function GET() {
     }
 
     return NextResponse.json({
-      success: results.database.success && results.siteSettings.success && results.storage.success,
+      success:
+        results.database.success &&
+        results.siteSettings.success &&
+        results.storage.success &&
+        results.mediaTable.success,
       results,
     })
   } catch (error: any) {

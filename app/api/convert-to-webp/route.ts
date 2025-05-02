@@ -1,6 +1,8 @@
 import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
 import sharp from "sharp"
+import { cookies } from "next/headers"
+import { createServerClient } from "@/lib/supabase-server"
 
 export const config = {
   api: {
@@ -22,6 +24,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "File is not a supported image format" }, { status: 400 })
     }
 
+    // Get the user's ID for folder structure
+    const cookieStore = cookies()
+    const supabase = createServerClient()
+
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const userId = session?.user?.id
+
+    if (!userId) {
+      return NextResponse.json({ error: "User not authenticated" }, { status: 401 })
+    }
+
     // Convert to buffer
     const buffer = await file.arrayBuffer()
 
@@ -33,11 +48,13 @@ export async function POST(request: NextRequest) {
     // Generate filename
     const originalName = file.name.split(".")[0]
     const webpFilename = `${originalName}-${Date.now()}.webp`
-    const filePath = `uploads/${webpFilename}`
+
+    // Include user ID in the file path
+    const filePath = `${userId}/uploads/${webpFilename}`
 
     // Upload to Supabase
-    const supabase = createAdminClient()
-    const { error: uploadError } = await supabase.storage.from("media").upload(filePath, webpBuffer, {
+    const adminClient = createAdminClient()
+    const { error: uploadError } = await adminClient.storage.from("media").upload(filePath, webpBuffer, {
       contentType: "image/webp",
       cacheControl: "3600",
       upsert: false,
@@ -50,7 +67,7 @@ export async function POST(request: NextRequest) {
     // Get public URL
     const {
       data: { publicUrl },
-    } = supabase.storage.from("media").getPublicUrl(filePath)
+    } = adminClient.storage.from("media").getPublicUrl(filePath)
 
     return NextResponse.json({
       success: true,
@@ -58,6 +75,7 @@ export async function POST(request: NextRequest) {
       filepath: filePath,
       filesize: webpBuffer.byteLength,
       publicUrl,
+      userId,
     })
   } catch (error) {
     console.error("Error converting image:", error)

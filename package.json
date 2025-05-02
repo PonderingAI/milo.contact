@@ -65,7 +65,9 @@
     "@clerk/nextjs": "latest",
     "@supabase/auth-helpers-nextjs": "latest",
     "jszip": "latest",
-    "sharp": "latest"
+    "sharp": "latest",
+    "fs": "latest",
+    "path": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
