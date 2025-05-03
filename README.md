@@ -1,6 +1,6 @@
 # Milo Presedo Portfolio
 
-A professional portfolio website for Milo Presedo, showcasing film production and photography work.
+This is the portfolio website for Milo Presedo, showcasing film production and photography work.
 
 ## Features
 
@@ -12,6 +12,29 @@ A professional portfolio website for Milo Presedo, showcasing film production an
 - Media library for image and video management
 - Automatic WebP conversion for optimal image quality
 - Authentication and role-based access control
+
+## Media Library
+
+The media library supports the following features:
+
+- Upload images and other files (single or bulk upload)
+- Add videos from multiple platforms:
+  - Vimeo videos
+  - YouTube videos (including youtube.com/watch?v=ID format)
+  - LinkedIn videos
+- Automatic WebP conversion for images
+- Storage usage tracking
+- Drag and drop file uploads
+- Preview and manage media
+- Copy media URLs for embedding
+
+### Important Notes
+
+- When making changes to the media library, always make minimal changes to fix specific issues
+- Avoid complete rewrites of components unless absolutely necessary
+- Test all functionality after making changes
+- Ensure YouTube links in all formats are properly recognized
+- Prevent duplicate video links from being added
 
 ## Media Management
 

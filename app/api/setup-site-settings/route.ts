@@ -12,9 +12,7 @@ export async function GET() {
       .limit(1)
       .maybeSingle()
 
-    if (tableCheckError) {
-      console.log("Error checking site_settings table:", tableCheckError)
-
+    if (tableCheckError && tableCheckError.code === "42P01") {
       // Table doesn't exist, create it
       const { error: createTableError } = await supabase.rpc("create_site_settings_table")
 

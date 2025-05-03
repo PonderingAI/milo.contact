@@ -25,15 +25,11 @@ export default function DynamicFavicons() {
         const supabase = getSupabaseBrowserClient()
 
         // Try to get favicon settings from site_settings table
-        const { data, error } = await supabase
-          .from("site_settings")
-          .select("key, value")
-          .like("key", "icon_%")
-          .throwOnError()
+        const { data, error } = await supabase.from("site_settings").select("key, value").like("key", "icon_%")
 
         if (error) {
           // If the table doesn't exist, this is expected during initial setup
-          console.log("Error loading favicon settings:", error.message)
+          console.log("Error in loadFavicons:", error)
           return
         }
 
@@ -54,7 +50,7 @@ export default function DynamicFavicons() {
         setFavicons(iconSettings)
       } catch (err) {
         console.error("Error in loadFavicons:", err)
-        // Don't set error state to avoid unnecessary UI issues
+        setError("An unexpected error occurred loading favicons")
       } finally {
         setLoading(false)
       }

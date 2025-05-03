@@ -241,22 +241,31 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
 /**
  * Extract video platform and ID from a video URL
  */
-export function extractVideoInfo(url: string | undefined): { platform: "youtube" | "vimeo"; id: string } | null {
-  if (!url) return null
+export function extractVideoInfo(url: string) {
+  // Vimeo regex
+  const vimeoRegex =
+    /(?:https?:)?\/\/(?:www\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:[a-zA-Z0-9_-]+)?/i
+  const vimeoMatch = url.match(vimeoRegex)
 
-  // YouTube
-  if (url.includes("youtube.com") || url.includes("youtu.be")) {
-    const regex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/
-    const match = url.match(regex)
-    return match ? { platform: "youtube", id: match[1] } : null
+  if (vimeoMatch && vimeoMatch[1]) {
+    return { platform: "vimeo", id: vimeoMatch[1] }
   }
 
-  // Vimeo
-  if (url.includes("vimeo.com")) {
-    const regex =
-      /vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:$|\/|\?)/
-    const match = url.match(regex)
-    return match ? { platform: "vimeo", id: match[1] } : null
+  // YouTube regex - handles both youtu.be and youtube.com/watch?v= formats
+  const youtubeRegex =
+    /(?:https?:)?\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i
+  const youtubeMatch = url.match(youtubeRegex)
+
+  if (youtubeMatch && youtubeMatch[1]) {
+    return { platform: "youtube", id: youtubeMatch[1] }
+  }
+
+  // LinkedIn regex
+  const linkedinRegex = /(?:https?:)?\/\/(?:www\.)?linkedin\.com\/(?:posts|feed\/update)\/(?:urn:li:activity:)?(\d+)/i
+  const linkedinMatch = url.match(linkedinRegex)
+
+  if (linkedinMatch && linkedinMatch[1]) {
+    return { platform: "linkedin", id: linkedinMatch[1] }
   }
 
   return null
