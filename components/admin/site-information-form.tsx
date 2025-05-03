@@ -429,15 +429,29 @@ export default function SiteInformationForm() {
     try {
       setSetupInProgress(true)
 
-      const response = await fetch("/api/setup-site-settings-table")
+      // Try the new endpoint first
+      const response = await fetch("/api/create-site-settings-table")
       const result = await response.json()
 
       if (!result.success) {
-        throw new Error(result.error || "Failed to set up site settings table")
+        // If the new endpoint fails, try the old one as fallback
+        const fallbackResponse = await fetch("/api/setup-site-settings-table")
+        const fallbackResult = await fallbackResponse.json()
+
+        if (!fallbackResult.success) {
+          throw new Error(fallbackResult.error || "Failed to set up site settings table")
+        }
       }
 
+      toast({
+        title: "Setup successful",
+        description: "Site settings table has been created. Reloading page...",
+      })
+
       // Reload the page to get the new settings
-      window.location.reload()
+      setTimeout(() => {
+        window.location.reload()
+      }, 2000)
     } catch (err: any) {
       console.error("Error setting up site settings:", err)
       toast({

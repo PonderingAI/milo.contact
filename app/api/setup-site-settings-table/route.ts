@@ -5,37 +5,67 @@ export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Create the site_settings table if it doesn't exist
-    const { error: createTableError } = await supabase.rpc("create_site_settings_table")
+    // Create the site_settings table directly with SQL
+    const { error: createTableError } = await supabase.rpc("exec_sql", {
+      sql: `
+        CREATE TABLE IF NOT EXISTS site_settings (
+          id SERIAL PRIMARY KEY,
+          key TEXT UNIQUE NOT NULL,
+          value TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `,
+    })
 
     if (createTableError) {
       console.error("Error creating site_settings table:", createTableError)
 
-      // If the function doesn't exist, create the table directly
-      if (createTableError.message.includes("does not exist")) {
-        const { error: sqlError } = await supabase
-          .from("_exec_sql")
-          .select("*")
-          .eq(
-            "query",
-            `
-          CREATE TABLE IF NOT EXISTS site_settings (
-            id SERIAL PRIMARY KEY,
-            key TEXT UNIQUE NOT NULL,
-            value TEXT,
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-        `,
-          )
-          .single()
+      // Try an alternative approach if the RPC method fails
+      try {
+        // Use the query builder approach as a fallback
+        const { error: queryError } = await supabase.from("site_settings").select("*").limit(1)
 
-        if (sqlError) {
-          console.error("Error creating table directly:", sqlError)
-          return NextResponse.json({ success: false, error: sqlError.message }, { status: 500 })
+        if (queryError && queryError.code === "42P01") {
+          // Table doesn't exist, so we need to create it
+          // Use the REST API to create the table
+          const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+              apikey: process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+              Prefer: "return=minimal",
+            },
+            body: JSON.stringify({
+              query: `
+                CREATE TABLE IF NOT EXISTS site_settings (
+                  id SERIAL PRIMARY KEY,
+                  key TEXT UNIQUE NOT NULL,
+                  value TEXT,
+                  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+                  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+                );
+              `,
+            }),
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(`Failed to create table via REST API: ${JSON.stringify(errorData)}`)
+          }
+        } else if (queryError) {
+          throw new Error(`Error checking table existence: ${queryError.message}`)
         }
-      } else {
-        return NextResponse.json({ success: false, error: createTableError.message }, { status: 500 })
+      } catch (fallbackError: any) {
+        console.error("Fallback approach failed:", fallbackError)
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Failed to create site_settings table: ${createTableError.message}. Fallback also failed: ${fallbackError.message}`,
+          },
+          { status: 500 },
+        )
       }
     }
 
