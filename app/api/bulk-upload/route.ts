@@ -1,13 +1,39 @@
 import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
-import { currentUser } from "@clerk/nextjs/server"
+import { cookies } from "next/headers"
+import { createServerClient } from "@supabase/ssr"
 
 export async function POST(request: NextRequest) {
   try {
-    // Check if user is a superAdmin
-    const user = await currentUser()
+    // Use Supabase authentication instead of Clerk
+    const cookieStore = cookies()
+    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      cookies: {
+        get(name) {
+          return cookieStore.get(name)?.value
+        },
+        set(name, value, options) {
+          cookieStore.set({ name, value, ...options })
+        },
+        remove(name, options) {
+          cookieStore.set({ name, value: "", ...options })
+        },
+      },
+    })
 
-    if (!user || user.publicMetadata.superAdmin !== true) {
+    // Check if user is authenticated and has admin role
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const { data: userRoles } = await supabase
+      .from("user_roles")
+      .select("*")
+      .eq("user_id", session?.user?.id || "")
+      .single()
+
+    const isAdmin = userRoles?.is_superadmin || false
+
+    if (!session || !isAdmin) {
       return NextResponse.json({ error: "Only super admins can upload files" }, { status: 403 })
     }
 
@@ -70,7 +96,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         contentType: fileType,
         uploadedAt: new Date().toISOString(),
-        uploadedBy: user?.id || "anonymous",
+        uploadedBy: session?.user?.id || "anonymous",
       },
     })
 

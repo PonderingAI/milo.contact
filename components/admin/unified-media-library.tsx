@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { Button } from "@/components/ui/button"
@@ -20,7 +20,6 @@ import {
   UploadCloud,
   Loader2,
   AlertCircle,
-  FileUp,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
@@ -70,8 +69,9 @@ export default function UnifiedMediaLibrary() {
   const [uploadQueue, setUploadQueue] = useState<UploadStatus[]>([])
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const multipleFileInputRef = useRef<HTMLInputElement>(null)
+  const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = getSupabaseBrowserClient()
   const { isSignedIn } = useAuth()
   const { user } = useUser()
@@ -174,7 +174,7 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
-  const handleSingleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (files: File[]) => {
     if (!isAdmin) {
       toast({
         title: "Permission denied",
@@ -184,79 +184,114 @@ export default function UnifiedMediaLibrary() {
       return
     }
 
-    const file = e.target.files?.[0]
-    if (!file) return
+    if (files.length === 0) return
 
-    setUploadingFile(true)
-    try {
-      // Create a FormData object
-      const formData = new FormData()
-      formData.append("image", file)
+    if (files.length === 1) {
+      // Single file upload
+      const file = files[0]
+      setUploadingFile(true)
 
-      // Upload the file directly without trying to convert
-      const response = await fetch("/api/convert-to-webp", {
-        method: "POST",
-        body: formData,
-      })
+      try {
+        // Create a FormData object
+        const formData = new FormData()
+        formData.append("file", file)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to upload file")
-      }
-
-      const result = await response.json()
-
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: "File uploaded successfully",
+        // Upload the file directly
+        const response = await fetch("/api/bulk-upload", {
+          method: "POST",
+          body: formData,
         })
 
-        // Refresh the media list
-        fetchMedia()
-      } else {
-        throw new Error(result.error || "Unknown error during upload")
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to upload file")
+        }
+
+        const result = await response.json()
+
+        if (result.success) {
+          toast({
+            title: "Success",
+            description: "File uploaded successfully",
+          })
+
+          // Refresh the media list
+          fetchMedia()
+        } else {
+          throw new Error(result.error || "Unknown error during upload")
+        }
+      } catch (error) {
+        console.error("Error uploading file:", error)
+        toast({
+          title: "Error",
+          description: error instanceof Error ? error.message : "Failed to upload file",
+          variant: "destructive",
+        })
+      } finally {
+        setUploadingFile(false)
       }
-    } catch (error) {
-      console.error("Error uploading file:", error)
-      toast({
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to upload file",
-        variant: "destructive",
-      })
-    } finally {
-      setUploadingFile(false)
-      // Reset the input
-      e.target.value = ""
+    } else {
+      // Multiple files upload
+      const newUploads: UploadStatus[] = Array.from(files).map((file) => ({
+        file,
+        status: "pending",
+        progress: 0,
+      }))
+
+      setUploadQueue((prev) => [...prev, ...newUploads])
+      setIsUploadDialogOpen(true)
     }
   }
 
-  const handleBulkFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only super admins can upload files",
-        variant: "destructive",
-      })
-      return
-    }
-
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    // Convert FileList to array and create upload status objects
-    const newUploads: UploadStatus[] = Array.from(files).map((file) => ({
-      file,
-      status: "pending",
-      progress: 0,
-    }))
-
-    setUploadQueue((prev) => [...prev, ...newUploads])
-    setIsUploadDialogOpen(true)
+    handleFileUpload(Array.from(files))
 
     // Reset the input
     e.target.value = ""
   }
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragging(false)
+
+      if (!isAdmin) {
+        toast({
+          title: "Permission denied",
+          description: "Only super admins can upload files",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const files = e.dataTransfer.files
+      if (files && files.length > 0) {
+        handleFileUpload(Array.from(files))
+      }
+    },
+    [isAdmin],
+  )
 
   const processBulkUpload = async () => {
     if (isProcessingQueue || uploadQueue.length === 0) return
@@ -378,38 +413,6 @@ export default function UnifiedMediaLibrary() {
       return
     }
     setUploadQueue([])
-  }
-
-  const handleMediaUpload = async (filename: string, filepath: string, filesize: number, publicUrl: string) => {
-    // Determine file type category
-    let fileType = "other"
-    if (filepath.match(/\.(jpg|jpeg|png|webp|avif|gif)$/i)) fileType = "image"
-    else if (filepath.match(/\.(mp4|webm|mov|avi)$/i)) fileType = "video"
-    else if (filepath.match(/\.(mp3|wav|ogg)$/i)) fileType = "audio"
-
-    // Generate thumbnail for images
-    let thumbnailUrl = null
-    if (fileType === "image") {
-      thumbnailUrl = publicUrl
-    }
-
-    // Save to media table
-    const { error: dbError } = await supabase.from("media").insert({
-      filename: filename,
-      filepath: filepath,
-      filesize: filesize,
-      filetype: fileType,
-      public_url: publicUrl,
-      thumbnail_url: thumbnailUrl,
-      tags: [fileType],
-      metadata: {
-        contentType: fileType,
-        uploadedAt: new Date().toISOString(),
-        uploadedBy: user?.id || "anonymous",
-      },
-    })
-
-    if (dbError) throw dbError
   }
 
   const handleVimeoAdd = async () => {
@@ -712,40 +715,36 @@ export default function UnifiedMediaLibrary() {
           <div className="bg-gray-900 p-4 rounded-lg">
             <h2 className="text-xl mb-4">Upload Files</h2>
             <div className="space-y-4">
-              <div className="flex flex-col gap-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  <Button
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2"
-                    variant="secondary"
-                    disabled={!!error || uploadingFile}
-                  >
-                    <FileUp className="h-4 w-4" />
-                    Single File
-                    {uploadingFile && <Loader2 className="h-3 w-3 ml-1 animate-spin" />}
-                  </Button>
-                  <Button
-                    onClick={() => multipleFileInputRef.current?.click()}
-                    className="flex items-center gap-2"
-                    variant="secondary"
-                    disabled={!!error}
-                  >
-                    <UploadCloud className="h-4 w-4" />
-                    Multiple Files
-                  </Button>
+              <div
+                ref={dropAreaRef}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  isDragging ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500"
+                }`}
+                onDragEnter={handleDragEnter}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <UploadCloud className="h-10 w-10 text-gray-400" />
+                  <p className="text-lg font-medium">{isDragging ? "Drop files here" : "Drag & drop files here"}</p>
+                  <p className="text-sm text-gray-400">
+                    or <span className="text-blue-500 cursor-pointer">browse</span> to upload
+                  </p>
+                  <p className="text-xs text-gray-500 mt-2">Supports single or multiple files</p>
+                  {uploadingFile && (
+                    <div className="flex items-center gap-2 mt-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Uploading...</span>
+                    </div>
+                  )}
                 </div>
-                <input ref={fileInputRef} type="file" onChange={handleSingleFileUpload} className="hidden" />
-                <input
-                  ref={multipleFileInputRef}
-                  type="file"
-                  multiple
-                  onChange={handleBulkFileSelect}
-                  className="hidden"
-                />
+                <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
               </div>
               <div className="text-sm text-gray-400">
-                <p>Upload files directly without conversion to avoid WebP errors.</p>
-                <p className="mt-1">For bulk uploads, select multiple files to begin.</p>
+                <p>Upload files directly to the media library.</p>
+                <p className="mt-1">Select multiple files or drag and drop a folder to upload in bulk.</p>
               </div>
             </div>
           </div>
