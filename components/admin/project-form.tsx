@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -12,8 +12,10 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle } from "lucide-react"
+import { AlertCircle, Loader2 } from "lucide-react"
 import ImageUploader from "@/components/admin/image-uploader"
+import MediaSelector from "@/components/admin/media-selector"
+import { toast } from "@/components/ui/use-toast"
 
 interface ProjectFormProps {
   project?: {
@@ -44,6 +46,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isProcessingVideo, setIsProcessingVideo] = useState(false)
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
 
@@ -60,6 +63,109 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setFormData((prev) => ({ ...prev, image: url }))
   }
 
+  // Process video URL and add to media library
+  useEffect(() => {
+    const processVideoUrl = async () => {
+      const url = formData.video_url.trim()
+      if (!url || isProcessingVideo) return
+
+      const videoInfo = extractVideoInfo(url)
+      if (!videoInfo) return
+
+      // Check if this video is already in the media library
+      const { data: existingMedia } = await supabase
+        .from("media")
+        .select("id, public_url")
+        .eq("public_url", url)
+        .maybeSingle()
+
+      if (existingMedia) {
+        console.log("Video already exists in media library:", existingMedia.id)
+        return // Already in the library
+      }
+
+      setIsProcessingVideo(true)
+
+      try {
+        let thumbnailUrl = null
+        let videoTitle = null
+        let videoMetadata = {}
+
+        if (videoInfo.platform === "vimeo") {
+          // Get video thumbnail and metadata
+          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+
+          if (!response.ok) {
+            throw new Error("Failed to fetch Vimeo video info")
+          }
+
+          const videoData = await response.json()
+          const video = videoData[0]
+
+          thumbnailUrl = video.thumbnail_large
+          videoTitle = video.title || `Vimeo ${videoInfo.id}`
+          videoMetadata = {
+            vimeoId: videoInfo.id,
+            description: video.description,
+            duration: video.duration,
+            uploadDate: video.upload_date,
+          }
+        } else if (videoInfo.platform === "youtube") {
+          // Use YouTube thumbnail URL format
+          thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
+          videoTitle = `YouTube ${videoInfo.id}`
+          videoMetadata = {
+            youtubeId: videoInfo.id,
+          }
+        } else if (videoInfo.platform === "linkedin") {
+          // LinkedIn doesn't provide easy thumbnail access, use a placeholder
+          thumbnailUrl = "/generic-icon.png"
+          videoTitle = `LinkedIn Post ${videoInfo.id}`
+          videoMetadata = {
+            linkedinId: videoInfo.id,
+          }
+        }
+
+        // Get current user session
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        const userId = session?.user?.id || "anonymous"
+
+        // Add user ID to metadata
+        videoMetadata.uploadedBy = userId
+
+        // Save to media table
+        const { error: dbError } = await supabase.from("media").insert({
+          filename: videoTitle,
+          filepath: url,
+          filesize: 0, // Not applicable for external videos
+          filetype: videoInfo.platform,
+          public_url: url,
+          thumbnail_url: thumbnailUrl,
+          tags: ["video", videoInfo.platform, "project"],
+          metadata: videoMetadata,
+        })
+
+        if (dbError) throw dbError
+
+        toast({
+          title: "Video added to media library",
+          description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been added to your media library`,
+        })
+      } catch (err) {
+        console.error("Error processing video URL:", err)
+        // Don't show error to user, just log it
+      } finally {
+        setIsProcessingVideo(false)
+      }
+    }
+
+    if (formData.video_url) {
+      processVideoUrl()
+    }
+  }, [formData.video_url, supabase])
+
   const validateForm = () => {
     if (!formData.title) return "Title is required"
     if (!formData.category) return "Category is required"
@@ -70,7 +176,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     // Validate video URL if provided
     if (formData.video_url) {
       const videoInfo = extractVideoInfo(formData.video_url)
-      if (!videoInfo) return "Invalid video URL. Please use a YouTube or Vimeo link."
+      if (!videoInfo) return "Invalid video URL. Please use a YouTube, Vimeo, or LinkedIn link."
     }
 
     return null
@@ -109,7 +215,10 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       }
 
       // Show success message
-      alert(mode === "create" ? "Project created successfully!" : "Project updated successfully!")
+      toast({
+        title: mode === "create" ? "Project created" : "Project updated",
+        description: mode === "create" ? "Project created successfully!" : "Project updated successfully!",
+      })
     } catch (error: any) {
       console.error("Error saving project:", error)
       setError(error.message || "Failed to save project")
@@ -184,26 +293,56 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="video_url">Video URL (YouTube or Vimeo)</Label>
-        <Input
-          id="video_url"
-          name="video_url"
-          value={formData.video_url}
-          onChange={handleChange}
-          placeholder="https://www.youtube.com/watch?v=..."
-          className="bg-gray-800 border-gray-700"
-        />
+        <Label>Video URL (YouTube, Vimeo, or LinkedIn)</Label>
+        <div className="flex items-center gap-2">
+          <div className="flex-grow">
+            <Input
+              id="video_url"
+              name="video_url"
+              value={formData.video_url}
+              onChange={handleChange}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="bg-gray-800 border-gray-700"
+            />
+          </div>
+          <div className="flex-shrink-0">
+            <MediaSelector
+              type="video"
+              onSelect={(url) => setFormData((prev) => ({ ...prev, video_url: url }))}
+              buttonLabel="Browse Videos"
+              currentUrl={formData.video_url}
+            />
+          </div>
+        </div>
+        {isProcessingVideo && (
+          <p className="text-sm text-blue-500 flex items-center gap-1 mt-1">
+            <Loader2 className="h-3 w-3 animate-spin" />
+            Processing video...
+          </p>
+        )}
         {formData.video_url && extractVideoInfo(formData.video_url) && (
           <p className="text-sm text-green-500">Valid video URL</p>
         )}
         {formData.video_url && !extractVideoInfo(formData.video_url) && (
-          <p className="text-sm text-red-500">Invalid video URL. Please use a YouTube or Vimeo link.</p>
+          <p className="text-sm text-red-500">Invalid video URL. Please use a YouTube, Vimeo, or LinkedIn link.</p>
         )}
       </div>
 
       <div className="space-y-2">
         <Label>Cover Image *</Label>
-        <ImageUploader currentImage={formData.image} onImageUploaded={handleImageUpload} folder="projects" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <ImageUploader currentImage={formData.image} onImageUploaded={handleImageUpload} folder="projects" />
+          </div>
+          <div>
+            <MediaSelector
+              type="image"
+              onSelect={handleImageUpload}
+              buttonLabel="Select from Media Library"
+              currentUrl={formData.image}
+            />
+          </div>
+        </div>
       </div>
 
       <div className="space-y-2">

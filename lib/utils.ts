@@ -5,11 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-/**
- * Format a file size in bytes to a human-readable string
- * @param bytes File size in bytes
- * @returns Formatted string (e.g., "1.5 MB")
- */
 export function formatFileSize(bytes: number): string {
   if (bytes === 0) return "0 Bytes"
 
@@ -20,39 +15,30 @@ export function formatFileSize(bytes: number): string {
   return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
 }
 
-/**
- * Extract video ID from various video platform URLs
- * @param url The video URL
- * @returns Object containing platform and videoId
- */
-export function extractVideoInfo(url: string): {
-  platform: "youtube" | "vimeo" | "linkedin" | null
-  videoId: string | null
-} {
-  // YouTube regex patterns
-  const youtubeRegex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i
-  const youtubeMatch = url.match(youtubeRegex)
+export function extractVideoInfo(url: string | undefined) {
+  if (!url) return null
 
-  if (youtubeMatch && youtubeMatch[1]) {
-    return { platform: "youtube", videoId: youtubeMatch[1] }
+  // YouTube
+  if (url.includes("youtube.com") || url.includes("youtu.be")) {
+    const regex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/
+    const match = url.match(regex)
+    return match ? { platform: "youtube", id: match[1] } : null
   }
 
-  // Vimeo regex pattern
-  const vimeoRegex =
-    /(?:vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:$|\/|\?))/i
-  const vimeoMatch = url.match(vimeoRegex)
-
-  if (vimeoMatch && vimeoMatch[1]) {
-    return { platform: "vimeo", videoId: vimeoMatch[1] }
+  // Vimeo
+  if (url.includes("vimeo.com")) {
+    const regex =
+      /vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:$|\/|\?)/
+    const match = url.match(regex)
+    return match ? { platform: "vimeo", id: match[1] } : null
   }
 
-  // LinkedIn regex pattern
-  const linkedinRegex = /linkedin\.com\/.*(?:posts|video).*(?:\/|\?)([0-9]+)/i
-  const linkedinMatch = url.match(linkedinRegex)
-
-  if (linkedinMatch && linkedinMatch[1]) {
-    return { platform: "linkedin", videoId: linkedinMatch[1] }
+  // LinkedIn
+  if (url.includes("linkedin.com")) {
+    const regex = /linkedin\.com\/(?:posts|feed\/update)\/(?:urn:li:activity:)?(\d+)/
+    const match = url.match(regex)
+    return match ? { platform: "linkedin", id: match[1] } : null
   }
 
-  return { platform: null, videoId: null }
+  return null
 }

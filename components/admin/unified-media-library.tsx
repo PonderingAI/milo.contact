@@ -312,7 +312,7 @@ export default function UnifiedMediaLibrary() {
           // Update status to uploading
           setUploadQueue((prev) => {
             const updated = [...prev]
-            updated[queueIndex] = { ...updated[queueIndex], status: "uploading", progress: 10 }
+            updated[queueIndex] = { ...updated[queueIndex], status: "uploading", progress: 5 }
             return updated
           })
 
@@ -321,22 +321,35 @@ export default function UnifiedMediaLibrary() {
             const formData = new FormData()
             formData.append("file", item.file)
 
-            // Update progress to 30%
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = { ...updated[queueIndex], progress: 30 }
-              return updated
-            })
+            // Simulate gradual progress updates
+            const progressUpdater = setInterval(() => {
+              setUploadQueue((prev) => {
+                const current = [...prev]
+                const currentItem = current[queueIndex]
+
+                // Only update if still uploading and progress < 90
+                if (currentItem.status === "uploading" && currentItem.progress < 90) {
+                  // Increase by a small random amount to simulate progress
+                  const increment = Math.floor(Math.random() * 5) + 3
+                  const newProgress = Math.min(90, currentItem.progress + increment)
+                  current[queueIndex] = { ...currentItem, progress: newProgress }
+                }
+                return current
+              })
+            }, 800)
 
             const response = await fetch("/api/bulk-upload", {
               method: "POST",
               body: formData,
             })
 
-            // Update progress to 80%
+            // Clear the interval
+            clearInterval(progressUpdater)
+
+            // Update progress to 95%
             setUploadQueue((prev) => {
               const updated = [...prev]
-              updated[queueIndex] = { ...updated[queueIndex], progress: 80 }
+              updated[queueIndex] = { ...updated[queueIndex], progress: 95 }
               return updated
             })
 
@@ -408,6 +421,17 @@ export default function UnifiedMediaLibrary() {
       return
     }
     setUploadQueue([])
+  }
+
+  const cancelUpload = (index: number) => {
+    setUploadQueue((prev) => {
+      const updated = [...prev]
+      // Only allow canceling pending uploads
+      if (updated[index].status === "pending") {
+        updated[index] = { ...updated[index], status: "error", progress: 0, error: "Cancelled by user" }
+      }
+      return updated
+    })
   }
 
   const handleVideoAdd = async () => {
@@ -1014,9 +1038,16 @@ export default function UnifiedMediaLibrary() {
 
                 <div className="flex items-center gap-2 mb-1">
                   <Progress value={item.progress} className="h-2 flex-grow" />
-                  <span className="text-xs whitespace-nowrap">
-                    {item.status === "pending" && "Pending"}
-                    {item.status === "uploading" && "Uploading..."}
+                  <span className="text-xs whitespace-nowrap w-20 text-right">
+                    {item.status === "pending" && (
+                      <span className="flex items-center justify-end gap-1">
+                        Pending
+                        <Button variant="ghost" size="icon" className="h-4 w-4 p-0" onClick={() => cancelUpload(index)}>
+                          <AlertCircle className="h-3 w-3 text-red-400" />
+                        </Button>
+                      </span>
+                    )}
+                    {item.status === "uploading" && `${item.progress}%`}
                     {item.status === "success" && "Complete"}
                     {item.status === "error" && "Failed"}
                   </span>
@@ -1046,7 +1077,7 @@ export default function UnifiedMediaLibrary() {
               {isProcessingQueue ? (
                 <span className="flex items-center gap-2 text-sm">
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading automatically...
+                  Uploading...
                 </span>
               ) : (
                 <span className="text-sm text-gray-400">
