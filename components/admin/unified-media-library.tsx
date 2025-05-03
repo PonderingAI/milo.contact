@@ -20,7 +20,6 @@ import {
   UploadCloud,
   Loader2,
   AlertCircle,
-  FolderOpen,
   FileUp,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
@@ -72,7 +71,7 @@ export default function UnifiedMediaLibrary() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const folderInputRef = useRef<HTMLInputElement>(null)
+  const multipleFileInputRef = useRef<HTMLInputElement>(null)
   const supabase = getSupabaseBrowserClient()
   const { isSignedIn } = useAuth()
   const { user } = useUser()
@@ -190,71 +189,39 @@ export default function UnifiedMediaLibrary() {
 
     setUploadingFile(true)
     try {
-      // Check if file is an image that can be converted to WebP
-      const isConvertibleImage =
-        file.type.startsWith("image/") &&
-        !file.type.includes("svg") &&
-        !file.type.includes("webp") &&
-        !file.type.includes("gif")
+      // Create a FormData object
+      const formData = new FormData()
+      formData.append("image", file)
 
-      // If it's a convertible image, send it to the conversion API
-      if (isConvertibleImage) {
-        const formData = new FormData()
-        formData.append("image", file)
+      // Upload the file directly without trying to convert
+      const response = await fetch("/api/convert-to-webp", {
+        method: "POST",
+        body: formData,
+      })
 
-        const response = await fetch("/api/convert-to-webp", {
-          method: "POST",
-          body: formData,
-        })
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to upload file")
+      }
 
-        if (!response.ok) {
-          throw new Error("Failed to convert image to WebP")
-        }
+      const result = await response.json()
 
-        const result = await response.json()
-
-        // Update the media library with the converted image
-        await handleMediaUpload(result.filename, result.filepath, result.filesize, result.publicUrl)
-
-        toast({
-          title: "Success",
-          description: result.converted
-            ? "Image converted to WebP and uploaded successfully"
-            : "Image uploaded successfully",
-        })
-      } else {
-        // For non-convertible files, proceed with regular upload
-        const fileExt = file.name.split(".").pop()
-        const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
-
-        // Use 'uploads' folder for all media, without user segmentation
-        const filePath = `uploads/${fileName}`
-
-        const { error: uploadError, data } = await supabase.storage.from("media").upload(filePath, file)
-
-        if (uploadError) throw uploadError
-
-        // Get public URL
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("media").getPublicUrl(filePath)
-
-        // Add to media library
-        await handleMediaUpload(file.name, filePath, file.size, publicUrl)
-
+      if (result.success) {
         toast({
           title: "Success",
           description: "File uploaded successfully",
         })
-      }
 
-      // Refresh the media list
-      fetchMedia()
+        // Refresh the media list
+        fetchMedia()
+      } else {
+        throw new Error(result.error || "Unknown error during upload")
+      }
     } catch (error) {
       console.error("Error uploading file:", error)
       toast({
         title: "Error",
-        description: "Failed to upload file",
+        description: error instanceof Error ? error.message : "Failed to upload file",
         variant: "destructive",
       })
     } finally {
@@ -291,70 +258,45 @@ export default function UnifiedMediaLibrary() {
     e.target.value = ""
   }
 
-  const handleFolderSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only super admins can upload files",
-        variant: "destructive",
-      })
-      return
-    }
-
-    const files = e.target.files
-    if (!files || files.length === 0) return
-
-    // Convert FileList to array and create upload status objects
-    const newUploads: UploadStatus[] = Array.from(files).map((file) => ({
-      file,
-      status: "pending",
-      progress: 0,
-    }))
-
-    setUploadQueue((prev) => [...prev, ...newUploads])
-    setIsUploadDialogOpen(true)
-
-    // Reset the input
-    e.target.value = ""
-  }
-
   const processBulkUpload = async () => {
     if (isProcessingQueue || uploadQueue.length === 0) return
 
     setIsProcessingQueue(true)
 
-    // Process files in parallel with a limit (5 at a time)
-    const batchSize = 5
+    // Process files in parallel with a limit (3 at a time)
+    const batchSize = 3
     const totalFiles = uploadQueue.length
+    const pendingUploads = uploadQueue.filter((item) => item.status === "pending")
 
-    for (let i = 0; i < totalFiles; i += batchSize) {
-      const batch = uploadQueue.slice(i, i + batchSize)
-
-      // Only process pending files
-      const pendingBatch = batch.filter((item) => item.status === "pending")
+    for (let i = 0; i < pendingUploads.length; i += batchSize) {
+      const batch = pendingUploads.slice(i, i + batchSize)
 
       // Process batch in parallel
       await Promise.all(
-        pendingBatch.map(async (item, idx) => {
-          const batchIndex = i + idx
+        batch.map(async (item) => {
+          // Find the index in the original queue
+          const queueIndex = uploadQueue.findIndex(
+            (queueItem) => queueItem.file.name === item.file.name && queueItem.status === "pending",
+          )
+
+          if (queueIndex === -1) return // Skip if not found
 
           // Update status to uploading
           setUploadQueue((prev) => {
             const updated = [...prev]
-            updated[batchIndex] = { ...updated[batchIndex], status: "uploading", progress: 10 }
+            updated[queueIndex] = { ...updated[queueIndex], status: "uploading", progress: 10 }
             return updated
           })
 
           try {
+            // Create a FormData object
             const formData = new FormData()
             formData.append("file", item.file)
-            formData.append("index", batchIndex.toString())
-            formData.append("total", totalFiles.toString())
 
             // Update progress to 30%
             setUploadQueue((prev) => {
               const updated = [...prev]
-              updated[batchIndex] = { ...updated[batchIndex], progress: 30 }
+              updated[queueIndex] = { ...updated[queueIndex], progress: 30 }
               return updated
             })
 
@@ -366,44 +308,34 @@ export default function UnifiedMediaLibrary() {
             // Update progress to 80%
             setUploadQueue((prev) => {
               const updated = [...prev]
-              updated[batchIndex] = { ...updated[batchIndex], progress: 80 }
+              updated[queueIndex] = { ...updated[queueIndex], progress: 80 }
               return updated
             })
 
+            if (!response.ok) {
+              const errorData = await response.json()
+              throw new Error(errorData.error || "Upload failed")
+            }
+
             const result = await response.json()
 
-            if (result.success) {
-              // Success
-              setUploadQueue((prev) => {
-                const updated = [...prev]
-                updated[batchIndex] = {
-                  ...updated[batchIndex],
-                  status: "success",
-                  progress: 100,
-                  response: result,
-                }
-                return updated
-              })
-            } else {
-              // Error from API
-              setUploadQueue((prev) => {
-                const updated = [...prev]
-                updated[batchIndex] = {
-                  ...updated[batchIndex],
-                  status: "error",
-                  progress: 100,
-                  error: result.error,
-                  response: result,
-                }
-                return updated
-              })
-            }
+            // Success
+            setUploadQueue((prev) => {
+              const updated = [...prev]
+              updated[queueIndex] = {
+                ...updated[queueIndex],
+                status: "success",
+                progress: 100,
+                response: result,
+              }
+              return updated
+            })
           } catch (error) {
             // Exception
             setUploadQueue((prev) => {
               const updated = [...prev]
-              updated[batchIndex] = {
-                ...updated[batchIndex],
+              updated[queueIndex] = {
+                ...updated[queueIndex],
                 status: "error",
                 progress: 100,
                 error: error instanceof Error ? error.message : "Unknown error",
@@ -422,10 +354,11 @@ export default function UnifiedMediaLibrary() {
     // Count results
     const successful = uploadQueue.filter((item) => item.status === "success").length
     const failed = uploadQueue.filter((item) => item.status === "error").length
+    const pending = uploadQueue.filter((item) => item.status === "pending").length
 
     toast({
-      title: "Bulk upload complete",
-      description: `${successful} files uploaded successfully, ${failed} files failed`,
+      title: "Bulk upload progress",
+      description: `${successful} files uploaded successfully, ${failed} files failed, ${pending} files pending`,
       variant: successful > 0 ? "default" : "destructive",
     })
   }
@@ -674,11 +607,7 @@ export default function UnifiedMediaLibrary() {
           {item.thumbnail_url ? (
             <Image src={item.thumbnail_url || "/placeholder.svg"} alt={item.filename} fill className="object-cover" />
           ) : (
-            <div
-              className="w-full
-</cut_off_point>
-h-full flex items-center justify-center bg-gray-800"
-            >
+            <div className="w-full h-full flex items-center justify-center bg-gray-800">
               <span className="text-gray-400">{item.filetype}</span>
             </div>
           )}
@@ -789,44 +718,34 @@ h-full flex items-center justify-center bg-gray-800"
                     onClick={() => fileInputRef.current?.click()}
                     className="flex items-center gap-2"
                     variant="secondary"
-                    disabled={!!error}
+                    disabled={!!error || uploadingFile}
                   >
                     <FileUp className="h-4 w-4" />
                     Single File
+                    {uploadingFile && <Loader2 className="h-3 w-3 ml-1 animate-spin" />}
                   </Button>
                   <Button
-                    onClick={() => fileInputRef.current?.click()}
+                    onClick={() => multipleFileInputRef.current?.click()}
                     className="flex items-center gap-2"
                     variant="secondary"
                     disabled={!!error}
-                    multiple
                   >
                     <UploadCloud className="h-4 w-4" />
                     Multiple Files
                   </Button>
                 </div>
-                <Button
-                  onClick={() => folderInputRef.current?.click()}
-                  className="flex items-center gap-2 w-full"
-                  variant="outline"
-                  disabled={!!error}
-                >
-                  <FolderOpen className="h-4 w-4" />
-                  Upload Folder
-                </Button>
-                <input ref={fileInputRef} type="file" multiple onChange={handleBulkFileSelect} className="hidden" />
+                <input ref={fileInputRef} type="file" onChange={handleSingleFileUpload} className="hidden" />
                 <input
-                  ref={folderInputRef}
+                  ref={multipleFileInputRef}
                   type="file"
-                  directory=""
-                  webkitdirectory=""
-                  onChange={handleFolderSelect}
+                  multiple
+                  onChange={handleBulkFileSelect}
                   className="hidden"
                 />
               </div>
               <div className="text-sm text-gray-400">
-                <p>Images are automatically converted to WebP for optimal quality and performance.</p>
-                <p className="mt-1">For bulk uploads, choose multiple files or a folder to begin.</p>
+                <p>Upload files directly without conversion to avoid WebP errors.</p>
+                <p className="mt-1">For bulk uploads, select multiple files to begin.</p>
               </div>
             </div>
           </div>

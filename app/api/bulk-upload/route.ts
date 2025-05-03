@@ -2,12 +2,6 @@ import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
 import { currentUser } from "@clerk/nextjs/server"
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}
-
 export async function POST(request: NextRequest) {
   try {
     // Check if user is a superAdmin
@@ -19,41 +13,32 @@ export async function POST(request: NextRequest) {
 
     const formData = await request.formData()
     const file = formData.get("file") as File
-    const index = formData.get("index") as string
-    const total = formData.get("total") as string
 
     if (!file) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Generate a unique filename
-    const fileExt = file.name.split(".").pop()?.toLowerCase() || ""
-    const originalName = file.name.split(".")[0].replace(/[^a-zA-Z0-9]/g, "-")
-    const filename = `${originalName}-${Date.now()}.${fileExt}`
-    const filePath = `uploads/${filename}`
+    // Create safe filename
+    const fileExt = file.name.split(".").pop()?.toLowerCase() || "bin"
+    const originalName = file.name.split(".")[0]
+    const safeFilename = `${originalName.replace(/[^a-z0-9]/gi, "-")}-${Date.now()}.${fileExt}`
+    const filePath = `uploads/${safeFilename}`
 
-    // Convert to buffer
-    const buffer = await file.arrayBuffer()
+    // Get file buffer
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
 
-    // Upload to Supabase
+    // Upload file to Supabase
     const adminClient = createAdminClient()
-    const { error: uploadError } = await adminClient.storage.from("media").upload(filePath, Buffer.from(buffer), {
-      contentType: file.type,
+    const { error: uploadError } = await adminClient.storage.from("media").upload(filePath, buffer, {
+      contentType: file.type || "application/octet-stream",
       cacheControl: "3600",
       upsert: false,
     })
 
     if (uploadError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: uploadError.message,
-          filename: file.name,
-          index,
-          total,
-        },
-        { status: 200 },
-      ) // Return 200 with error details for the client to handle
+      console.error("Supabase upload error:", uploadError)
+      return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
     // Get public URL
@@ -63,9 +48,9 @@ export async function POST(request: NextRequest) {
 
     // Determine file type category
     let fileType = "other"
-    if (file.type.match(/^image\//i)) fileType = "image"
-    else if (file.type.match(/^video\//i)) fileType = "video"
-    else if (file.type.match(/^audio\//i)) fileType = "audio"
+    if (filePath.match(/\.(jpg|jpeg|png|webp|avif|gif)$/i)) fileType = "image"
+    else if (filePath.match(/\.(mp4|webm|mov|avi)$/i)) fileType = "video"
+    else if (filePath.match(/\.(mp3|wav|ogg)$/i)) fileType = "audio"
 
     // Generate thumbnail for images
     let thumbnailUrl = null
@@ -77,47 +62,34 @@ export async function POST(request: NextRequest) {
     const { error: dbError } = await adminClient.from("media").insert({
       filename: file.name,
       filepath: filePath,
-      filesize: file.size,
+      filesize: buffer.byteLength,
       filetype: fileType,
       public_url: publicUrl,
       thumbnail_url: thumbnailUrl,
       tags: [fileType],
       metadata: {
-        contentType: file.type,
+        contentType: fileType,
         uploadedAt: new Date().toISOString(),
         uploadedBy: user?.id || "anonymous",
       },
     })
 
     if (dbError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: dbError.message,
-          filename: file.name,
-          index,
-          total,
-        },
-        { status: 200 },
-      )
+      console.error("Database error:", dbError)
+      return NextResponse.json({ error: dbError.message }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       filename: file.name,
       filepath: filePath,
-      filesize: file.size,
+      filesize: buffer.byteLength,
       publicUrl,
-      index,
-      total,
     })
   } catch (error) {
-    console.error("Error uploading file:", error)
+    console.error("Error processing upload:", error)
     return NextResponse.json(
-      {
-        success: false,
-        error: `Failed to upload file: ${error instanceof Error ? error.message : String(error)}`,
-      },
+      { error: `Failed to process upload: ${error instanceof Error ? error.message : String(error)}` },
       { status: 500 },
     )
   }

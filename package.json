@@ -66,8 +66,7 @@
     "@supabase/auth-helpers-nextjs": "latest",
     "jszip": "latest",
     "fs": "latest",
-    "path": "latest",
-    "sharp": "latest"
+    "path": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
