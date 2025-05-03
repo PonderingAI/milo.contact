@@ -20,7 +20,6 @@ import {
   UploadCloud,
   Loader2,
   AlertCircle,
-  Info,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
@@ -65,64 +64,20 @@ export default function UnifiedMediaLibrary() {
   const [vimeoUrls, setVimeoUrls] = useState("")
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
   const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(true) // Default to true to avoid flickering
   const [uploadQueue, setUploadQueue] = useState<UploadStatus[]>([])
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
-  const [authChecking, setAuthChecking] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = getSupabaseBrowserClient()
 
   useEffect(() => {
-    // Check if user is authenticated and has admin role
-    const checkAdminStatus = async () => {
-      setAuthChecking(true)
-      try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-
-        if (session?.user) {
-          // Check if user is a superadmin in the database
-          const { data: userRoles, error: rolesError } = await supabase
-            .from("user_roles")
-            .select("is_superadmin")
-            .eq("user_id", session.user.id)
-            .single()
-
-          if (rolesError) {
-            console.error("Error checking user roles:", rolesError)
-            setIsAdmin(false)
-          } else {
-            setIsAdmin(userRoles?.is_superadmin === true)
-          }
-        } else {
-          setIsAdmin(false)
-        }
-      } catch (error) {
-        console.error("Error checking admin status:", error)
-        setIsAdmin(false)
-      } finally {
-        setAuthChecking(false)
-      }
-    }
-
-    checkAdminStatus()
     fetchMedia()
   }, [])
 
   const setupDatabase = async () => {
-    if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only super admins can set up the database",
-        variant: "destructive",
-      })
-      return
-    }
-
     setSetupInProgress(true)
     setError(null)
 
@@ -199,15 +154,6 @@ export default function UnifiedMediaLibrary() {
   }
 
   const handleFileUpload = async (files: File[]) => {
-    if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only super admins can upload files",
-        variant: "destructive",
-      })
-      return
-    }
-
     if (files.length === 0) return
 
     if (files.length === 1) {
@@ -293,28 +239,16 @@ export default function UnifiedMediaLibrary() {
     e.stopPropagation()
   }
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent) => {
-      e.preventDefault()
-      e.stopPropagation()
-      setIsDragging(false)
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
 
-      if (!isAdmin) {
-        toast({
-          title: "Permission denied",
-          description: "Only super admins can upload files",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const files = e.dataTransfer.files
-      if (files && files.length > 0) {
-        handleFileUpload(Array.from(files))
-      }
-    },
-    [isAdmin],
-  )
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      handleFileUpload(Array.from(files))
+    }
+  }, [])
 
   const processBulkUpload = async () => {
     if (isProcessingQueue || uploadQueue.length === 0) return
@@ -437,15 +371,6 @@ export default function UnifiedMediaLibrary() {
   }
 
   const handleVimeoAdd = async () => {
-    if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only super admins can add videos",
-        variant: "destructive",
-      })
-      return
-    }
-
     // Validate input
     if (!vimeoUrls.trim()) {
       toast({
@@ -562,15 +487,6 @@ export default function UnifiedMediaLibrary() {
   }
 
   const handleDeleteMedia = async (id: string, filepath: string) => {
-    if (!isAdmin) {
-      toast({
-        title: "Permission denied",
-        description: "Only super admins can delete media",
-        variant: "destructive",
-      })
-      return
-    }
-
     if (!confirm("Are you sure you want to delete this media item?")) return
 
     try {
@@ -688,12 +604,10 @@ export default function UnifiedMediaLibrary() {
               )}
             </Button>
 
-            {isAdmin && (
-              <Button variant="ghost" size="icon" onClick={() => handleDeleteMedia(item.id, item.filepath)}>
-                <Trash2 className="h-4 w-4 text-red-500" />
-                <span className="sr-only">Delete</span>
-              </Button>
-            )}
+            <Button variant="ghost" size="icon" onClick={() => handleDeleteMedia(item.id, item.filepath)}>
+              <Trash2 className="h-4 w-4 text-red-500" />
+              <span className="sr-only">Delete</span>
+            </Button>
           </div>
         </div>
       </div>
@@ -709,7 +623,7 @@ export default function UnifiedMediaLibrary() {
           <AlertTitle>Error</AlertTitle>
           <AlertDescription className="flex flex-col gap-4">
             <p>{error}</p>
-            {error.includes("database") && isAdmin && (
+            {error.includes("database") && (
               <Button onClick={setupDatabase} disabled={setupInProgress} className="w-fit flex items-center gap-2">
                 {setupInProgress ? (
                   <>
@@ -728,95 +642,73 @@ export default function UnifiedMediaLibrary() {
         </Alert>
       )}
 
-      {authChecking ? (
-        <Alert className="mb-6">
-          <AlertTitle className="flex items-center gap-2">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            Checking permissions...
-          </AlertTitle>
-          <AlertDescription>Verifying your access level to the media library.</AlertDescription>
-        </Alert>
-      ) : !isAdmin ? (
-        <Alert className="mb-6">
-          <AlertTitle className="flex items-center gap-2">
-            <Info className="h-4 w-4" />
-            View-Only Mode
-          </AlertTitle>
-          <AlertDescription>
-            You are viewing the media library in read-only mode. Only super admins can upload, modify, or delete media.
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {isAdmin && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-gray-900 p-4 rounded-lg">
-            <h2 className="text-xl mb-4">Upload Files</h2>
-            <div className="space-y-4">
-              <div
-                ref={dropAreaRef}
-                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                  isDragging ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500"
-                }`}
-                onDragEnter={handleDragEnter}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <div className="flex flex-col items-center justify-center gap-2">
-                  <UploadCloud className="h-10 w-10 text-gray-400" />
-                  <p className="text-lg font-medium">{isDragging ? "Drop files here" : "Drag & drop files here"}</p>
-                  <p className="text-sm text-gray-400">
-                    or <span className="text-blue-500 cursor-pointer">browse</span> to upload
-                  </p>
-                  <p className="text-xs text-gray-500 mt-2">Supports single or multiple files</p>
-                  {uploadingFile && (
-                    <div className="flex items-center gap-2 mt-2">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Uploading...</span>
-                    </div>
-                  )}
-                </div>
-                <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
-              </div>
-              <div className="text-sm text-gray-400">
-                <p>Upload files directly to the media library.</p>
-                <p className="mt-1">Select multiple files or drag and drop a folder to upload in bulk.</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-gray-900 p-4 rounded-lg">
-            <h2 className="text-xl mb-4">Add Vimeo Videos</h2>
-            <div className="space-y-4">
-              <Textarea
-                placeholder="Paste one or more Vimeo URLs (one per line or separated by spaces)"
-                value={vimeoUrls}
-                onChange={(e) => setVimeoUrls(e.target.value)}
-                disabled={uploadingVimeo || !!error}
-                className="bg-gray-800 border-gray-700 min-h-[100px]"
-              />
-              <Button onClick={handleVimeoAdd} disabled={!vimeoUrls || uploadingVimeo || !!error} className="w-full">
-                {uploadingVimeo ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Processing...
-                  </span>
-                ) : (
-                  "Add Vimeo Videos"
-                )}
-              </Button>
-              <div className="text-sm text-gray-400">
-                <p>
-                  You can paste multiple Vimeo URLs. The system will automatically detect and process all valid Vimeo
-                  links.
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-gray-900 p-4 rounded-lg">
+          <h2 className="text-xl mb-4">Upload Files</h2>
+          <div className="space-y-4">
+            <div
+              ref={dropAreaRef}
+              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                isDragging ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500"
+              }`}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="flex flex-col items-center justify-center gap-2">
+                <UploadCloud className="h-10 w-10 text-gray-400" />
+                <p className="text-lg font-medium">{isDragging ? "Drop files here" : "Drag & drop files here"}</p>
+                <p className="text-sm text-gray-400">
+                  or <span className="text-blue-500 cursor-pointer">browse</span> to upload
                 </p>
+                <p className="text-xs text-gray-500 mt-2">Supports single or multiple files</p>
+                {uploadingFile && (
+                  <div className="flex items-center gap-2 mt-2">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Uploading...</span>
+                  </div>
+                )}
               </div>
+              <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
+            </div>
+            <div className="text-sm text-gray-400">
+              <p>Upload files directly to the media library.</p>
+              <p className="mt-1">Select multiple files or drag and drop a folder to upload in bulk.</p>
             </div>
           </div>
         </div>
-      )}
+
+        <div className="bg-gray-900 p-4 rounded-lg">
+          <h2 className="text-xl mb-4">Add Vimeo Videos</h2>
+          <div className="space-y-4">
+            <Textarea
+              placeholder="Paste one or more Vimeo URLs (one per line or separated by spaces)"
+              value={vimeoUrls}
+              onChange={(e) => setVimeoUrls(e.target.value)}
+              disabled={uploadingVimeo || !!error}
+              className="bg-gray-800 border-gray-700 min-h-[100px]"
+            />
+            <Button onClick={handleVimeoAdd} disabled={!vimeoUrls || uploadingVimeo || !!error} className="w-full">
+              {uploadingVimeo ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Processing...
+                </span>
+              ) : (
+                "Add Vimeo Videos"
+              )}
+            </Button>
+            <div className="text-sm text-gray-400">
+              <p>
+                You can paste multiple Vimeo URLs. The system will automatically detect and process all valid Vimeo
+                links.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="flex flex-col md:flex-row gap-4 mb-8">
         <div className="flex-1">
