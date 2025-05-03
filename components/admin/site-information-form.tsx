@@ -11,8 +11,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Film } from "lucide-react"
+import { Loader2, Film, Search } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { extractVideoInfo } from "@/lib/project-data"
 
 interface MediaUploaderProps {
   label: string
@@ -27,7 +29,59 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
   const [mediaType, setMediaType] = useState<"image" | "video">(currentValue.includes("vimeo.com") ? "video" : "image")
   const [videoUrl, setVideoUrl] = useState(currentValue.includes("vimeo.com") ? currentValue : "")
   const [preview, setPreview] = useState<string | null>(!currentValue.includes("vimeo.com") ? currentValue : null)
+  const [mediaLibraryOpen, setMediaLibraryOpen] = useState(false)
+  const [mediaItems, setMediaItems] = useState<any[]>([])
+  const [searchQuery, setSearchQuery] = useState("")
+  const [isLoading, setIsLoading] = useState(false)
+  const [selectedMediaType, setSelectedMediaType] = useState<"all" | "images" | "videos">("all")
   const supabase = createClientComponentClient()
+
+  // Load media items when the dialog opens
+  useEffect(() => {
+    if (mediaLibraryOpen) {
+      loadMediaItems()
+    }
+  }, [mediaLibraryOpen, searchQuery, selectedMediaType])
+
+  const loadMediaItems = async () => {
+    try {
+      setIsLoading(true)
+
+      let query = supabase.from("media").select("*")
+
+      // Filter by media type if selected
+      if (selectedMediaType === "images") {
+        query = query.ilike("content_type", "image/%")
+      } else if (selectedMediaType === "videos") {
+        query = query.or("content_type.eq.video/vimeo,content_type.eq.video/youtube,content_type.eq.video/linkedin")
+      }
+
+      // Apply search query if provided
+      if (searchQuery) {
+        query = query.or(`name.ilike.%${searchQuery}%,tags.ilike.%${searchQuery}%`)
+      }
+
+      // Order by most recent first
+      query = query.order("created_at", { ascending: false })
+
+      const { data, error } = await query
+
+      if (error) {
+        throw error
+      }
+
+      setMediaItems(data || [])
+    } catch (error: any) {
+      console.error("Error loading media items:", error)
+      toast({
+        title: "Error loading media",
+        description: error.message,
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -71,8 +125,14 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
         }
       }
 
+      // Generate a unique filename
+      const timestamp = new Date().getTime()
+      const fileExt = file.name.split(".").pop()
+      const fileName = `${settingKey}_${timestamp}.${fileExt}`
+      const filePath = `site/${fileName}`
+
       // Upload the file
-      const { data, error: uploadError } = await supabase.storage.from("public").upload(`site/${settingKey}`, file, {
+      const { data, error: uploadError } = await supabase.storage.from("public").upload(filePath, file, {
         cacheControl: "3600",
         upsert: true,
       })
@@ -84,10 +144,25 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
       // Get the public URL
       const {
         data: { publicUrl },
-      } = supabase.storage.from("public").getPublicUrl(`site/${settingKey}`)
+      } = supabase.storage.from("public").getPublicUrl(filePath)
 
       // Update the preview
       setPreview(publicUrl)
+
+      // Add to media table
+      const { error: mediaError } = await supabase.from("media").insert({
+        name: file.name,
+        url: publicUrl,
+        content_type: file.type,
+        size: file.size,
+        tags: `site,${settingKey}`,
+        storage_path: filePath,
+      })
+
+      if (mediaError) {
+        console.error("Warning: Failed to add to media table:", mediaError)
+        // Continue anyway as the file is uploaded
+      }
 
       // Call the onUpload callback
       onUpload(publicUrl)
@@ -112,30 +187,74 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
     setVideoUrl(e.target.value)
   }
 
-  const saveVideoUrl = () => {
+  const saveVideoUrl = async () => {
     if (!videoUrl) {
       toast({
         title: "Missing URL",
-        description: "Please enter a Vimeo URL",
+        description: "Please enter a video URL",
         variant: "destructive",
       })
       return
     }
 
-    // Simple validation for Vimeo URL
-    if (!videoUrl.includes("vimeo.com")) {
+    try {
+      // Extract video info
+      const videoInfo = extractVideoInfo(videoUrl)
+
+      if (!videoInfo) {
+        toast({
+          title: "Invalid URL",
+          description: "Please enter a valid Vimeo, YouTube, or LinkedIn video URL",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Add to media table
+      const { error: mediaError } = await supabase.from("media").insert({
+        name: `${videoInfo.platform} Video ${videoInfo.id}`,
+        url: videoUrl,
+        content_type: `video/${videoInfo.platform}`,
+        size: 0, // Size is not applicable for external videos
+        tags: `video,${videoInfo.platform},site,${settingKey}`,
+      })
+
+      if (mediaError) {
+        console.error("Warning: Failed to add to media table:", mediaError)
+        // Continue anyway as we have the URL
+      }
+
+      onUpload(videoUrl)
       toast({
-        title: "Invalid URL",
-        description: "Please enter a valid Vimeo URL",
+        title: "Video URL saved",
+        description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been saved successfully`,
+      })
+    } catch (err: any) {
+      console.error("Error saving video URL:", err)
+      toast({
+        title: "Error",
+        description: err.message || "Failed to save video URL",
         variant: "destructive",
       })
-      return
+    }
+  }
+
+  const selectMediaItem = (item: any) => {
+    if (item.content_type.startsWith("image/")) {
+      setMediaType("image")
+      setPreview(item.url)
+      onUpload(item.url)
+    } else if (item.content_type.startsWith("video/")) {
+      setMediaType("video")
+      setVideoUrl(item.url)
+      onUpload(item.url)
     }
 
-    onUpload(videoUrl)
+    setMediaLibraryOpen(false)
+
     toast({
-      title: "Video URL saved",
-      description: "Vimeo URL has been saved successfully",
+      title: "Media selected",
+      description: `${item.name} has been selected`,
     })
   }
 
@@ -158,11 +277,23 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="video" id={`${settingKey}-video`} />
             <Label htmlFor={`${settingKey}-video`} className="cursor-pointer">
-              Vimeo Video
+              Video
             </Label>
           </div>
         </RadioGroup>
       )}
+
+      <div className="flex items-center gap-2 mb-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setMediaLibraryOpen(true)}
+          className="flex items-center gap-2"
+        >
+          <Search className="h-4 w-4" />
+          Browse Media Library
+        </Button>
+      </div>
 
       {mediaType === "image" ? (
         <div className="space-y-2">
@@ -192,7 +323,7 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
             <Input
               id={`video-${settingKey}`}
               type="text"
-              placeholder="https://vimeo.com/123456789"
+              placeholder="https://vimeo.com/123456789 or YouTube/LinkedIn URL"
               value={videoUrl}
               onChange={handleVideoUrlChange}
             />
@@ -201,11 +332,11 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
               Save
             </Button>
           </div>
-          <p className="text-xs text-gray-400">Enter a Vimeo URL for the background</p>
+          <p className="text-xs text-gray-400">Enter a Vimeo, YouTube, or LinkedIn video URL</p>
 
-          {videoUrl && videoUrl.includes("vimeo.com") && (
+          {videoUrl && (
             <div className="mt-4">
-              <p className="text-xs text-gray-400 mb-1">Current Vimeo URL:</p>
+              <p className="text-xs text-gray-400 mb-1">Current Video URL:</p>
               <div className="bg-gray-900/50 rounded-lg p-2">
                 <p className="text-sm break-all">{videoUrl}</p>
               </div>
@@ -213,6 +344,85 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
           )}
         </div>
       )}
+
+      {/* Media Library Dialog */}
+      <Dialog open={mediaLibraryOpen} onOpenChange={setMediaLibraryOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Media Library</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1">
+                <Input
+                  placeholder="Search media..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  variant={selectedMediaType === "all" ? "default" : "outline"}
+                  onClick={() => setSelectedMediaType("all")}
+                  size="sm"
+                >
+                  All
+                </Button>
+                <Button
+                  variant={selectedMediaType === "images" ? "default" : "outline"}
+                  onClick={() => setSelectedMediaType("images")}
+                  size="sm"
+                >
+                  Images
+                </Button>
+                <Button
+                  variant={selectedMediaType === "videos" ? "default" : "outline"}
+                  onClick={() => setSelectedMediaType("videos")}
+                  size="sm"
+                >
+                  Videos
+                </Button>
+              </div>
+            </div>
+
+            {isLoading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+              </div>
+            ) : mediaItems.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">No media found. Upload some media first.</div>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {mediaItems.map((item) => (
+                  <div
+                    key={item.id}
+                    className="relative border rounded-md overflow-hidden cursor-pointer hover:border-primary transition-colors"
+                    onClick={() => selectMediaItem(item)}
+                  >
+                    {item.content_type.startsWith("image/") ? (
+                      <div className="aspect-square bg-gray-100">
+                        <img
+                          src={item.url || "/placeholder.svg"}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="aspect-square bg-gray-900 flex items-center justify-center">
+                        <Film className="h-12 w-12 text-gray-400" />
+                      </div>
+                    )}
+                    <div className="p-2 bg-gray-900/80 absolute bottom-0 left-0 right-0 text-xs truncate">
+                      {item.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -322,7 +532,10 @@ export default function SiteInformationForm() {
       }))
 
       // Use upsert to insert or update settings
-      const { error } = await supabase.from("site_settings").upsert(settingsArray, { onConflict: "key" })
+      const { error } = await supabase.from("site_settings").upsert(settingsArray, {
+        onConflict: "key",
+        ignoreDuplicates: false,
+      })
 
       if (error) {
         throw error
