@@ -44,17 +44,17 @@ const services = [
   },
   {
     icon: <Camera className="w-8 h-8" />,
-    title: "Landscape Photography",
-    description: "Creating compelling visual stories through nature and landscape imagery.",
+    title: "Photography",
+    description: "Creating compelling visual stories through artistic photography and imagery.",
     type: "photography",
-    filter: "Landscape",
+    filter: "Photography",
   },
   {
     icon: <Smartphone className="w-8 h-8" />,
-    title: "Product Photography",
-    description: "Showcasing products with attention to detail and professional lighting.",
-    type: "photography",
-    filter: "Product",
+    title: "AI",
+    description: "Leveraging artificial intelligence to create innovative visual content and solutions.",
+    type: "ai",
+    filter: "AI",
   },
 ]
 

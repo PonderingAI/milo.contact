@@ -53,9 +53,6 @@ export default async function Home() {
               <a href="mailto:milo.presedo@mailbox.org" className="text-gray-400 hover:text-white">
                 Email
               </a>
-              <a href="/admin" className="text-gray-400 hover:text-white">
-                Admin
-              </a>
             </div>
           </div>
         </div>

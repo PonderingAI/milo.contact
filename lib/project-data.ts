@@ -371,6 +371,18 @@ export const mockProjects = [
     special_notes:
       "Creating an environment where subjects felt comfortable enough to express their authentic selves was the key to these portraits.",
   },
+  {
+    id: "ai-1",
+    title: "AI Generated Art",
+    category: "AI",
+    type: "ai",
+    role: "AI Artist",
+    image: "/images/project4.jpg",
+    description:
+      "A collection of AI-generated artwork exploring the intersection of human creativity and machine learning.",
+    special_notes:
+      "This project uses cutting-edge AI models to create unique visual experiences that challenge our perception of art and creativity.",
+  },
 ]
 
 // Mock BTS images for development
