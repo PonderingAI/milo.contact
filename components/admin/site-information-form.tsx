@@ -1,17 +1,23 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
-import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
-import * as z from "zod"
-import { Button } from "@/components/ui/button"
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { useToast } from "@/hooks/use-toast"
-import { Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { toast } from "@/components/ui/use-toast"
+import { Loader2, Film, AlertTriangle, Copy, Check } from "lucide-react"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import MediaSelector from "./media-selector"
-import SqlSetupGuide from "./sql-setup-guide"
+import { extractVideoInfo } from "@/lib/utils"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 
 // SQL code for site_settings table setup
 const SITE_SETTINGS_SQL = `-- 1. Create the site_settings table
@@ -23,29 +29,10 @@ CREATE TABLE IF NOT EXISTS public.site_settings (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- 2. Insert default values
-INSERT INTO public.site_settings (key, value)
-VALUES
-  ('site_title', 'Milo Presedo Portfolio'),
-  ('site_description', 'Filmmaker and Cinematographer Portfolio'),
-  ('hero_title', 'Milo Presedo'),
-  ('hero_subtitle', 'Filmmaker & Cinematographer'),
-  ('hero_background', '/images/hero-bg.jpg'),
-  ('about_title', 'About Me'),
-  ('about_content', 'I am a filmmaker and cinematographer based in San Francisco, California.'),
-  ('profile_image', '/images/profile.jpg'),
-  ('contact_email', 'contact@example.com'),
-  ('contact_phone', '+1 (555) 123-4567'),
-  ('social_instagram', 'https://instagram.com/username'),
-  ('social_vimeo', 'https://vimeo.com/username'),
-  ('social_linkedin', 'https://linkedin.com/in/username'),
-  ('footer_text', '© 2023 Milo Presedo. All rights reserved.')
-ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value;
-
--- 3. Enable Row Level Security
+-- 2. Enable Row Level Security
 ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
 
--- 4. Create policies for site_settings table
+-- 3. Create policies for site_settings table
 -- Allow authenticated users to select
 CREATE POLICY "Allow authenticated users to select site_settings"
   ON public.site_settings
@@ -97,443 +84,725 @@ CREATE POLICY "Allow admins to delete site_settings"
     )
   );`
 
-const formSchema = z.object({
-  site_title: z.string().min(2, {
-    message: "Site title must be at least 2 characters.",
-  }),
-  site_description: z.string().min(2, {
-    message: "Site description must be at least 2 characters.",
-  }),
-  hero_title: z.string().min(2, {
-    message: "Hero title must be at least 2 characters.",
-  }),
-  hero_subtitle: z.string().min(2, {
-    message: "Hero subtitle must be at least 2 characters.",
-  }),
-  hero_background: z.string().optional(),
-  about_title: z.string().min(2, {
-    message: "About title must be at least 2 characters.",
-  }),
-  about_content: z.string().min(10, {
-    message: "About content must be at least 10 characters.",
-  }),
-  profile_image: z.string().optional(),
-  contact_email: z.string().email({
-    message: "Please enter a valid email address.",
-  }),
-  contact_phone: z.string().optional(),
-  social_instagram: z
-    .string()
-    .url({
-      message: "Please enter a valid URL.",
-    })
-    .optional()
-    .or(z.literal("")),
-  social_vimeo: z
-    .string()
-    .url({
-      message: "Please enter a valid URL.",
-    })
-    .optional()
-    .or(z.literal("")),
-  social_linkedin: z
-    .string()
-    .url({
-      message: "Please enter a valid URL.",
-    })
-    .optional()
-    .or(z.literal("")),
-  footer_text: z.string().min(2, {
-    message: "Footer text must be at least 2 characters.",
-  }),
-})
+interface MediaUploaderProps {
+  label: string
+  settingKey: string
+  currentValue: string
+  onUpload: (url: string) => void
+  allowVideo?: boolean
+}
 
-type FormValues = z.infer<typeof formSchema>
+function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo = false }: MediaUploaderProps) {
+  const [uploading, setUploading] = useState(false)
+  const [mediaType, setMediaType] = useState<"image" | "video">(
+    currentValue.includes("vimeo.com") ||
+      currentValue.includes("youtube.com") ||
+      currentValue.includes("youtu.be") ||
+      currentValue.includes("linkedin.com")
+      ? "video"
+      : "image",
+  )
+  const [videoUrl, setVideoUrl] = useState(
+    currentValue.includes("vimeo.com") ||
+      currentValue.includes("youtube.com") ||
+      currentValue.includes("youtu.be") ||
+      currentValue.includes("linkedin.com")
+      ? currentValue
+      : "",
+  )
+  const [preview, setPreview] = useState<string | null>(
+    !(
+      currentValue.includes("vimeo.com") ||
+      currentValue.includes("youtube.com") ||
+      currentValue.includes("youtu.be") ||
+      currentValue.includes("linkedin.com")
+    )
+      ? currentValue
+      : null,
+  )
+  const supabase = createClientComponentClient()
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Check if file is an image
+    if (!file.type.startsWith("image/")) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select an image file",
+        variant: "destructive",
+      })
+      return
+    }
+
+    // Check file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({
+        title: "File too large",
+        description: "Image size should be less than 5MB",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setUploading(true)
+
+      // Ensure the bucket exists
+      const { data: buckets } = await supabase.storage.listBuckets()
+      const bucketExists = buckets?.some((bucket) => bucket.name === "public")
+
+      if (!bucketExists) {
+        const { error } = await supabase.storage.createBucket("public", {
+          public: true,
+          fileSizeLimit: 5242880, // 5MB
+        })
+
+        if (error) {
+          throw new Error(`Failed to create bucket: ${error.message}`)
+        }
+      }
+
+      // Generate a unique filename
+      const timestamp = new Date().getTime()
+      const fileExt = file.name.split(".").pop()
+      const fileName = `${settingKey}_${timestamp}.${fileExt}`
+      const filePath = `site/${fileName}`
+
+      // Upload the file
+      const { data, error: uploadError } = await supabase.storage.from("public").upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: true,
+      })
+
+      if (uploadError) {
+        throw new Error(`Failed to upload image: ${uploadError.message}`)
+      }
+
+      // Get the public URL
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("public").getPublicUrl(filePath)
+
+      // Update the preview
+      setPreview(publicUrl)
+
+      // Add to media table
+      const { error: mediaError } = await supabase.from("media").insert({
+        filename: file.name,
+        filepath: filePath,
+        filesize: file.size,
+        filetype: "image",
+        public_url: publicUrl,
+        tags: ["site", settingKey],
+      })
+
+      if (mediaError) {
+        console.error("Warning: Failed to add to media table:", mediaError)
+        // Continue anyway as the file is uploaded
+      }
+
+      // Call the onUpload callback
+      onUpload(publicUrl)
+
+      toast({
+        title: "Upload successful",
+        description: "Image has been uploaded successfully",
+      })
+    } catch (err: any) {
+      console.error("Error uploading image:", err)
+      toast({
+        title: "Upload failed",
+        description: err.message || "Failed to upload image",
+        variant: "destructive",
+      })
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setVideoUrl(e.target.value)
+  }
+
+  const saveVideoUrl = async () => {
+    if (!videoUrl) {
+      toast({
+        title: "Missing URL",
+        description: "Please enter a video URL",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      // Extract video info
+      const videoInfo = extractVideoInfo(videoUrl)
+
+      if (!videoInfo) {
+        toast({
+          title: "Invalid URL",
+          description: "Please enter a valid Vimeo, YouTube, or LinkedIn video URL",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Add to media table
+      const { error: mediaError } = await supabase.from("media").insert({
+        filename: `${videoInfo.platform} Video ${videoInfo.id}`,
+        filepath: videoUrl,
+        filesize: 0, // Size is not applicable for external videos
+        filetype: videoInfo.platform,
+        public_url: videoUrl,
+        tags: ["video", videoInfo.platform, "site", settingKey],
+      })
+
+      if (mediaError) {
+        console.error("Warning: Failed to add to media table:", mediaError)
+        // Continue anyway as we have the URL
+      }
+
+      onUpload(videoUrl)
+      toast({
+        title: "Video URL saved",
+        description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been saved successfully`,
+      })
+    } catch (err: any) {
+      console.error("Error saving video URL:", err)
+      toast({
+        title: "Error",
+        description: err.message || "Failed to save video URL",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleMediaSelect = (url: string) => {
+    if (!url) return
+
+    // Determine if it's a video or image URL
+    const isVideo =
+      url.includes("vimeo.com") ||
+      url.includes("youtube.com") ||
+      url.includes("youtu.be") ||
+      url.includes("linkedin.com")
+
+    if (isVideo) {
+      setMediaType("video")
+      setVideoUrl(url)
+      setPreview(null)
+    } else {
+      setMediaType("image")
+      setPreview(url)
+      setVideoUrl("")
+    }
+
+    onUpload(url)
+  }
+
+  return (
+    <div className="space-y-4">
+      <Label>{label}</Label>
+
+      {allowVideo && (
+        <RadioGroup
+          value={mediaType}
+          onValueChange={(value) => setMediaType(value as "image" | "video")}
+          className="flex space-x-4 mb-4"
+        >
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="image" id={`${settingKey}-image`} />
+            <Label htmlFor={`${settingKey}-image`} className="cursor-pointer">
+              Image
+            </Label>
+          </div>
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="video" id={`${settingKey}-video`} />
+            <Label htmlFor={`${settingKey}-video`} className="cursor-pointer">
+              Video
+            </Label>
+          </div>
+        </RadioGroup>
+      )}
+
+      <div className="mb-4">
+        <MediaSelector
+          onSelect={handleMediaSelect}
+          currentValue={mediaType === "image" ? preview || "" : videoUrl}
+          mediaType={mediaType === "image" ? "images" : "videos"}
+          buttonLabel={`Browse Media Library (${mediaType === "image" ? "Images" : "Videos"})`}
+        />
+      </div>
+
+      <p className="text-sm text-gray-400 mb-2">Or upload a new file:</p>
+
+      {mediaType === "image" ? (
+        <div className="space-y-2">
+          <div className="flex items-center gap-4">
+            <Input
+              id={`image-${settingKey}`}
+              type="file"
+              accept="image/*"
+              onChange={handleFileChange}
+              disabled={uploading}
+            />
+            {uploading && <Loader2 className="h-5 w-5 animate-spin text-gray-400" />}
+          </div>
+
+          {preview && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 mb-1">Preview:</p>
+              <div className="relative bg-gray-900/50 rounded-lg p-2 w-full max-w-xs">
+                <img src={preview || "/placeholder.svg"} alt={`${label} preview`} className="w-full h-auto rounded" />
+              </div>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Input
+              id={`video-${settingKey}`}
+              type="text"
+              placeholder="https://vimeo.com/123456789 or YouTube/LinkedIn URL"
+              value={videoUrl}
+              onChange={handleVideoUrlChange}
+            />
+            <Button type="button" onClick={saveVideoUrl} size="sm">
+              <Film className="h-4 w-4 mr-2" />
+              Save
+            </Button>
+          </div>
+          <p className="text-xs text-gray-400">Enter a Vimeo, YouTube, or LinkedIn video URL</p>
+
+          {videoUrl && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 mb-1">Current Video URL:</p>
+              <div className="bg-gray-900/50 rounded-lg p-2">
+                <p className="text-sm break-all">{videoUrl}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SqlSetupInstructions() {
+  const [copied, setCopied] = useState(false)
+  const [showCode, setShowCode] = useState(false)
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(SITE_SETTINGS_SQL)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  return (
+    <Alert variant="destructive" className="mb-6">
+      <AlertTriangle className="h-4 w-4" />
+      <AlertTitle>Site settings table not found</AlertTitle>
+      <AlertDescription className="space-y-4">
+        <p>
+          The site_settings table does not exist in your database. You need to create it manually by running the SQL
+          code below in your Supabase SQL Editor.
+        </p>
+
+        <div className="flex justify-between items-center">
+          <Button variant="outline" size="sm" onClick={() => setShowCode(!showCode)}>
+            {showCode ? "Hide SQL Code" : "Show SQL Code"}
+          </Button>
+
+          <Button variant="outline" size="sm" onClick={copyToClipboard} className="flex items-center gap-2">
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? "Copied!" : "Copy SQL"}
+          </Button>
+        </div>
+
+        {showCode && (
+          <div className="relative mt-2 max-h-96 overflow-auto rounded border border-gray-700">
+            <SyntaxHighlighter language="sql" style={vscDarkPlus} customStyle={{ margin: 0, borderRadius: "0.375rem" }}>
+              {SITE_SETTINGS_SQL}
+            </SyntaxHighlighter>
+          </div>
+        )}
+
+        <p>After running the SQL code, refresh this page to continue setting up your site.</p>
+      </AlertDescription>
+    </Alert>
+  )
+}
 
 export default function SiteInformationForm() {
-  const [isLoading, setIsLoading] = useState(false)
-  const [isSettingUp, setIsSettingUp] = useState(false)
-  const { toast } = useToast()
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [tableExists, setTableExists] = useState(true)
+  const [settings, setSettings] = useState({
+    // Hero section
+    hero_heading: "Film Production & Photography",
+    hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+    image_hero_bg: "/images/hero-bg.jpg",
 
-  // Create form with default values
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      site_title: "Milo Presedo Portfolio",
-      site_description: "Filmmaker and Cinematographer Portfolio",
-      hero_title: "Milo Presedo",
-      hero_subtitle: "Filmmaker & Cinematographer",
-      hero_background: "/images/hero-bg.jpg",
-      about_title: "About Me",
-      about_content: "I am a filmmaker and cinematographer based in San Francisco, California.",
-      profile_image: "/images/profile.jpg",
-      contact_email: "contact@example.com",
-      contact_phone: "+1 (555) 123-4567",
-      social_instagram: "https://instagram.com/username",
-      social_vimeo: "https://vimeo.com/username",
-      social_linkedin: "https://linkedin.com/in/username",
-      footer_text: "© 2023 Milo Presedo. All rights reserved.",
-    },
+    // About section
+    about_heading: "About Me",
+    about_text1:
+      "I'm Milo Presedo, an AI Solutions Architect and film production professional. Fluent in German, Spanish and English, I love diving into the latest AI models, VR technologies, and complex problem-solving.",
+    about_text2:
+      "My journey combines a solid educational background with hands-on experience in computer science, graphic design, and film production. I work as a Director of Photography (DP), 1st and 2nd Assistant Camera (1AC & 2AC), as well as a drone and underwater operator.",
+    about_text3:
+      "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature, which often inspires my landscape and product photography work.",
+    image_profile: "/images/profile.jpg",
+
+    // Services section
+    services_heading: "Services",
+
+    // Contact section
+    contact_heading: "Get in Touch",
+    contact_text:
+      "Connect with me to discuss AI, VR, film production, or photography projects. I'm always open to new collaborations and opportunities.",
+    contact_email: "milo.presedo@mailbox.org",
+    contact_phone: "+41 77 422 68 03",
+    chatgpt_url: "https://chatgpt.com/g/g-vOF4lzRBG-milo",
+
+    // Footer
+    footer_text: "© 2023 Milo Presedo. All rights reserved.",
   })
 
-  // Load settings from database on component mount
+  const supabase = createClientComponentClient()
+
   useEffect(() => {
-    async function loadSettings() {
+    async function checkTableExists() {
       try {
-        const response = await fetch("/api/settings")
+        const { error } = await supabase.from("site_settings").select("count").limit(1)
 
-        if (!response.ok) {
-          if (response.status === 404) {
-            console.log("Settings not found, using defaults")
-            return
-          }
-          throw new Error("Failed to load settings")
+        if (error && error.code === "42P01") {
+          // Table doesn't exist
+          setTableExists(false)
+        } else {
+          setTableExists(true)
+          loadSettings()
         }
-
-        const data = await response.json()
-
-        // Convert array of {key, value} objects to a single object
-        const settings = data.reduce((acc: any, item: { key: string; value: string }) => {
-          acc[item.key] = item.value
-          return acc
-        }, {})
-
-        // Update form with settings from database
-        form.reset(settings)
-      } catch (error) {
-        console.error("Error loading settings:", error)
+      } catch (err) {
+        console.error("Error checking if table exists:", err)
+      } finally {
+        setLoading(false)
       }
     }
 
-    loadSettings()
-  }, [form])
+    async function loadSettings() {
+      try {
+        const { data, error } = await supabase.from("site_settings").select("key, value")
 
-  async function onSubmit(values: FormValues) {
-    setIsLoading(true)
+        if (error) {
+          console.error("Error loading settings:", error)
+
+          // Check if the error is because the table doesn't exist
+          if (error.code === "42P01") {
+            setTableExists(false)
+          } else {
+            toast({
+              title: "Error loading settings",
+              description: error.message,
+              variant: "destructive",
+            })
+          }
+          return
+        }
+
+        if (data && data.length > 0) {
+          const newSettings = { ...settings }
+          data.forEach((item) => {
+            // @ts-ignore
+            if (newSettings.hasOwnProperty(item.key)) {
+              // @ts-ignore
+              newSettings[item.key] = item.value
+            }
+          })
+          setSettings(newSettings)
+        }
+      } catch (err) {
+        console.error("Error in loadSettings:", err)
+        toast({
+          title: "Error",
+          description: "Failed to load settings",
+          variant: "destructive",
+        })
+      }
+    }
+
+    checkTableExists()
+  }, [])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target
+    setSettings((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
+  const handleMediaUpload = (key: string, value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      [key]: value,
+    }))
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    // If the table doesn't exist, show an error
+    if (!tableExists) {
+      toast({
+        title: "Settings table not found",
+        description: "Please set up the site settings table first using the SQL code provided",
+        variant: "destructive",
+      })
+      return
+    }
 
     try {
-      // Convert object to array of {key, value} objects
-      const settingsArray = Object.entries(values).map(([key, value]) => ({
+      setSaving(true)
+
+      // Convert settings object to array of {key, value} pairs
+      const settingsArray = Object.entries(settings).map(([key, value]) => ({
         key,
         value: value || "",
       }))
 
-      const response = await fetch("/api/settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(settingsArray),
+      // Use upsert to insert or update settings
+      const { error } = await supabase.from("site_settings").upsert(settingsArray, {
+        onConflict: "key",
       })
 
-      if (!response.ok) {
-        throw new Error("Failed to save settings")
+      if (error) {
+        console.error("Upsert error details:", error)
+        throw new Error(error.message || "Failed to save settings")
       }
 
       toast({
         title: "Settings saved",
-        description: "Your site information has been updated.",
+        description: "Your site information has been updated successfully.",
       })
-    } catch (error) {
-      console.error("Upsert error details:", error)
+    } catch (err: any) {
+      console.error("Error saving settings:", err)
       toast({
-        title: "Error",
-        description: "Failed to save settings. Please try again.",
+        title: "Error saving settings",
+        description: err.message || "An unknown error occurred",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setSaving(false)
     }
   }
 
-  async function setupSiteSettingsTable() {
-    setIsSettingUp(true)
-
-    try {
-      // First try to create the check_table_exists function
-      await fetch("/api/create-check-table-function")
-
-      // Try the first endpoint
-      const response1 = await fetch("/api/create-site-settings-table")
-
-      if (response1.ok) {
-        toast({
-          title: "Success",
-          description: "Site settings table has been set up.",
-        })
-        return
-      }
-
-      // If the first endpoint fails, try the second one
-      const response2 = await fetch("/api/setup-site-settings-table")
-
-      if (response2.ok) {
-        toast({
-          title: "Success",
-          description: "Site settings table has been set up.",
-        })
-        return
-      }
-
-      throw new Error("Failed to set up site settings table")
-    } catch (error) {
-      console.error("Error setting up site settings:", error)
-      toast({
-        title: "Error",
-        description: "Failed to set up site settings table. Please run the SQL code manually.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSettingUp(false)
-    }
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
   }
 
   return (
     <div className="space-y-6">
-      <SqlSetupGuide
-        tableName="site_settings"
-        sqlCode={SITE_SETTINGS_SQL}
-        title="Site Settings Table Required"
-        description="The site_settings table is missing from your database. Please run the SQL code below in your Supabase SQL Editor to create it."
-      />
+      {!tableExists && <SqlSetupInstructions />}
 
-      <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold">Site Information</h2>
-        <Button variant="outline" onClick={setupSiteSettingsTable} disabled={isSettingUp}>
-          {isSettingUp && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Set Up Site Settings Table
-        </Button>
-      </div>
+      <form onSubmit={handleSubmit}>
+        <Tabs defaultValue="hero">
+          <TabsList className="mb-4">
+            <TabsTrigger value="hero">Hero</TabsTrigger>
+            <TabsTrigger value="about">About</TabsTrigger>
+            <TabsTrigger value="services">Services</TabsTrigger>
+            <TabsTrigger value="contact">Contact</TabsTrigger>
+            <TabsTrigger value="footer">Footer</TabsTrigger>
+          </TabsList>
 
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="site_title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Site Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Milo Presedo Portfolio" {...field} />
-                  </FormControl>
-                  <FormDescription>This will be displayed in the browser tab.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="site_description"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Site Description</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Filmmaker and Cinematographer Portfolio" {...field} />
-                  </FormControl>
-                  <FormDescription>This will be used for SEO.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="hero_title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Hero Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Milo Presedo" {...field} />
-                  </FormControl>
-                  <FormDescription>Main title displayed in the hero section.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="hero_subtitle"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Hero Subtitle</FormLabel>
-                  <FormControl>
-                    <Input placeholder="Filmmaker & Cinematographer" {...field} />
-                  </FormControl>
-                  <FormDescription>Subtitle displayed in the hero section.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="hero_background"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Hero Background Image</FormLabel>
-                <FormControl>
-                  <MediaSelector value={field.value || ""} onChange={field.onChange} mediaType="image" />
-                </FormControl>
-                <FormDescription>Background image for the hero section.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="about_title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>About Title</FormLabel>
-                  <FormControl>
-                    <Input placeholder="About Me" {...field} />
-                  </FormControl>
-                  <FormDescription>Title for the about section.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="profile_image"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Profile Image</FormLabel>
-                  <FormControl>
-                    <MediaSelector value={field.value || ""} onChange={field.onChange} mediaType="image" />
-                  </FormControl>
-                  <FormDescription>Your profile image for the about section.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="about_content"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>About Content</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="I am a filmmaker and cinematographer based in San Francisco, California."
-                    className="min-h-32"
-                    {...field}
+          <TabsContent value="hero">
+            <Card>
+              <CardHeader>
+                <CardTitle>Hero Section</CardTitle>
+                <CardDescription>Update the main heading and background image of your site.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="hero_heading">Heading</Label>
+                  <Input id="hero_heading" name="hero_heading" value={settings.hero_heading} onChange={handleChange} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="hero_subheading">Subheading</Label>
+                  <Input
+                    id="hero_subheading"
+                    name="hero_subheading"
+                    value={settings.hero_subheading}
+                    onChange={handleChange}
                   />
-                </FormControl>
-                <FormDescription>Your bio or about text.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+                </div>
+                <MediaUploader
+                  label="Background Media"
+                  settingKey="image_hero_bg"
+                  currentValue={settings.image_hero_bg}
+                  onUpload={(url) => handleMediaUpload("image_hero_bg", url)}
+                  allowVideo={true}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <FormField
-              control={form.control}
-              name="contact_email"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contact Email</FormLabel>
-                  <FormControl>
-                    <Input placeholder="contact@example.com" {...field} />
-                  </FormControl>
-                  <FormDescription>Your public contact email.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <TabsContent value="about">
+            <Card>
+              <CardHeader>
+                <CardTitle>About Section</CardTitle>
+                <CardDescription>Update your profile information and image.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="about_heading">Heading</Label>
+                  <Input
+                    id="about_heading"
+                    name="about_heading"
+                    value={settings.about_heading}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="about_text1">Paragraph 1</Label>
+                  <Textarea
+                    id="about_text1"
+                    name="about_text1"
+                    value={settings.about_text1}
+                    onChange={handleChange}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="about_text2">Paragraph 2</Label>
+                  <Textarea
+                    id="about_text2"
+                    name="about_text2"
+                    value={settings.about_text2}
+                    onChange={handleChange}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="about_text3">Paragraph 3</Label>
+                  <Textarea
+                    id="about_text3"
+                    name="about_text3"
+                    value={settings.about_text3}
+                    onChange={handleChange}
+                    rows={3}
+                  />
+                </div>
+                <MediaUploader
+                  label="Profile Image"
+                  settingKey="image_profile"
+                  currentValue={settings.image_profile}
+                  onUpload={(url) => handleMediaUpload("image_profile", url)}
+                />
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <FormField
-              control={form.control}
-              name="contact_phone"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Contact Phone (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="+1 (555) 123-4567" {...field} />
-                  </FormControl>
-                  <FormDescription>Your public contact phone number.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
+          <TabsContent value="services">
+            <Card>
+              <CardHeader>
+                <CardTitle>Services Section</CardTitle>
+                <CardDescription>Update your services section heading.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="services_heading">Heading</Label>
+                  <Input
+                    id="services_heading"
+                    name="services_heading"
+                    value={settings.services_heading}
+                    onChange={handleChange}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <FormField
-              control={form.control}
-              name="social_instagram"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Instagram URL (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://instagram.com/username" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <TabsContent value="contact">
+            <Card>
+              <CardHeader>
+                <CardTitle>Contact Section</CardTitle>
+                <CardDescription>Update your contact information.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="contact_heading">Heading</Label>
+                  <Input
+                    id="contact_heading"
+                    name="contact_heading"
+                    value={settings.contact_heading}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="contact_text">Description</Label>
+                  <Textarea
+                    id="contact_text"
+                    name="contact_text"
+                    value={settings.contact_text}
+                    onChange={handleChange}
+                    rows={3}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="contact_email">Email</Label>
+                  <Input
+                    id="contact_email"
+                    name="contact_email"
+                    value={settings.contact_email}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="contact_phone">Phone</Label>
+                  <Input
+                    id="contact_phone"
+                    name="contact_phone"
+                    value={settings.contact_phone}
+                    onChange={handleChange}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="chatgpt_url">ChatGPT URL</Label>
+                  <Input id="chatgpt_url" name="chatgpt_url" value={settings.chatgpt_url} onChange={handleChange} />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-            <FormField
-              control={form.control}
-              name="social_vimeo"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Vimeo URL (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://vimeo.com/username" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <TabsContent value="footer">
+            <Card>
+              <CardHeader>
+                <CardTitle>Footer</CardTitle>
+                <CardDescription>Update your footer text.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="footer_text">Footer Text</Label>
+                  <Input id="footer_text" name="footer_text" value={settings.footer_text} onChange={handleChange} />
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
 
-            <FormField
-              control={form.control}
-              name="social_linkedin"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>LinkedIn URL (Optional)</FormLabel>
-                  <FormControl>
-                    <Input placeholder="https://linkedin.com/in/username" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-          </div>
-
-          <FormField
-            control={form.control}
-            name="footer_text"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Footer Text</FormLabel>
-                <FormControl>
-                  <Input placeholder="© 2023 Milo Presedo. All rights reserved." {...field} />
-                </FormControl>
-                <FormDescription>Text displayed in the footer.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <Button type="submit" disabled={isLoading}>
-            {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        <div className="mt-6 flex justify-end">
+          <Button type="submit" disabled={saving || !tableExists}>
+            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes
           </Button>
-        </form>
-      </Form>
+        </div>
+      </form>
     </div>
   )
 }

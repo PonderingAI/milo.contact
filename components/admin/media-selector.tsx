@@ -4,16 +4,25 @@ import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
-import { Loader2, Search, Film, X } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
+import { Loader2, Search, Film, X, Check } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { cn } from "@/lib/utils"
 
 interface MediaSelectorProps {
-  onSelect: (media: any) => void
-  currentValue?: string
+  onSelect: (media: string | string[]) => void
+  currentValue?: string | string[]
   mediaType?: "all" | "images" | "videos"
   buttonLabel?: string
   showPreview?: boolean
+  multiple?: boolean
 }
 
 export default function MediaSelector({
@@ -22,6 +31,7 @@ export default function MediaSelector({
   mediaType = "all",
   buttonLabel = "Select Media",
   showPreview = true,
+  multiple = false,
 }: MediaSelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [mediaItems, setMediaItems] = useState<any[]>([])
@@ -29,12 +39,21 @@ export default function MediaSelector({
   const [isLoading, setIsLoading] = useState(false)
   const [selectedMediaType, setSelectedMediaType] = useState<"all" | "images" | "videos">(mediaType)
   const [selectedItem, setSelectedItem] = useState<any | null>(null)
+  const [selectedItems, setSelectedItems] = useState<any[]>([])
   const supabase = createClientComponentClient()
 
   // Load the current media item if there's a currentValue
   useEffect(() => {
     if (currentValue) {
-      loadCurrentMedia()
+      if (multiple && Array.isArray(currentValue)) {
+        // Handle multiple values
+        Promise.all(currentValue.map((url) => loadMediaItem(url))).then((items) => {
+          setSelectedItems(items.filter(Boolean))
+        })
+      } else if (!multiple && typeof currentValue === "string") {
+        // Handle single value
+        loadCurrentMedia(currentValue)
+      }
     }
   }, [currentValue])
 
@@ -45,33 +64,44 @@ export default function MediaSelector({
     }
   }, [isOpen, searchQuery, selectedMediaType])
 
-  const loadCurrentMedia = async () => {
+  const loadMediaItem = async (url: string) => {
     try {
-      if (!currentValue) return
+      if (!url) return null
 
       // Check if it's a URL or a local path
-      if (currentValue.startsWith("http")) {
+      if (url.startsWith("http")) {
         // Try to find by public_url
-        const { data, error } = await supabase.from("media").select("*").eq("public_url", currentValue).maybeSingle()
+        const { data, error } = await supabase.from("media").select("*").eq("public_url", url).maybeSingle()
 
         if (error) {
-          console.error("Error loading current media:", error)
-          return
+          console.error("Error loading media item:", error)
+          return null
         }
 
         if (data) {
-          setSelectedItem(data)
-          return
+          return data
         }
       }
 
       // If not found or it's a local path, create a placeholder
-      setSelectedItem({
-        id: "local",
-        filename: currentValue.split("/").pop() || "Current media",
-        public_url: currentValue,
-        filetype: currentValue.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image" : "video",
-      })
+      return {
+        id: `local-${url}`,
+        filename: url.split("/").pop() || "Media item",
+        public_url: url,
+        filetype: url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image" : "video",
+      }
+    } catch (err) {
+      console.error("Error loading media item:", err)
+      return null
+    }
+  }
+
+  const loadCurrentMedia = async (url: string) => {
+    try {
+      const item = await loadMediaItem(url)
+      if (item) {
+        setSelectedItem(item)
+      }
     } catch (err) {
       console.error("Error loading current media:", err)
     }
@@ -80,6 +110,21 @@ export default function MediaSelector({
   const loadMediaItems = async () => {
     try {
       setIsLoading(true)
+
+      // First check if the media table exists
+      const { error: checkError } = await supabase.from("media").select("count").limit(1)
+
+      if (checkError && checkError.code === "42P01") {
+        // Table doesn't exist
+        toast({
+          title: "Media table not found",
+          description: "The media table doesn't exist in your database. Please set up your database first.",
+          variant: "destructive",
+        })
+        setMediaItems([])
+        setIsLoading(false)
+        return
+      }
 
       let query = supabase.from("media").select("*")
 
@@ -118,19 +163,47 @@ export default function MediaSelector({
   }
 
   const selectMediaItem = (item: any) => {
-    setSelectedItem(item)
-    onSelect(item.public_url)
+    if (multiple) {
+      // For multiple selection, toggle the item in the selectedItems array
+      const isAlreadySelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)
+
+      if (isAlreadySelected) {
+        setSelectedItems(selectedItems.filter((selectedItem) => selectedItem.id !== item.id))
+      } else {
+        setSelectedItems([...selectedItems, item])
+      }
+    } else {
+      // For single selection, set the item and close the dialog
+      setSelectedItem(item)
+      onSelect(item.public_url)
+      setIsOpen(false)
+
+      toast({
+        title: "Media selected",
+        description: `${item.filename} has been selected`,
+      })
+    }
+  }
+
+  const confirmMultipleSelection = () => {
+    const urls = selectedItems.map((item) => item.public_url)
+    onSelect(urls)
     setIsOpen(false)
 
     toast({
       title: "Media selected",
-      description: `${item.filename} has been selected`,
+      description: `${selectedItems.length} items have been selected`,
     })
   }
 
   const clearSelection = () => {
-    setSelectedItem(null)
-    onSelect("")
+    if (multiple) {
+      setSelectedItems([])
+      onSelect([])
+    } else {
+      setSelectedItem(null)
+      onSelect("")
+    }
 
     toast({
       title: "Selection cleared",
@@ -138,12 +211,19 @@ export default function MediaSelector({
     })
   }
 
+  const isItemSelected = (item: any) => {
+    if (multiple) {
+      return selectedItems.some((selectedItem) => selectedItem.id === item.id)
+    }
+    return selectedItem?.id === item.id
+  }
+
   const isImageType = (item: any) => {
-    return item.filetype === "image"
+    return item?.filetype === "image"
   }
 
   const isVideoType = (item: any) => {
-    return ["vimeo", "youtube", "linkedin"].includes(item.filetype)
+    return ["vimeo", "youtube", "linkedin"].includes(item?.filetype)
   }
 
   return (
@@ -154,7 +234,7 @@ export default function MediaSelector({
           {buttonLabel}
         </Button>
 
-        {selectedItem && (
+        {((multiple && selectedItems.length > 0) || (!multiple && selectedItem)) && (
           <Button
             type="button"
             variant="ghost"
@@ -168,7 +248,7 @@ export default function MediaSelector({
         )}
       </div>
 
-      {showPreview && selectedItem && (
+      {showPreview && !multiple && selectedItem && (
         <div className="mt-2">
           <p className="text-xs text-gray-400 mb-1">Selected media:</p>
           <div className="relative bg-gray-900/50 rounded-lg p-2 w-full max-w-xs">
@@ -190,12 +270,41 @@ export default function MediaSelector({
         </div>
       )}
 
+      {showPreview && multiple && selectedItems.length > 0 && (
+        <div className="mt-2">
+          <p className="text-xs text-gray-400 mb-1">Selected media ({selectedItems.length}):</p>
+          <div className="grid grid-cols-3 gap-2">
+            {selectedItems.map((item) => (
+              <div key={item.id} className="relative bg-gray-900/50 rounded-lg p-1">
+                {isImageType(item) ? (
+                  <img
+                    src={item.public_url || "/placeholder.svg"}
+                    alt={item.filename}
+                    className="w-full h-auto aspect-square object-cover rounded"
+                  />
+                ) : (
+                  <div className="aspect-square bg-gray-900 flex items-center justify-center rounded">
+                    <Film className="h-8 w-8 text-gray-400" />
+                  </div>
+                )}
+                <button
+                  className="absolute top-0 right-0 bg-red-500 rounded-full p-0.5 m-1"
+                  onClick={() => selectMediaItem(item)}
+                >
+                  <X className="h-3 w-3 text-white" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Media Library Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Media Library</DialogTitle>
-            <DialogDescription>Select media from your library or upload new files</DialogDescription>
+            <DialogDescription>{multiple ? "Select multiple media items" : "Select a media item"}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
@@ -243,7 +352,12 @@ export default function MediaSelector({
                 {mediaItems.map((item) => (
                   <div
                     key={item.id}
-                    className="relative border border-gray-800 rounded-md overflow-hidden cursor-pointer hover:border-blue-500 transition-colors"
+                    className={cn(
+                      "relative border rounded-md overflow-hidden cursor-pointer transition-colors",
+                      isItemSelected(item)
+                        ? "border-blue-500 ring-2 ring-blue-500"
+                        : "border-gray-800 hover:border-blue-500",
+                    )}
                     onClick={() => selectMediaItem(item)}
                   >
                     <div className="aspect-square bg-gray-900 flex items-center justify-center">
@@ -278,6 +392,12 @@ export default function MediaSelector({
                           {item.filetype.charAt(0).toUpperCase() + item.filetype.slice(1)}
                         </div>
                       )}
+
+                      {isItemSelected(item) && (
+                        <div className="absolute top-2 left-2 bg-blue-500 rounded-full p-1">
+                          <Check className="h-4 w-4 text-white" />
+                        </div>
+                      )}
                     </div>
                     <div className="p-2 bg-gray-900 text-xs truncate">{item.filename}</div>
                   </div>
@@ -285,6 +405,19 @@ export default function MediaSelector({
               </div>
             )}
           </div>
+
+          {multiple && (
+            <DialogFooter>
+              <div className="flex justify-between w-full">
+                <div className="text-sm text-gray-400">
+                  {selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""} selected
+                </div>
+                <Button onClick={confirmMultipleSelection} disabled={selectedItems.length === 0}>
+                  Confirm Selection
+                </Button>
+              </div>
+            </DialogFooter>
+          )}
         </DialogContent>
       </Dialog>
     </div>
