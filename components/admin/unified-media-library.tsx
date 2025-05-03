@@ -410,54 +410,129 @@ export default function UnifiedMediaLibrary() {
     setUploadQueue([])
   }
 
-  const handleVimeoAdd = async () => {
+  const [videoUrls, setVideoUrls] = useState("")
+  const [uploadingVideo, setUploadingVideo] = useState(false)
+
+  const handleVideoAdd = async () => {
     // Validate input
-    if (!vimeoUrls.trim()) {
+    if (!videoUrls.trim()) {
       toast({
         title: "Error",
-        description: "Please enter at least one Vimeo URL",
+        description: "Please enter at least one video URL",
         variant: "destructive",
       })
       return
     }
 
-    setUploadingVimeo(true)
+    setUploadingVideo(true)
     let successCount = 0
     let failCount = 0
+    const results = { vimeo: 0, youtube: 0, linkedin: 0 }
 
     try {
-      // Extract potential Vimeo URLs
-      const urlRegex =
+      // Extract potential video URLs
+      // Vimeo regex
+      const vimeoRegex =
         /(?:https?:)?\/\/(?:www\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:[a-zA-Z0-9_-]+)?/gi
-      const matches = vimeoUrls.match(urlRegex) || []
+      // YouTube regex
+      const youtubeRegex =
+        /(?:https?:)?\/\/(?:www\.)?(?:youtube\.com\/(?:[^/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/gi
+      // LinkedIn regex
+      const linkedinRegex =
+        /(?:https?:)?\/\/(?:www\.)?linkedin\.com\/(?:posts|feed\/update)\/(?:urn:li:activity:)?(\d+)/gi
 
-      if (matches.length === 0) {
+      // Find all matches
+      const vimeoMatches = videoUrls.match(vimeoRegex) || []
+      const youtubeMatches = videoUrls.match(youtubeRegex) || []
+      const linkedinMatches = videoUrls.match(linkedinRegex) || []
+
+      const allMatches = [...vimeoMatches, ...youtubeMatches, ...linkedinMatches]
+
+      if (allMatches.length === 0) {
         toast({
-          title: "No valid Vimeo URLs found",
-          description: "Please check your input and try again",
+          title: "No valid video URLs found",
+          description: "Please check your input and try again. Supported platforms: Vimeo, YouTube, LinkedIn",
           variant: "destructive",
         })
         return
       }
 
-      // Process each Vimeo URL
-      for (const url of matches) {
+      // Process each video URL
+      for (const url of allMatches) {
         try {
-          const videoInfo = extractVideoInfo(url)
+          let videoInfo
+          let videoType
+          let thumbnailUrl
+          let videoTitle
+          let videoMetadata = {}
 
-          if (!videoInfo || videoInfo.platform !== "vimeo") {
-            throw new Error("Invalid Vimeo URL")
+          // Determine video type and extract info
+          if (url.includes("vimeo.com")) {
+            videoType = "vimeo"
+            videoInfo = extractVideoInfo(url)
+
+            if (!videoInfo || videoInfo.platform !== "vimeo") {
+              throw new Error("Invalid Vimeo URL")
+            }
+
+            // Get video thumbnail and metadata
+            const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+
+            if (!response.ok) {
+              throw new Error("Failed to fetch Vimeo video info")
+            }
+
+            const videoData = await response.json()
+            const video = videoData[0]
+
+            thumbnailUrl = video.thumbnail_large
+            videoTitle = video.title || `Vimeo ${videoInfo.id}`
+            videoMetadata = {
+              vimeoId: videoInfo.id,
+              description: video.description,
+              duration: video.duration,
+              uploadDate: video.upload_date,
+            }
+
+            results.vimeo++
+          } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
+            videoType = "youtube"
+            // Extract YouTube video ID
+            const match = url.match(youtubeRegex)
+            const videoId = match ? match[0].match(/([a-zA-Z0-9_-]{11})/) : null
+
+            if (!videoId || !videoId[1]) {
+              throw new Error("Invalid YouTube URL")
+            }
+
+            thumbnailUrl = `https://img.youtube.com/vi/${videoId[1]}/hqdefault.jpg`
+            videoTitle = `YouTube ${videoId[1]}`
+            videoMetadata = {
+              youtubeId: videoId[1],
+            }
+
+            results.youtube++
+          } else if (url.includes("linkedin.com")) {
+            videoType = "linkedin"
+            // Extract LinkedIn post ID
+            const match = url.match(linkedinRegex)
+            const postId = match ? match[0].match(/(\d+)/) : null
+
+            if (!postId || !postId[1]) {
+              throw new Error("Invalid LinkedIn URL")
+            }
+
+            // LinkedIn doesn't provide easy thumbnail access, use a placeholder
+            thumbnailUrl = null
+            videoTitle = `LinkedIn Post ${postId[1]}`
+            videoMetadata = {
+              linkedinId: postId[1],
+            }
+
+            results.linkedin++
+          } else {
+            throw new Error("Unsupported video platform")
           }
-
-          // Get video thumbnail and metadata
-          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-
-          if (!response.ok) {
-            throw new Error("Failed to fetch Vimeo video info")
-          }
-
-          const videoData = await response.json()
-          const video = videoData[0]
 
           // Get current user session
           const {
@@ -465,53 +540,55 @@ export default function UnifiedMediaLibrary() {
           } = await supabase.auth.getSession()
           const userId = session?.user?.id || "anonymous"
 
+          // Add user ID to metadata
+          videoMetadata.uploadedBy = userId
+
           // Save to media table
           const { error: dbError } = await supabase.from("media").insert({
-            filename: video.title || `Vimeo ${videoInfo.id}`,
+            filename: videoTitle,
             filepath: url,
             filesize: 0, // Not applicable for external videos
-            filetype: "vimeo",
+            filetype: videoType,
             public_url: url,
-            thumbnail_url: video.thumbnail_large,
-            tags: ["video", "vimeo"],
-            metadata: {
-              vimeoId: videoInfo.id,
-              description: video.description,
-              duration: video.duration,
-              uploadDate: video.upload_date,
-              uploadedBy: userId,
-            },
+            thumbnail_url: thumbnailUrl,
+            tags: ["video", videoType],
+            metadata: videoMetadata,
           })
 
           if (dbError) throw dbError
           successCount++
         } catch (err) {
-          console.error("Error processing Vimeo URL:", url, err)
+          console.error("Error processing video URL:", url, err)
           failCount++
         }
       }
 
       // Show summary toast
+      let successMessage = `${successCount} videos added successfully`
+      if (results.vimeo > 0 || results.youtube > 0 || results.linkedin > 0) {
+        successMessage += ` (${results.vimeo} Vimeo, ${results.youtube} YouTube, ${results.linkedin} LinkedIn)`
+      }
+
       toast({
         title: successCount > 0 ? "Success" : "Error",
-        description: `${successCount} videos added successfully${failCount > 0 ? `, ${failCount} failed` : ""}`,
+        description: `${successMessage}${failCount > 0 ? `, ${failCount} failed` : ""}`,
         variant: successCount > 0 ? "default" : "destructive",
       })
 
       // Reset form if any successful and refresh
       if (successCount > 0) {
-        setVimeoUrls("")
+        setVideoUrls("")
         fetchMedia()
       }
     } catch (error) {
-      console.error("Error adding Vimeo videos:", error)
+      console.error("Error adding videos:", error)
       toast({
         title: "Error",
-        description: "Failed to add Vimeo videos",
+        description: "Failed to add videos",
         variant: "destructive",
       })
     } finally {
-      setUploadingVimeo(false)
+      setUploadingVideo(false)
     }
   }
 
@@ -578,7 +655,9 @@ export default function UnifiedMediaLibrary() {
 
     // Filter by type (tab)
     const matchesType =
-      activeTab === "all" || item.filetype === activeTab || (activeTab === "video" && item.filetype === "vimeo")
+      activeTab === "all" ||
+      item.filetype === activeTab ||
+      (activeTab === "video" && ["vimeo", "youtube", "linkedin"].includes(item.filetype))
 
     return matchesSearch && matchesTags && matchesType
   })
@@ -601,8 +680,14 @@ export default function UnifiedMediaLibrary() {
               <span className="text-gray-400">{item.filetype}</span>
             </div>
           )}
-          {isVimeo && (
+          {item.filetype === "vimeo" && (
             <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">Vimeo</div>
+          )}
+          {item.filetype === "youtube" && (
+            <div className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-1 rounded">YouTube</div>
+          )}
+          {item.filetype === "linkedin" && (
+            <div className="absolute top-2 right-2 bg-blue-800 text-white text-xs px-2 py-1 rounded">LinkedIn</div>
           )}
           {isImage && (
             <div className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center">
@@ -733,29 +818,29 @@ export default function UnifiedMediaLibrary() {
         </div>
 
         <div className="bg-gray-900 p-4 rounded-lg">
-          <h2 className="text-xl mb-4">Add Vimeo Videos</h2>
+          <h2 className="text-xl mb-4">Add Videos</h2>
           <div className="space-y-4">
             <Textarea
-              placeholder="Paste one or more Vimeo URLs (one per line or separated by spaces)"
-              value={vimeoUrls}
-              onChange={(e) => setVimeoUrls(e.target.value)}
-              disabled={uploadingVimeo || !!error}
+              placeholder="Paste one or more video URLs (one per line or separated by spaces)"
+              value={videoUrls}
+              onChange={(e) => setVideoUrls(e.target.value)}
+              disabled={uploadingVideo || !!error}
               className="bg-gray-800 border-gray-700 min-h-[100px]"
             />
-            <Button onClick={handleVimeoAdd} disabled={!vimeoUrls || uploadingVimeo || !!error} className="w-full">
-              {uploadingVimeo ? (
+            <Button onClick={handleVideoAdd} disabled={!videoUrls || uploadingVideo || !!error} className="w-full">
+              {uploadingVideo ? (
                 <span className="flex items-center gap-2">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Processing...
                 </span>
               ) : (
-                "Add Vimeo Videos"
+                "Add Videos"
               )}
             </Button>
             <div className="text-sm text-gray-400">
               <p>
-                You can paste multiple Vimeo URLs. The system will automatically detect and process all valid Vimeo
-                links.
+                You can paste multiple video URLs. The system will automatically detect and process all valid YouTube,
+                Vimeo, and LinkedIn video links.
               </p>
             </div>
           </div>
@@ -801,6 +886,8 @@ export default function UnifiedMediaLibrary() {
           <TabsTrigger value="image">Images</TabsTrigger>
           <TabsTrigger value="video">Videos</TabsTrigger>
           <TabsTrigger value="vimeo">Vimeo</TabsTrigger>
+          <TabsTrigger value="youtube">YouTube</TabsTrigger>
+          <TabsTrigger value="linkedin">LinkedIn</TabsTrigger>
           <TabsTrigger value="other">Other</TabsTrigger>
         </TabsList>
 
@@ -840,6 +927,28 @@ export default function UnifiedMediaLibrary() {
         <TabsContent value="vimeo" className="mt-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl">Vimeo Videos ({filteredMedia.length})</h2>
+            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
+              Total Storage:{" "}
+              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
+            </div>
+          </div>
+          {renderMediaGrid()}
+        </TabsContent>
+
+        <TabsContent value="youtube" className="mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl">YouTube Videos ({filteredMedia.length})</h2>
+            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
+              Total Storage:{" "}
+              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
+            </div>
+          </div>
+          {renderMediaGrid()}
+        </TabsContent>
+
+        <TabsContent value="linkedin" className="mt-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl">LinkedIn Videos ({filteredMedia.length})</h2>
             <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
               Total Storage:{" "}
               <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
