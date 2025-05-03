@@ -181,7 +181,7 @@ export default function UnifiedMediaLibrary() {
         if (result.success) {
           toast({
             title: "Success",
-            description: "File uploaded successfully",
+            description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
           })
 
           // Refresh the media list
@@ -209,6 +209,11 @@ export default function UnifiedMediaLibrary() {
 
       setUploadQueue((prev) => [...prev, ...newUploads])
       setIsUploadDialogOpen(true)
+
+      // Automatically start processing the queue
+      setTimeout(() => {
+        processBulkUpload()
+      }, 100)
     }
   }
 
@@ -343,12 +348,13 @@ export default function UnifiedMediaLibrary() {
 
     // Count results
     const successful = uploadQueue.filter((item) => item.status === "success").length
+    const converted = uploadQueue.filter((item) => item.status === "success" && item.response?.convertedToWebP).length
     const failed = uploadQueue.filter((item) => item.status === "error").length
     const pending = uploadQueue.filter((item) => item.status === "pending").length
 
     toast({
       title: "Bulk upload progress",
-      description: `${successful} files uploaded successfully, ${failed} files failed, ${pending} files pending`,
+      description: `${successful} files uploaded successfully${converted > 0 ? ` (${converted} converted to WebP)` : ""}, ${failed} files failed, ${pending} files pending`,
       variant: successful > 0 ? "default" : "destructive",
     })
   }
@@ -870,41 +876,29 @@ export default function UnifiedMediaLibrary() {
             ))}
           </div>
 
-          <div className="flex flex-col gap-2">
-            <div className="text-sm">
-              <div className="flex justify-between">
-                <span>Status:</span>
-                <span>
-                  {uploadQueue.filter((i) => i.status === "success").length} completed,{" "}
-                  {uploadQueue.filter((i) => i.status === "error").length} failed,{" "}
-                  {uploadQueue.filter((i) => i.status === "pending").length} pending
-                </span>
-              </div>
+          <div className="flex justify-between gap-2 mt-2">
+            <div className="space-x-2">
+              <Button variant="outline" onClick={clearUploadQueue} disabled={isProcessingQueue}>
+                Clear Completed
+              </Button>
+              <Button variant="outline" onClick={resetUploadQueue} disabled={isProcessingQueue}>
+                Reset All
+              </Button>
             </div>
 
-            <div className="flex justify-between gap-2 mt-2">
-              <div className="space-x-2">
-                <Button variant="outline" onClick={clearUploadQueue} disabled={isProcessingQueue}>
-                  Clear Completed
-                </Button>
-                <Button variant="outline" onClick={resetUploadQueue} disabled={isProcessingQueue}>
-                  Reset All
-                </Button>
-              </div>
-
-              <Button
-                onClick={processBulkUpload}
-                disabled={isProcessingQueue || uploadQueue.filter((i) => i.status === "pending").length === 0}
-              >
-                {isProcessingQueue ? (
-                  <span className="flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Uploading...
-                  </span>
-                ) : (
-                  "Start Upload"
-                )}
-              </Button>
+            <div className="flex items-center">
+              {isProcessingQueue ? (
+                <span className="flex items-center gap-2 text-sm">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading automatically...
+                </span>
+              ) : (
+                <span className="text-sm text-gray-400">
+                  {uploadQueue.filter((i) => i.status === "pending").length > 0
+                    ? "Upload will start automatically"
+                    : "All uploads processed"}
+                </span>
+              )}
             </div>
           </div>
         </DialogContent>

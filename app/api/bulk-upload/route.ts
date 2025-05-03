@@ -1,14 +1,11 @@
 import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
+import sharp from "sharp"
 
 export async function POST(request: NextRequest) {
   try {
     // Get the Supabase client
     const supabase = createAdminClient()
-
-    // Skip authentication check - since we're using the admin client
-    // This is safe because the admin client is only available server-side
-    // and we're using Supabase RLS policies to control access
 
     const formData = await request.formData()
     const file = formData.get("file") as File
@@ -17,19 +14,61 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Create safe filename
-    const fileExt = file.name.split(".").pop()?.toLowerCase() || "bin"
-    const originalName = file.name.split(".")[0]
-    const safeFilename = `${originalName.replace(/[^a-z0-9]/gi, "-")}-${Date.now()}.${fileExt}`
-    const filePath = `uploads/${safeFilename}`
-
     // Get file buffer
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
+    // Create safe filename base (without extension)
+    const originalName = file.name.split(".")[0]
+    const safeFilenameBase = originalName.replace(/[^a-z0-9]/gi, "-")
+
+    // Determine file type category
+    let fileType = "other"
+    let filePath = ""
+    let processedBuffer = buffer
+    let contentType = file.type || "application/octet-stream"
+
+    // Check if it's an image that can be converted to WebP
+    const isConvertibleImage =
+      file.type && ["image/jpeg", "image/png", "image/gif", "image/jpg"].includes(file.type.toLowerCase())
+
+    if (isConvertibleImage) {
+      fileType = "image"
+      filePath = `uploads/${safeFilenameBase}-${Date.now()}.webp`
+      contentType = "image/webp"
+
+      try {
+        // Convert to WebP
+        processedBuffer = await sharp(buffer).webp({ quality: 85 }).toBuffer()
+
+        console.log(`Converted ${file.name} to WebP format`)
+      } catch (conversionError) {
+        console.error("WebP conversion error:", conversionError)
+        // Fallback to original format if conversion fails
+        const fileExt = file.name.split(".").pop()?.toLowerCase() || "bin"
+        filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
+        processedBuffer = buffer
+        contentType = file.type || "application/octet-stream"
+
+        console.log(`Falling back to original format for ${file.name}`)
+      }
+    } else if (file.type && file.type.startsWith("video/")) {
+      fileType = "video"
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4"
+      filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
+    } else if (file.type && file.type.startsWith("audio/")) {
+      fileType = "audio"
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp3"
+      filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
+    } else {
+      // Other file types
+      const fileExt = file.name.split(".").pop()?.toLowerCase() || "bin"
+      filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
+    }
+
     // Upload file to Supabase
-    const { error: uploadError } = await supabase.storage.from("media").upload(filePath, buffer, {
-      contentType: file.type || "application/octet-stream",
+    const { error: uploadError } = await supabase.storage.from("media").upload(filePath, processedBuffer, {
+      contentType: contentType,
       cacheControl: "3600",
       upsert: false,
     })
@@ -44,12 +83,6 @@ export async function POST(request: NextRequest) {
       data: { publicUrl },
     } = supabase.storage.from("media").getPublicUrl(filePath)
 
-    // Determine file type category
-    let fileType = "other"
-    if (filePath.match(/\.(jpg|jpeg|png|webp|avif|gif)$/i)) fileType = "image"
-    else if (filePath.match(/\.(mp4|webm|mov|avi)$/i)) fileType = "video"
-    else if (filePath.match(/\.(mp3|wav|ogg)$/i)) fileType = "audio"
-
     // Generate thumbnail for images
     let thumbnailUrl = null
     if (fileType === "image") {
@@ -58,17 +91,20 @@ export async function POST(request: NextRequest) {
 
     // Save to media table
     const { error: dbError } = await supabase.from("media").insert({
-      filename: file.name,
+      filename: isConvertibleImage ? `${originalName}.webp` : file.name,
       filepath: filePath,
-      filesize: buffer.byteLength,
+      filesize: processedBuffer.byteLength,
       filetype: fileType,
       public_url: publicUrl,
       thumbnail_url: thumbnailUrl,
       tags: [fileType],
       metadata: {
-        contentType: fileType,
+        contentType: contentType,
+        originalType: file.type,
+        originalName: file.name,
         uploadedAt: new Date().toISOString(),
         uploadedBy: "admin", // Since we're using the admin client
+        convertedToWebP: isConvertibleImage,
       },
     })
 
@@ -79,10 +115,11 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      filename: file.name,
+      filename: isConvertibleImage ? `${originalName}.webp` : file.name,
       filepath: filePath,
-      filesize: buffer.byteLength,
+      filesize: processedBuffer.byteLength,
       publicUrl,
+      convertedToWebP: isConvertibleImage,
     })
   } catch (error) {
     console.error("Error processing upload:", error)
