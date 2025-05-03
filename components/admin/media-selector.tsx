@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Loader2, Search, Film, X } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 
@@ -47,31 +47,31 @@ export default function MediaSelector({
 
   const loadCurrentMedia = async () => {
     try {
-      // First try to find by URL
-      const { data, error } = await supabase
-        .from("media")
-        .select("*")
-        .or(`public_url.eq.${currentValue},url.eq.${currentValue}`)
-        .maybeSingle()
+      if (!currentValue) return
 
-      if (error) {
-        console.error("Error loading current media:", error)
-        return
+      // Check if it's a URL or a local path
+      if (currentValue.startsWith("http")) {
+        // Try to find by public_url
+        const { data, error } = await supabase.from("media").select("*").eq("public_url", currentValue).maybeSingle()
+
+        if (error) {
+          console.error("Error loading current media:", error)
+          return
+        }
+
+        if (data) {
+          setSelectedItem(data)
+          return
+        }
       }
 
-      // If not found by URL, it might be a local path
-      if (!data) {
-        // Just create a placeholder object
-        setSelectedItem({
-          id: "local",
-          filename: currentValue.split("/").pop() || "Current media",
-          public_url: currentValue,
-          filetype: currentValue.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image" : "video",
-        })
-        return
-      }
-
-      setSelectedItem(data)
+      // If not found or it's a local path, create a placeholder
+      setSelectedItem({
+        id: "local",
+        filename: currentValue.split("/").pop() || "Current media",
+        public_url: currentValue,
+        filetype: currentValue.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image" : "video",
+      })
     } catch (err) {
       console.error("Error loading current media:", err)
     }
@@ -87,7 +87,7 @@ export default function MediaSelector({
       if (selectedMediaType === "images") {
         query = query.eq("filetype", "image")
       } else if (selectedMediaType === "videos") {
-        query = query.or("filetype.eq.vimeo,filetype.eq.youtube,filetype.eq.linkedin")
+        query = query.in("filetype", ["vimeo", "youtube", "linkedin"])
       }
 
       // Apply search query if provided
@@ -195,6 +195,7 @@ export default function MediaSelector({
         <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Media Library</DialogTitle>
+            <DialogDescription>Select media from your library or upload new files</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">

@@ -11,10 +11,11 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Film } from "lucide-react"
+import { Loader2, Film, AlertTriangle } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import MediaSelector from "./media-selector"
 import { extractVideoInfo } from "@/lib/utils"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 
 interface MediaUploaderProps {
   label: string
@@ -326,6 +327,8 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
 export default function SiteInformationForm() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [tableExists, setTableExists] = useState(true)
+  const [setupInProgress, setSetupInProgress] = useState(false)
   const [settings, setSettings] = useState({
     // Hero section
     hero_heading: "Film Production & Photography",
@@ -367,11 +370,17 @@ export default function SiteInformationForm() {
 
         if (error) {
           console.error("Error loading settings:", error)
-          toast({
-            title: "Error loading settings",
-            description: error.message,
-            variant: "destructive",
-          })
+
+          // Check if the error is because the table doesn't exist
+          if (error.code === "42P01") {
+            setTableExists(false)
+          } else {
+            toast({
+              title: "Error loading settings",
+              description: error.message,
+              variant: "destructive",
+            })
+          }
           return
         }
 
@@ -416,8 +425,44 @@ export default function SiteInformationForm() {
     }))
   }
 
+  const setupSiteSettings = async () => {
+    try {
+      setSetupInProgress(true)
+
+      const response = await fetch("/api/setup-site-settings-table")
+      const result = await response.json()
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to set up site settings table")
+      }
+
+      // Reload the page to get the new settings
+      window.location.reload()
+    } catch (err: any) {
+      console.error("Error setting up site settings:", err)
+      toast({
+        title: "Setup failed",
+        description: err.message || "Failed to set up site settings",
+        variant: "destructive",
+      })
+    } finally {
+      setSetupInProgress(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // If the table doesn't exist, show an error
+    if (!tableExists) {
+      toast({
+        title: "Settings table not found",
+        description: "Please set up the site settings table first",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       setSaving(true)
 
@@ -457,6 +502,25 @@ export default function SiteInformationForm() {
     return (
       <div className="flex justify-center items-center h-64">
         <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    )
+  }
+
+  if (!tableExists) {
+    return (
+      <div className="space-y-6">
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Site settings table not found</AlertTitle>
+          <AlertDescription>
+            The site settings table does not exist in your database. Click the button below to set it up.
+          </AlertDescription>
+        </Alert>
+
+        <Button onClick={setupSiteSettings} disabled={setupInProgress} className="flex items-center gap-2">
+          {setupInProgress && <Loader2 className="h-4 w-4 animate-spin" />}
+          Set Up Site Settings Table
+        </Button>
       </div>
     )
   }
