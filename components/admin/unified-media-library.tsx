@@ -73,9 +73,22 @@ export default function UnifiedMediaLibrary() {
   const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = getSupabaseBrowserClient()
 
+  // Reference to track if we need to process the queue
+  const pendingQueueRef = useRef(false)
+
   useEffect(() => {
     fetchMedia()
   }, [])
+
+  // Effect to monitor the upload queue and start processing when needed
+  useEffect(() => {
+    const pendingUploads = uploadQueue.filter((item) => item.status === "pending").length
+
+    if (pendingUploads > 0 && !isProcessingQueue && pendingQueueRef.current) {
+      pendingQueueRef.current = false
+      processBulkUpload()
+    }
+  }, [uploadQueue, isProcessingQueue])
 
   const setupDatabase = async () => {
     setSetupInProgress(true)
@@ -207,12 +220,20 @@ export default function UnifiedMediaLibrary() {
         progress: 0,
       }))
 
+      // Set the flag to process the queue
+      pendingQueueRef.current = true
+
+      // Add files to the queue
       setUploadQueue((prev) => [...prev, ...newUploads])
+
+      // Show the upload dialog
       setIsUploadDialogOpen(true)
 
-      // Automatically start processing the queue
+      // Force start the upload process immediately
       setTimeout(() => {
-        processBulkUpload()
+        if (!isProcessingQueue) {
+          processBulkUpload()
+        }
       }, 100)
     }
   }
@@ -258,6 +279,7 @@ export default function UnifiedMediaLibrary() {
   const processBulkUpload = async () => {
     if (isProcessingQueue || uploadQueue.length === 0) return
 
+    console.log("Starting bulk upload process")
     setIsProcessingQueue(true)
 
     // Process files in parallel with a limit (3 at a time)
@@ -357,6 +379,8 @@ export default function UnifiedMediaLibrary() {
       description: `${successful} files uploaded successfully${converted > 0 ? ` (${converted} converted to WebP)` : ""}, ${failed} files failed, ${pending} files pending`,
       variant: successful > 0 ? "default" : "destructive",
     })
+
+    console.log("Bulk upload process completed")
   }
 
   const clearUploadQueue = () => {
