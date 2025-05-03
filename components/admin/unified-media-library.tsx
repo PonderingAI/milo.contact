@@ -28,6 +28,16 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return "0 Bytes"
+
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
 interface MediaItem {
   id: string
   filename: string
@@ -573,6 +583,10 @@ export default function UnifiedMediaLibrary() {
     return matchesSearch && matchesTags && matchesType
   })
 
+  const calculateTotalStorage = (): number => {
+    return mediaItems.reduce((total, item) => total + (item.filesize || 0), 0)
+  }
+
   const renderMediaItem = (item: MediaItem) => {
     const isVimeo = item.filetype === "vimeo"
     const isImage = item.filetype === "image"
@@ -600,8 +614,16 @@ export default function UnifiedMediaLibrary() {
           <p className="text-sm truncate" title={item.filename}>
             {item.filename}
           </p>
-          <p className="text-xs text-gray-500">
-            {isVimeo ? "External Video" : `${(item.filesize / 1024).toFixed(2)} KB`}
+          <p className="text-xs text-gray-500 flex items-center">
+            {isVimeo ? (
+              "External Video"
+            ) : (
+              <>
+                <span className="bg-gray-800 text-blue-400 px-1.5 py-0.5 rounded mr-1 font-medium">
+                  {formatFileSize(item.filesize)}
+                </span>
+              </>
+            )}
           </p>
 
           {item.tags && item.tags.length > 0 && (
@@ -783,27 +805,57 @@ export default function UnifiedMediaLibrary() {
         </TabsList>
 
         <TabsContent value="all" className="mt-6">
-          <h2 className="text-xl mb-4">All Media ({filteredMedia.length})</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl">All Media ({filteredMedia.length})</h2>
+            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
+              Total Storage:{" "}
+              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
+            </div>
+          </div>
           {renderMediaGrid()}
         </TabsContent>
 
         <TabsContent value="image" className="mt-6">
-          <h2 className="text-xl mb-4">Images ({filteredMedia.length})</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl">Images ({filteredMedia.length})</h2>
+            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
+              Total Storage:{" "}
+              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
+            </div>
+          </div>
           {renderMediaGrid()}
         </TabsContent>
 
         <TabsContent value="video" className="mt-6">
-          <h2 className="text-xl mb-4">Videos ({filteredMedia.length})</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl">Videos ({filteredMedia.length})</h2>
+            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
+              Total Storage:{" "}
+              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
+            </div>
+          </div>
           {renderMediaGrid()}
         </TabsContent>
 
         <TabsContent value="vimeo" className="mt-6">
-          <h2 className="text-xl mb-4">Vimeo Videos ({filteredMedia.length})</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl">Vimeo Videos ({filteredMedia.length})</h2>
+            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
+              Total Storage:{" "}
+              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
+            </div>
+          </div>
           {renderMediaGrid()}
         </TabsContent>
 
         <TabsContent value="other" className="mt-6">
-          <h2 className="text-xl mb-4">Other Files ({filteredMedia.length})</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl">Other Files ({filteredMedia.length})</h2>
+            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
+              Total Storage:{" "}
+              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
+            </div>
+          </div>
           {renderMediaGrid()}
         </TabsContent>
       </Tabs>
