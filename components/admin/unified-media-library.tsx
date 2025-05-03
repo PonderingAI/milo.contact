@@ -2,272 +2,289 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback } from "react"
-import Image from "next/image"
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { useEffect, useState, useRef, useCallback } from "react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import {
-  Copy,
-  Trash2,
-  Search,
-  Filter,
-  CheckCircle,
-  Link,
-  ImageIcon,
-  RefreshCw,
-  UploadCloud,
-  Loader2,
-  AlertCircle,
-} from "lucide-react"
-import { toast } from "@/components/ui/use-toast"
-import { extractVideoInfo } from "@/lib/project-data"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Progress } from "@/components/ui/progress"
+import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Loader2, Upload, Trash2, ImageIcon, Film, Link, Check, AlertCircle } from "lucide-react"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { formatFileSize, extractVideoInfo } from "@/lib/utils"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Progress } from "@/components/ui/progress"
+import { toast } from "@/components/ui/use-toast"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
-const formatFileSize = (bytes: number): string => {
-  if (bytes === 0) return "0 Bytes"
-
-  const k = 1024
-  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-
-  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
-}
-
-interface MediaItem {
+type MediaItem = {
   id: string
-  filename: string
-  filepath: string
-  filesize: number
-  filetype: string
-  public_url: string
-  thumbnail_url: string | null
-  tags: string[]
-  metadata: Record<string, any>
-  usage_locations: Record<string, any>
+  name: string
+  type: string
+  url: string
+  thumbnail_url?: string
   created_at: string
+  size?: number
+  video_platform?: "vimeo" | "youtube" | "linkedin"
 }
 
-interface UploadStatus {
+type UploadQueueItem = {
+  id: string
   file: File
-  status: "pending" | "uploading" | "success" | "error"
   progress: number
+  status: "pending" | "uploading" | "success" | "error"
   error?: string
-  response?: any
+}
+
+type VideoProcessResult = {
+  success: boolean
+  platform: "vimeo" | "youtube" | "linkedin" | null
+  videoId: string | null
+  error?: string
 }
 
 export default function UnifiedMediaLibrary() {
-  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [setupInProgress, setSetupInProgress] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
-  const [allTags, setAllTags] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState("all")
-  const [uploadingFile, setUploadingFile] = useState(false)
-  const [uploadingVimeo, setUploadingVimeo] = useState(false)
-  const [vimeoUrls, setVimeoUrls] = useState("")
-  const [copiedUrl, setCopiedUrl] = useState<string | null>(null)
-  const [selectedImage, setSelectedImage] = useState<MediaItem | null>(null)
-  const [isAdmin, setIsAdmin] = useState(true) // Default to true to avoid flickering
-  const [uploadQueue, setUploadQueue] = useState<UploadStatus[]>([])
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [videoUrl, setVideoUrl] = useState("")
+  const [videoTitle, setVideoTitle] = useState("")
+  const [videoDescription, setVideoDescription] = useState("")
+  const [isProcessingVideo, setIsProcessingVideo] = useState(false)
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
-  const [isProcessingQueue, setIsProcessingQueue] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const folderInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
-  const supabase = getSupabaseBrowserClient()
+  const [storageUsage, setStorageUsage] = useState({
+    images: 0,
+    videos: 0,
+    total: 0,
+  })
 
-  // Reference to track if we need to process the queue
-  const pendingQueueRef = useRef(false)
-
-  useEffect(() => {
-    fetchMedia()
-  }, [])
-
-  // Effect to monitor the upload queue and start processing when needed
-  useEffect(() => {
-    const pendingUploads = uploadQueue.filter((item) => item.status === "pending").length
-
-    if (pendingUploads > 0 && !isProcessingQueue && pendingQueueRef.current) {
-      pendingQueueRef.current = false
-      processBulkUpload()
-    }
-  }, [uploadQueue, isProcessingQueue])
-
-  const setupDatabase = async () => {
-    setSetupInProgress(true)
-    setError(null)
-
+  // Load media items from Supabase
+  const loadMediaItems = useCallback(async () => {
     try {
-      // First try the comprehensive setup
-      const setupResponse = await fetch("/api/setup-all")
-
-      if (!setupResponse.ok) {
-        // If that fails, try the specific media table setup
-        const mediaSetupResponse = await fetch("/api/setup-media-table")
-
-        if (!mediaSetupResponse.ok) {
-          throw new Error("Failed to set up media table")
-        }
-      }
-
-      toast({
-        title: "Setup complete",
-        description: "Database tables have been created successfully",
-      })
-
-      // Refresh media after setup
-      fetchMedia()
-    } catch (error) {
-      console.error("Setup error:", error)
-      setError("Failed to set up database. Please check console for details.")
-      toast({
-        title: "Setup failed",
-        description: "Could not set up database tables",
-        variant: "destructive",
-      })
-    } finally {
-      setSetupInProgress(false)
-    }
-  }
-
-  const fetchMedia = async () => {
-    setLoading(true)
-    setError(null)
-
-    try {
+      setIsLoading(true)
+      const supabase = getSupabaseBrowserClient()
       const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
 
       if (error) {
-        if (error.code === "42P01") {
-          setError("Media table does not exist. Please set up the database.")
-          return
-        }
-        throw error
+        console.error("Error loading media items:", error)
+        return
       }
 
       setMediaItems(data || [])
 
-      // Extract all unique tags
-      const tags = new Set<string>()
+      // Calculate storage usage
+      let imagesSize = 0
+      let videosSize = 0
+
       data?.forEach((item) => {
-        if (item.tags) {
-          item.tags.forEach((tag: string) => tags.add(tag))
+        if (item.type.startsWith("image/")) {
+          imagesSize += item.size || 0
+        } else if (item.type === "video/vimeo" || item.type === "video/youtube" || item.type === "video/linkedin") {
+          videosSize += item.size || 0
         }
       })
 
-      setAllTags(Array.from(tags))
-    } catch (error) {
-      console.error("Error fetching media:", error)
-      setError("Failed to load media library. Please check console for details.")
-      toast({
-        title: "Error",
-        description: "Failed to load media library",
-        variant: "destructive",
+      setStorageUsage({
+        images: imagesSize,
+        videos: videosSize,
+        total: imagesSize + videosSize,
       })
+    } catch (error) {
+      console.error("Error in loadMediaItems:", error)
     } finally {
-      setLoading(false)
+      setIsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    loadMediaItems()
+  }, [loadMediaItems])
+
+  // Handle file selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      const newFiles = Array.from(e.target.files)
+      addFilesToQueue(newFiles)
     }
   }
 
-  const handleFileUpload = async (files: File[]) => {
-    if (files.length === 0) return
+  // Add files to upload queue
+  const addFilesToQueue = (files: File[]) => {
+    const newQueueItems = files.map((file) => ({
+      id: Math.random().toString(36).substring(2, 11),
+      file,
+      progress: 0,
+      status: "pending" as const,
+    }))
 
-    if (files.length === 1) {
-      // Single file upload
-      const file = files[0]
-      setUploadingFile(true)
+    setUploadQueue((prevQueue) => [...prevQueue, ...newQueueItems])
+    setIsUploadDialogOpen(true)
 
-      try {
-        // Create a FormData object
-        const formData = new FormData()
-        formData.append("file", file)
+    // Start upload automatically
+    setTimeout(() => {
+      processQueue([...uploadQueue, ...newQueueItems])
+    }, 100)
+  }
 
-        // Upload the file directly
-        const response = await fetch("/api/bulk-upload", {
-          method: "POST",
-          body: formData,
-        })
+  // Process upload queue
+  const processQueue = async (queue: UploadQueueItem[]) => {
+    if (queue.length === 0 || isUploading) return
 
-        const result = await response.json()
+    setIsUploading(true)
 
-        if (!response.ok) {
-          throw new Error(result.error || "Failed to upload file")
-        }
+    // Find the next pending item
+    const pendingItems = queue.filter((item) => item.status === "pending")
+    if (pendingItems.length === 0) {
+      setIsUploading(false)
+      return
+    }
 
-        if (result.success) {
-          toast({
-            title: "Success",
-            description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
+    // Process all pending items in parallel with a limit
+    const MAX_CONCURRENT = 3
+    const itemsToProcess = pendingItems.slice(0, MAX_CONCURRENT)
+
+    await Promise.all(
+      itemsToProcess.map(async (item) => {
+        try {
+          // Update status to uploading
+          setUploadQueue((prevQueue) =>
+            prevQueue.map((qItem) => (qItem.id === item.id ? { ...qItem, status: "uploading", progress: 0 } : qItem)),
+          )
+
+          // Create form data
+          const formData = new FormData()
+          formData.append("file", item.file)
+
+          // Upload file with progress tracking
+          const xhr = new XMLHttpRequest()
+
+          // Create a promise that resolves when the upload is complete
+          const uploadPromise = new Promise<void>((resolve, reject) => {
+            xhr.upload.addEventListener("progress", (event) => {
+              if (event.lengthComputable) {
+                const progress = Math.round((event.loaded / event.total) * 100)
+                setUploadQueue((prevQueue) =>
+                  prevQueue.map((qItem) => (qItem.id === item.id ? { ...qItem, progress } : qItem)),
+                )
+              }
+            })
+
+            xhr.addEventListener("load", () => {
+              if (xhr.status >= 200 && xhr.status < 300) {
+                const response = JSON.parse(xhr.responseText)
+                setUploadQueue((prevQueue) =>
+                  prevQueue.map((qItem) =>
+                    qItem.id === item.id ? { ...qItem, status: "success", progress: 100 } : qItem,
+                  ),
+                )
+                resolve()
+              } else {
+                setUploadQueue((prevQueue) =>
+                  prevQueue.map((qItem) =>
+                    qItem.id === item.id
+                      ? { ...qItem, status: "error", error: `Upload failed: ${xhr.statusText}` }
+                      : qItem,
+                  ),
+                )
+                reject(new Error(`Upload failed: ${xhr.statusText}`))
+              }
+            })
+
+            xhr.addEventListener("error", () => {
+              setUploadQueue((prevQueue) =>
+                prevQueue.map((qItem) =>
+                  qItem.id === item.id ? { ...qItem, status: "error", error: "Network error during upload" } : qItem,
+                ),
+              )
+              reject(new Error("Network error during upload"))
+            })
+
+            xhr.addEventListener("abort", () => {
+              setUploadQueue((prevQueue) =>
+                prevQueue.map((qItem) =>
+                  qItem.id === item.id ? { ...qItem, status: "error", error: "Upload aborted" } : qItem,
+                ),
+              )
+              reject(new Error("Upload aborted"))
+            })
           })
 
-          // Refresh the media list
-          fetchMedia()
-        } else {
-          throw new Error(result.error || "Unknown error during upload")
+          // Start the upload
+          xhr.open("POST", "/api/bulk-upload")
+          xhr.send(formData)
+
+          // Wait for the upload to complete
+          await uploadPromise
+        } catch (error) {
+          console.error(`Error uploading ${item.file.name}:`, error)
+          setUploadQueue((prevQueue) =>
+            prevQueue.map((qItem) =>
+              qItem.id === item.id
+                ? { ...qItem, status: "error", error: error instanceof Error ? error.message : "Unknown error" }
+                : qItem,
+            ),
+          )
         }
-      } catch (error) {
-        console.error("Error uploading file:", error)
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to upload file",
-          variant: "destructive",
-        })
-      } finally {
-        setUploadingFile(false)
-      }
+      }),
+    )
+
+    // Check if there are more items to process
+    const updatedQueue = [...queue]
+    const remainingPendingItems = updatedQueue.filter((item) => item.status === "pending")
+
+    if (remainingPendingItems.length > 0) {
+      // Process next batch
+      processQueue(updatedQueue)
     } else {
-      // Multiple files upload
-      const newUploads: UploadStatus[] = Array.from(files).map((file) => ({
-        file,
-        status: "pending",
-        progress: 0,
-      }))
+      setIsUploading(false)
 
-      // Set the flag to process the queue
-      pendingQueueRef.current = true
+      // Count successful uploads and WebP conversions
+      const successCount = updatedQueue.filter((item) => item.status === "success").length
+      const imageCount = updatedQueue.filter(
+        (item) => item.status === "success" && item.file.type.startsWith("image/"),
+      ).length
 
-      // Add files to the queue
-      setUploadQueue((prev) => [...prev, ...newUploads])
+      if (successCount > 0) {
+        toast({
+          title: "Upload Complete",
+          description: `Successfully uploaded ${successCount} file${successCount !== 1 ? "s" : ""}${imageCount > 0 ? ` (${imageCount} image${imageCount !== 1 ? "s" : ""} converted to WebP)` : ""}`,
+        })
 
-      // Show the upload dialog
-      setIsUploadDialogOpen(true)
-
-      // Force start the upload process immediately
-      setTimeout(() => {
-        if (!isProcessingQueue) {
-          processBulkUpload()
-        }
-      }, 100)
+        // Reload media items
+        loadMediaItems()
+      }
     }
   }
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files || files.length === 0) return
-
-    handleFileUpload(Array.from(files))
-
-    // Reset the input
-    e.target.value = ""
-  }
-
+  // Handle drag and drop
   const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(true)
-  }
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    setIsDragging(false)
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -275,845 +292,715 @@ export default function UnifiedMediaLibrary() {
     e.stopPropagation()
   }
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    // Only set isDragging to false if we're leaving the drop area
+    if (dropAreaRef.current && !dropAreaRef.current.contains(e.relatedTarget as Node)) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
 
-    const files = e.dataTransfer.files
-    if (files && files.length > 0) {
-      handleFileUpload(Array.from(files))
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const files = Array.from(e.dataTransfer.files)
+      addFilesToQueue(files)
     }
-  }, [])
-
-  const processBulkUpload = async () => {
-    if (isProcessingQueue || uploadQueue.length === 0) return
-
-    console.log("Starting bulk upload process")
-    setIsProcessingQueue(true)
-
-    // Process files in parallel with a limit (3 at a time)
-    const batchSize = 3
-    const pendingUploads = uploadQueue.filter((item) => item.status === "pending")
-
-    for (let i = 0; i < pendingUploads.length; i += batchSize) {
-      const batch = pendingUploads.slice(i, i + batchSize)
-
-      // Process batch in parallel
-      await Promise.all(
-        batch.map(async (item) => {
-          // Find the index in the original queue
-          const queueIndex = uploadQueue.findIndex(
-            (queueItem) => queueItem.file.name === item.file.name && queueItem.status === "pending",
-          )
-
-          if (queueIndex === -1) return // Skip if not found
-
-          // Update status to uploading
-          setUploadQueue((prev) => {
-            const updated = [...prev]
-            updated[queueIndex] = { ...updated[queueIndex], status: "uploading", progress: 10 }
-            return updated
-          })
-
-          try {
-            // Create a FormData object
-            const formData = new FormData()
-            formData.append("file", item.file)
-
-            // Update progress to 30%
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = { ...updated[queueIndex], progress: 30 }
-              return updated
-            })
-
-            const response = await fetch("/api/bulk-upload", {
-              method: "POST",
-              body: formData,
-            })
-
-            // Update progress to 80%
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = { ...updated[queueIndex], progress: 80 }
-              return updated
-            })
-
-            const result = await response.json()
-
-            if (!response.ok) {
-              throw new Error(result.error || "Upload failed")
-            }
-
-            // Success
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = {
-                ...updated[queueIndex],
-                status: "success",
-                progress: 100,
-                response: result,
-              }
-              return updated
-            })
-          } catch (error) {
-            // Exception
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = {
-                ...updated[queueIndex],
-                status: "error",
-                progress: 100,
-                error: error instanceof Error ? error.message : "Unknown error",
-              }
-              return updated
-            })
-          }
-        }),
-      )
-    }
-
-    // Refresh media list after all uploads
-    fetchMedia()
-    setIsProcessingQueue(false)
-
-    // Count results
-    const successful = uploadQueue.filter((item) => item.status === "success").length
-    const converted = uploadQueue.filter((item) => item.status === "success" && item.response?.convertedToWebP).length
-    const failed = uploadQueue.filter((item) => item.status === "error").length
-    const pending = uploadQueue.filter((item) => item.status === "pending").length
-
-    toast({
-      title: "Bulk upload progress",
-      description: `${successful} files uploaded successfully${converted > 0 ? ` (${converted} converted to WebP)` : ""}, ${failed} files failed, ${pending} files pending`,
-      variant: successful > 0 ? "default" : "destructive",
-    })
-
-    console.log("Bulk upload process completed")
   }
 
-  const clearUploadQueue = () => {
-    // Only clear completed uploads
-    setUploadQueue((prev) => prev.filter((item) => item.status === "pending" || item.status === "uploading"))
-  }
+  // Process video URL
+  const processVideoUrl = async () => {
+    if (!videoUrl.trim()) return
 
-  const resetUploadQueue = () => {
-    if (isProcessingQueue) {
-      toast({
-        title: "Upload in progress",
-        description: "Please wait for the current upload to complete",
-        variant: "destructive",
-      })
-      return
-    }
-    setUploadQueue([])
-  }
-
-  const [videoUrls, setVideoUrls] = useState("")
-  const [uploadingVideo, setUploadingVideo] = useState(false)
-
-  const handleVideoAdd = async () => {
-    // Validate input
-    if (!videoUrls.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter at least one video URL",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setUploadingVideo(true)
-    let successCount = 0
-    let failCount = 0
-    const results = { vimeo: 0, youtube: 0, linkedin: 0 }
+    setIsProcessingVideo(true)
 
     try {
-      // Extract potential video URLs
-      // Vimeo regex
-      const vimeoRegex =
-        /(?:https?:)?\/\/(?:www\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:[a-zA-Z0-9_-]+)?/gi
-      // YouTube regex
-      const youtubeRegex =
-        /(?:https?:)?\/\/(?:www\.)?(?:youtube\.com\/(?:[^/\n\s]+\/\S+\/|(?:v|e(?:mbed)?)\/|\S*?[?&]v=)|youtu\.be\/)([a-zA-Z0-9_-]{11})/gi
-      // LinkedIn regex
-      const linkedinRegex =
-        /(?:https?:)?\/\/(?:www\.)?linkedin\.com\/(?:posts|feed\/update)\/(?:urn:li:activity:)?(\d+)/gi
+      // Split the input by common delimiters to handle multiple URLs
+      const urls = videoUrl.split(/[\n\s,;]+/).filter((url) => url.trim().length > 0)
 
-      // Find all matches
-      const vimeoMatches = videoUrls.match(vimeoRegex) || []
-      const youtubeMatches = videoUrls.match(youtubeRegex) || []
-      const linkedinMatches = videoUrls.match(linkedinRegex) || []
-
-      const allMatches = [...vimeoMatches, ...youtubeMatches, ...linkedinMatches]
-
-      if (allMatches.length === 0) {
+      if (urls.length === 0) {
         toast({
-          title: "No valid video URLs found",
-          description: "Please check your input and try again. Supported platforms: Vimeo, YouTube, LinkedIn",
+          title: "No valid URLs found",
+          description: "Please enter at least one valid video URL",
+          variant: "destructive",
+        })
+        setIsProcessingVideo(false)
+        return
+      }
+
+      const results: VideoProcessResult[] = []
+
+      // Process each URL
+      for (const url of urls) {
+        const { platform, videoId } = extractVideoInfo(url.trim())
+
+        if (!platform || !videoId) {
+          results.push({
+            success: false,
+            platform: null,
+            videoId: null,
+            error: `Could not extract video information from: ${url}`,
+          })
+          continue
+        }
+
+        // Get video information based on platform
+        let thumbnailUrl = ""
+        let videoType = ""
+
+        if (platform === "vimeo") {
+          // Get Vimeo video information
+          const response = await fetch(`https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`)
+
+          if (!response.ok) {
+            results.push({
+              success: false,
+              platform,
+              videoId,
+              error: `Failed to fetch Vimeo video information: ${response.statusText}`,
+            })
+            continue
+          }
+
+          const data = await response.json()
+          thumbnailUrl = data.thumbnail_url
+          videoType = "video/vimeo"
+        } else if (platform === "youtube") {
+          // Use YouTube thumbnail URL format
+          thumbnailUrl = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+          videoType = "video/youtube"
+        } else if (platform === "linkedin") {
+          // LinkedIn doesn't provide easy thumbnail access, use a generic video thumbnail
+          thumbnailUrl = "/generic-icon.png"
+          videoType = "video/linkedin"
+        }
+
+        // Save to database
+        const supabase = getSupabaseBrowserClient()
+
+        const { data, error } = await supabase
+          .from("media")
+          .insert([
+            {
+              name: videoTitle || `${platform.charAt(0).toUpperCase() + platform.slice(1)} Video ${videoId}`,
+              type: videoType,
+              url: url.trim(),
+              thumbnail_url: thumbnailUrl,
+              description: videoDescription || "",
+              size: 0, // Video links don't consume storage
+              video_platform: platform,
+            },
+          ])
+          .select()
+
+        if (error) {
+          results.push({
+            success: false,
+            platform,
+            videoId,
+            error: `Database error: ${error.message}`,
+          })
+        } else {
+          results.push({
+            success: true,
+            platform,
+            videoId,
+          })
+        }
+      }
+
+      // Summarize results
+      const successful = results.filter((r) => r.success)
+      const failed = results.filter((r) => !r.success)
+
+      // Group successful results by platform
+      const vimeoCount = successful.filter((r) => r.platform === "vimeo").length
+      const youtubeCount = successful.filter((r) => r.platform === "youtube").length
+      const linkedinCount = successful.filter((r) => r.platform === "linkedin").length
+
+      let successMessage = ""
+      if (vimeoCount > 0) successMessage += `${vimeoCount} Vimeo video${vimeoCount !== 1 ? "s" : ""}`
+      if (youtubeCount > 0) {
+        if (successMessage) successMessage += ", "
+        successMessage += `${youtubeCount} YouTube video${youtubeCount !== 1 ? "s" : ""}`
+      }
+      if (linkedinCount > 0) {
+        if (successMessage) successMessage += ", "
+        successMessage += `${linkedinCount} LinkedIn video${linkedinCount !== 1 ? "s" : ""}`
+      }
+
+      if (successful.length > 0) {
+        toast({
+          title: "Videos Added Successfully",
+          description: `Added ${successMessage} to your media library`,
+        })
+
+        // Clear form
+        setVideoUrl("")
+        setVideoTitle("")
+        setVideoDescription("")
+
+        // Reload media items
+        loadMediaItems()
+      }
+
+      if (failed.length > 0) {
+        toast({
+          title: `${failed.length} video${failed.length !== 1 ? "s" : ""} failed to add`,
+          description: failed.map((f) => f.error).join("\n"),
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error processing video URL:", error)
+      toast({
+        title: "Error Adding Video",
+        description: error instanceof Error ? error.message : "An unknown error occurred",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingVideo(false)
+    }
+  }
+
+  // Delete media item
+  const deleteMediaItem = async (id: string) => {
+    try {
+      const supabase = getSupabaseBrowserClient()
+      const { error } = await supabase.from("media").delete().eq("id", id)
+
+      if (error) {
+        console.error("Error deleting media item:", error)
+        toast({
+          title: "Error",
+          description: `Failed to delete media item: ${error.message}`,
           variant: "destructive",
         })
         return
       }
 
-      // Process each video URL
-      for (const url of allMatches) {
-        try {
-          let videoInfo
-          let videoType
-          let thumbnailUrl
-          let videoTitle
-          let videoMetadata = {}
-
-          // Determine video type and extract info
-          if (url.includes("vimeo.com")) {
-            videoType = "vimeo"
-            videoInfo = extractVideoInfo(url)
-
-            if (!videoInfo || videoInfo.platform !== "vimeo") {
-              throw new Error("Invalid Vimeo URL")
-            }
-
-            // Get video thumbnail and metadata
-            const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-
-            if (!response.ok) {
-              throw new Error("Failed to fetch Vimeo video info")
-            }
-
-            const videoData = await response.json()
-            const video = videoData[0]
-
-            thumbnailUrl = video.thumbnail_large
-            videoTitle = video.title || `Vimeo ${videoInfo.id}`
-            videoMetadata = {
-              vimeoId: videoInfo.id,
-              description: video.description,
-              duration: video.duration,
-              uploadDate: video.upload_date,
-            }
-
-            results.vimeo++
-          } else if (url.includes("youtube.com") || url.includes("youtu.be")) {
-            videoType = "youtube"
-            // Extract YouTube video ID
-            const match = url.match(youtubeRegex)
-            const videoId = match ? match[0].match(/([a-zA-Z0-9_-]{11})/) : null
-
-            if (!videoId || !videoId[1]) {
-              throw new Error("Invalid YouTube URL")
-            }
-
-            thumbnailUrl = `https://img.youtube.com/vi/${videoId[1]}/hqdefault.jpg`
-            videoTitle = `YouTube ${videoId[1]}`
-            videoMetadata = {
-              youtubeId: videoId[1],
-            }
-
-            results.youtube++
-          } else if (url.includes("linkedin.com")) {
-            videoType = "linkedin"
-            // Extract LinkedIn post ID
-            const match = url.match(linkedinRegex)
-            const postId = match ? match[0].match(/(\d+)/) : null
-
-            if (!postId || !postId[1]) {
-              throw new Error("Invalid LinkedIn URL")
-            }
-
-            // LinkedIn doesn't provide easy thumbnail access, use a placeholder
-            thumbnailUrl = null
-            videoTitle = `LinkedIn Post ${postId[1]}`
-            videoMetadata = {
-              linkedinId: postId[1],
-            }
-
-            results.linkedin++
-          } else {
-            throw new Error("Unsupported video platform")
-          }
-
-          // Get current user session
-          const {
-            data: { session },
-          } = await supabase.auth.getSession()
-          const userId = session?.user?.id || "anonymous"
-
-          // Add user ID to metadata
-          videoMetadata.uploadedBy = userId
-
-          // Save to media table
-          const { error: dbError } = await supabase.from("media").insert({
-            filename: videoTitle,
-            filepath: url,
-            filesize: 0, // Not applicable for external videos
-            filetype: videoType,
-            public_url: url,
-            thumbnail_url: thumbnailUrl,
-            tags: ["video", videoType],
-            metadata: videoMetadata,
-          })
-
-          if (dbError) throw dbError
-          successCount++
-        } catch (err) {
-          console.error("Error processing video URL:", url, err)
-          failCount++
-        }
-      }
-
-      // Show summary toast
-      let successMessage = `${successCount} videos added successfully`
-      if (results.vimeo > 0 || results.youtube > 0 || results.linkedin > 0) {
-        successMessage += ` (${results.vimeo} Vimeo, ${results.youtube} YouTube, ${results.linkedin} LinkedIn)`
-      }
-
-      toast({
-        title: successCount > 0 ? "Success" : "Error",
-        description: `${successMessage}${failCount > 0 ? `, ${failCount} failed` : ""}`,
-        variant: successCount > 0 ? "default" : "destructive",
-      })
-
-      // Reset form if any successful and refresh
-      if (successCount > 0) {
-        setVideoUrls("")
-        fetchMedia()
-      }
-    } catch (error) {
-      console.error("Error adding videos:", error)
-      toast({
-        title: "Error",
-        description: "Failed to add videos",
-        variant: "destructive",
-      })
-    } finally {
-      setUploadingVideo(false)
-    }
-  }
-
-  const handleCopyUrl = (url: string) => {
-    navigator.clipboard.writeText(url)
-    setCopiedUrl(url)
-    setTimeout(() => setCopiedUrl(null), 2000)
-
-    toast({
-      title: "URL copied",
-      description: "Media URL copied to clipboard",
-    })
-  }
-
-  const handleDeleteMedia = async (id: string, filepath: string) => {
-    if (!confirm("Are you sure you want to delete this media item?")) return
-
-    try {
-      // Delete from storage if it's not an external URL
-      if (!filepath.startsWith("http")) {
-        const { error: storageError } = await supabase.storage.from("media").remove([filepath])
-
-        if (storageError) throw storageError
-      }
-
-      // Delete from database
-      const { error: dbError } = await supabase.from("media").delete().eq("id", id)
-
-      if (dbError) throw dbError
-
       toast({
         title: "Success",
-        description: "Media deleted successfully",
+        description: "Media item deleted successfully",
       })
 
-      // Update state
-      setMediaItems(mediaItems.filter((item) => item.id !== id))
+      // Reload media items
+      loadMediaItems()
     } catch (error) {
-      console.error("Error deleting media:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete media",
-        variant: "destructive",
-      })
+      console.error("Error in deleteMediaItem:", error)
+    } finally {
+      setDeleteItemId(null)
     }
   }
 
-  const handleTagClick = (tag: string) => {
-    if (selectedTags.includes(tag)) {
-      setSelectedTags(selectedTags.filter((t) => t !== tag))
-    } else {
-      setSelectedTags([...selectedTags, tag])
-    }
-  }
-
-  const filteredMedia = mediaItems.filter((item) => {
-    // Filter by search term
-    const matchesSearch =
-      item.filename.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.metadata && JSON.stringify(item.metadata).toLowerCase().includes(searchTerm.toLowerCase()))
-
-    // Filter by selected tags
-    const matchesTags = selectedTags.length === 0 || selectedTags.every((tag) => item.tags && item.tags.includes(tag))
-
-    // Filter by type (tab)
-    const matchesType =
-      activeTab === "all" ||
-      item.filetype === activeTab ||
-      (activeTab === "video" && ["vimeo", "youtube", "linkedin"].includes(item.filetype))
-
-    return matchesSearch && matchesTags && matchesType
+  // Filter media items based on active tab
+  const filteredMediaItems = mediaItems.filter((item) => {
+    if (activeTab === "all") return true
+    if (activeTab === "images") return item.type.startsWith("image/")
+    if (activeTab === "videos")
+      return item.type === "video/vimeo" || item.type === "video/youtube" || item.type === "video/linkedin"
+    if (activeTab === "vimeo") return item.type === "video/vimeo"
+    if (activeTab === "youtube") return item.type === "video/youtube"
+    if (activeTab === "linkedin") return item.type === "video/linkedin"
+    return true
   })
 
-  const calculateTotalStorage = (): number => {
-    return mediaItems.reduce((total, item) => total + (item.filesize || 0), 0)
-  }
+  return (
+    <div className="container mx-auto py-6">
+      <h1 className="text-3xl font-bold mb-6">Media Library</h1>
 
-  const renderMediaItem = (item: MediaItem) => {
-    const isVimeo = item.filetype === "vimeo"
-    const isImage = item.filetype === "image"
+      <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+        <div className="flex justify-between items-center mb-4">
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="images">Images</TabsTrigger>
+            <TabsTrigger value="videos">Videos</TabsTrigger>
+            <TabsTrigger value="vimeo">Vimeo</TabsTrigger>
+            <TabsTrigger value="youtube">YouTube</TabsTrigger>
+            <TabsTrigger value="linkedin">LinkedIn</TabsTrigger>
+          </TabsList>
 
-    return (
-      <div key={item.id} className="bg-gray-900 rounded-lg overflow-hidden">
-        <div className="relative h-40 cursor-pointer" onClick={() => (isImage ? setSelectedImage(item) : null)}>
-          {item.thumbnail_url ? (
-            <Image src={item.thumbnail_url || "/placeholder.svg"} alt={item.filename} fill className="object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-gray-800">
-              <span className="text-gray-400">{item.filetype}</span>
-            </div>
-          )}
-          {item.filetype === "vimeo" && (
-            <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs px-2 py-1 rounded">Vimeo</div>
-          )}
-          {item.filetype === "youtube" && (
-            <div className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-1 rounded">YouTube</div>
-          )}
-          {item.filetype === "linkedin" && (
-            <div className="absolute top-2 right-2 bg-blue-800 text-white text-xs px-2 py-1 rounded">LinkedIn</div>
-          )}
-          {isImage && (
-            <div className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center">
-              <ImageIcon size={12} className="mr-1" /> Click to preview
-            </div>
-          )}
-        </div>
-        <div className="p-3">
-          <p className="text-sm truncate" title={item.filename}>
-            {item.filename}
-          </p>
-          <p className="text-xs text-gray-500 flex items-center">
-            {isVimeo ? (
-              "External Video"
-            ) : (
-              <>
-                <span className="bg-gray-800 text-blue-400 px-1.5 py-0.5 rounded mr-1 font-medium">
-                  {formatFileSize(item.filesize)}
-                </span>
-              </>
-            )}
-          </p>
-
-          {item.tags && item.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-2">
-              {item.tags.map((tag) => (
-                <span key={tag} className="text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded">
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
-
-          <div className="flex justify-between items-center mt-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1 text-xs"
-              onClick={() => handleCopyUrl(item.public_url)}
-            >
-              {copiedUrl === item.public_url ? (
-                <>
-                  <CheckCircle className="h-3 w-3 text-green-500" />
-                  Copied
-                </>
-              ) : (
-                <>
-                  <Link className="h-3 w-3" />
-                  Copy URL
-                </>
-              )}
-            </Button>
-
-            <Button variant="ghost" size="icon" onClick={() => handleDeleteMedia(item.id, item.filepath)}>
-              <Trash2 className="h-4 w-4 text-red-500" />
-              <span className="sr-only">Delete</span>
-            </Button>
+          <div className="text-sm text-muted-foreground">
+            {activeTab === "all" && `Total storage: ${formatFileSize(storageUsage.total)}`}
+            {activeTab === "images" && `Images storage: ${formatFileSize(storageUsage.images)}`}
+            {(activeTab === "videos" || activeTab === "vimeo" || activeTab === "youtube" || activeTab === "linkedin") &&
+              `Videos storage: ${formatFileSize(storageUsage.videos)}`}
           </div>
         </div>
-      </div>
-    )
-  }
 
-  return (
-    <div>
-      <h1 className="text-3xl font-serif mb-8">Media Library</h1>
+        <TabsContent value="all" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isLoading ? (
+              <div className="col-span-full flex justify-center items-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : filteredMediaItems.length > 0 ? (
+              filteredMediaItems.map((item) => (
+                <Card key={item.id} className="overflow-hidden">
+                  <div className="aspect-video relative bg-muted">
+                    {item.thumbnail_url ? (
+                      <img
+                        src={item.thumbnail_url || "/placeholder.svg"}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        {item.type.startsWith("image/") ? (
+                          <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                        ) : (
+                          <Film className="h-12 w-12 text-muted-foreground" />
+                        )}
+                      </div>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8"
+                      onClick={() => setDeleteItemId(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                    {item.video_platform && (
+                      <Badge
+                        className={`absolute top-2 left-2 ${
+                          item.video_platform === "vimeo"
+                            ? "bg-blue-500"
+                            : item.video_platform === "youtube"
+                              ? "bg-red-500"
+                              : "bg-blue-800"
+                        }`}
+                      >
+                        {item.video_platform.charAt(0).toUpperCase() + item.video_platform.slice(1)}
+                      </Badge>
+                    )}
+                  </div>
+                  <CardContent className="p-4">
+                    <h3 className="font-medium truncate" title={item.name}>
+                      {item.name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {new Date(item.created_at).toLocaleDateString()}
+                      {item.size !== undefined && ` • ${formatFileSize(item.size)}`}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="p-4 pt-0 flex justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        navigator.clipboard.writeText(item.url)
+                        toast({
+                          title: "URL Copied",
+                          description: "Media URL copied to clipboard",
+                        })
+                      }}
+                    >
+                      Copy URL
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                No media items found. Upload some files or add video links to get started.
+              </div>
+            )}
+          </div>
+        </TabsContent>
 
-      {error && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertTitle>Error</AlertTitle>
-          <AlertDescription className="flex flex-col gap-4">
-            <p>{error}</p>
-            {error.includes("database") && (
-              <Button onClick={setupDatabase} disabled={setupInProgress} className="w-fit flex items-center gap-2">
-                {setupInProgress ? (
+        <TabsContent value="images" className="space-y-4">
+          <div
+            ref={dropAreaRef}
+            className={`border-2 border-dashed rounded-lg p-8 text-center ${
+              isDragging ? "border-primary bg-primary/10" : "border-muted-foreground/20"
+            }`}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+          >
+            <div className="flex flex-col items-center justify-center space-y-4">
+              <div className="rounded-full bg-primary/10 p-4">
+                <Upload className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <h3 className="text-lg font-medium">Drag and drop files here</h3>
+                <p className="text-sm text-muted-foreground mt-1">Or click the buttons below to select files</p>
+              </div>
+              <div className="flex flex-wrap gap-2 justify-center">
+                <Button onClick={() => fileInputRef.current?.click()}>Select Files</Button>
+                <Button variant="outline" onClick={() => folderInputRef.current?.click()}>
+                  Select Folder
+                </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+                <input
+                  ref={folderInputRef}
+                  type="file"
+                  webkitdirectory="true"
+                  directory=""
+                  multiple
+                  className="hidden"
+                  onChange={handleFileSelect}
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isLoading ? (
+              <div className="col-span-full flex justify-center items-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            ) : filteredMediaItems.length > 0 ? (
+              filteredMediaItems.map((item) => (
+                <Card key={item.id} className="overflow-hidden">
+                  <div className="aspect-video relative bg-muted">
+                    {item.thumbnail_url ? (
+                      <img
+                        src={item.thumbnail_url || "/placeholder.svg"}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <ImageIcon className="h-12 w-12 text-muted-foreground" />
+                      </div>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8"
+                      onClick={() => setDeleteItemId(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <CardContent className="p-4">
+                    <h3 className="font-medium truncate" title={item.name}>
+                      {item.name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {new Date(item.created_at).toLocaleDateString()}
+                      {item.size !== undefined && ` • ${formatFileSize(item.size)}`}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="p-4 pt-0 flex justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        navigator.clipboard.writeText(item.url)
+                        toast({
+                          title: "URL Copied",
+                          description: "Media URL copied to clipboard",
+                        })
+                      }}
+                    >
+                      Copy URL
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                No images found. Upload some image files to get started.
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="videos" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Add Videos</CardTitle>
+              <CardDescription>Add videos from YouTube, Vimeo, or LinkedIn by pasting the URL below</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="video-url">Video URL(s)</Label>
+                <Textarea
+                  id="video-url"
+                  placeholder="Paste one or more video URLs (separated by spaces, commas, or new lines)"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="video-title">Title (Optional)</Label>
+                <Input
+                  id="video-title"
+                  placeholder="Video title"
+                  value={videoTitle}
+                  onChange={(e) => setVideoTitle(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="video-description">Description (Optional)</Label>
+                <Textarea
+                  id="video-description"
+                  placeholder="Video description"
+                  value={videoDescription}
+                  onChange={(e) => setVideoDescription(e.target.value)}
+                  rows={3}
+                />
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button onClick={processVideoUrl} disabled={isProcessingVideo || !videoUrl.trim()}>
+                {isProcessingVideo ? (
                   <>
-                    <RefreshCw className="h-4 w-4 animate-spin" />
-                    Setting up...
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Processing...
                   </>
                 ) : (
                   <>
-                    <RefreshCw className="h-4 w-4" />
-                    Set up database
+                    <Link className="mr-2 h-4 w-4" />
+                    Add Video
                   </>
                 )}
               </Button>
-            )}
-          </AlertDescription>
-        </Alert>
-      )}
+            </CardFooter>
+          </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-gray-900 p-4 rounded-lg">
-          <h2 className="text-xl mb-4">Upload Files</h2>
-          <div className="space-y-4">
-            <div
-              ref={dropAreaRef}
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                isDragging ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500"
-              }`}
-              onDragEnter={handleDragEnter}
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <div className="flex flex-col items-center justify-center gap-2">
-                <UploadCloud className="h-10 w-10 text-gray-400" />
-                <p className="text-lg font-medium">{isDragging ? "Drop files here" : "Drag & drop files here"}</p>
-                <p className="text-sm text-gray-400">
-                  or <span className="text-blue-500 cursor-pointer">browse</span> to upload
-                </p>
-                <p className="text-xs text-gray-500 mt-2">Supports single or multiple files</p>
-                {uploadingFile && (
-                  <div className="flex items-center gap-2 mt-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Uploading...</span>
-                  </div>
-                )}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {isLoading ? (
+              <div className="col-span-full flex justify-center items-center py-12">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
-              <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
-            </div>
-            <div className="text-sm text-gray-400">
-              <p>Upload files directly to the media library.</p>
-              <p className="mt-1">Select multiple files or drag and drop a folder to upload in bulk.</p>
-            </div>
+            ) : filteredMediaItems.length > 0 ? (
+              filteredMediaItems.map((item) => (
+                <Card key={item.id} className="overflow-hidden">
+                  <div className="aspect-video relative bg-muted">
+                    {item.thumbnail_url ? (
+                      <img
+                        src={item.thumbnail_url || "/placeholder.svg"}
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <Film className="h-12 w-12 text-muted-foreground" />
+                      </div>
+                    )}
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8"
+                      onClick={() => setDeleteItemId(item.id)}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                    {item.video_platform && (
+                      <Badge
+                        className={`absolute top-2 left-2 ${
+                          item.video_platform === "vimeo"
+                            ? "bg-blue-500"
+                            : item.video_platform === "youtube"
+                              ? "bg-red-500"
+                              : "bg-blue-800"
+                        }`}
+                      >
+                        {item.video_platform.charAt(0).toUpperCase() + item.video_platform.slice(1)}
+                      </Badge>
+                    )}
+                  </div>
+                  <CardContent className="p-4">
+                    <h3 className="font-medium truncate" title={item.name}>
+                      {item.name}
+                    </h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      {new Date(item.created_at).toLocaleDateString()}
+                    </p>
+                  </CardContent>
+                  <CardFooter className="p-4 pt-0 flex justify-between">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() => {
+                        navigator.clipboard.writeText(item.url)
+                        toast({
+                          title: "URL Copied",
+                          description: "Video URL copied to clipboard",
+                        })
+                      }}
+                    >
+                      Copy URL
+                    </Button>
+                  </CardFooter>
+                </Card>
+              ))
+            ) : (
+              <div className="col-span-full text-center py-12 text-muted-foreground">
+                No videos found. Add video links to get started.
+              </div>
+            )}
           </div>
-        </div>
+        </TabsContent>
 
-        <div className="bg-gray-900 p-4 rounded-lg">
-          <h2 className="text-xl mb-4">Add Videos</h2>
-          <div className="space-y-4">
-            <Textarea
-              placeholder="Paste one or more video URLs (one per line or separated by spaces)"
-              value={videoUrls}
-              onChange={(e) => setVideoUrls(e.target.value)}
-              disabled={uploadingVideo || !!error}
-              className="bg-gray-800 border-gray-700 min-h-[100px]"
-            />
-            <Button onClick={handleVideoAdd} disabled={!videoUrls || uploadingVideo || !!error} className="w-full">
-              {uploadingVideo ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Processing...
-                </span>
+        {/* Platform-specific tabs */}
+        {["vimeo", "youtube", "linkedin"].map((platform) => (
+          <TabsContent key={platform} value={platform} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {isLoading ? (
+                <div className="col-span-full flex justify-center items-center py-12">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : filteredMediaItems.length > 0 ? (
+                filteredMediaItems.map((item) => (
+                  <Card key={item.id} className="overflow-hidden">
+                    <div className="aspect-video relative bg-muted">
+                      {item.thumbnail_url ? (
+                        <img
+                          src={item.thumbnail_url || "/placeholder.svg"}
+                          alt={item.name}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Film className="h-12 w-12 text-muted-foreground" />
+                        </div>
+                      )}
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-8 w-8"
+                        onClick={() => setDeleteItemId(item.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Badge
+                        className={`absolute top-2 left-2 ${
+                          platform === "vimeo" ? "bg-blue-500" : platform === "youtube" ? "bg-red-500" : "bg-blue-800"
+                        }`}
+                      >
+                        {platform.charAt(0).toUpperCase() + platform.slice(1)}
+                      </Badge>
+                    </div>
+                    <CardContent className="p-4">
+                      <h3 className="font-medium truncate" title={item.name}>
+                        {item.name}
+                      </h3>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        {new Date(item.created_at).toLocaleDateString()}
+                      </p>
+                    </CardContent>
+                    <CardFooter className="p-4 pt-0 flex justify-between">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => {
+                          navigator.clipboard.writeText(item.url)
+                          toast({
+                            title: "URL Copied",
+                            description: "Video URL copied to clipboard",
+                          })
+                        }}
+                      >
+                        Copy URL
+                      </Button>
+                    </CardFooter>
+                  </Card>
+                ))
               ) : (
-                "Add Videos"
+                <div className="col-span-full text-center py-12 text-muted-foreground">
+                  No {platform} videos found. Add {platform} video links to get started.
+                </div>
               )}
-            </Button>
-            <div className="text-sm text-gray-400">
-              <p>
-                You can paste multiple video URLs. The system will automatically detect and process all valid YouTube,
-                Vimeo, and LinkedIn video links.
-              </p>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <Input
-              placeholder="Search media files..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-gray-800 border-gray-700 pl-10"
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Filter size={18} className="text-gray-400" />
-          <span className="text-sm text-gray-400">Filter by tags:</span>
-          <div className="flex flex-wrap gap-1">
-            {allTags.slice(0, 5).map((tag) => (
-              <button
-                key={tag}
-                onClick={() => handleTagClick(tag)}
-                className={`text-xs px-2 py-1 rounded ${
-                  selectedTags.includes(tag) ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-300"
-                }`}
-              >
-                {tag}
-              </button>
-            ))}
-            {allTags.length > 5 && <span className="text-xs text-gray-400">+{allTags.length - 5} more</span>}
-          </div>
-        </div>
-      </div>
-
-      <Tabs defaultValue="all" onValueChange={setActiveTab}>
-        <TabsList className="bg-gray-800">
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="image">Images</TabsTrigger>
-          <TabsTrigger value="video">Videos</TabsTrigger>
-          <TabsTrigger value="vimeo">Vimeo</TabsTrigger>
-          <TabsTrigger value="youtube">YouTube</TabsTrigger>
-          <TabsTrigger value="linkedin">LinkedIn</TabsTrigger>
-          <TabsTrigger value="other">Other</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl">All Media ({filteredMedia.length})</h2>
-            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
-              Total Storage:{" "}
-              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
-            </div>
-          </div>
-          {renderMediaGrid()}
-        </TabsContent>
-
-        <TabsContent value="image" className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl">Images ({filteredMedia.length})</h2>
-            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
-              Total Storage:{" "}
-              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
-            </div>
-          </div>
-          {renderMediaGrid()}
-        </TabsContent>
-
-        <TabsContent value="video" className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl">Videos ({filteredMedia.length})</h2>
-            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
-              Total Storage:{" "}
-              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
-            </div>
-          </div>
-          {renderMediaGrid()}
-        </TabsContent>
-
-        <TabsContent value="vimeo" className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl">Vimeo Videos ({filteredMedia.length})</h2>
-            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
-              Total Storage:{" "}
-              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
-            </div>
-          </div>
-          {renderMediaGrid()}
-        </TabsContent>
-
-        <TabsContent value="youtube" className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl">YouTube Videos ({filteredMedia.length})</h2>
-            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
-              Total Storage:{" "}
-              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
-            </div>
-          </div>
-          {renderMediaGrid()}
-        </TabsContent>
-
-        <TabsContent value="linkedin" className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl">LinkedIn Videos ({filteredMedia.length})</h2>
-            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
-              Total Storage:{" "}
-              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
-            </div>
-          </div>
-          {renderMediaGrid()}
-        </TabsContent>
-
-        <TabsContent value="other" className="mt-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl">Other Files ({filteredMedia.length})</h2>
-            <div className="bg-gray-800 px-3 py-1 rounded-md text-sm">
-              Total Storage:{" "}
-              <span className="font-medium text-blue-400">{formatFileSize(calculateTotalStorage())}</span>
-            </div>
-          </div>
-          {renderMediaGrid()}
-        </TabsContent>
+          </TabsContent>
+        ))}
       </Tabs>
 
-      {/* Image Preview Dialog */}
-      <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
-        <DialogContent className="max-w-4xl w-full">
+      {/* Upload Dialog */}
+      <Dialog open={isUploadDialogOpen} onOpenChange={setIsUploadDialogOpen}>
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>{selectedImage?.filename}</DialogTitle>
+            <DialogTitle>Uploading Files</DialogTitle>
             <DialogDescription>
-              {selectedImage?.filepath} •{" "}
-              {selectedImage?.filesize ? `${(selectedImage.filesize / 1024).toFixed(2)} KB` : ""}
+              {isUploading
+                ? "Files are being uploaded. Please wait..."
+                : uploadQueue.every((item) => item.status === "success")
+                  ? "All files uploaded successfully!"
+                  : "Upload queue"}
             </DialogDescription>
           </DialogHeader>
-
-          <div className="relative w-full h-[60vh] bg-black/50 rounded-md overflow-hidden">
-            {selectedImage?.public_url && (
-              <Image
-                src={selectedImage.public_url || "/placeholder.svg"}
-                alt={selectedImage.filename}
-                fill
-                className="object-contain"
-              />
-            )}
-          </div>
-
-          <div className="flex justify-between items-center">
-            <div className="text-sm">
-              <p>
-                <strong>URL:</strong> <span className="text-gray-400">{selectedImage?.public_url}</span>
-              </p>
-              <p>
-                <strong>Path:</strong> <span className="text-gray-400">{selectedImage?.filepath}</span>
-              </p>
-            </div>
-
-            <Button
-              onClick={() => selectedImage && handleCopyUrl(selectedImage.public_url)}
-              className="flex items-center gap-2"
-            >
-              <Copy className="h-4 w-4" />
-              Copy URL
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Bulk Upload Dialog */}
-      <Dialog
-        open={isUploadDialogOpen}
-        onOpenChange={(open) => {
-          if (!isProcessingQueue) setIsUploadDialogOpen(open)
-          else
-            toast({
-              title: "Upload in progress",
-              description: "Please wait for uploads to complete before closing",
-              variant: "destructive",
-            })
-        }}
-      >
-        <DialogContent className="max-w-3xl w-full">
-          <DialogHeader>
-            <DialogTitle>Bulk Upload</DialogTitle>
-            <DialogDescription>{uploadQueue.length} files selected for upload</DialogDescription>
-          </DialogHeader>
-
-          <div className="max-h-[60vh] overflow-y-auto pr-2">
-            {uploadQueue.map((item, index) => (
-              <div key={index} className="mb-2 p-3 bg-gray-900 rounded-md">
-                <div className="flex justify-between items-start mb-1">
-                  <div className="truncate mr-2 text-sm" title={item.file.name}>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {uploadQueue.map((item) => (
+              <div key={item.id} className="py-2 border-b last:border-0">
+                <div className="flex justify-between items-center mb-1">
+                  <span className="text-sm font-medium truncate max-w-[200px]" title={item.file.name}>
                     {item.file.name}
-                  </div>
-                  <div className="text-xs whitespace-nowrap">{(item.file.size / 1024).toFixed(2)} KB</div>
+                  </span>
+                  <span className="text-xs text-muted-foreground">{formatFileSize(item.file.size)}</span>
                 </div>
-
-                <div className="flex items-center gap-2 mb-1">
-                  <Progress value={item.progress} className="h-2 flex-grow" />
-                  <span className="text-xs whitespace-nowrap">
+                <div className="flex items-center gap-2">
+                  <Progress value={item.progress} className="flex-1" />
+                  <span className="text-xs w-12 text-right">
                     {item.status === "pending" && "Pending"}
-                    {item.status === "uploading" && "Uploading..."}
-                    {item.status === "success" && "Complete"}
-                    {item.status === "error" && "Failed"}
+                    {item.status === "uploading" && `${item.progress}%`}
+                    {item.status === "success" && <Check className="h-4 w-4 text-green-500" />}
+                    {item.status === "error" && <AlertCircle className="h-4 w-4 text-red-500" />}
                   </span>
                 </div>
-
-                {item.status === "error" && (
-                  <div className="text-xs text-red-400 flex items-center gap-1 mt-1">
-                    <AlertCircle className="h-3 w-3" />
-                    {item.error || "Upload failed"}
-                  </div>
-                )}
+                {item.status === "error" && <p className="text-xs text-red-500 mt-1">{item.error}</p>}
               </div>
             ))}
           </div>
-
-          <div className="flex justify-between gap-2 mt-2">
-            <div className="space-x-2">
-              <Button variant="outline" onClick={clearUploadQueue} disabled={isProcessingQueue}>
-                Clear Completed
-              </Button>
-              <Button variant="outline" onClick={resetUploadQueue} disabled={isProcessingQueue}>
-                Reset All
-              </Button>
-            </div>
-
-            <div className="flex items-center">
-              {isProcessingQueue ? (
-                <span className="flex items-center gap-2 text-sm">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Uploading automatically...
-                </span>
-              ) : (
-                <span className="text-sm text-gray-400">
-                  {uploadQueue.filter((i) => i.status === "pending").length > 0
-                    ? "Upload will start automatically"
-                    : "All uploads processed"}
-                </span>
-              )}
-            </div>
-          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!isUploading) {
+                  setIsUploadDialogOpen(false)
+                  // Clear successful uploads from queue
+                  setUploadQueue((prevQueue) => prevQueue.filter((item) => item.status !== "success"))
+                }
+              }}
+              disabled={isUploading}
+            >
+              {isUploading ? "Uploading..." : "Close"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteItemId} onOpenChange={(open) => !open && setDeleteItemId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the media item.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => deleteItemId && deleteMediaItem(deleteItemId)}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
-
-  function renderMediaGrid() {
-    if (loading) {
-      return <div className="text-center py-8">Loading media...</div>
-    }
-
-    if (error) {
-      return (
-        <div className="text-center py-8 bg-gray-900 rounded-lg">
-          <p className="text-gray-400">Please resolve the error to view media</p>
-        </div>
-      )
-    }
-
-    if (filteredMedia.length === 0) {
-      return (
-        <div className="text-center py-8 bg-gray-900 rounded-lg">
-          <p className="text-gray-400">No media found</p>
-        </div>
-      )
-    }
-
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{filteredMedia.map(renderMediaItem)}</div>
-    )
-  }
 }

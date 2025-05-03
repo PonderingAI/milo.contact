@@ -12,7 +12,9 @@ export async function GET() {
       .limit(1)
       .maybeSingle()
 
-    if (tableCheckError && tableCheckError.code === "42P01") {
+    if (tableCheckError) {
+      console.log("Error checking site_settings table:", tableCheckError)
+
       // Table doesn't exist, create it
       const { error: createTableError } = await supabase.rpc("create_site_settings_table")
 
@@ -54,6 +56,11 @@ export async function GET() {
         { key: "contact_phone", value: "+41 77 422 68 03" },
         { key: "chatgpt_url", value: "https://chatgpt.com/g/g-vOF4lzRBG-milo" },
         { key: "footer_text", value: `© ${new Date().getFullYear()} Milo Presedo. All rights reserved.` },
+        // Add default favicon entries
+        { key: "icon_favicon_ico", value: "/favicon.ico" },
+        { key: "icon_favicon_16x16_png", value: "/favicon-16x16.png" },
+        { key: "icon_favicon_32x32_png", value: "/favicon-32x32.png" },
+        { key: "icon_apple_touch_icon", value: "/apple-touch-icon.png" },
       ]
 
       const { error: insertError } = await supabase.from("site_settings").insert(defaultSettings)
@@ -109,6 +116,11 @@ export async function GET() {
         { key: "contact_phone", value: "+41 77 422 68 03" },
         { key: "chatgpt_url", value: "https://chatgpt.com/g/g-vOF4lzRBG-milo" },
         { key: "footer_text", value: `© ${new Date().getFullYear()} Milo Presedo. All rights reserved.` },
+        // Add default favicon entries
+        { key: "icon_favicon_ico", value: "/favicon.ico" },
+        { key: "icon_favicon_16x16_png", value: "/favicon-16x16.png" },
+        { key: "icon_favicon_32x32_png", value: "/favicon-32x32.png" },
+        { key: "icon_apple_touch_icon", value: "/apple-touch-icon.png" },
       ]
 
       // Filter out settings that already exist
