@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Loader2, Search, Film, X } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import Image from "next/image"
 
 interface MediaSelectorProps {
   onSelect: (media: any) => void
@@ -49,7 +48,11 @@ export default function MediaSelector({
   const loadCurrentMedia = async () => {
     try {
       // First try to find by URL
-      const { data, error } = await supabase.from("media").select("*").eq("public_url", currentValue).maybeSingle()
+      const { data, error } = await supabase
+        .from("media")
+        .select("*")
+        .or(`public_url.eq.${currentValue},url.eq.${currentValue}`)
+        .maybeSingle()
 
       if (error) {
         console.error("Error loading current media:", error)
@@ -61,9 +64,9 @@ export default function MediaSelector({
         // Just create a placeholder object
         setSelectedItem({
           id: "local",
-          name: currentValue.split("/").pop() || "Current media",
+          filename: currentValue.split("/").pop() || "Current media",
           public_url: currentValue,
-          content_type: currentValue.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image/unknown" : "video/unknown",
+          filetype: currentValue.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image" : "video",
         })
         return
       }
@@ -82,14 +85,14 @@ export default function MediaSelector({
 
       // Filter by media type if selected
       if (selectedMediaType === "images") {
-        query = query.ilike("filetype", "image/%")
+        query = query.eq("filetype", "image")
       } else if (selectedMediaType === "videos") {
         query = query.or("filetype.eq.vimeo,filetype.eq.youtube,filetype.eq.linkedin")
       }
 
       // Apply search query if provided
       if (searchQuery) {
-        query = query.or(`filename.ilike.%${searchQuery}%,tags.ilike.%${searchQuery}%`)
+        query = query.or(`filename.ilike.%${searchQuery}%,tags.cs.{${searchQuery}}`)
       }
 
       // Order by most recent first
@@ -127,12 +130,20 @@ export default function MediaSelector({
 
   const clearSelection = () => {
     setSelectedItem(null)
-    onSelect(null)
+    onSelect("")
 
     toast({
       title: "Selection cleared",
       description: "Media selection has been cleared",
     })
+  }
+
+  const isImageType = (item: any) => {
+    return item.filetype === "image"
+  }
+
+  const isVideoType = (item: any) => {
+    return ["vimeo", "youtube", "linkedin"].includes(item.filetype)
   }
 
   return (
@@ -149,7 +160,7 @@ export default function MediaSelector({
             variant="ghost"
             size="sm"
             onClick={clearSelection}
-            className="flex items-center gap-1 text-red-500 hover:text-red-700 hover:bg-red-100"
+            className="flex items-center gap-1 text-red-500 hover:text-red-700 hover:bg-red-100/10"
           >
             <X className="h-4 w-4" />
             Clear
@@ -161,19 +172,17 @@ export default function MediaSelector({
         <div className="mt-2">
           <p className="text-xs text-gray-400 mb-1">Selected media:</p>
           <div className="relative bg-gray-900/50 rounded-lg p-2 w-full max-w-xs">
-            {selectedItem.content_type.startsWith("image/") ? (
-              <Image
+            {isImageType(selectedItem) ? (
+              <img
                 src={selectedItem.public_url || "/placeholder.svg"}
-                alt={selectedItem.name}
-                fill
-                className="w-full h-auto object-contain"
-                sizes="100%"
+                alt={selectedItem.filename}
+                className="w-full h-auto rounded"
               />
             ) : (
               <div className="aspect-video bg-gray-900 flex items-center justify-center rounded">
                 <Film className="h-12 w-12 text-gray-400" />
                 <div className="absolute bottom-0 left-0 right-0 p-2 bg-gray-900/80 text-xs truncate">
-                  {selectedItem.name}
+                  {selectedItem.filename}
                 </div>
               </div>
             )}
@@ -233,27 +242,43 @@ export default function MediaSelector({
                 {mediaItems.map((item) => (
                   <div
                     key={item.id}
-                    className="relative border rounded-md overflow-hidden cursor-pointer hover:border-primary transition-colors"
+                    className="relative border border-gray-800 rounded-md overflow-hidden cursor-pointer hover:border-blue-500 transition-colors"
                     onClick={() => selectMediaItem(item)}
                   >
-                    {item.content_type.startsWith("image/") ? (
-                      <div className="aspect-square bg-gray-100">
-                        <Image
-                          src={item.public_url || "/placeholder.svg"}
+                    <div className="aspect-square bg-gray-900 flex items-center justify-center">
+                      {item.thumbnail_url ? (
+                        <img
+                          src={item.thumbnail_url || "/placeholder.svg"}
                           alt={item.filename}
-                          fill
                           className="w-full h-full object-cover"
-                          sizes="100%"
                         />
-                      </div>
-                    ) : (
-                      <div className="aspect-square bg-gray-900 flex items-center justify-center">
+                      ) : isImageType(item) ? (
+                        <div className="relative w-full h-full">
+                          <img
+                            src={item.public_url || "/placeholder.svg"}
+                            alt={item.filename}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                      ) : (
                         <Film className="h-12 w-12 text-gray-400" />
-                      </div>
-                    )}
-                    <div className="p-2 bg-gray-900/80 absolute bottom-0 left-0 right-0 text-xs truncate">
-                      {item.filename}
+                      )}
+
+                      {isVideoType(item) && (
+                        <div
+                          className={`absolute top-2 right-2 text-white text-xs px-2 py-1 rounded ${
+                            item.filetype === "vimeo"
+                              ? "bg-blue-600"
+                              : item.filetype === "youtube"
+                                ? "bg-red-600"
+                                : "bg-blue-800"
+                          }`}
+                        >
+                          {item.filetype.charAt(0).toUpperCase() + item.filetype.slice(1)}
+                        </div>
+                      )}
                     </div>
+                    <div className="p-2 bg-gray-900 text-xs truncate">{item.filename}</div>
                   </div>
                 ))}
               </div>
