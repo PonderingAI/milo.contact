@@ -1,35 +1,28 @@
-import { createServerClient } from "@/lib/supabase-server"
-import { NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase-server"
+import { type NextRequest, NextResponse } from "next/server"
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url)
-    const table = searchParams.get("table")
+    const searchParams = request.nextUrl.searchParams
+    const tableName = searchParams.get("table")
 
-    if (!table) {
-      return NextResponse.json({ error: "Table name is required" }, { status: 400 })
+    if (!tableName) {
+      return NextResponse.json({ error: "Missing table parameter" }, { status: 400 })
     }
 
-    const supabase = createServerClient()
+    const supabase = createAdminClient()
 
-    // Query to check if the table exists
-    const { data, error } = await supabase.rpc("check_table_exists", { table_name: table })
+    // Try to select from the table
+    const { error } = await supabase.from(tableName).select("count").limit(1)
 
-    if (error) {
-      // If the RPC function doesn't exist, try a different approach
-      try {
-        // Try to select from the table - if it doesn't exist, it will throw an error
-        await supabase.from(table).select("*").limit(1)
-        return NextResponse.json({ exists: true })
-      } catch (err) {
-        console.error("Error checking table existence:", err)
-        return NextResponse.json({ exists: false })
-      }
+    // If error code is 42P01, table doesn't exist
+    if (error && error.code === "42P01") {
+      return NextResponse.json({ exists: false })
     }
 
-    return NextResponse.json({ exists: data })
-  } catch (error) {
-    console.error("Error in check-table-exists route:", error)
-    return NextResponse.json({ error: "Failed to check if table exists" }, { status: 500 })
+    return NextResponse.json({ exists: true })
+  } catch (error: any) {
+    console.error("Error checking if table exists:", error)
+    return NextResponse.json({ error: error.message, exists: false }, { status: 500 })
   }
 }

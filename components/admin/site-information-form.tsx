@@ -476,45 +476,35 @@ export default function SiteInformationForm() {
   useEffect(() => {
     async function checkTableExists() {
       try {
-        const { error } = await supabase.from("site_settings").select("count").limit(1)
+        const response = await fetch("/api/check-table-exists?table=site_settings")
+        const data = await response.json()
 
-        if (error && error.code === "42P01") {
-          // Table doesn't exist
-          setTableExists(false)
-        } else {
+        if (data.exists) {
           setTableExists(true)
           loadSettings()
+        } else {
+          setTableExists(false)
+          setLoading(false)
         }
       } catch (err) {
         console.error("Error checking if table exists:", err)
-      } finally {
         setLoading(false)
       }
     }
 
     async function loadSettings() {
       try {
-        const { data, error } = await supabase.from("site_settings").select("key, value")
+        const response = await fetch("/api/settings")
 
-        if (error) {
-          console.error("Error loading settings:", error)
-
-          // Check if the error is because the table doesn't exist
-          if (error.code === "42P01") {
-            setTableExists(false)
-          } else {
-            toast({
-              title: "Error loading settings",
-              description: error.message,
-              variant: "destructive",
-            })
-          }
-          return
+        if (!response.ok) {
+          throw new Error(`Failed to load settings: ${response.status}`)
         }
+
+        const data = await response.json()
 
         if (data && data.length > 0) {
           const newSettings = { ...settings }
-          data.forEach((item) => {
+          data.forEach((item: { key: string; value: string }) => {
             // @ts-ignore
             if (newSettings.hasOwnProperty(item.key)) {
               // @ts-ignore
@@ -530,6 +520,8 @@ export default function SiteInformationForm() {
           description: "Failed to load settings",
           variant: "destructive",
         })
+      } finally {
+        setLoading(false)
       }
     }
 
@@ -573,14 +565,18 @@ export default function SiteInformationForm() {
         value: value || "",
       }))
 
-      // Use upsert to insert or update settings
-      const { error } = await supabase.from("site_settings").upsert(settingsArray, {
-        onConflict: "key",
+      // Use the API route to save settings
+      const response = await fetch("/api/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(settingsArray),
       })
 
-      if (error) {
-        console.error("Upsert error details:", error)
-        throw new Error(error.message || "Failed to save settings")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to save settings")
       }
 
       toast({

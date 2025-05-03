@@ -3,141 +3,85 @@
 import { useState, useEffect } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Input } from "@/components/ui/input"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-} from "@/components/ui/dialog"
-import { Loader2, Search, Film, X, Check } from "lucide-react"
+import { Loader2, Search, X, Check, Film, ImageIcon } from "lucide-react"
+import { extractVideoInfo } from "@/lib/utils"
 import { toast } from "@/components/ui/use-toast"
-import { cn } from "@/lib/utils"
 
 interface MediaSelectorProps {
-  onSelect: (media: string | string[]) => void
+  onSelect: (url: string | string[]) => void
   currentValue?: string | string[]
-  mediaType?: "all" | "images" | "videos"
-  buttonLabel?: string
-  showPreview?: boolean
+  mediaType?: "images" | "videos" | "all"
   multiple?: boolean
+  buttonLabel?: string
 }
 
 export default function MediaSelector({
   onSelect,
   currentValue = "",
   mediaType = "all",
-  buttonLabel = "Select Media",
-  showPreview = true,
   multiple = false,
+  buttonLabel = "Browse Media Library",
 }: MediaSelectorProps) {
-  const [isOpen, setIsOpen] = useState(false)
-  const [mediaItems, setMediaItems] = useState<any[]>([])
+  const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [media, setMedia] = useState<any[]>([])
+  const [filteredMedia, setFilteredMedia] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
-  const [selectedMediaType, setSelectedMediaType] = useState<"all" | "images" | "videos">(mediaType)
-  const [selectedItem, setSelectedItem] = useState<any | null>(null)
-  const [selectedItems, setSelectedItems] = useState<any[]>([])
+  const [selectedItems, setSelectedItems] = useState<string[]>([])
+  const [activeTab, setActiveTab] = useState<string>(mediaType === "videos" ? "videos" : "images")
+  const [videoUrl, setVideoUrl] = useState("")
+  const [uploadingVideo, setUploadingVideo] = useState(false)
+
   const supabase = createClientComponentClient()
 
-  // Load the current media item if there's a currentValue
+  // Initialize selected items from currentValue
   useEffect(() => {
     if (currentValue) {
-      if (multiple && Array.isArray(currentValue)) {
-        // Handle multiple values
-        Promise.all(currentValue.map((url) => loadMediaItem(url))).then((items) => {
-          setSelectedItems(items.filter(Boolean))
-        })
-      } else if (!multiple && typeof currentValue === "string") {
-        // Handle single value
-        loadCurrentMedia(currentValue)
+      if (Array.isArray(currentValue)) {
+        setSelectedItems(currentValue)
+      } else if (currentValue) {
+        setSelectedItems([currentValue])
       }
     }
   }, [currentValue])
 
-  // Load media items when the dialog opens
+  // Load media when dialog opens
   useEffect(() => {
-    if (isOpen) {
-      loadMediaItems()
+    if (open) {
+      loadMedia()
     }
-  }, [isOpen, searchQuery, selectedMediaType])
+  }, [open, activeTab])
 
-  const loadMediaItem = async (url: string) => {
-    try {
-      if (!url) return null
-
-      // Check if it's a URL or a local path
-      if (url.startsWith("http")) {
-        // Try to find by public_url
-        const { data, error } = await supabase.from("media").select("*").eq("public_url", url).maybeSingle()
-
-        if (error) {
-          console.error("Error loading media item:", error)
-          return null
-        }
-
-        if (data) {
-          return data
-        }
-      }
-
-      // If not found or it's a local path, create a placeholder
-      return {
-        id: `local-${url}`,
-        filename: url.split("/").pop() || "Media item",
-        public_url: url,
-        filetype: url.match(/\.(jpg|jpeg|png|gif|webp)$/i) ? "image" : "video",
-      }
-    } catch (err) {
-      console.error("Error loading media item:", err)
-      return null
+  // Filter media when search query changes
+  useEffect(() => {
+    if (searchQuery) {
+      const filtered = media.filter((item) => {
+        const searchLower = searchQuery.toLowerCase()
+        return (
+          item.filename?.toLowerCase().includes(searchLower) ||
+          item.tags?.some((tag: string) => tag.toLowerCase().includes(searchLower))
+        )
+      })
+      setFilteredMedia(filtered)
+    } else {
+      setFilteredMedia(media)
     }
-  }
+  }, [searchQuery, media])
 
-  const loadCurrentMedia = async (url: string) => {
+  const loadMedia = async () => {
     try {
-      const item = await loadMediaItem(url)
-      if (item) {
-        setSelectedItem(item)
-      }
-    } catch (err) {
-      console.error("Error loading current media:", err)
-    }
-  }
-
-  const loadMediaItems = async () => {
-    try {
-      setIsLoading(true)
-
-      // First check if the media table exists
-      const { error: checkError } = await supabase.from("media").select("count").limit(1)
-
-      if (checkError && checkError.code === "42P01") {
-        // Table doesn't exist
-        toast({
-          title: "Media table not found",
-          description: "The media table doesn't exist in your database. Please set up your database first.",
-          variant: "destructive",
-        })
-        setMediaItems([])
-        setIsLoading(false)
-        return
-      }
+      setLoading(true)
 
       let query = supabase.from("media").select("*")
 
-      // Filter by media type if selected
-      if (selectedMediaType === "images") {
+      // Filter by media type
+      if (activeTab === "images") {
         query = query.eq("filetype", "image")
-      } else if (selectedMediaType === "videos") {
-        query = query.in("filetype", ["vimeo", "youtube", "linkedin"])
-      }
-
-      // Apply search query if provided
-      if (searchQuery) {
-        query = query.or(`filename.ilike.%${searchQuery}%,tags.cs.{${searchQuery}}`)
+      } else if (activeTab === "videos") {
+        query = query.in("filetype", ["vimeo", "youtube", "linkedin", "video"])
       }
 
       // Order by most recent first
@@ -149,277 +93,263 @@ export default function MediaSelector({
         throw error
       }
 
-      setMediaItems(data || [])
+      setMedia(data || [])
+      setFilteredMedia(data || [])
     } catch (error: any) {
-      console.error("Error loading media items:", error)
+      console.error("Error loading media:", error)
       toast({
         title: "Error loading media",
         description: error.message,
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
   }
 
-  const selectMediaItem = (item: any) => {
+  const handleSelect = (url: string) => {
     if (multiple) {
-      // For multiple selection, toggle the item in the selectedItems array
-      const isAlreadySelected = selectedItems.some((selectedItem) => selectedItem.id === item.id)
-
-      if (isAlreadySelected) {
-        setSelectedItems(selectedItems.filter((selectedItem) => selectedItem.id !== item.id))
-      } else {
-        setSelectedItems([...selectedItems, item])
-      }
+      // For multiple selection, toggle the selection
+      setSelectedItems((prev) => {
+        if (prev.includes(url)) {
+          return prev.filter((item) => item !== url)
+        } else {
+          return [...prev, url]
+        }
+      })
     } else {
-      // For single selection, set the item and close the dialog
-      setSelectedItem(item)
-      onSelect(item.public_url)
-      setIsOpen(false)
+      // For single selection, set the selection and close the dialog
+      setSelectedItems([url])
+      onSelect(url)
+      setOpen(false)
+    }
+  }
+
+  const handleConfirmSelection = () => {
+    if (multiple) {
+      onSelect(selectedItems)
+    } else if (selectedItems.length > 0) {
+      onSelect(selectedItems[0])
+    }
+    setOpen(false)
+  }
+
+  const handleAddVideoUrl = async () => {
+    if (!videoUrl) {
+      toast({
+        title: "Missing URL",
+        description: "Please enter a video URL",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setUploadingVideo(true)
+
+      // Extract video info
+      const videoInfo = extractVideoInfo(videoUrl)
+
+      if (!videoInfo) {
+        toast({
+          title: "Invalid URL",
+          description: "Please enter a valid Vimeo, YouTube, or LinkedIn video URL",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Add to media table
+      const { data, error } = await supabase
+        .from("media")
+        .insert({
+          filename: `${videoInfo.platform} Video ${videoInfo.id}`,
+          filepath: videoUrl,
+          filesize: 0, // Size is not applicable for external videos
+          filetype: videoInfo.platform,
+          public_url: videoUrl,
+          tags: ["video", videoInfo.platform],
+        })
+        .select()
+
+      if (error) {
+        throw error
+      }
+
+      // Refresh media list
+      loadMedia()
+
+      // Clear input
+      setVideoUrl("")
+
+      // Select the newly added video
+      if (data && data.length > 0) {
+        handleSelect(data[0].public_url)
+      }
 
       toast({
-        title: "Media selected",
-        description: `${item.filename} has been selected`,
+        title: "Video added",
+        description: "Video URL has been added to your media library",
       })
+    } catch (error: any) {
+      console.error("Error adding video URL:", error)
+      toast({
+        title: "Error adding video",
+        description: error.message,
+        variant: "destructive",
+      })
+    } finally {
+      setUploadingVideo(false)
     }
-  }
-
-  const confirmMultipleSelection = () => {
-    const urls = selectedItems.map((item) => item.public_url)
-    onSelect(urls)
-    setIsOpen(false)
-
-    toast({
-      title: "Media selected",
-      description: `${selectedItems.length} items have been selected`,
-    })
-  }
-
-  const clearSelection = () => {
-    if (multiple) {
-      setSelectedItems([])
-      onSelect([])
-    } else {
-      setSelectedItem(null)
-      onSelect("")
-    }
-
-    toast({
-      title: "Selection cleared",
-      description: "Media selection has been cleared",
-    })
-  }
-
-  const isItemSelected = (item: any) => {
-    if (multiple) {
-      return selectedItems.some((selectedItem) => selectedItem.id === item.id)
-    }
-    return selectedItem?.id === item.id
-  }
-
-  const isImageType = (item: any) => {
-    return item?.filetype === "image"
-  }
-
-  const isVideoType = (item: any) => {
-    return ["vimeo", "youtube", "linkedin"].includes(item?.filetype)
   }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Button type="button" variant="outline" onClick={() => setIsOpen(true)} className="flex items-center gap-2">
-          <Search className="h-4 w-4" />
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" className="w-full justify-start">
           {buttonLabel}
         </Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Media Library</DialogTitle>
+        </DialogHeader>
 
-        {((multiple && selectedItems.length > 0) || (!multiple && selectedItem)) && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={clearSelection}
-            className="flex items-center gap-1 text-red-500 hover:text-red-700 hover:bg-red-100/10"
-          >
-            <X className="h-4 w-4" />
-            Clear
-          </Button>
-        )}
-      </div>
+        <Tabs defaultValue={activeTab} onValueChange={setActiveTab}>
+          <div className="flex justify-between items-center mb-4">
+            <TabsList>
+              {mediaType !== "videos" && <TabsTrigger value="images">Images</TabsTrigger>}
+              {mediaType !== "images" && <TabsTrigger value="videos">Videos</TabsTrigger>}
+            </TabsList>
 
-      {showPreview && !multiple && selectedItem && (
-        <div className="mt-2">
-          <p className="text-xs text-gray-400 mb-1">Selected media:</p>
-          <div className="relative bg-gray-900/50 rounded-lg p-2 w-full max-w-xs">
-            {isImageType(selectedItem) ? (
-              <img
-                src={selectedItem.public_url || "/placeholder.svg"}
-                alt={selectedItem.filename}
-                className="w-full h-auto rounded"
-              />
-            ) : (
-              <div className="aspect-video bg-gray-900 flex items-center justify-center rounded">
-                <Film className="h-12 w-12 text-gray-400" />
-                <div className="absolute bottom-0 left-0 right-0 p-2 bg-gray-900/80 text-xs truncate">
-                  {selectedItem.filename}
-                </div>
-              </div>
+            {multiple && (
+              <Button onClick={handleConfirmSelection} disabled={selectedItems.length === 0}>
+                Confirm Selection ({selectedItems.length})
+              </Button>
             )}
           </div>
-        </div>
-      )}
 
-      {showPreview && multiple && selectedItems.length > 0 && (
-        <div className="mt-2">
-          <p className="text-xs text-gray-400 mb-1">Selected media ({selectedItems.length}):</p>
-          <div className="grid grid-cols-3 gap-2">
-            {selectedItems.map((item) => (
-              <div key={item.id} className="relative bg-gray-900/50 rounded-lg p-1">
-                {isImageType(item) ? (
-                  <img
-                    src={item.public_url || "/placeholder.svg"}
-                    alt={item.filename}
-                    className="w-full h-auto aspect-square object-cover rounded"
-                  />
-                ) : (
-                  <div className="aspect-square bg-gray-900 flex items-center justify-center rounded">
-                    <Film className="h-8 w-8 text-gray-400" />
-                  </div>
-                )}
-                <button
-                  className="absolute top-0 right-0 bg-red-500 rounded-full p-0.5 m-1"
-                  onClick={() => selectMediaItem(item)}
-                >
-                  <X className="h-3 w-3 text-white" />
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Media Library Dialog */}
-      <Dialog open={isOpen} onOpenChange={setIsOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Media Library</DialogTitle>
-            <DialogDescription>{multiple ? "Select multiple media items" : "Select a media item"}</DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <Input
-                  placeholder="Search media..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
+          <div className="mb-4">
+            <div className="relative">
+              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search media..."
+                className="pl-8"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              {searchQuery && (
                 <Button
-                  variant={selectedMediaType === "all" ? "default" : "outline"}
-                  onClick={() => setSelectedMediaType("all")}
+                  variant="ghost"
                   size="sm"
+                  className="absolute right-1 top-1 h-7 w-7 p-0"
+                  onClick={() => setSearchQuery("")}
                 >
-                  All
+                  <X className="h-4 w-4" />
                 </Button>
-                <Button
-                  variant={selectedMediaType === "images" ? "default" : "outline"}
-                  onClick={() => setSelectedMediaType("images")}
-                  size="sm"
-                >
-                  Images
-                </Button>
-                <Button
-                  variant={selectedMediaType === "videos" ? "default" : "outline"}
-                  onClick={() => setSelectedMediaType("videos")}
-                  size="sm"
-                >
-                  Videos
-                </Button>
-              </div>
+              )}
             </div>
+          </div>
 
-            {isLoading ? (
+          <TabsContent value="images" className="space-y-4">
+            {loading ? (
               <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : mediaItems.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">No media found. Upload some media first.</div>
+            ) : filteredMedia.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <ImageIcon className="mx-auto h-12 w-12 mb-2 opacity-20" />
+                <p>No images found</p>
+                <p className="text-sm">Upload images or adjust your search</p>
+              </div>
             ) : (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {mediaItems.map((item) => (
+                {filteredMedia.map((item) => (
                   <div
                     key={item.id}
-                    className={cn(
-                      "relative border rounded-md overflow-hidden cursor-pointer transition-colors",
-                      isItemSelected(item)
-                        ? "border-blue-500 ring-2 ring-blue-500"
-                        : "border-gray-800 hover:border-blue-500",
-                    )}
-                    onClick={() => selectMediaItem(item)}
+                    className={`relative aspect-square rounded-md overflow-hidden border cursor-pointer transition-all ${
+                      selectedItems.includes(item.public_url)
+                        ? "ring-2 ring-primary border-primary"
+                        : "hover:opacity-90"
+                    }`}
+                    onClick={() => handleSelect(item.public_url)}
                   >
-                    <div className="aspect-square bg-gray-900 flex items-center justify-center">
-                      {item.thumbnail_url ? (
-                        <img
-                          src={item.thumbnail_url || "/placeholder.svg"}
-                          alt={item.filename}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : isImageType(item) ? (
-                        <div className="relative w-full h-full">
-                          <img
-                            src={item.public_url || "/placeholder.svg"}
-                            alt={item.filename}
-                            className="w-full h-full object-cover"
-                          />
-                        </div>
-                      ) : (
-                        <Film className="h-12 w-12 text-gray-400" />
-                      )}
-
-                      {isVideoType(item) && (
-                        <div
-                          className={`absolute top-2 right-2 text-white text-xs px-2 py-1 rounded ${
-                            item.filetype === "vimeo"
-                              ? "bg-blue-600"
-                              : item.filetype === "youtube"
-                                ? "bg-red-600"
-                                : "bg-blue-800"
-                          }`}
-                        >
-                          {item.filetype.charAt(0).toUpperCase() + item.filetype.slice(1)}
-                        </div>
-                      )}
-
-                      {isItemSelected(item) && (
-                        <div className="absolute top-2 left-2 bg-blue-500 rounded-full p-1">
-                          <Check className="h-4 w-4 text-white" />
-                        </div>
-                      )}
+                    <img
+                      src={item.public_url || "/placeholder.svg"}
+                      alt={item.filename}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        e.currentTarget.src = "/placeholder.svg"
+                      }}
+                    />
+                    {selectedItems.includes(item.public_url) && (
+                      <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
+                        <Check className="h-4 w-4" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-1 text-xs truncate">
+                      {item.filename}
                     </div>
-                    <div className="p-2 bg-gray-900 text-xs truncate">{item.filename}</div>
                   </div>
                 ))}
               </div>
             )}
-          </div>
+          </TabsContent>
 
-          {multiple && (
-            <DialogFooter>
-              <div className="flex justify-between w-full">
-                <div className="text-sm text-gray-400">
-                  {selectedItems.length} item{selectedItems.length !== 1 ? "s" : ""} selected
-                </div>
-                <Button onClick={confirmMultipleSelection} disabled={selectedItems.length === 0}>
-                  Confirm Selection
-                </Button>
+          <TabsContent value="videos" className="space-y-4">
+            <div className="flex gap-2 mb-4">
+              <Input
+                placeholder="Enter Vimeo, YouTube, or LinkedIn video URL"
+                value={videoUrl}
+                onChange={(e) => setVideoUrl(e.target.value)}
+              />
+              <Button onClick={handleAddVideoUrl} disabled={uploadingVideo}>
+                {uploadingVideo ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Film className="h-4 w-4 mr-2" />}
+                Add
+              </Button>
+            </div>
+
+            {loading ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            </DialogFooter>
-          )}
-        </DialogContent>
-      </Dialog>
-    </div>
+            ) : filteredMedia.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Film className="mx-auto h-12 w-12 mb-2 opacity-20" />
+                <p>No videos found</p>
+                <p className="text-sm">Add video URLs or adjust your search</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {filteredMedia.map((item) => (
+                  <div
+                    key={item.id}
+                    className={`relative p-3 rounded-md border cursor-pointer transition-all ${
+                      selectedItems.includes(item.public_url)
+                        ? "bg-primary/10 ring-2 ring-primary border-primary"
+                        : "hover:bg-muted"
+                    }`}
+                    onClick={() => handleSelect(item.public_url)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Film className="h-5 w-5 flex-shrink-0" />
+                      <div className="flex-grow min-w-0">
+                        <p className="font-medium truncate">{item.filename}</p>
+                        <p className="text-sm text-muted-foreground truncate">{item.public_url}</p>
+                      </div>
+                      {selectedItems.includes(item.public_url) && (
+                        <div className="flex-shrink-0 bg-primary text-primary-foreground rounded-full p-1">
+                          <Check className="h-4 w-4" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </DialogContent>
+    </Dialog>
   )
 }
