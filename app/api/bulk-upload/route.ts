@@ -1,39 +1,56 @@
 import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { createServerClient } from "@supabase/ssr"
 
 export async function POST(request: NextRequest) {
   try {
-    // Use Supabase authentication instead of Clerk
+    // Get the Supabase client
+    const supabase = createAdminClient()
+
+    // Get the session from cookies
     const cookieStore = cookies()
-    const supabase = createServerClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
-      cookies: {
-        get(name) {
-          return cookieStore.get(name)?.value
-        },
-        set(name, value, options) {
-          cookieStore.set({ name, value, ...options })
-        },
-        remove(name, options) {
-          cookieStore.set({ name, value: "", ...options })
-        },
-      },
-    })
+    const sessionCookie = cookieStore.get("sb-azggzulgpfuyubdouhcu-auth-token")?.value
+
+    // Log authentication attempt for debugging
+    console.log("Authentication attempt with session cookie:", !!sessionCookie)
+
+    let isAdmin = false
+    let userId = null
 
     // Check if user is authenticated and has admin role
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    const { data: userRoles } = await supabase
-      .from("user_roles")
-      .select("*")
-      .eq("user_id", session?.user?.id || "")
-      .single()
+    if (sessionCookie) {
+      try {
+        const parsedSession = JSON.parse(sessionCookie)
+        userId = parsedSession?.user?.id
 
-    const isAdmin = userRoles?.is_superadmin || false
+        if (userId) {
+          // Check if user is a superadmin in the database
+          const { data: userRoles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("is_superadmin")
+            .eq("user_id", userId)
+            .single()
 
-    if (!session || !isAdmin) {
+          if (rolesError) {
+            console.error("Error checking user roles:", rolesError)
+          } else {
+            isAdmin = userRoles?.is_superadmin === true
+            console.log(`User ${userId} admin status:`, isAdmin)
+          }
+        }
+      } catch (parseError) {
+        console.error("Error parsing session cookie:", parseError)
+      }
+    }
+
+    // For development/testing - allow uploads without auth check
+    // Remove this in production
+    if (process.env.NODE_ENV === "development") {
+      isAdmin = true
+      console.log("Development mode: Bypassing auth check")
+    }
+
+    if (!isAdmin) {
       return NextResponse.json({ error: "Only super admins can upload files" }, { status: 403 })
     }
 
@@ -55,8 +72,7 @@ export async function POST(request: NextRequest) {
     const buffer = Buffer.from(arrayBuffer)
 
     // Upload file to Supabase
-    const adminClient = createAdminClient()
-    const { error: uploadError } = await adminClient.storage.from("media").upload(filePath, buffer, {
+    const { error: uploadError } = await supabase.storage.from("media").upload(filePath, buffer, {
       contentType: file.type || "application/octet-stream",
       cacheControl: "3600",
       upsert: false,
@@ -70,7 +86,7 @@ export async function POST(request: NextRequest) {
     // Get public URL
     const {
       data: { publicUrl },
-    } = adminClient.storage.from("media").getPublicUrl(filePath)
+    } = supabase.storage.from("media").getPublicUrl(filePath)
 
     // Determine file type category
     let fileType = "other"
@@ -85,7 +101,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Save to media table
-    const { error: dbError } = await adminClient.from("media").insert({
+    const { error: dbError } = await supabase.from("media").insert({
       filename: file.name,
       filepath: filePath,
       filesize: buffer.byteLength,
@@ -96,7 +112,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         contentType: fileType,
         uploadedAt: new Date().toISOString(),
-        uploadedBy: session?.user?.id || "anonymous",
+        uploadedBy: userId || "anonymous",
       },
     })
 

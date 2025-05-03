@@ -20,12 +20,12 @@ import {
   UploadCloud,
   Loader2,
   AlertCircle,
+  Info,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { useAuth, useUser } from "@clerk/nextjs"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
 
@@ -70,24 +70,48 @@ export default function UnifiedMediaLibrary() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [authChecking, setAuthChecking] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = getSupabaseBrowserClient()
-  const { isSignedIn } = useAuth()
-  const { user } = useUser()
 
   useEffect(() => {
-    // Check if user is a superAdmin
-    if (user) {
-      const userMetadata = user.publicMetadata || {}
-      setIsAdmin(userMetadata.superAdmin === true)
-    } else {
-      setIsAdmin(false)
+    // Check if user is authenticated and has admin role
+    const checkAdminStatus = async () => {
+      setAuthChecking(true)
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
+        if (session?.user) {
+          // Check if user is a superadmin in the database
+          const { data: userRoles, error: rolesError } = await supabase
+            .from("user_roles")
+            .select("is_superadmin")
+            .eq("user_id", session.user.id)
+            .single()
+
+          if (rolesError) {
+            console.error("Error checking user roles:", rolesError)
+            setIsAdmin(false)
+          } else {
+            setIsAdmin(userRoles?.is_superadmin === true)
+          }
+        } else {
+          setIsAdmin(false)
+        }
+      } catch (error) {
+        console.error("Error checking admin status:", error)
+        setIsAdmin(false)
+      } finally {
+        setAuthChecking(false)
+      }
     }
 
-    // Fetch media regardless of authentication status
+    checkAdminStatus()
     fetchMedia()
-  }, [user])
+  }, [])
 
   const setupDatabase = async () => {
     if (!isAdmin) {
@@ -202,12 +226,11 @@ export default function UnifiedMediaLibrary() {
           body: formData,
         })
 
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to upload file")
-        }
-
         const result = await response.json()
+
+        if (!response.ok) {
+          throw new Error(result.error || "Failed to upload file")
+        }
 
         if (result.success) {
           toast({
@@ -300,7 +323,6 @@ export default function UnifiedMediaLibrary() {
 
     // Process files in parallel with a limit (3 at a time)
     const batchSize = 3
-    const totalFiles = uploadQueue.length
     const pendingUploads = uploadQueue.filter((item) => item.status === "pending")
 
     for (let i = 0; i < pendingUploads.length; i += batchSize) {
@@ -347,12 +369,11 @@ export default function UnifiedMediaLibrary() {
               return updated
             })
 
-            if (!response.ok) {
-              const errorData = await response.json()
-              throw new Error(errorData.error || "Upload failed")
-            }
-
             const result = await response.json()
+
+            if (!response.ok) {
+              throw new Error(result.error || "Upload failed")
+            }
 
             // Success
             setUploadQueue((prev) => {
@@ -473,6 +494,12 @@ export default function UnifiedMediaLibrary() {
           const videoData = await response.json()
           const video = videoData[0]
 
+          // Get current user session
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+          const userId = session?.user?.id || "anonymous"
+
           // Save to media table
           const { error: dbError } = await supabase.from("media").insert({
             filename: video.title || `Vimeo ${videoInfo.id}`,
@@ -487,7 +514,7 @@ export default function UnifiedMediaLibrary() {
               description: video.description,
               duration: video.duration,
               uploadDate: video.upload_date,
-              uploadedBy: user?.id || "anonymous",
+              uploadedBy: userId,
             },
           })
 
@@ -701,14 +728,25 @@ export default function UnifiedMediaLibrary() {
         </Alert>
       )}
 
-      {!isAdmin && (
+      {authChecking ? (
         <Alert className="mb-6">
-          <AlertTitle>View-Only Mode</AlertTitle>
+          <AlertTitle className="flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Checking permissions...
+          </AlertTitle>
+          <AlertDescription>Verifying your access level to the media library.</AlertDescription>
+        </Alert>
+      ) : !isAdmin ? (
+        <Alert className="mb-6">
+          <AlertTitle className="flex items-center gap-2">
+            <Info className="h-4 w-4" />
+            View-Only Mode
+          </AlertTitle>
           <AlertDescription>
             You are viewing the media library in read-only mode. Only super admins can upload, modify, or delete media.
           </AlertDescription>
         </Alert>
-      )}
+      ) : null}
 
       {isAdmin && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
