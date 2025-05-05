@@ -67,7 +67,8 @@
     "fs": "latest",
     "path": "latest",
     "sharp": "latest",
-    "react-syntax-highlighter": "latest"
+    "react-syntax-highlighter": "latest",
+    "nodemailer": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",
