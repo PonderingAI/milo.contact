@@ -25,8 +25,35 @@ export async function POST(request: Request) {
     // Initialize Supabase client with service role key to bypass RLS
     const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
 
-    // Store the message in a contact_messages table
-    // If the table doesn't exist, we'll just log the message
+    // Check if the contact_messages table exists
+    const { error: checkError } = await supabase.from("contact_messages").select("count").limit(1)
+
+    if (checkError && checkError.code === "42P01") {
+      // Table doesn't exist, but we still want to send the email
+      console.log("Contact messages table doesn't exist. Skipping database storage.")
+
+      // Send email notification
+      try {
+        await sendEmailNotification(name, email, message)
+        // Return success response even though we couldn't save to database
+        return NextResponse.json({
+          success: true,
+          message: "Thank you for your message! I will get back to you soon.",
+          warning: "Message sent by email, but not saved to database",
+        })
+      } catch (emailError: any) {
+        console.error("Failed to send email notification:", emailError)
+        return NextResponse.json(
+          {
+            error: "Failed to send message. Please try again later.",
+            details: "Email sending failed and contact_messages table doesn't exist.",
+          },
+          { status: 500 },
+        )
+      }
+    }
+
+    // Store the message in the contact_messages table (if it exists)
     const { error } = await supabase.from("contact_messages").insert({
       name,
       email,
@@ -34,20 +61,22 @@ export async function POST(request: Request) {
       created_at: new Date().toISOString(),
     })
 
-    if (error && error.code !== "42P01") {
+    if (error) {
       console.error("Error saving contact message:", error)
-      // If it's not a "table doesn't exist" error, return an error
-      if (error.code !== "42P01") {
-        return NextResponse.json({ error: "Failed to save message" }, { status: 500 })
-      }
+      return NextResponse.json({ error: "Failed to save message", details: error.message }, { status: 500 })
     }
 
     // Send email notification
     try {
       await sendEmailNotification(name, email, message)
-    } catch (emailError) {
+    } catch (emailError: any) {
       console.error("Failed to send email notification:", emailError)
-      // Continue execution even if email fails
+      // Continue execution even if email fails since we saved to database
+      return NextResponse.json({
+        success: true,
+        message: "Thank you for your message! I will get back to you soon.",
+        warning: "Message saved to database, but email notification failed.",
+      })
     }
 
     // Return success response
@@ -55,9 +84,15 @@ export async function POST(request: Request) {
       success: true,
       message: "Thank you for your message! I will get back to you soon.",
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Contact form error:", error)
-    return NextResponse.json({ error: "Failed to process your request" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Failed to process your request",
+        details: error.message,
+      },
+      { status: 500 },
+    )
   }
 }
 

@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import ContactTableSetupGuide from "@/components/admin/contact-table-setup-guide"
 
 export default function ContactSection() {
   const [settings, setSettings] = useState({
@@ -20,6 +21,7 @@ export default function ContactSection() {
     chatgpt_url: "https://chatgpt.com/g/g-vOF4lzRBG-milo",
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -37,6 +39,21 @@ export default function ContactSection() {
       try {
         setIsLoading(true)
         const supabase = getSupabaseBrowserClient()
+
+        // Check if user is admin
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (user) {
+          const { data: roles } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", user.id)
+            .eq("role", "admin")
+            .single()
+
+          setIsAdmin(!!roles)
+        }
 
         const { data, error } = await supabase
           .from("site_settings")
@@ -135,6 +152,8 @@ export default function ContactSection() {
 
   return (
     <section id="contact" className="py-24">
+      {isAdmin && <ContactTableSetupGuide />}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
         <div>
           <h2 className="text-5xl md:text-7xl font-serif mb-8">{settings.contact_heading}</h2>
