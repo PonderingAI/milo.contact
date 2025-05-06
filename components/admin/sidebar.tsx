@@ -33,6 +33,11 @@ export default function AdminSidebar() {
               Settings
             </Link>
           </li>
+          <li>
+            <Link href="/admin/dependencies" className="block py-2 px-4 rounded hover:bg-gray-800">
+              Dependencies
+            </Link>
+          </li>
           <li className="mt-8">
             <form action="/api/auth/signout" method="post">
               <button type="submit" className="w-full text-left py-2 px-4 rounded hover:bg-gray-800 text-red-400">

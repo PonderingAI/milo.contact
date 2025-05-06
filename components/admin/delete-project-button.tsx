@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { getSupabaseBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Trash2 } from "lucide-react"
 import {
@@ -15,6 +14,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { toast } from "@/components/ui/use-toast"
 
 interface DeleteProjectButtonProps {
   id: string
@@ -24,24 +24,41 @@ export default function DeleteProjectButton({ id }: DeleteProjectButtonProps) {
   const [open, setOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const router = useRouter()
-  const supabase = getSupabaseBrowserClient()
 
   const handleDelete = async () => {
     setIsDeleting(true)
 
     try {
-      // Delete the project
-      const { error } = await supabase.from("projects").delete().eq("id", id)
+      // Use the server-side API route instead of direct Supabase client
+      const response = await fetch(`/api/projects/delete`, {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id }),
+      })
 
-      if (error) {
-        throw error
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || "Failed to delete project")
       }
 
-      // Refresh the page
+      // Show success toast
+      toast({
+        title: "Project deleted",
+        description: "The project has been successfully deleted",
+      })
+
+      // Refresh the page or redirect
       router.refresh()
+      router.push("/admin/projects")
     } catch (error) {
       console.error("Error deleting project:", error)
-      alert("Failed to delete project")
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete project",
+        variant: "destructive",
+      })
     } finally {
       setIsDeleting(false)
       setOpen(false)

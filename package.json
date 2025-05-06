@@ -68,7 +68,9 @@
     "path": "latest",
     "sharp": "latest",
     "react-syntax-highlighter": "latest",
-    "nodemailer": "latest"
+    "nodemailer": "latest",
+    "child_process": "latest",
+    "util": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

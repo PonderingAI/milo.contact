@@ -4,9 +4,10 @@
  * This file provides Supabase clients for server-side usage.
  * - createServerClient: For general server-side operations
  * - createAdminClient: For operations requiring admin privileges
+ * - createClient: Named export for compatibility
  */
 
-import { createClient } from "@supabase/supabase-js"
+import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 /**
@@ -16,7 +17,7 @@ export function createServerClient(): SupabaseClient {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  return supabaseCreateClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
@@ -32,10 +33,16 @@ export function createAdminClient(): SupabaseClient {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
   const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
-  return createClient(supabaseUrl, supabaseServiceKey, {
+  return supabaseCreateClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       persistSession: false,
       autoRefreshToken: false,
     },
   })
 }
+
+/**
+ * Named export for createClient for compatibility
+ * This is an alias for createServerClient
+ */
+export const createClient = createServerClient

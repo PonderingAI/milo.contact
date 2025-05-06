@@ -16,6 +16,7 @@ import { AlertCircle, Loader2 } from "lucide-react"
 import ImageUploader from "@/components/admin/image-uploader"
 import MediaSelector from "@/components/admin/media-selector"
 import { toast } from "@/components/ui/use-toast"
+import Image from "next/image"
 
 interface ProjectFormProps {
   project?: {
@@ -47,6 +48,8 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
+  const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
+  const [isUsingVideoThumbnail, setIsUsingVideoThumbnail] = useState(false)
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
 
@@ -61,38 +64,28 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
   const handleImageUpload = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
+    setIsUsingVideoThumbnail(false)
   }
 
-  // Process video URL and add to media library
+  // Process video URL and extract thumbnail
   useEffect(() => {
     const processVideoUrl = async () => {
       const url = formData.video_url.trim()
       if (!url || isProcessingVideo) return
 
       const videoInfo = extractVideoInfo(url)
-      if (!videoInfo) return
-
-      // Check if this video is already in the media library
-      const { data: existingMedia } = await supabase
-        .from("media")
-        .select("id, public_url")
-        .eq("public_url", url)
-        .maybeSingle()
-
-      if (existingMedia) {
-        console.log("Video already exists in media library:", existingMedia.id)
-        return // Already in the library
+      if (!videoInfo) {
+        setVideoThumbnail(null)
+        return
       }
 
       setIsProcessingVideo(true)
 
       try {
         let thumbnailUrl = null
-        let videoTitle = null
-        let videoMetadata = {}
 
         if (videoInfo.platform === "vimeo") {
-          // Get video thumbnail and metadata
+          // Get video thumbnail from Vimeo API
           const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
 
           if (!response.ok) {
@@ -101,29 +94,33 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
           const videoData = await response.json()
           const video = videoData[0]
-
           thumbnailUrl = video.thumbnail_large
-          videoTitle = video.title || `Vimeo ${videoInfo.id}`
-          videoMetadata = {
-            vimeoId: videoInfo.id,
-            description: video.description,
-            duration: video.duration,
-            uploadDate: video.upload_date,
-          }
         } else if (videoInfo.platform === "youtube") {
           // Use YouTube thumbnail URL format
           thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-          videoTitle = `YouTube ${videoInfo.id}`
-          videoMetadata = {
-            youtubeId: videoInfo.id,
-          }
         } else if (videoInfo.platform === "linkedin") {
           // LinkedIn doesn't provide easy thumbnail access, use a placeholder
           thumbnailUrl = "/generic-icon.png"
-          videoTitle = `LinkedIn Post ${videoInfo.id}`
-          videoMetadata = {
-            linkedinId: videoInfo.id,
-          }
+        }
+
+        setVideoThumbnail(thumbnailUrl)
+
+        // If no image is set yet, use the video thumbnail
+        if (!formData.image && thumbnailUrl) {
+          setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
+          setIsUsingVideoThumbnail(true)
+        }
+
+        // Check if this video is already in the media library
+        const { data: existingMedia } = await supabase
+          .from("media")
+          .select("id, public_url")
+          .eq("public_url", url)
+          .maybeSingle()
+
+        if (existingMedia) {
+          console.log("Video already exists in media library:", existingMedia.id)
+          return // Already in the library
         }
 
         // Get current user session
@@ -132,8 +129,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         } = await supabase.auth.getSession()
         const userId = session?.user?.id || "anonymous"
 
-        // Add user ID to metadata
-        videoMetadata.uploadedBy = userId
+        // Add video to media library
+        const videoTitle =
+          videoInfo.platform === "vimeo"
+            ? (await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`).then((r) => r.json()))[0]?.title ||
+              `Vimeo ${videoInfo.id}`
+            : videoInfo.platform === "youtube"
+              ? `YouTube ${videoInfo.id}`
+              : `LinkedIn Post ${videoInfo.id}`
 
         // Save to media table
         const { error: dbError } = await supabase.from("media").insert({
@@ -144,7 +147,10 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           public_url: url,
           thumbnail_url: thumbnailUrl,
           tags: ["video", videoInfo.platform, "project"],
-          metadata: videoMetadata,
+          metadata: {
+            [videoInfo.platform + "Id"]: videoInfo.id,
+            uploadedBy: userId,
+          },
         })
 
         if (dbError) throw dbError
@@ -163,8 +169,21 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
     if (formData.video_url) {
       processVideoUrl()
+    } else {
+      setVideoThumbnail(null)
     }
-  }, [formData.video_url, supabase])
+  }, [formData.video_url, formData.image, supabase])
+
+  const useVideoThumbnail = () => {
+    if (videoThumbnail) {
+      setFormData((prev) => ({ ...prev, image: videoThumbnail }))
+      setIsUsingVideoThumbnail(true)
+      toast({
+        title: "Video thumbnail applied",
+        description: "The video thumbnail has been set as the project image",
+      })
+    }
+  }
 
   const validateForm = () => {
     if (!formData.title) return "Title is required"
@@ -274,6 +293,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
               <SelectItem value="camera">Camera</SelectItem>
               <SelectItem value="production">Production</SelectItem>
               <SelectItem value="photography">Photography</SelectItem>
+              <SelectItem value="ai">AI</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -330,6 +350,37 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
       <div className="space-y-2">
         <Label>Cover Image *</Label>
+
+        {/* Video thumbnail section */}
+        {videoThumbnail && (
+          <div className="mb-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+              <div className="relative w-40 h-24 overflow-hidden rounded-md">
+                <Image
+                  src={videoThumbnail || "/placeholder.svg"}
+                  alt="Video thumbnail"
+                  fill
+                  className="object-cover"
+                  unoptimized
+                />
+              </div>
+              <div className="flex-1">
+                <h4 className="text-sm font-medium mb-1">Video Thumbnail Available</h4>
+                <p className="text-xs text-gray-400 mb-2">
+                  {isUsingVideoThumbnail
+                    ? "You're currently using the video thumbnail as your project image."
+                    : "You can use this thumbnail as your project image."}
+                </p>
+                {!isUsingVideoThumbnail && (
+                  <Button type="button" variant="secondary" size="sm" onClick={useVideoThumbnail}>
+                    Use Video Thumbnail
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <ImageUploader currentImage={formData.image} onImageUploaded={handleImageUpload} folder="projects" />
