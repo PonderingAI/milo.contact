@@ -5,6 +5,7 @@ import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 import CustomCursor from "@/components/custom-cursor"
 import DynamicFavicons from "@/components/dynamic-favicons"
+import SetupTablesPopup from "@/components/setup-tables-popup"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -31,6 +32,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <DynamicFavicons />
             {children}
           </ThemeProvider>
+          {/* Database setup popup */}
+          <SetupTablesPopup />
         </body>
       </html>
     </ClerkProvider>
