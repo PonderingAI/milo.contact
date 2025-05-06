@@ -6,7 +6,7 @@ CREATE TABLE IF NOT EXISTS dependencies (
   latest_version VARCHAR(100),
   locked BOOLEAN DEFAULT FALSE,
   locked_version VARCHAR(100),
-  update_mode VARCHAR(50) DEFAULT 'manual', -- 'manual', 'auto', 'conservative'
+  update_mode VARCHAR(50) DEFAULT 'global', -- 'manual', 'auto', 'conservative', 'global'
   last_checked TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   has_security_update BOOLEAN DEFAULT FALSE,

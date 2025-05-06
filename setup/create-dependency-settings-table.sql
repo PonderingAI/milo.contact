@@ -1,15 +1,16 @@
 -- Create dependency settings table
 CREATE TABLE IF NOT EXISTS dependency_settings (
   id SERIAL PRIMARY KEY,
-  auto_update_enabled BOOLEAN DEFAULT false,
-  conservative_mode BOOLEAN DEFAULT true,
+  update_mode VARCHAR(50) DEFAULT 'conservative', -- 'manual', 'auto', 'conservative'
+  auto_update_enabled BOOLEAN DEFAULT FALSE,
+  update_schedule VARCHAR(100) DEFAULT 'daily',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Insert default settings
-INSERT INTO dependency_settings (auto_update_enabled, conservative_mode)
-VALUES (false, true)
+INSERT INTO dependency_settings (update_mode, auto_update_enabled, update_schedule)
+VALUES ('conservative', FALSE, 'daily')
 ON CONFLICT DO NOTHING;
 
 -- Create dependency locks table
@@ -30,13 +31,21 @@ ALTER TABLE dependency_locks ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow authenticated users to read dependency settings"
 ON dependency_settings
 FOR SELECT
-TO authenticated;
+TO authenticated
+USING (true);
 
--- Allow authenticated users to update dependency settings
-CREATE POLICY "Allow authenticated users to update dependency settings"
+-- Allow authenticated users with admin role to manage dependency settings
+CREATE POLICY "Allow admins to manage dependency settings"
 ON dependency_settings
-FOR UPDATE
-TO authenticated;
+FOR ALL
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM auth.users
+    WHERE auth.users.id = auth.uid()
+    AND auth.users.role = 'admin'
+  )
+);
 
 -- Allow authenticated users to read dependency locks
 CREATE POLICY "Allow authenticated users to read dependency locks"

@@ -1,41 +1,117 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import fs from "fs"
-import path from "path"
-
-// Helper function to get package.json
-async function getPackageJson() {
-  const packageJsonPath = path.join(process.cwd(), "package.json")
-  try {
-    const packageJsonContent = await fs.promises.readFile(packageJsonPath, "utf8")
-    return JSON.parse(packageJsonContent)
-  } catch (error) {
-    console.error("Error reading package.json:", error)
-    throw new Error("Failed to read package.json")
-  }
-}
 
 export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Get settings from database
-    const { data: settings, error: settingsError } = await supabase
-      .from("dependency_settings")
-      .select("*")
-      .limit(1)
-      .single()
+    // Check if dependencies table exists
+    const { data: depsTableExists, error: checkDepsError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependencies",
+    })
 
-    if (settingsError && settingsError.code !== "PGRST116") {
-      console.error("Error fetching dependency settings:", settingsError)
+    if (checkDepsError) {
+      console.error("Error checking if dependencies table exists:", checkDepsError)
       return NextResponse.json(
         {
-          error: "Failed to fetch dependency settings",
-          details: settingsError.message,
+          error: "Failed to check if dependencies table exists",
+          details: checkDepsError.message,
         },
         { status: 500 },
       )
     }
+
+    // If dependencies table doesn't exist, return appropriate message
+    if (!depsTableExists) {
+      return NextResponse.json(
+        {
+          error: "Dependencies table does not exist",
+          tablesMissing: true,
+          dependencies: [],
+        },
+        { status: 404 },
+      )
+    }
+
+    // Check if dependency_settings table exists
+    const { data: settingsTableExists, error: checkSettingsError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependency_settings",
+    })
+
+    if (checkSettingsError) {
+      console.error("Error checking if dependency_settings table exists:", checkSettingsError)
+    }
+
+    // Get settings if table exists
+    let settings = { update_mode: "conservative" }
+    if (settingsTableExists) {
+      const { data: settingsData, error: settingsError } = await supabase
+        .from("dependency_settings")
+        .select("*")
+        .limit(1)
+        .single()
+
+      if (!settingsError) {
+        settings = settingsData
+      }
+    }
+
+    // Get existing dependencies from database
+    const { data: dependencies, error: depsError } = await supabase.from("dependencies").select("*")
+
+    if (depsError) {
+      console.error("Error fetching existing dependencies:", depsError)
+      return NextResponse.json(
+        {
+          error: "Failed to fetch dependencies",
+          details: depsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // Calculate security stats
+    const vulnerabilities = dependencies.filter((d) => d.has_security_update).length
+    const outdatedPackages = dependencies.filter(
+      (d) => d.current_version !== d.latest_version && d.latest_version,
+    ).length
+
+    // Calculate security score
+    let securityScore = 100
+
+    // Deduct for vulnerabilities
+    securityScore -= vulnerabilities * 10
+
+    // Deduct less for outdated packages
+    securityScore -= Math.min(10, outdatedPackages * 2)
+
+    // Ensure score is between 0 and 100
+    securityScore = Math.max(0, Math.min(100, securityScore))
+
+    return NextResponse.json({
+      dependencies,
+      updateMode: settings.update_mode,
+      securityScore,
+      vulnerabilities,
+      outdatedPackages,
+    })
+  } catch (error) {
+    console.error("Error in dependencies API:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to fetch dependencies",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const supabase = createAdminClient()
+    const body = await request.json()
+    const { id, name, current_version, latest_version, locked, locked_version, update_mode } = body
 
     // Check if dependencies table exists
     const { data: tableExists, error: checkError } = await supabase.rpc("check_table_exists", {
@@ -53,114 +129,84 @@ export async function GET() {
       )
     }
 
-    // If table doesn't exist, return empty data
+    // If table doesn't exist, return appropriate message
     if (!tableExists) {
-      console.log("Dependencies table does not exist")
-      return NextResponse.json({
-        dependencies: [],
-        updateMode: settings?.update_mode || "conservative",
-        securityScore: 100,
-        vulnerabilities: 0,
-        outdatedPackages: 0,
-        message: "Dependencies table not found",
-      })
-    }
-
-    // Get existing dependencies from database
-    const { data: existingDeps, error: depsError } = await supabase.from("dependencies").select("*")
-
-    if (depsError) {
-      console.error("Error fetching existing dependencies:", depsError)
       return NextResponse.json(
         {
-          error: "Failed to fetch dependencies",
-          details: depsError.message,
+          error: "Dependencies table does not exist",
+          tablesMissing: true,
         },
-        { status: 500 },
+        { status: 404 },
       )
     }
 
-    // Create a map of existing dependencies for quick lookup
-    const existingDepsMap = {}
-    if (existingDeps) {
-      existingDeps.forEach((dep) => {
-        existingDepsMap[dep.name] = dep
-      })
-    }
+    // If id is provided, update existing dependency
+    if (id) {
+      const updateData: any = {}
 
-    // Get actual dependencies from package.json
-    let packageJson
-    try {
-      packageJson = await getPackageJson()
-    } catch (error) {
-      console.error("Error reading package.json:", error)
-      return NextResponse.json(
-        {
-          error: "Failed to read package.json",
-          details: error instanceof Error ? error.message : String(error),
-        },
-        { status: 500 },
-      )
-    }
+      if (locked !== undefined) updateData.locked = locked
+      if (locked_version !== undefined) updateData.locked_version = locked_version
+      if (update_mode !== undefined) updateData.update_mode = update_mode
+      if (latest_version !== undefined) updateData.latest_version = latest_version
+      if (current_version !== undefined) updateData.current_version = current_version
 
-    // Combine dependencies and devDependencies
-    const allPackageJsonDeps = {
-      ...Object.entries(packageJson.dependencies || {}).map(([name, version]) => ({
-        name,
-        version: version.toString().replace(/^\^|~/, ""),
-        isDev: false,
-      })),
-      ...Object.entries(packageJson.devDependencies || {}).map(([name, version]) => ({
-        name,
-        version: version.toString().replace(/^\^|~/, ""),
-        isDev: true,
-      })),
-    }
+      updateData.updated_at = new Date().toISOString()
 
-    // Process all dependencies
-    const allDependencies = Object.values(existingDepsMap).map((dep) => {
-      const packageInfo = allPackageJsonDeps[dep.name]
+      const { error: updateError } = await supabase.from("dependencies").update(updateData).eq("id", id)
 
-      return {
-        id: dep.id,
-        name: dep.name,
-        currentVersion: dep.current_version,
-        latestVersion: dep.latest_version,
-        outdated: dep.current_version !== dep.latest_version,
-        locked: dep.locked || false,
-        description: dep.description || "",
-        hasSecurityIssue: dep.has_security_issue || false,
-        securityDetails: dep.security_details,
-        updateMode: dep.update_mode || "global",
-        isDev: packageInfo?.isDev || dep.is_dev || false,
+      if (updateError) {
+        console.error("Error updating dependency:", updateError)
+        return NextResponse.json(
+          {
+            error: "Failed to update dependency",
+            details: updateError.message,
+          },
+          { status: 500 },
+        )
       }
-    })
 
-    // Calculate security stats
-    const vulnerabilities = allDependencies.filter((d) => d.hasSecurityIssue).length
-    const outdatedPackages = allDependencies.filter((d) => d.outdated).length
+      return NextResponse.json({ success: true, message: "Dependency updated successfully" })
+    }
 
-    // Calculate security score
-    let securityScore = 100
+    // If name is provided, add new dependency
+    if (name && current_version) {
+      const { error: insertError } = await supabase.from("dependencies").insert({
+        name,
+        current_version,
+        latest_version: latest_version || current_version,
+        locked: locked || false,
+        locked_version: locked_version,
+        update_mode: update_mode || "global",
+      })
 
-    // Deduct for vulnerabilities
-    securityScore -= vulnerabilities * 10
+      if (insertError) {
+        console.error("Error adding dependency:", insertError)
+        return NextResponse.json(
+          {
+            error: "Failed to add dependency",
+            details: insertError.message,
+          },
+          { status: 500 },
+        )
+      }
 
-    // Deduct less for outdated packages
-    securityScore -= Math.min(10, outdatedPackages * 2)
+      return NextResponse.json({ success: true, message: "Dependency added successfully" })
+    }
 
-    // Ensure score is between 0 and 100
-    securityScore = Math.max(0, Math.min(100, securityScore))
-
-    return NextResponse.json({
-      dependencies: allDependencies,
-      updateMode: settings?.update_mode || "conservative",
-      securityScore,
-      vulnerabilities,
-      outdatedPackages,
-    })
+    return NextResponse.json(
+      {
+        error: "Invalid request. Missing required fields.",
+      },
+      { status: 400 },
+    )
   } catch (error) {
     console.error("Error in dependencies API:", error)
-    return NextResponse.json({ error: "Failed to fetch dependencies" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "An unexpected error occurred",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }

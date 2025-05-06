@@ -6,19 +6,22 @@ import { useRouter } from "next/navigation"
 import AdminCheck from "@/components/admin/admin-check"
 import DependencyTableSetupGuide from "@/components/admin/dependency-table-setup-guide"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface Dependency {
   id: number
   name: string
-  currentVersion: string
-  latestVersion: string | null
-  outdated: boolean
+  current_version: string
+  latest_version: string | null
   locked: boolean
-  description: string
-  hasSecurityIssue: boolean
-  securityDetails: any
-  updateMode: "manual" | "auto" | "conservative" | "global"
-  isDev: boolean
+  locked_version: string | null
+  update_mode: "manual" | "auto" | "conservative" | "global"
+  last_checked: string
+  last_updated: string
+  has_security_update: boolean
 }
 
 export default function ClientDependenciesPage() {
@@ -27,17 +30,17 @@ export default function ClientDependenciesPage() {
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [tableExists, setTableExists] = useState(true)
+  const [tablesMissing, setTablesMissing] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<Record<number, { loading: boolean; error: string | null }>>({})
   const [filter, setFilter] = useState<"all" | "outdated" | "locked">("all")
   const [searchTerm, setSearchTerm] = useState("")
-  const [securityStats, setSecurityStats] = useState({
-    vulnerabilities: 0,
-    outdatedPackages: 0,
-    securityScore: 100,
-    lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
+  const [newDependency, setNewDependency] = useState({
+    name: "",
+    current_version: "",
+    latest_version: "",
+    update_mode: "global" as const,
   })
-  const [globalUpdateMode, setGlobalUpdateMode] = useState<"manual" | "auto" | "conservative">("conservative")
+  const [dialogOpen, setDialogOpen] = useState(false)
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -52,87 +55,77 @@ export default function ClientDependenciesPage() {
   }, [isSignedIn])
 
   const fetchDependencies = async () => {
-    try {
-      setLoading(true)
-      setError(null)
+    setLoading(true)
+    setError(null)
 
+    try {
       const response = await fetch("/api/dependencies")
+
       if (!response.ok) {
         const errorData = await response.json()
+
+        if (response.status === 404 && errorData.tablesMissing) {
+          setTablesMissing(true)
+          setDependencies([])
+          return
+        }
+
         throw new Error(errorData.error || "Failed to fetch dependencies")
       }
 
       const data = await response.json()
-
-      // Check if we got a message about missing tables
-      if (data.message && data.message.includes("not found")) {
-        setError("Dependencies table not set up yet. Please set up the dependencies table first.")
-        setDependencies([])
-        return
-      }
-
-      // Map the data to our internal format
-      const mappedDependencies = (data.dependencies || []).map((dep: any) => ({
-        id: dep.id || dep.name,
-        name: dep.name,
-        currentVersion: dep.currentVersion || dep.current_version,
-        latestVersion: dep.latestVersion || dep.latest_version,
-        outdated: dep.outdated || (dep.currentVersion !== dep.latestVersion && dep.latestVersion),
-        locked: dep.locked || false,
-        description: dep.description || "",
-        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_issue || false,
-        securityDetails: dep.securityDetails || dep.security_details,
-        updateMode: dep.updateMode || "global",
-        isDev: dep.isDev || dep.is_dev || false,
-      }))
-
-      setDependencies(mappedDependencies)
-
-      // Update security stats
-      setSecurityStats({
-        vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
-        outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
-        securityScore: data.securityScore || calculateSecurityScore(mappedDependencies),
-        lastScan: data.lastScan || new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
-      })
-
-      // Get global update mode - default to conservative (security only)
-      setGlobalUpdateMode(data.updateMode || "conservative")
-    } catch (err: any) {
-      setError(`Error fetching dependencies: ${err.message}`)
+      setDependencies(data.dependencies || [])
+      setTablesMissing(false)
+    } catch (err) {
       console.error("Error fetching dependencies:", err)
-
-      // Set empty dependencies to avoid UI errors
-      setDependencies([])
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
     } finally {
       setLoading(false)
     }
   }
 
-  const setupDependencies = async () => {
-    try {
-      setLoading(true)
-      setError(null)
+  const addDependency = async () => {
+    if (!newDependency.name || !newDependency.current_version) {
+      setError("Name and current version are required")
+      return
+    }
 
-      const response = await fetch("/api/setup-dependencies", {
+    setLoading(true)
+    setError(null)
+
+    try {
+      const response = await fetch("/api/dependencies", {
         method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: newDependency.name,
+          current_version: newDependency.current_version,
+          latest_version: newDependency.latest_version || newDependency.current_version,
+          update_mode: newDependency.update_mode,
+        }),
       })
 
       if (!response.ok) {
         const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to set up dependencies")
+        throw new Error(errorData.error || "Failed to add dependency")
       }
 
-      const data = await response.json()
+      // Reset form and close dialog
+      setNewDependency({
+        name: "",
+        current_version: "",
+        latest_version: "",
+        update_mode: "global",
+      })
+      setDialogOpen(false)
 
-      // Show success message
-      setError(`Dependencies set up successfully! ${data.dependenciesCount} dependencies added.`)
-
-      // Fetch dependencies after setup
-      fetchDependencies()
-    } catch (err: any) {
-      setError(`Error setting up dependencies: ${err.message}`)
-      console.error("Error setting up dependencies:", err)
+      // Refresh dependencies
+      await fetchDependencies()
+    } catch (err) {
+      console.error("Error adding dependency:", err)
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
     } finally {
       setLoading(false)
     }
@@ -183,7 +176,7 @@ export default function ClientDependenciesPage() {
     settings: {
       locked?: boolean
       locked_version?: string
-      update_mode?: "manual" | "auto" | "conservative"
+      update_mode?: "manual" | "auto" | "conservative" | "global"
     },
   ) => {
     try {
@@ -230,25 +223,10 @@ export default function ClientDependenciesPage() {
     }
   }
 
-  const calculateSecurityScore = (deps: Dependency[]) => {
-    if (!deps || deps.length === 0) return 100
-
-    const totalDependencies = deps.length
-    const securityIssues = deps.filter((dep) => dep.hasSecurityIssue).length
-    const outdated = deps.filter((dep) => dep.outdated).length
-
-    // Penalize for security issues and outdated packages
-    let score = 100
-    score -= securityIssues * (100 / totalDependencies) * 0.75 // Security issues are weighted more
-    score -= outdated * (100 / totalDependencies) * 0.25
-
-    return Math.max(0, Math.min(100, score)) // Ensure score is within 0-100 range
-  }
-
   const filteredDependencies = dependencies
     .filter((dep) => {
       if (filter === "outdated") {
-        return dep.latestVersion && dep.currentVersion !== dep.latestVersion
+        return dep.latest_version && dep.current_version !== dep.latest_version
       }
       if (filter === "locked") {
         return dep.locked
@@ -270,7 +248,7 @@ export default function ClientDependenciesPage() {
       <div className="container mx-auto p-6">
         <h1 className="text-3xl font-bold mb-6">Dependency Management</h1>
 
-        {!tableExists ? (
+        {tablesMissing ? (
           <DependencyTableSetupGuide onSetupComplete={fetchDependencies} />
         ) : (
           <>
@@ -302,6 +280,82 @@ export default function ClientDependenciesPage() {
                 >
                   Run Auto Updates
                 </button>
+
+                <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-purple-600 hover:bg-purple-700">Add Dependency</Button>
+                  </DialogTrigger>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Add New Dependency</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="name" className="text-right">
+                          Name
+                        </Label>
+                        <Input
+                          id="name"
+                          value={newDependency.name}
+                          onChange={(e) => setNewDependency({ ...newDependency, name: e.target.value })}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="current_version" className="text-right">
+                          Current Version
+                        </Label>
+                        <Input
+                          id="current_version"
+                          value={newDependency.current_version}
+                          onChange={(e) => setNewDependency({ ...newDependency, current_version: e.target.value })}
+                          className="col-span-3"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="latest_version" className="text-right">
+                          Latest Version
+                        </Label>
+                        <Input
+                          id="latest_version"
+                          value={newDependency.latest_version}
+                          onChange={(e) => setNewDependency({ ...newDependency, latest_version: e.target.value })}
+                          className="col-span-3"
+                          placeholder="Optional (defaults to current version)"
+                        />
+                      </div>
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="update_mode" className="text-right">
+                          Update Mode
+                        </Label>
+                        <Select
+                          value={newDependency.update_mode}
+                          onValueChange={(value) =>
+                            setNewDependency({
+                              ...newDependency,
+                              update_mode: value as "manual" | "auto" | "conservative" | "global",
+                            })
+                          }
+                        >
+                          <SelectTrigger className="col-span-3">
+                            <SelectValue placeholder="Select update mode" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="global">Global (Default)</SelectItem>
+                            <SelectItem value="manual">Manual</SelectItem>
+                            <SelectItem value="auto">Automatic</SelectItem>
+                            <SelectItem value="conservative">Conservative</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    <div className="flex justify-end">
+                      <Button onClick={addDependency} disabled={loading}>
+                        {loading ? "Adding..." : "Add Dependency"}
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               </div>
 
               <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -363,27 +417,22 @@ export default function ClientDependenciesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700">
-                    {loading ? (
-                      <div className="text-center py-8">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-                        <p className="mt-4">Loading dependencies...</p>
-                      </div>
+                    {loading && dependencies.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center">
+                          Loading dependencies...
+                        </td>
+                      </tr>
                     ) : dependencies.length === 0 ? (
-                      <div className="text-center py-8">
-                        <p>
-                          No dependencies found. This could be because the dependencies table hasn't been set up yet.
-                        </p>
-                        <div className="flex justify-center gap-2 mt-4">
-                          <Button onClick={setupDependencies}>Set Up Dependencies</Button>
-                          <Button variant="outline" onClick={fetchDependencies} className="border-gray-700">
-                            Retry
-                          </Button>
-                        </div>
-                      </div>
+                      <tr>
+                        <td colSpan={6} className="px-6 py-4 text-center">
+                          No dependencies found. Use the "Add Dependency" button to add your first dependency.
+                        </td>
+                      </tr>
                     ) : filteredDependencies.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-6 py-4 text-center">
-                          No dependencies found.
+                          No dependencies match your filter criteria.
                         </td>
                       </tr>
                     ) : (
@@ -392,20 +441,20 @@ export default function ClientDependenciesPage() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="font-medium">{dep.name}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">{dep.currentVersion}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{dep.current_version}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {dep.latestVersion ? (
+                            {dep.latest_version ? (
                               <span
                                 className={
-                                  dep.currentVersion === dep.latestVersion
+                                  dep.current_version === dep.latest_version
                                     ? "text-green-500"
-                                    : dep.hasSecurityIssue
+                                    : dep.has_security_update
                                       ? "text-red-500"
                                       : "text-yellow-500"
                                 }
                               >
-                                {dep.latestVersion}
-                                {dep.hasSecurityIssue && (
+                                {dep.latest_version}
+                                {dep.has_security_update && (
                                   <span className="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded">Security</span>
                                 )}
                               </span>
@@ -415,15 +464,16 @@ export default function ClientDependenciesPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <select
-                              value={dep.updateMode}
+                              value={dep.update_mode}
                               onChange={(e) =>
                                 updateSettings(dep.id, {
-                                  update_mode: e.target.value as "manual" | "auto" | "conservative",
+                                  update_mode: e.target.value as "manual" | "auto" | "conservative" | "global",
                                 })
                               }
                               className="bg-gray-700 rounded p-1"
                               disabled={dep.locked}
                             >
+                              <option value="global">Global</option>
                               <option value="manual">Manual</option>
                               <option value="auto">Automatic</option>
                               <option value="conservative">Conservative</option>
@@ -440,7 +490,7 @@ export default function ClientDependenciesPage() {
                               {dep.locked && (
                                 <input
                                   type="text"
-                                  value={dep.locked_version || dep.currentVersion}
+                                  value={dep.locked_version || dep.current_version}
                                   onChange={(e) => updateSettings(dep.id, { locked_version: e.target.value })}
                                   className="bg-gray-700 rounded p-1 w-24"
                                   placeholder="Version"
@@ -449,7 +499,7 @@ export default function ClientDependenciesPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {dep.latestVersion && dep.currentVersion !== dep.latestVersion && !dep.locked && (
+                            {dep.latest_version && dep.current_version !== dep.latest_version && !dep.locked && (
                               <button
                                 onClick={() => updateDependency(dep.id)}
                                 disabled={updateStatus[dep.id]?.loading}

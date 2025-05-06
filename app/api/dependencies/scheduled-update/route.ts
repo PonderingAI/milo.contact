@@ -5,48 +5,6 @@ export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Check if dependency_settings table exists
-    const { data: settingsTableExists, error: checkSettingsError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependency_settings",
-    })
-
-    if (checkSettingsError) {
-      console.error("Error checking if dependency_settings table exists:", checkSettingsError)
-      return NextResponse.json(
-        {
-          error: "Failed to check if dependency_settings table exists",
-          details: checkSettingsError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    // If settings table doesn't exist, return early
-    if (!settingsTableExists) {
-      return NextResponse.json({
-        message: "Dependency settings table does not exist",
-        action: "Please set up the dependency tables first",
-      })
-    }
-
-    // Get the global update mode
-    const { data: settings, error: settingsError } = await supabase
-      .from("dependency_settings")
-      .select("*")
-      .limit(1)
-      .single()
-
-    if (settingsError) {
-      console.error("Error fetching dependency settings:", settingsError)
-      return NextResponse.json(
-        {
-          error: "Failed to fetch dependency settings",
-          details: settingsError.message,
-        },
-        { status: 500 },
-      )
-    }
-
     // Check if dependencies table exists
     const { data: depsTableExists, error: checkDepsError } = await supabase.rpc("check_table_exists", {
       table_name: "dependencies",
@@ -71,13 +29,42 @@ export async function GET() {
       })
     }
 
-    const globalMode = settings?.update_mode || "conservative"
+    // Check if dependency_settings table exists
+    const { data: settingsTableExists, error: checkSettingsError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependency_settings",
+    })
+
+    if (checkSettingsError) {
+      console.error("Error checking if dependency_settings table exists:", checkSettingsError)
+      return NextResponse.json(
+        {
+          error: "Failed to check if dependency_settings table exists",
+          details: checkSettingsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // Get the global update mode (default to conservative if table doesn't exist)
+    let globalMode = "conservative"
+
+    if (settingsTableExists) {
+      const { data: settings, error: settingsError } = await supabase
+        .from("dependency_settings")
+        .select("*")
+        .limit(1)
+        .single()
+
+      if (!settingsError) {
+        globalMode = settings?.update_mode || "conservative"
+      }
+    }
 
     // Get dependencies that should be auto-updated based on their update mode
     const { data: dependencies, error: fetchError } = await supabase
       .from("dependencies")
       .select("*")
-      .or(`update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_issue.eq.true)`)
+      .or(`update_mode.eq.auto,and(update_mode.eq.conservative,has_security_update.eq.true)`)
       .eq("locked", false)
 
     if (fetchError) {
@@ -109,7 +96,7 @@ export async function GET() {
             current_version: dep.latest_version,
             last_updated: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            has_security_issue: false,
+            has_security_update: false,
           })
           .eq("id", dep.id)
 
