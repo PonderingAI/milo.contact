@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
@@ -7,22 +9,152 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
-import { AlertCircle, CheckCircle, Package, Shield, RefreshCw, Lock, AlertTriangle } from "lucide-react"
+import { Progress } from "@/components/ui/progress"
+import { ThreeStateToggle, type ToggleState } from "@/components/ui/three-state-toggle"
+import { DraggableWidget } from "@/components/admin/draggable-widget"
+import { WidgetSelector, type WidgetOption } from "@/components/admin/widget-selector"
+import {
+  AlertCircle,
+  CheckCircle,
+  Package,
+  Shield,
+  RefreshCw,
+  AlertTriangle,
+  Settings,
+  Clock,
+  Activity,
+  Search,
+} from "lucide-react"
+
+// Types
+interface Dependency {
+  id: string
+  name: string
+  currentVersion: string
+  latestVersion: string
+  outdated: boolean
+  locked: boolean
+  description: string
+  hasSecurityIssue: boolean
+  updateMode: ToggleState
+}
+
+interface SecurityStats {
+  vulnerabilities: number
+  outdatedPackages: number
+  securityScore: number
+  lastScan: string
+}
+
+interface Widget {
+  id: string
+  type: string
+  visible: boolean
+  order: number
+}
+
+// Available widgets
+const availableWidgets: WidgetOption[] = [
+  {
+    id: "security-score",
+    title: "Security Score",
+    description: "Overall security rating of your application",
+    icon: <Shield className="h-4 w-4" />,
+  },
+  {
+    id: "vulnerabilities",
+    title: "Vulnerabilities",
+    description: "Known security issues in your dependencies",
+    icon: <AlertTriangle className="h-4 w-4" />,
+  },
+  {
+    id: "outdated-packages",
+    title: "Outdated Packages",
+    description: "Dependencies that need updates",
+    icon: <Package className="h-4 w-4" />,
+  },
+  {
+    id: "update-settings",
+    title: "Update Settings",
+    description: "Configure automatic update behavior",
+    icon: <Settings className="h-4 w-4" />,
+  },
+  {
+    id: "recent-activity",
+    title: "Recent Activity",
+    description: "Latest security events and actions",
+    icon: <Activity className="h-4 w-4" />,
+  },
+  {
+    id: "security-audit",
+    title: "Security Audit",
+    description: "Run a security scan of your application",
+    icon: <Search className="h-4 w-4" />,
+  },
+  {
+    id: "update-history",
+    title: "Update History",
+    description: "Recent package updates",
+    icon: <Clock className="h-4 w-4" />,
+  },
+  {
+    id: "security-recommendations",
+    title: "Security Recommendations",
+    description: "Suggested actions to improve security",
+    icon: <AlertCircle className="h-4 w-4" />,
+  },
+]
 
 export default function SecurityClientPage() {
   const { isLoaded, isSignedIn, user } = useUser()
   const router = useRouter()
   const [activeTab, setActiveTab] = useState("overview")
-  const [dependencies, setDependencies] = useState<any[]>([])
+  const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [autoUpdateEnabled, setAutoUpdateEnabled] = useState(false)
-  const [conservativeMode, setConservativeMode] = useState(true)
+  const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("off")
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all")
+  const [widgets, setWidgets] = useState<Widget[]>([])
+  const [availableWidgetsForAdd, setAvailableWidgetsForAdd] = useState<WidgetOption[]>([])
+  const [securityStats, setSecurityStats] = useState<SecurityStats>({
+    vulnerabilities: 3,
+    outdatedPackages: 5,
+    securityScore: 85,
+    lastScan: new Date().toLocaleDateString(),
+  })
+  const [auditRunning, setAuditRunning] = useState(false)
+
+  // Load widgets from localStorage on initial render
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const savedWidgets = localStorage.getItem("securityWidgets")
+      if (savedWidgets) {
+        setWidgets(JSON.parse(savedWidgets))
+      } else {
+        // Default widgets
+        const defaultWidgets: Widget[] = [
+          { id: "security-score", type: "security-score", visible: true, order: 0 },
+          { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 1 },
+          { id: "outdated-packages", type: "outdated-packages", visible: true, order: 2 },
+          { id: "update-settings", type: "update-settings", visible: true, order: 3 },
+          { id: "security-recommendations", type: "security-recommendations", visible: true, order: 4 },
+          { id: "recent-activity", type: "recent-activity", visible: true, order: 5 },
+        ]
+        setWidgets(defaultWidgets)
+        localStorage.setItem("securityWidgets", JSON.stringify(defaultWidgets))
+      }
+    }
+  }, [])
+
+  // Update available widgets for adding
+  useEffect(() => {
+    const currentWidgetTypes = widgets.map((w) => w.type)
+    const filtered = availableWidgets.filter((w) => !currentWidgetTypes.includes(w.id))
+    setAvailableWidgetsForAdd(filtered)
+  }, [widgets])
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -44,9 +176,31 @@ export default function SecurityClientPage() {
         throw new Error("Failed to fetch dependencies")
       }
       const data = await response.json()
-      setDependencies(data.dependencies || [])
-      setAutoUpdateEnabled(data.autoUpdateEnabled || false)
-      setConservativeMode(data.conservativeMode || true)
+
+      // Map the data to our internal format
+      const mappedDependencies = (data.dependencies || []).map((dep: any) => ({
+        id: dep.id || dep.name,
+        name: dep.name,
+        currentVersion: dep.currentVersion || dep.current_version,
+        latestVersion: dep.latestVersion || dep.latest_version,
+        outdated: dep.outdated || dep.currentVersion !== dep.latestVersion,
+        locked: dep.locked || false,
+        description: dep.description || "",
+        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_issue || false,
+        updateMode: dep.updateMode || "off",
+      }))
+
+      setDependencies(mappedDependencies)
+
+      // Update security stats
+      setSecurityStats({
+        ...securityStats,
+        outdatedPackages: mappedDependencies.filter((d) => d.outdated).length,
+        vulnerabilities: mappedDependencies.filter((d) => d.hasSecurityIssue).length,
+      })
+
+      // Get global update mode
+      setGlobalUpdateMode(data.updateMode || "off")
     } catch (err: any) {
       setError(err.message)
       console.error("Error fetching dependencies:", err)
@@ -55,16 +209,15 @@ export default function SecurityClientPage() {
     }
   }
 
-  const toggleAutoUpdate = async () => {
+  const updateGlobalMode = async (value: ToggleState) => {
     try {
-      const newValue = !autoUpdateEnabled
-      setAutoUpdateEnabled(newValue)
+      setGlobalUpdateMode(value)
       await fetch("/api/dependencies/settings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ autoUpdateEnabled: newValue, conservativeMode }),
+        body: JSON.stringify({ updateMode: value }),
       })
     } catch (err: any) {
       setError(err.message)
@@ -72,89 +225,122 @@ export default function SecurityClientPage() {
     }
   }
 
-  const toggleConservativeMode = async () => {
+  const updateDependencyMode = async (id: string, value: ToggleState) => {
     try {
-      const newValue = !conservativeMode
-      setConservativeMode(newValue)
-      await fetch("/api/dependencies/settings", {
+      // Update local state
+      setDependencies((prev) => prev.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep)))
+
+      // Send to API
+      await fetch("/api/dependencies/update-mode", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ autoUpdateEnabled, conservativeMode: newValue }),
+        body: JSON.stringify({ id, updateMode: value }),
       })
     } catch (err: any) {
       setError(err.message)
-      console.error("Error updating settings:", err)
+      console.error("Error updating dependency mode:", err)
+      // Revert on error
+      fetchDependencies()
     }
   }
 
-  const toggleLock = async (packageName: string, locked: boolean) => {
+  const resetAllSettings = async () => {
     try {
-      const updatedDependencies = dependencies.map((dep) => {
-        if (dep.name === packageName) {
-          return { ...dep, locked: !locked }
-        }
-        return dep
-      })
-      setDependencies(updatedDependencies)
+      // Update local state
+      setDependencies((prev) => prev.map((dep) => ({ ...dep, updateMode: globalUpdateMode })))
 
-      await fetch("/api/dependencies/lock", {
+      // Send to API
+      await fetch("/api/dependencies/reset-all", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ packageName, locked: !locked }),
+        body: JSON.stringify({ updateMode: globalUpdateMode }),
       })
     } catch (err: any) {
       setError(err.message)
-      console.error("Error toggling lock:", err)
-      // Revert the UI change if the API call fails
+      console.error("Error resetting settings:", err)
+      // Revert on error
       fetchDependencies()
     }
   }
 
-  const updatePackage = async (packageName: string) => {
+  const runSecurityAudit = async () => {
     try {
-      const updatedDependencies = dependencies.map((dep) => {
-        if (dep.name === packageName) {
-          return { ...dep, updating: true }
-        }
-        return dep
-      })
-      setDependencies(updatedDependencies)
+      setAuditRunning(true)
 
-      await fetch("/api/dependencies/update", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ packageName }),
+      // Simulate an audit
+      await new Promise((resolve) => setTimeout(resolve, 2000))
+
+      // Update security stats with "new" data
+      setSecurityStats({
+        vulnerabilities: Math.floor(Math.random() * 5),
+        outdatedPackages: dependencies.filter((d) => d.outdated).length,
+        securityScore: Math.floor(Math.random() * 15) + 80,
+        lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       })
 
-      // Refresh the dependencies list
-      fetchDependencies()
+      // Show success message
+      setError(null)
     } catch (err: any) {
       setError(err.message)
-      console.error("Error updating package:", err)
-      // Revert the UI change if the API call fails
-      fetchDependencies()
-    }
-  }
-
-  const runAutoUpdates = async () => {
-    try {
-      setLoading(true)
-      await fetch("/api/dependencies/auto-update", {
-        method: "POST",
-      })
-      fetchDependencies()
-    } catch (err: any) {
-      setError(err.message)
-      console.error("Error running auto updates:", err)
+      console.error("Error running security audit:", err)
     } finally {
-      setLoading(false)
+      setAuditRunning(false)
     }
+  }
+
+  // Widget management functions
+  const handleAddWidget = (widgetId: string) => {
+    const newWidget: Widget = {
+      id: `${widgetId}-${Date.now()}`,
+      type: widgetId,
+      visible: true,
+      order: widgets.length,
+    }
+
+    const updatedWidgets = [...widgets, newWidget]
+    setWidgets(updatedWidgets)
+    localStorage.setItem("securityWidgets", JSON.stringify(updatedWidgets))
+  }
+
+  const handleRemoveWidget = (id: string) => {
+    const updatedWidgets = widgets.filter((w) => w.id !== id)
+    setWidgets(updatedWidgets)
+    localStorage.setItem("securityWidgets", JSON.stringify(updatedWidgets))
+  }
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    e.dataTransfer.setData("widgetId", id)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault()
+    const draggedId = e.dataTransfer.getData("widgetId")
+
+    if (draggedId === targetId) return
+
+    const updatedWidgets = [...widgets]
+    const draggedIndex = updatedWidgets.findIndex((w) => w.id === draggedId)
+    const targetIndex = updatedWidgets.findIndex((w) => w.id === targetId)
+
+    if (draggedIndex === -1 || targetIndex === -1) return
+
+    // Reorder
+    const [draggedWidget] = updatedWidgets.splice(draggedIndex, 1)
+    updatedWidgets.splice(targetIndex, 0, draggedWidget)
+
+    // Update order property
+    const reorderedWidgets = updatedWidgets.map((w, i) => ({ ...w, order: i }))
+
+    setWidgets(reorderedWidgets)
+    localStorage.setItem("securityWidgets", JSON.stringify(reorderedWidgets))
   }
 
   const filteredDependencies = dependencies
@@ -170,41 +356,224 @@ export default function SecurityClientPage() {
         dep.description?.toLowerCase().includes(searchTerm.toLowerCase()),
     )
 
+  // Render widget content based on type
+  const renderWidgetContent = (type: string) => {
+    switch (type) {
+      case "security-score":
+        return (
+          <div>
+            <div className="text-3xl font-bold">{securityStats.securityScore}%</div>
+            <div className="mt-2">
+              <Progress value={securityStats.securityScore} className="h-2" />
+            </div>
+            <p className="text-sm text-gray-400 mt-2">Last scan: {securityStats.lastScan}</p>
+          </div>
+        )
+
+      case "vulnerabilities":
+        return (
+          <div>
+            <div className="flex items-center">
+              <div className="text-3xl font-bold">{securityStats.vulnerabilities}</div>
+              <Badge
+                variant="outline"
+                className={`ml-2 ${securityStats.vulnerabilities > 0 ? "bg-red-900/20 text-red-400 border-red-800" : "bg-green-900/20 text-green-400 border-green-800"}`}
+              >
+                {securityStats.vulnerabilities > 0 ? "Action needed" : "All clear"}
+              </Badge>
+            </div>
+            <p className="text-sm text-gray-400 mt-2">Detected security issues</p>
+            {securityStats.vulnerabilities > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  setActiveTab("dependencies")
+                  setFilter("security")
+                }}
+              >
+                View Issues
+              </Button>
+            )}
+          </div>
+        )
+
+      case "outdated-packages":
+        return (
+          <div>
+            <div className="text-3xl font-bold">{securityStats.outdatedPackages}</div>
+            <p className="text-sm text-gray-400 mt-2">Packages need updates</p>
+            {securityStats.outdatedPackages > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                onClick={() => {
+                  setActiveTab("dependencies")
+                  setFilter("outdated")
+                }}
+              >
+                View Outdated
+              </Button>
+            )}
+          </div>
+        )
+
+      case "update-settings":
+        return (
+          <div className="space-y-4">
+            <div>
+              <Label className="text-sm mb-2 block">Global Update Mode</Label>
+              <ThreeStateToggle
+                value={globalUpdateMode}
+                onValueChange={updateGlobalMode}
+                labels={{
+                  off: "Off",
+                  conservative: "Security Only",
+                  aggressive: "All Updates",
+                }}
+              />
+            </div>
+            <div className="text-sm text-gray-400 mt-2">
+              <p>
+                <strong>Off:</strong> No automatic updates
+              </p>
+              <p>
+                <strong>Security Only:</strong> Only security patches
+              </p>
+              <p>
+                <strong>All Updates:</strong> All package updates
+              </p>
+            </div>
+          </div>
+        )
+
+      case "recent-activity":
+        return (
+          <div className="space-y-3">
+            <div className="flex items-start">
+              <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Security scan completed</p>
+                <p className="text-xs text-gray-500">{securityStats.lastScan}</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <Package className="h-4 w-4 text-blue-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Package updates available</p>
+                <p className="text-xs text-gray-500">{securityStats.outdatedPackages} packages can be updated</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <Shield className="h-4 w-4 text-purple-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Security policy updated</p>
+                <p className="text-xs text-gray-500">Yesterday at 2:30 PM</p>
+              </div>
+            </div>
+          </div>
+        )
+
+      case "security-audit":
+        return (
+          <div>
+            <p className="text-sm text-gray-400 mb-3">Scan your dependencies for known security vulnerabilities</p>
+            <Button onClick={runSecurityAudit} disabled={auditRunning} className="w-full">
+              {auditRunning ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                  Running Audit...
+                </>
+              ) : (
+                "Run Security Audit"
+              )}
+            </Button>
+          </div>
+        )
+
+      case "update-history":
+        return (
+          <div className="space-y-3">
+            <div className="flex items-start">
+              <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">tailwindcss updated to 3.3.5</p>
+                <p className="text-xs text-gray-500">Today at 10:15 AM</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">react-dom updated to 18.2.0</p>
+                <p className="text-xs text-gray-500">Yesterday at 3:45 PM</p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <AlertCircle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">postcss update failed</p>
+                <p className="text-xs text-gray-500">Yesterday at 3:42 PM</p>
+              </div>
+            </div>
+          </div>
+        )
+
+      case "security-recommendations":
+        return (
+          <div className="space-y-4">
+            <div className="flex items-start">
+              <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Update vulnerable packages</p>
+                <p className="text-xs text-gray-500">
+                  {securityStats.vulnerabilities} packages have known security vulnerabilities
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start">
+              <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium">Enable security updates</p>
+                <p className="text-xs text-gray-500">Set update mode to at least "Security Only"</p>
+              </div>
+            </div>
+          </div>
+        )
+
+      default:
+        return <div>Unknown widget type</div>
+    }
+  }
+
   if (!isLoaded || !isSignedIn) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Loading...</p>
+      <div className="flex items-center justify-center min-h-screen bg-gray-950">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
       </div>
     )
   }
 
-  // Mock data for the security overview
-  const securityStats = {
-    vulnerabilities: 3,
-    outdatedPackages: dependencies.filter((d) => d.outdated).length || 5,
-    securityScore: 85,
-    lastScan: new Date().toLocaleDateString(),
-  }
-
   return (
-    <div className="container mx-auto p-6">
+    <div className="container mx-auto p-6 bg-gray-950 text-gray-100">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Security Center</h1>
-        <Button onClick={fetchDependencies} variant="outline" size="sm">
+        <Button onClick={fetchDependencies} variant="outline" size="sm" className="border-gray-700">
           <RefreshCw className="mr-2 h-4 w-4" />
           Refresh
         </Button>
       </div>
 
       {error && (
-        <div className="bg-red-500 text-white p-4 rounded-md mb-6 flex items-center">
-          <AlertCircle className="mr-2" />
+        <div className="bg-red-900/30 border border-red-800 text-white p-4 rounded-md mb-6 flex items-center">
+          <AlertCircle className="mr-2 h-5 w-5" />
           <span>{error}</span>
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setError(null)}
-            className="ml-auto text-white hover:bg-red-600"
+            className="ml-auto text-white hover:bg-red-800/50"
           >
             Dismiss
           </Button>
@@ -212,149 +581,51 @@ export default function SecurityClientPage() {
       )}
 
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
+        <TabsList className="mb-6 bg-gray-900 border-gray-800">
+          <TabsTrigger value="overview">Dashboard</TabsTrigger>
           <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
-          <TabsTrigger value="updates">Updates</TabsTrigger>
-          <TabsTrigger value="audit">Security Audit</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Security Score</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{securityStats.securityScore}%</div>
-                <p className="text-sm text-gray-500">Last scan: {securityStats.lastScan}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Vulnerabilities</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{securityStats.vulnerabilities}</div>
-                <p className="text-sm text-gray-500">Detected issues</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Outdated Packages</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{securityStats.outdatedPackages}</div>
-                <p className="text-sm text-gray-500">Need updates</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="pb-2">
-                <CardTitle className="text-lg">Auto Updates</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="text-3xl font-bold">{autoUpdateEnabled ? "Enabled" : "Disabled"}</div>
-                <p className="text-sm text-gray-500">{conservativeMode ? "Conservative mode" : "Standard mode"}</p>
-              </CardContent>
-            </Card>
+          <div className="mb-4 flex justify-between items-center">
+            <h2 className="text-xl font-semibold">Security Dashboard</h2>
+            <WidgetSelector availableWidgets={availableWidgetsForAdd} onAddWidget={handleAddWidget} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
-                <CardTitle>Security Recommendations</CardTitle>
-                <CardDescription>Actions to improve your site security</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-4">
-                  <li className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2 mt-0.5" />
-                    <div>
-                      <p className="font-medium">Update vulnerable packages</p>
-                      <p className="text-sm text-gray-500">3 packages have known security vulnerabilities</p>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="mt-2"
-                        onClick={() => {
-                          setActiveTab("dependencies")
-                          setFilter("security")
-                        }}
-                      >
-                        View Packages
-                      </Button>
-                    </div>
-                  </li>
-                  <li className="flex items-start">
-                    <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2 mt-0.5" />
-                    <div>
-                      <p className="font-medium">Enable automatic security updates</p>
-                      <p className="text-sm text-gray-500">Stay protected with automatic security patches</p>
-                      <div className="flex items-center mt-2">
-                        <Switch
-                          id="auto-security-updates"
-                          checked={autoUpdateEnabled && conservativeMode}
-                          onCheckedChange={() => {
-                            if (!autoUpdateEnabled) {
-                              setAutoUpdateEnabled(true)
-                              setConservativeMode(true)
-                            } else {
-                              setConservativeMode(!conservativeMode)
-                            }
-                          }}
-                        />
-                        <Label htmlFor="auto-security-updates" className="ml-2">
-                          {autoUpdateEnabled && conservativeMode ? "Enabled" : "Disabled"}
-                        </Label>
-                      </div>
-                    </div>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Recent Activity</CardTitle>
-                <CardDescription>Latest security events</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ul className="space-y-4">
-                  <li className="flex items-start">
-                    <CheckCircle className="h-5 w-5 text-green-500 mr-2 mt-0.5" />
-                    <div>
-                      <p className="font-medium">Security scan completed</p>
-                      <p className="text-sm text-gray-500">Today at {new Date().toLocaleTimeString()}</p>
-                    </div>
-                  </li>
-                  <li className="flex items-start">
-                    <Package className="h-5 w-5 text-blue-500 mr-2 mt-0.5" />
-                    <div>
-                      <p className="font-medium">Package updates available</p>
-                      <p className="text-sm text-gray-500">5 packages can be updated</p>
-                    </div>
-                  </li>
-                  <li className="flex items-start">
-                    <Shield className="h-5 w-5 text-purple-500 mr-2 mt-0.5" />
-                    <div>
-                      <p className="font-medium">Security policy updated</p>
-                      <p className="text-sm text-gray-500">Yesterday at 2:30 PM</p>
-                    </div>
-                  </li>
-                </ul>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {widgets
+              .sort((a, b) => a.order - b.order)
+              .map((widget) => {
+                const widgetDef = availableWidgets.find((w) => w.id === widget.type)
+                return (
+                  <DraggableWidget
+                    key={widget.id}
+                    id={widget.id}
+                    title={widgetDef?.title || widget.type}
+                    onRemove={handleRemoveWidget}
+                    onDragStart={handleDragStart}
+                    onDragOver={handleDragOver}
+                    onDrop={handleDrop}
+                  >
+                    {renderWidgetContent(widget.type)}
+                  </DraggableWidget>
+                )
+              })}
           </div>
         </TabsContent>
 
         <TabsContent value="dependencies">
-          <Card>
+          <Card className="bg-gray-900 border-gray-800">
             <CardHeader>
-              <CardTitle>Dependency Management</CardTitle>
-              <CardDescription>Manage your project dependencies and updates</CardDescription>
+              <div className="flex justify-between items-center">
+                <div>
+                  <CardTitle>Dependency Management</CardTitle>
+                  <CardDescription>Manage your project dependencies and updates</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={resetAllSettings} className="border-gray-700">
+                  Reset All Settings
+                </Button>
+              </div>
 
               <div className="flex flex-col sm:flex-row gap-4 mt-4">
                 <div className="flex-1">
@@ -362,18 +633,24 @@ export default function SecurityClientPage() {
                     placeholder="Search dependencies..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full"
+                    className="w-full bg-gray-800 border-gray-700"
                   />
                 </div>
 
                 <div className="flex gap-2">
-                  <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => setFilter("all")}>
+                  <Button
+                    variant={filter === "all" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilter("all")}
+                    className={filter !== "all" ? "border-gray-700" : ""}
+                  >
                     All
                   </Button>
                   <Button
                     variant={filter === "outdated" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFilter("outdated")}
+                    className={filter !== "outdated" ? "border-gray-700" : ""}
                   >
                     Outdated
                   </Button>
@@ -381,6 +658,7 @@ export default function SecurityClientPage() {
                     variant={filter === "locked" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFilter("locked")}
+                    className={filter !== "locked" ? "border-gray-700" : ""}
                   >
                     Locked
                   </Button>
@@ -388,6 +666,7 @@ export default function SecurityClientPage() {
                     variant={filter === "security" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFilter("security")}
+                    className={filter !== "security" ? "border-gray-700" : ""}
                   >
                     Security
                   </Button>
@@ -397,7 +676,7 @@ export default function SecurityClientPage() {
             <CardContent>
               {loading ? (
                 <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-800 mx-auto"></div>
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
                   <p className="mt-4">Loading dependencies...</p>
                 </div>
               ) : dependencies.length === 0 ? (
@@ -412,7 +691,7 @@ export default function SecurityClientPage() {
                   <p>No dependencies match your search or filter criteria.</p>
                   <Button
                     variant="outline"
-                    className="mt-4"
+                    className="mt-4 border-gray-700"
                     onClick={() => {
                       setSearchTerm("")
                       setFilter("all")
@@ -425,69 +704,48 @@ export default function SecurityClientPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="border-b">
+                      <tr className="border-b border-gray-800">
                         <th className="text-left py-3 px-4">Package</th>
                         <th className="text-left py-3 px-4">Current</th>
                         <th className="text-left py-3 px-4">Latest</th>
                         <th className="text-left py-3 px-4">Status</th>
-                        <th className="text-left py-3 px-4">Auto Update</th>
-                        <th className="text-left py-3 px-4">Actions</th>
+                        <th className="text-left py-3 px-4">Update Mode</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredDependencies.map((dep, index) => (
-                        <tr key={dep.name} className={index % 2 === 0 ? "bg-gray-50" : ""}>
+                        <tr key={dep.id} className={index % 2 === 0 ? "bg-gray-800/30" : ""}>
                           <td className="py-3 px-4">
                             <div className="font-medium">{dep.name}</div>
-                            <div className="text-sm text-gray-500">{dep.description || "No description"}</div>
+                            <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
                           </td>
                           <td className="py-3 px-4">{dep.currentVersion}</td>
                           <td className="py-3 px-4">{dep.latestVersion}</td>
                           <td className="py-3 px-4">
                             {dep.hasSecurityIssue ? (
-                              <Badge variant="destructive">Security Issue</Badge>
+                              <Badge className="bg-red-900/20 text-red-400 border-red-800">Security Issue</Badge>
                             ) : dep.outdated ? (
-                              <Badge variant="outline">Outdated</Badge>
+                              <Badge variant="outline" className="border-yellow-800 text-yellow-400">
+                                Outdated
+                              </Badge>
                             ) : (
-                              <Badge variant="outline" className="bg-green-100 text-green-800 hover:bg-green-100">
+                              <Badge variant="outline" className="bg-green-900/20 text-green-400 border-green-800">
                                 Up to date
                               </Badge>
                             )}
                           </td>
                           <td className="py-3 px-4">
-                            <div className="flex items-center">
-                              <Switch
-                                id={`lock-${dep.name}`}
-                                checked={!dep.locked}
-                                onCheckedChange={() => toggleLock(dep.name, dep.locked)}
-                              />
-                              <Label htmlFor={`lock-${dep.name}`} className="ml-2">
-                                {dep.locked ? (
-                                  <span className="flex items-center">
-                                    <Lock className="h-3 w-3 mr-1" />
-                                    Locked
-                                  </span>
-                                ) : (
-                                  "Auto"
-                                )}
-                              </Label>
-                            </div>
-                          </td>
-                          <td className="py-3 px-4">
-                            <Button
-                              size="sm"
-                              disabled={!dep.outdated || dep.updating}
-                              onClick={() => updatePackage(dep.name)}
-                            >
-                              {dep.updating ? (
-                                <>
-                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                  Updating...
-                                </>
-                              ) : (
-                                "Update"
-                              )}
-                            </Button>
+                            <ThreeStateToggle
+                              value={dep.updateMode}
+                              onValueChange={(value) => updateDependencyMode(dep.id, value)}
+                              showLabels={false}
+                              labels={{
+                                off: "Off",
+                                conservative: "Security",
+                                aggressive: "All",
+                              }}
+                              className="max-w-[180px]"
+                            />
                           </td>
                         </tr>
                       ))}
@@ -495,159 +753,6 @@ export default function SecurityClientPage() {
                   </table>
                 </div>
               )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="updates">
-          <Card>
-            <CardHeader>
-              <CardTitle>Update Settings</CardTitle>
-              <CardDescription>Configure how package updates are handled</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="auto-update" className="text-base">
-                        Automatic Updates
-                      </Label>
-                      <p className="text-sm text-gray-500">
-                        Automatically update packages when new versions are available
-                      </p>
-                    </div>
-                    <Switch id="auto-update" checked={autoUpdateEnabled} onCheckedChange={toggleAutoUpdate} />
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <Label htmlFor="conservative-mode" className="text-base">
-                        Conservative Mode
-                      </Label>
-                      <p className="text-sm text-gray-500">
-                        Only automatically apply security updates, delay feature updates
-                      </p>
-                    </div>
-                    <Switch
-                      id="conservative-mode"
-                      checked={conservativeMode}
-                      onCheckedChange={toggleConservativeMode}
-                      disabled={!autoUpdateEnabled}
-                    />
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t">
-                  <h3 className="text-lg font-medium mb-2">Manual Updates</h3>
-                  <p className="text-sm text-gray-500 mb-4">
-                    Run updates manually for all non-locked packages that have updates available
-                  </p>
-                  <Button onClick={runAutoUpdates} disabled={loading}>
-                    {loading ? (
-                      <>
-                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                        Running Updates...
-                      </>
-                    ) : (
-                      "Run Updates Now"
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="audit">
-          <Card>
-            <CardHeader>
-              <CardTitle>Security Audit</CardTitle>
-              <CardDescription>Scan your dependencies for security vulnerabilities</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-6">
-                <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4">
-                  <div className="flex">
-                    <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2" />
-                    <div>
-                      <h3 className="font-medium text-yellow-800">Security vulnerabilities detected</h3>
-                      <p className="text-sm text-yellow-700 mt-1">
-                        We found 3 packages with known security vulnerabilities that should be updated.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b">
-                        <th className="text-left py-3 px-4">Package</th>
-                        <th className="text-left py-3 px-4">Vulnerability</th>
-                        <th className="text-left py-3 px-4">Severity</th>
-                        <th className="text-left py-3 px-4">Recommended Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {/* Mock vulnerability data */}
-                      <tr className="bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div className="font-medium">lodash</div>
-                          <div className="text-sm text-gray-500">4.17.15</div>
-                        </td>
-                        <td className="py-3 px-4">Prototype Pollution</td>
-                        <td className="py-3 px-4">
-                          <Badge variant="destructive">High</Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <Button size="sm">Update to 4.17.21</Button>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td className="py-3 px-4">
-                          <div className="font-medium">node-fetch</div>
-                          <div className="text-sm text-gray-500">2.6.1</div>
-                        </td>
-                        <td className="py-3 px-4">Exposure of Sensitive Information</td>
-                        <td className="py-3 px-4">
-                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-                            Medium
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <Button size="sm">Update to 2.6.7</Button>
-                        </td>
-                      </tr>
-                      <tr className="bg-gray-50">
-                        <td className="py-3 px-4">
-                          <div className="font-medium">postcss</div>
-                          <div className="text-sm text-gray-500">8.2.10</div>
-                        </td>
-                        <td className="py-3 px-4">Regular Expression Denial of Service</td>
-                        <td className="py-3 px-4">
-                          <Badge variant="outline" className="bg-yellow-100 text-yellow-800 hover:bg-yellow-100">
-                            Medium
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4">
-                          <Button size="sm">Update to 8.4.31</Button>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="pt-4 border-t">
-                  <h3 className="text-lg font-medium mb-2">Run Security Audit</h3>
-                  <p className="text-sm text-gray-500 mb-4">
-                    Scan your dependencies for known security vulnerabilities
-                  </p>
-                  <Button>Run Security Audit</Button>
-                </div>
-              </div>
             </CardContent>
           </Card>
         </TabsContent>

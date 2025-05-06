@@ -1,5 +1,5 @@
-import ClientDependenciesPage from "./client-page"
+import { redirect } from "next/navigation"
 
 export default function DependenciesPage() {
-  return <ClientDependenciesPage />
+  redirect("/admin/security")
 }
