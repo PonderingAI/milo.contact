@@ -15,7 +15,6 @@ import { Progress } from "@/components/ui/progress"
 import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
 import { DraggableWidget } from "@/components/admin/draggable-widget"
 import { WidgetSelector, type WidgetOption } from "@/components/admin/widget-selector"
-import DependencySetupAlert from "@/components/admin/dependency-setup-alert"
 import {
   AlertCircle,
   CheckCircle,
@@ -118,6 +117,7 @@ export default function SecurityClientPage() {
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [setupMessage, setSetupMessage] = useState<string | null>(null)
   const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("conservative")
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all")
@@ -201,16 +201,6 @@ export default function SecurityClientPage() {
       if (!response.ok) {
         const errorData = await response.json()
         console.error("Scheduled update check failed:", errorData.error || (await response.text()))
-
-        // If the error is about missing tables, we can ignore it silently
-        if (
-          errorData.message &&
-          (errorData.message.includes("table does not exist") || errorData.message.includes("not found"))
-        ) {
-          console.log("Dependencies tables not set up yet, skipping scheduled update")
-          return
-        }
-
         return
       }
 
@@ -260,6 +250,7 @@ export default function SecurityClientPage() {
     try {
       setLoading(true)
       setError(null)
+      setSetupMessage(null)
 
       const response = await fetch("/api/dependencies")
       if (!response.ok) {
@@ -267,6 +258,11 @@ export default function SecurityClientPage() {
       }
 
       const data = await response.json()
+
+      // Check if setup is needed
+      if (data.setupNeeded) {
+        setSetupMessage(data.setupMessage || "Setting up dependency system...")
+      }
 
       // Map the data to our internal format
       const mappedDependencies = (data.dependencies || []).map((dep: any) => ({
@@ -779,7 +775,20 @@ export default function SecurityClientPage() {
         </div>
       )}
 
-      <DependencySetupAlert />
+      {setupMessage && (
+        <div className="bg-blue-900/30 border border-blue-800 text-white p-4 rounded-md mb-6 flex items-center">
+          <Info className="mr-2 h-5 w-5" />
+          <span>{setupMessage}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSetupMessage(null)}
+            className="ml-auto text-white hover:bg-blue-800/50"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
 
       {showUpdateResults && updateResults.length > 0 && (
         <div className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6">
@@ -921,7 +930,7 @@ export default function SecurityClientPage() {
                 </div>
               ) : dependencies.length === 0 ? (
                 <div className="text-center py-8">
-                  <p>No dependencies found. This could be because the dependencies table hasn't been set up yet.</p>
+                  <p>No dependencies found. This could be because the system is still setting up.</p>
                   <Button className="mt-4" onClick={fetchDependencies}>
                     Retry
                   </Button>
