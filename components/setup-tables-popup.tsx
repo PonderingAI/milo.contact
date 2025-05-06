@@ -12,6 +12,15 @@ const COMPLETE_SETUP_SQL = `
 -- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
+-- Create user_roles table first (since other policies reference it)
+CREATE TABLE IF NOT EXISTS user_roles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL,
+  role TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, role)
+);
+
 -- Create projects table
 CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -127,16 +136,14 @@ CREATE TABLE IF NOT EXISTS security_audits (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create user_roles table if it doesn't exist
-CREATE TABLE IF NOT EXISTS user_roles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL,
-  role TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, role)
+-- Add RLS policies for all tables
+-- User roles table
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Allow users to read their own roles" ON user_roles FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Allow admins to manage user roles" ON user_roles FOR ALL USING (
+  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
 );
 
--- Add RLS policies for all tables
 -- Projects table
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Allow public read access to projects" ON projects FOR SELECT USING (true);
@@ -195,22 +202,6 @@ CREATE POLICY "Allow authenticated users to read security audits" ON security_au
 CREATE POLICY "Allow admins to manage security audits" ON security_audits FOR ALL TO authenticated USING (
   EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
 );
-
--- User roles table
-ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow users to read their own roles" ON user_roles FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Allow admins to manage user roles" ON user_roles FOR ALL USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
-
--- Create storage buckets if they don't exist
--- Note: This part needs to be done via the Supabase UI or API, not SQL
--- You'll need to create:
--- 1. 'project-images' bucket
--- 2. 'site-assets' bucket
--- 3. 'bts-images' bucket
--- 4. 'media' bucket
--- 5. 'icons' bucket
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
@@ -289,34 +280,29 @@ export default function SetupTablesPopup() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <AlertCircle className="h-5 w-5 text-red-500" />
-            Database Tables Setup Required
+            Database Setup Required
           </DialogTitle>
           <DialogDescription>
-            Your portfolio requires database tables that are currently missing. Copy the SQL below and run it in your
-            Supabase SQL Editor.
+            Your portfolio needs database tables to work properly. Follow these simple steps:
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 space-y-4">
-          <div className="bg-red-900/20 border border-red-800 rounded-md p-4">
-            <h3 className="font-medium text-red-400 mb-2">Missing Tables:</h3>
-            <ul className="list-disc list-inside text-red-300">
-              {missingTables.map((table) => (
-                <li key={table}>{table}</li>
-              ))}
-            </ul>
+          {/* Big prominent copy button at the top */}
+          <div className="sticky top-0 z-10 bg-blue-600 hover:bg-blue-700 rounded-md p-4 flex items-center justify-between">
+            <span className="font-medium text-white">Step 1: Copy this SQL code</span>
+            <Button
+              onClick={copyToClipboard}
+              variant="secondary"
+              className="bg-white text-blue-700 hover:bg-gray-100 flex items-center gap-2 font-bold"
+            >
+              {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
+              {copied ? "Copied!" : "COPY SQL CODE"}
+            </Button>
           </div>
 
           <div className="bg-gray-800/50 p-4 rounded-md">
-            <div className="flex justify-between items-center mb-2">
-              <h3 className="font-medium">Complete SQL Setup Script</h3>
-              <Button onClick={copyToClipboard} variant="outline" className="flex items-center gap-2">
-                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                {copied ? "Copied!" : "Copy SQL"}
-              </Button>
-            </div>
-
-            <div className="max-h-[50vh] overflow-auto rounded-md">
+            <div className="max-h-[30vh] overflow-auto rounded-md">
               <SyntaxHighlighter
                 language="sql"
                 style={vscDarkPlus}
@@ -332,16 +318,33 @@ export default function SetupTablesPopup() {
           </div>
 
           <div className="bg-blue-900/20 border border-blue-800 rounded-md p-4">
-            <h3 className="font-medium text-blue-400 mb-2">Instructions:</h3>
-            <ol className="list-decimal list-inside text-blue-300 space-y-2">
-              <li>Copy the SQL code above using the "Copy SQL" button</li>
-              <li>Go to your Supabase project dashboard</li>
-              <li>Click on "SQL Editor" in the left sidebar</li>
-              <li>Paste the SQL code into the editor</li>
-              <li>Click "Run" to execute the SQL and create all required tables</li>
-              <li>Return to your portfolio site and refresh the page</li>
+            <h3 className="font-medium text-blue-400 mb-2">What to do next:</h3>
+            <ol className="list-decimal list-inside text-blue-300 space-y-3 text-base">
+              <li className="p-2 bg-blue-900/30 rounded">
+                <strong>Step 2:</strong> Go to your Supabase dashboard and click on "SQL Editor" in the left sidebar
+              </li>
+              <li className="p-2 bg-blue-900/30 rounded">
+                <strong>Step 3:</strong> Create a "New Query" and paste the SQL code you copied
+              </li>
+              <li className="p-2 bg-blue-900/30 rounded">
+                <strong>Step 4:</strong> Click the "Run" button to create all the tables
+              </li>
+              <li className="p-2 bg-blue-900/30 rounded">
+                <strong>Step 5:</strong> Return to your portfolio site and refresh the page
+              </li>
             </ol>
           </div>
+
+          {missingTables.length > 0 && (
+            <div className="bg-red-900/20 border border-red-800 rounded-md p-4">
+              <h3 className="font-medium text-red-400 mb-2">Missing Tables:</h3>
+              <ul className="list-disc list-inside text-red-300">
+                {missingTables.map((table) => (
+                  <li key={table}>{table}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
 
         <div className="flex justify-end mt-4">
