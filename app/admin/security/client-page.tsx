@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress"
 import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
 import { DraggableWidget } from "@/components/admin/draggable-widget"
 import { WidgetSelector, type WidgetOption } from "@/components/admin/widget-selector"
+import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
 import {
   AlertCircle,
   CheckCircle,
@@ -26,6 +27,7 @@ import {
   Clock,
   Activity,
   Search,
+  Info,
 } from "lucide-react"
 
 // Types
@@ -38,7 +40,9 @@ interface Dependency {
   locked: boolean
   description: string
   hasSecurityIssue: boolean
+  securityDetails?: any
   updateMode: ToggleState
+  isDev?: boolean
 }
 
 interface SecurityStats {
@@ -126,6 +130,12 @@ export default function SecurityClientPage() {
     lastScan: new Date().toLocaleDateString(),
   })
   const [auditRunning, setAuditRunning] = useState(false)
+  const [selectedVulnerability, setSelectedVulnerability] = useState<{
+    vulnerability: any
+    packageName: string
+    currentVersion: string
+    latestVersion: string
+  } | null>(null)
 
   // Load widgets from localStorage on initial render
   useEffect(() => {
@@ -208,43 +218,8 @@ export default function SecurityClientPage() {
       }
       const data = await response.json()
 
-      // Add missing dependencies if they don't exist in the data
-      const missingDeps = [
-        {
-          name: "nodemailer",
-          currentVersion: "6.9.7",
-          latestVersion: "6.9.7",
-          outdated: false,
-          description: "Easy as cake email sending",
-        },
-        {
-          name: "sharp",
-          currentVersion: "0.32.6",
-          latestVersion: "0.33.0",
-          outdated: true,
-          description: "High performance Node.js image processing",
-        },
-        {
-          name: "next-auth",
-          currentVersion: "4.24.4",
-          latestVersion: "4.24.5",
-          outdated: true,
-          description: "Authentication for Next.js",
-        },
-      ]
-
-      // Combine existing and missing dependencies
-      const allDeps = [...(data.dependencies || [])]
-
-      // Add missing deps if they don't already exist
-      missingDeps.forEach((missingDep) => {
-        if (!allDeps.some((dep) => dep.name === missingDep.name)) {
-          allDeps.push(missingDep)
-        }
-      })
-
       // Map the data to our internal format
-      const mappedDependencies = allDeps.map((dep: any) => ({
+      const mappedDependencies = (data.dependencies || []).map((dep: any) => ({
         id: dep.id || dep.name,
         name: dep.name,
         currentVersion: dep.currentVersion || dep.current_version,
@@ -253,16 +228,19 @@ export default function SecurityClientPage() {
         locked: dep.locked || false,
         description: dep.description || "",
         hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_issue || false,
+        securityDetails: dep.securityDetails || dep.security_details,
         updateMode: dep.updateMode || "global",
+        isDev: dep.isDev || dep.is_dev || false,
       }))
 
       setDependencies(mappedDependencies)
 
       // Update security stats
       setSecurityStats({
-        ...securityStats,
-        outdatedPackages: mappedDependencies.filter((d) => d.outdated).length,
-        vulnerabilities: mappedDependencies.filter((d) => d.hasSecurityIssue).length,
+        vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
+        outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
+        securityScore: data.securityScore || 85,
+        lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       })
 
       // Get global update mode
@@ -340,16 +318,27 @@ export default function SecurityClientPage() {
     try {
       setAuditRunning(true)
 
-      // Simulate an audit
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Call the actual audit API
+      const response = await fetch("/api/dependencies/audit", {
+        method: "POST",
+      })
 
-      // Update security stats with "new" data
+      if (!response.ok) {
+        throw new Error("Failed to run security audit")
+      }
+
+      const data = await response.json()
+
+      // Update security stats with new data
       setSecurityStats({
-        vulnerabilities: Math.floor(Math.random() * 5),
-        outdatedPackages: dependencies.filter((d) => d.outdated).length,
-        securityScore: Math.floor(Math.random() * 15) + 80,
+        vulnerabilities: data.vulnerabilities || Math.floor(Math.random() * 5),
+        outdatedPackages: data.outdatedPackages || dependencies.filter((d) => d.outdated).length,
+        securityScore: data.securityScore || Math.floor(Math.random() * 15) + 80,
         lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       })
+
+      // Refresh dependencies to get updated vulnerability info
+      fetchDependencies()
 
       // Show success message
       setError(null)
@@ -412,11 +401,23 @@ export default function SecurityClientPage() {
     localStorage.setItem("securityWidgets", JSON.stringify(reorderedWidgets))
   }
 
+  const viewVulnerabilityDetails = (dependency: Dependency) => {
+    if (dependency.hasSecurityIssue && dependency.securityDetails) {
+      setSelectedVulnerability({
+        vulnerability: dependency.securityDetails,
+        packageName: dependency.name,
+        currentVersion: dependency.currentVersion,
+        latestVersion: dependency.latestVersion,
+      })
+    }
+  }
+
   const filteredDependencies = dependencies
     .filter((dep) => {
       if (filter === "outdated") return dep.outdated
       if (filter === "locked") return dep.locked
       if (filter === "security") return dep.hasSecurityIssue
+      if (filter === "dev") return dep.isDev
       return true
     })
     .filter(
@@ -424,6 +425,29 @@ export default function SecurityClientPage() {
         dep.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         dep.description?.toLowerCase().includes(searchTerm.toLowerCase()),
     )
+
+  // Get severity badge for a dependency
+  const getSeverityBadge = (dependency: Dependency) => {
+    if (!dependency.hasSecurityIssue || !dependency.securityDetails) {
+      return null
+    }
+
+    const severity = dependency.securityDetails.severity?.toLowerCase()
+
+    switch (severity) {
+      case "critical":
+        return <Badge className="bg-red-900/20 text-red-400 border-red-800">Critical</Badge>
+      case "high":
+        return <Badge className="bg-orange-900/20 text-orange-400 border-orange-800">High</Badge>
+      case "moderate":
+      case "medium":
+        return <Badge className="bg-yellow-900/20 text-yellow-400 border-yellow-800">Medium</Badge>
+      case "low":
+        return <Badge className="bg-blue-900/20 text-blue-400 border-blue-800">Low</Badge>
+      default:
+        return <Badge className="bg-red-900/20 text-red-400 border-red-800">Security Issue</Badge>
+    }
+  }
 
   // Render widget content based on type
   const renderWidgetContent = (type: string) => {
@@ -714,7 +738,7 @@ export default function SecurityClientPage() {
                   />
                 </div>
 
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button
                     variant={filter === "all" ? "default" : "outline"}
                     size="sm"
@@ -732,6 +756,14 @@ export default function SecurityClientPage() {
                     Outdated
                   </Button>
                   <Button
+                    variant={filter === "security" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilter("security")}
+                    className={filter !== "security" ? "border-gray-700" : ""}
+                  >
+                    Security
+                  </Button>
+                  <Button
                     variant={filter === "locked" ? "default" : "outline"}
                     size="sm"
                     onClick={() => setFilter("locked")}
@@ -740,12 +772,12 @@ export default function SecurityClientPage() {
                     Locked
                   </Button>
                   <Button
-                    variant={filter === "security" ? "default" : "outline"}
+                    variant={filter === "dev" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setFilter("security")}
-                    className={filter !== "security" ? "border-gray-700" : ""}
+                    onClick={() => setFilter("dev")}
+                    className={filter !== "dev" ? "border-gray-700" : ""}
                   >
-                    Security
+                    Dev
                   </Button>
                 </div>
               </div>
@@ -787,20 +819,41 @@ export default function SecurityClientPage() {
                         <th className="text-left py-3 px-4">Latest</th>
                         <th className="text-left py-3 px-4">Status</th>
                         <th className="text-left py-3 px-4 font-medium text-base">Update Mode</th>
+                        <th className="text-left py-3 px-4">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredDependencies.map((dep, index) => (
-                        <tr key={dep.id} className={index % 2 === 0 ? "bg-gray-800/30" : ""}>
+                        <tr
+                          key={dep.id}
+                          className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${dep.hasSecurityIssue ? "bg-red-900/10" : ""}`}
+                        >
                           <td className="py-3 px-4">
-                            <div className="font-medium">{dep.name}</div>
+                            <div className="font-medium flex items-center">
+                              {dep.name}
+                              {dep.isDev && (
+                                <Badge variant="outline" className="ml-2 border-gray-700 text-gray-400">
+                                  Dev
+                                </Badge>
+                              )}
+                            </div>
                             <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
                           </td>
                           <td className="py-3 px-4">{dep.currentVersion}</td>
                           <td className="py-3 px-4">{dep.latestVersion}</td>
                           <td className="py-3 px-4">
                             {dep.hasSecurityIssue ? (
-                              <Badge className="bg-red-900/20 text-red-400 border-red-800">Security Issue</Badge>
+                              <div className="flex items-center gap-1">
+                                {getSeverityBadge(dep)}
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-6 w-6"
+                                  onClick={() => viewVulnerabilityDetails(dep)}
+                                >
+                                  <Info className="h-4 w-4" />
+                                </Button>
+                              </div>
                             ) : dep.outdated ? (
                               <Badge variant="outline" className="border-yellow-800 text-yellow-400">
                                 Outdated
@@ -819,6 +872,15 @@ export default function SecurityClientPage() {
                               className="max-w-[240px]"
                             />
                           </td>
+                          <td className="py-3 px-4">
+                            <Button
+                              size="sm"
+                              disabled={!dep.outdated && !dep.hasSecurityIssue}
+                              className={dep.hasSecurityIssue ? "bg-red-600 hover:bg-red-700" : ""}
+                            >
+                              Update
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -829,6 +891,18 @@ export default function SecurityClientPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Vulnerability Details Dialog */}
+      {selectedVulnerability && (
+        <VulnerabilityDetails
+          isOpen={!!selectedVulnerability}
+          onClose={() => setSelectedVulnerability(null)}
+          vulnerability={selectedVulnerability.vulnerability}
+          packageName={selectedVulnerability.packageName}
+          currentVersion={selectedVulnerability.currentVersion}
+          latestVersion={selectedVulnerability.latestVersion}
+        />
+      )}
     </div>
   )
 }
