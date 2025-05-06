@@ -95,3 +95,16 @@ export async function GET() {
     )
   }
 }
+
+export async function POST() {
+  try {
+    // In a real implementation, this would run npm/yarn update for all non-locked packages
+    // For now, we'll simulate a delay and return success
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    console.error("Error in auto-update API:", error)
+    return NextResponse.json({ error: "Failed to run auto updates" }, { status: 500 })
+  }
+}
