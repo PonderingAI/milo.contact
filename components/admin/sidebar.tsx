@@ -1,6 +1,28 @@
+"use client"
+
 import Link from "next/link"
+import { HomeIcon, PackageIcon } from "@heroicons/react/24/outline"
+import { usePathname } from "next/navigation"
+import DependencyStatus from "@/components/admin/dependency-status"
 
 export default function AdminSidebar() {
+  const pathname = usePathname()
+
+  const navigation = [
+    { name: "Dashboard", href: "/admin", icon: HomeIcon },
+    { name: "Projects", href: "/admin/projects", icon: HomeIcon },
+    { name: "Media", href: "/admin/media", icon: HomeIcon },
+    { name: "Users", href: "/admin/users", icon: HomeIcon },
+    { name: "Settings", href: "/admin/settings", icon: HomeIcon },
+    { name: "Security", href: "/admin/security", icon: HomeIcon },
+    {
+      name: "Dependencies",
+      href: "/admin/dependencies",
+      icon: PackageIcon,
+      status: <DependencyStatus />,
+    },
+  ]
+
   return (
     <aside className="w-64 bg-gray-900 text-white p-6 hidden md:block">
       <div className="mb-8">
@@ -8,36 +30,22 @@ export default function AdminSidebar() {
       </div>
       <nav>
         <ul className="space-y-2">
-          <li>
-            <Link href="/admin" className="block py-2 px-4 rounded hover:bg-gray-800">
-              Dashboard
-            </Link>
-          </li>
-          <li>
-            <Link href="/admin/projects" className="block py-2 px-4 rounded hover:bg-gray-800">
-              Projects
-            </Link>
-          </li>
-          <li>
-            <Link href="/admin/media" className="block py-2 px-4 rounded hover:bg-gray-800">
-              Media
-            </Link>
-          </li>
-          <li>
-            <Link href="/admin/users" className="block py-2 px-4 rounded hover:bg-gray-800">
-              Users
-            </Link>
-          </li>
-          <li>
-            <Link href="/admin/settings" className="block py-2 px-4 rounded hover:bg-gray-800">
-              Settings
-            </Link>
-          </li>
-          <li>
-            <Link href="/admin/security" className="block py-2 px-4 rounded hover:bg-gray-800">
-              Security
-            </Link>
-          </li>
+          {navigation.map((item) => (
+            <li key={item.name}>
+              <Link
+                href={item.href}
+                className={`${
+                  pathname === item.href ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-700 hover:text-white"
+                } flex items-center justify-between px-3 py-2 rounded-md text-sm font-medium`}
+              >
+                <div className="flex items-center">
+                  <item.icon className="mr-3 h-6 w-6" aria-hidden="true" />
+                  {item.name}
+                </div>
+                {item.status && <div>{item.status}</div>}
+              </Link>
+            </li>
+          ))}
           <li className="mt-8">
             <form action="/api/auth/signout" method="post">
               <button type="submit" className="w-full text-left py-2 px-4 rounded hover:bg-gray-800 text-red-400">

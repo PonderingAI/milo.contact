@@ -70,7 +70,8 @@
     "react-syntax-highlighter": "latest",
     "nodemailer": "latest",
     "child_process": "latest",
-    "util": "latest"
+    "util": "latest",
+    "@heroicons/react": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

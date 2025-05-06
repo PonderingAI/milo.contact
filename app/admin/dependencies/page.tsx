@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation"
+import AdminCheck from "@/components/admin/admin-check"
+import DependenciesClientPage from "./client-page"
 
 export default function DependenciesPage() {
-  redirect("/admin/security")
+  return (
+    <AdminCheck>
+      <DependenciesClientPage />
+    </AdminCheck>
+  )
 }

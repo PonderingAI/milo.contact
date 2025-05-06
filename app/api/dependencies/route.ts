@@ -1,107 +1,147 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
+import { promises as fs } from "fs"
+import path from "path"
+import { exec } from "child_process"
+import { promisify } from "util"
+
+// Promisify exec
+const execAsync = promisify(exec)
+
+// Read package.json and parse dependencies
+async function getDependencies() {
+  try {
+    const packageJsonPath = path.join(process.cwd(), "package.json")
+    const packageJsonContent = await fs.readFile(packageJsonPath, "utf-8")
+    const packageJson = JSON.parse(packageJsonContent)
+
+    // Extract dependencies and dev dependencies
+    const dependencies = Object.entries(packageJson.dependencies || {}).map(([name, version]) => ({
+      name,
+      currentVersion: String(version).replace(/^\^|~/, ""),
+      type: "production",
+    }))
+
+    const devDependencies = Object.entries(packageJson.devDependencies || {}).map(([name, version]) => ({
+      name,
+      currentVersion: String(version).replace(/^\^|~/, ""),
+      type: "development",
+    }))
+
+    return [...dependencies, ...devDependencies]
+  } catch (error) {
+    console.error("Error reading package.json:", error)
+    throw new Error("Failed to read package.json")
+  }
+}
+
+// Check for latest versions using npm outdated
+async function checkLatestVersions(dependencies) {
+  const updatedDeps = [...dependencies]
+
+  try {
+    // Run npm outdated in JSON format
+    const { stdout } = await execAsync("npm outdated --json")
+
+    if (stdout.trim()) {
+      const outdated = JSON.parse(stdout)
+
+      // Update each dependency with latest version info
+      for (const dep of updatedDeps) {
+        if (outdated[dep.name]) {
+          dep.latestVersion = outdated[dep.name].latest
+          dep.needsUpdate = true
+        } else {
+          dep.latestVersion = dep.currentVersion
+          dep.needsUpdate = false
+        }
+      }
+    }
+  } catch (error) {
+    // npm outdated returns non-zero exit code when updates are available
+    if (error instanceof Error && "stdout" in error && error.stdout) {
+      try {
+        const outdated = JSON.parse(error.stdout as string)
+
+        // Update each dependency with latest version info
+        for (const dep of updatedDeps) {
+          if (outdated[dep.name]) {
+            dep.latestVersion = outdated[dep.name].latest
+            dep.needsUpdate = true
+          } else {
+            dep.latestVersion = dep.currentVersion
+            dep.needsUpdate = false
+          }
+        }
+      } catch (parseError) {
+        console.error("Error parsing npm outdated output:", parseError)
+      }
+    } else {
+      console.error("Error checking for updates:", error)
+    }
+  }
+
+  return updatedDeps
+}
+
+// Preferences file path
+const PREFS_FILE_PATH = path.join(process.cwd(), ".dependency-prefs.json")
+
+// Save preferences to file
+async function savePreferences(prefs) {
+  try {
+    await fs.writeFile(PREFS_FILE_PATH, JSON.stringify(prefs, null, 2))
+    return true
+  } catch (error) {
+    console.error("Error saving preferences:", error)
+    return false
+  }
+}
+
+// Load preferences from file
+async function loadPreferences() {
+  try {
+    const content = await fs.readFile(PREFS_FILE_PATH, "utf-8")
+    return JSON.parse(content)
+  } catch (error) {
+    // Return default preferences if file doesn't exist
+    return {
+      globalMode: "manual",
+      packages: {},
+    }
+  }
+}
 
 export async function GET() {
   try {
-    const supabase = createAdminClient()
+    // Get dependencies from package.json
+    const dependencies = await getDependencies()
 
-    // Check if dependencies table exists
-    const { data: depsTableExists, error: checkDepsError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependencies",
-    })
+    // Check for latest versions
+    const dependenciesWithVersions = await checkLatestVersions(dependencies)
 
-    if (checkDepsError) {
-      console.error("Error checking if dependencies table exists:", checkDepsError)
-      return NextResponse.json(
-        {
-          error: "Failed to check if dependencies table exists",
-          details: checkDepsError.message,
-        },
-        { status: 500 },
-      )
-    }
+    // Load preferences
+    const preferences = await loadPreferences()
 
-    // If dependencies table doesn't exist, return appropriate message
-    if (!depsTableExists) {
-      return NextResponse.json(
-        {
-          error: "Dependencies table does not exist",
-          tablesMissing: true,
-          dependencies: [],
-        },
-        { status: 404 },
-      )
-    }
+    // Combine preferences with dependencies
+    const result = dependenciesWithVersions.map((dep) => {
+      const packagePrefs = preferences.packages[dep.name] || {}
 
-    // Check if dependency_settings table exists
-    const { data: settingsTableExists, error: checkSettingsError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependency_settings",
-    })
-
-    if (checkSettingsError) {
-      console.error("Error checking if dependency_settings table exists:", checkSettingsError)
-    }
-
-    // Get settings if table exists
-    let settings = { update_mode: "conservative" }
-    if (settingsTableExists) {
-      const { data: settingsData, error: settingsError } = await supabase
-        .from("dependency_settings")
-        .select("*")
-        .limit(1)
-        .single()
-
-      if (!settingsError) {
-        settings = settingsData
+      return {
+        ...dep,
+        updateMode: packagePrefs.updateMode || "global",
+        locked: packagePrefs.locked || false,
+        lockedVersion: packagePrefs.lockedVersion || dep.currentVersion,
       }
-    }
-
-    // Get existing dependencies from database
-    const { data: dependencies, error: depsError } = await supabase.from("dependencies").select("*")
-
-    if (depsError) {
-      console.error("Error fetching existing dependencies:", depsError)
-      return NextResponse.json(
-        {
-          error: "Failed to fetch dependencies",
-          details: depsError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    // Calculate security stats
-    const vulnerabilities = dependencies.filter((d) => d.has_security_update).length
-    const outdatedPackages = dependencies.filter(
-      (d) => d.current_version !== d.latest_version && d.latest_version,
-    ).length
-
-    // Calculate security score
-    let securityScore = 100
-
-    // Deduct for vulnerabilities
-    securityScore -= vulnerabilities * 10
-
-    // Deduct less for outdated packages
-    securityScore -= Math.min(10, outdatedPackages * 2)
-
-    // Ensure score is between 0 and 100
-    securityScore = Math.max(0, Math.min(100, securityScore))
+    })
 
     return NextResponse.json({
-      dependencies,
-      updateMode: settings.update_mode,
-      securityScore,
-      vulnerabilities,
-      outdatedPackages,
+      dependencies: result,
+      globalMode: preferences.globalMode || "manual",
     })
   } catch (error) {
-    console.error("Error in dependencies API:", error)
+    console.error("Error fetching dependencies:", error)
     return NextResponse.json(
-      {
-        error: "Failed to fetch dependencies",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to fetch dependencies", details: error instanceof Error ? error.message : String(error) },
       { status: 500 },
     )
   }
@@ -109,103 +149,43 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const supabase = createAdminClient()
-    const body = await request.json()
-    const { id, name, current_version, latest_version, locked, locked_version, update_mode } = body
+    const { packageName, updateMode, locked, lockedVersion, globalMode } = await request.json()
 
-    // Check if dependencies table exists
-    const { data: tableExists, error: checkError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependencies",
-    })
+    // Load current preferences
+    const preferences = await loadPreferences()
 
-    if (checkError) {
-      console.error("Error checking if dependencies table exists:", checkError)
-      return NextResponse.json(
-        {
-          error: "Failed to check if dependencies table exists",
-          details: checkError.message,
-        },
-        { status: 500 },
-      )
+    // Update global mode if provided
+    if (globalMode) {
+      preferences.globalMode = globalMode
     }
 
-    // If table doesn't exist, return appropriate message
-    if (!tableExists) {
-      return NextResponse.json(
-        {
-          error: "Dependencies table does not exist",
-          tablesMissing: true,
-        },
-        { status: 404 },
-      )
-    }
-
-    // If id is provided, update existing dependency
-    if (id) {
-      const updateData: any = {}
-
-      if (locked !== undefined) updateData.locked = locked
-      if (locked_version !== undefined) updateData.locked_version = locked_version
-      if (update_mode !== undefined) updateData.update_mode = update_mode
-      if (latest_version !== undefined) updateData.latest_version = latest_version
-      if (current_version !== undefined) updateData.current_version = current_version
-
-      updateData.updated_at = new Date().toISOString()
-
-      const { error: updateError } = await supabase.from("dependencies").update(updateData).eq("id", id)
-
-      if (updateError) {
-        console.error("Error updating dependency:", updateError)
-        return NextResponse.json(
-          {
-            error: "Failed to update dependency",
-            details: updateError.message,
-          },
-          { status: 500 },
-        )
+    // Update package-specific preferences if provided
+    if (packageName) {
+      if (!preferences.packages[packageName]) {
+        preferences.packages[packageName] = {}
       }
 
-      return NextResponse.json({ success: true, message: "Dependency updated successfully" })
-    }
-
-    // If name is provided, add new dependency
-    if (name && current_version) {
-      const { error: insertError } = await supabase.from("dependencies").insert({
-        name,
-        current_version,
-        latest_version: latest_version || current_version,
-        locked: locked || false,
-        locked_version: locked_version,
-        update_mode: update_mode || "global",
-      })
-
-      if (insertError) {
-        console.error("Error adding dependency:", insertError)
-        return NextResponse.json(
-          {
-            error: "Failed to add dependency",
-            details: insertError.message,
-          },
-          { status: 500 },
-        )
+      if (updateMode !== undefined) {
+        preferences.packages[packageName].updateMode = updateMode
       }
 
-      return NextResponse.json({ success: true, message: "Dependency added successfully" })
+      if (locked !== undefined) {
+        preferences.packages[packageName].locked = locked
+      }
+
+      if (lockedVersion) {
+        preferences.packages[packageName].lockedVersion = lockedVersion
+      }
     }
 
-    return NextResponse.json(
-      {
-        error: "Invalid request. Missing required fields.",
-      },
-      { status: 400 },
-    )
+    // Save updated preferences
+    await savePreferences(preferences)
+
+    return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Error in dependencies API:", error)
+    console.error("Error updating preferences:", error)
     return NextResponse.json(
-      {
-        error: "An unexpected error occurred",
-        details: error instanceof Error ? error.message : String(error),
-      },
+      { error: "Failed to update preferences", details: error instanceof Error ? error.message : String(error) },
       { status: 500 },
     )
   }
