@@ -28,6 +28,42 @@ export async function GET() {
 
     if (settingsError && settingsError.code !== "PGRST116") {
       console.error("Error fetching dependency settings:", settingsError)
+      return NextResponse.json(
+        {
+          error: "Failed to fetch dependency settings",
+          details: settingsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // Check if dependencies table exists
+    const { data: tableExists, error: checkError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependencies",
+    })
+
+    if (checkError) {
+      console.error("Error checking if dependencies table exists:", checkError)
+      return NextResponse.json(
+        {
+          error: "Failed to check if dependencies table exists",
+          details: checkError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // If table doesn't exist, return empty data
+    if (!tableExists) {
+      console.log("Dependencies table does not exist")
+      return NextResponse.json({
+        dependencies: [],
+        updateMode: settings?.update_mode || "conservative",
+        securityScore: 100,
+        vulnerabilities: 0,
+        outdatedPackages: 0,
+        message: "Dependencies table not found",
+      })
     }
 
     // Get existing dependencies from database
@@ -35,7 +71,13 @@ export async function GET() {
 
     if (depsError) {
       console.error("Error fetching existing dependencies:", depsError)
-      return NextResponse.json({ error: "Failed to fetch dependencies" }, { status: 500 })
+      return NextResponse.json(
+        {
+          error: "Failed to fetch dependencies",
+          details: depsError.message,
+        },
+        { status: 500 },
+      )
     }
 
     // Create a map of existing dependencies for quick lookup
@@ -52,7 +94,13 @@ export async function GET() {
       packageJson = await getPackageJson()
     } catch (error) {
       console.error("Error reading package.json:", error)
-      packageJson = { dependencies: {}, devDependencies: {} }
+      return NextResponse.json(
+        {
+          error: "Failed to read package.json",
+          details: error instanceof Error ? error.message : String(error),
+        },
+        { status: 500 },
+      )
     }
 
     // Combine dependencies and devDependencies

@@ -5,18 +5,20 @@ import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import AdminCheck from "@/components/admin/admin-check"
 import DependencyTableSetupGuide from "@/components/admin/dependency-table-setup-guide"
+import { Button } from "@/components/ui/button"
 
 interface Dependency {
   id: number
   name: string
-  current_version: string
-  latest_version: string | null
+  currentVersion: string
+  latestVersion: string | null
+  outdated: boolean
   locked: boolean
-  locked_version: string | null
-  update_mode: "manual" | "auto" | "conservative"
-  last_checked: string
-  last_updated: string
-  has_security_update: boolean
+  description: string
+  hasSecurityIssue: boolean
+  securityDetails: any
+  updateMode: "manual" | "auto" | "conservative" | "global"
+  isDev: boolean
 }
 
 export default function ClientDependenciesPage() {
@@ -29,6 +31,13 @@ export default function ClientDependenciesPage() {
   const [updateStatus, setUpdateStatus] = useState<Record<number, { loading: boolean; error: string | null }>>({})
   const [filter, setFilter] = useState<"all" | "outdated" | "locked">("all")
   const [searchTerm, setSearchTerm] = useState("")
+  const [securityStats, setSecurityStats] = useState({
+    vulnerabilities: 0,
+    outdatedPackages: 0,
+    securityScore: 100,
+    lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
+  })
+  const [globalUpdateMode, setGlobalUpdateMode] = useState<"manual" | "auto" | "conservative">("conservative")
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -43,36 +52,87 @@ export default function ClientDependenciesPage() {
   }, [isSignedIn])
 
   const fetchDependencies = async () => {
-    setLoading(true)
-    setError(null)
-
     try {
+      setLoading(true)
+      setError(null)
+
       const response = await fetch("/api/dependencies")
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to fetch dependencies")
+      }
+
+      const data = await response.json()
+
+      // Check if we got a message about missing tables
+      if (data.message && data.message.includes("not found")) {
+        setError("Dependencies table not set up yet. Please set up the dependencies table first.")
+        setDependencies([])
+        return
+      }
+
+      // Map the data to our internal format
+      const mappedDependencies = (data.dependencies || []).map((dep: any) => ({
+        id: dep.id || dep.name,
+        name: dep.name,
+        currentVersion: dep.currentVersion || dep.current_version,
+        latestVersion: dep.latestVersion || dep.latest_version,
+        outdated: dep.outdated || (dep.currentVersion !== dep.latestVersion && dep.latestVersion),
+        locked: dep.locked || false,
+        description: dep.description || "",
+        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_issue || false,
+        securityDetails: dep.securityDetails || dep.security_details,
+        updateMode: dep.updateMode || "global",
+        isDev: dep.isDev || dep.is_dev || false,
+      }))
+
+      setDependencies(mappedDependencies)
+
+      // Update security stats
+      setSecurityStats({
+        vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
+        outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
+        securityScore: data.securityScore || calculateSecurityScore(mappedDependencies),
+        lastScan: data.lastScan || new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
+      })
+
+      // Get global update mode - default to conservative (security only)
+      setGlobalUpdateMode(data.updateMode || "conservative")
+    } catch (err: any) {
+      setError(`Error fetching dependencies: ${err.message}`)
+      console.error("Error fetching dependencies:", err)
+
+      // Set empty dependencies to avoid UI errors
+      setDependencies([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const setupDependencies = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+
+      const response = await fetch("/api/setup-dependencies", {
+        method: "POST",
+      })
 
       if (!response.ok) {
         const errorData = await response.json()
-
-        if (response.status === 404 || errorData.error?.includes("does not exist")) {
-          setTableExists(false)
-        } else {
-          throw new Error(errorData.error || "Failed to fetch dependencies")
-        }
-      } else {
-        const data = await response.json()
-        setDependencies(data.dependencies || [])
-        setTableExists(true)
+        throw new Error(errorData.error || "Failed to set up dependencies")
       }
-    } catch (err) {
-      console.error("Error fetching dependencies:", err)
-      setError(err instanceof Error ? err.message : "An unexpected error occurred")
 
-      // Check if the error is because the table doesn't exist
-      if (
-        err instanceof Error &&
-        (err.message.includes('relation "dependencies" does not exist') || err.message.includes("does not exist"))
-      ) {
-        setTableExists(false)
-      }
+      const data = await response.json()
+
+      // Show success message
+      setError(`Dependencies set up successfully! ${data.dependenciesCount} dependencies added.`)
+
+      // Fetch dependencies after setup
+      fetchDependencies()
+    } catch (err: any) {
+      setError(`Error setting up dependencies: ${err.message}`)
+      console.error("Error setting up dependencies:", err)
     } finally {
       setLoading(false)
     }
@@ -170,10 +230,25 @@ export default function ClientDependenciesPage() {
     }
   }
 
+  const calculateSecurityScore = (deps: Dependency[]) => {
+    if (!deps || deps.length === 0) return 100
+
+    const totalDependencies = deps.length
+    const securityIssues = deps.filter((dep) => dep.hasSecurityIssue).length
+    const outdated = deps.filter((dep) => dep.outdated).length
+
+    // Penalize for security issues and outdated packages
+    let score = 100
+    score -= securityIssues * (100 / totalDependencies) * 0.75 // Security issues are weighted more
+    score -= outdated * (100 / totalDependencies) * 0.25
+
+    return Math.max(0, Math.min(100, score)) // Ensure score is within 0-100 range
+  }
+
   const filteredDependencies = dependencies
     .filter((dep) => {
       if (filter === "outdated") {
-        return dep.latest_version && dep.current_version !== dep.latest_version
+        return dep.latestVersion && dep.currentVersion !== dep.latestVersion
       }
       if (filter === "locked") {
         return dep.locked
@@ -288,12 +363,23 @@ export default function ClientDependenciesPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-700">
-                    {loading && dependencies.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-4 text-center">
-                          Loading dependencies...
-                        </td>
-                      </tr>
+                    {loading ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
+                        <p className="mt-4">Loading dependencies...</p>
+                      </div>
+                    ) : dependencies.length === 0 ? (
+                      <div className="text-center py-8">
+                        <p>
+                          No dependencies found. This could be because the dependencies table hasn't been set up yet.
+                        </p>
+                        <div className="flex justify-center gap-2 mt-4">
+                          <Button onClick={setupDependencies}>Set Up Dependencies</Button>
+                          <Button variant="outline" onClick={fetchDependencies} className="border-gray-700">
+                            Retry
+                          </Button>
+                        </div>
+                      </div>
                     ) : filteredDependencies.length === 0 ? (
                       <tr>
                         <td colSpan={6} className="px-6 py-4 text-center">
@@ -306,20 +392,20 @@ export default function ClientDependenciesPage() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="font-medium">{dep.name}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap">{dep.current_version}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{dep.currentVersion}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {dep.latest_version ? (
+                            {dep.latestVersion ? (
                               <span
                                 className={
-                                  dep.current_version === dep.latest_version
+                                  dep.currentVersion === dep.latestVersion
                                     ? "text-green-500"
-                                    : dep.has_security_update
+                                    : dep.hasSecurityIssue
                                       ? "text-red-500"
                                       : "text-yellow-500"
                                 }
                               >
-                                {dep.latest_version}
-                                {dep.has_security_update && (
+                                {dep.latestVersion}
+                                {dep.hasSecurityIssue && (
                                   <span className="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded">Security</span>
                                 )}
                               </span>
@@ -329,7 +415,7 @@ export default function ClientDependenciesPage() {
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <select
-                              value={dep.update_mode}
+                              value={dep.updateMode}
                               onChange={(e) =>
                                 updateSettings(dep.id, {
                                   update_mode: e.target.value as "manual" | "auto" | "conservative",
@@ -354,7 +440,7 @@ export default function ClientDependenciesPage() {
                               {dep.locked && (
                                 <input
                                   type="text"
-                                  value={dep.locked_version || dep.current_version}
+                                  value={dep.locked_version || dep.currentVersion}
                                   onChange={(e) => updateSettings(dep.id, { locked_version: e.target.value })}
                                   className="bg-gray-700 rounded p-1 w-24"
                                   placeholder="Version"
@@ -363,7 +449,7 @@ export default function ClientDependenciesPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            {dep.latest_version && dep.current_version !== dep.latest_version && !dep.locked && (
+                            {dep.latestVersion && dep.currentVersion !== dep.latestVersion && !dep.locked && (
                               <button
                                 onClick={() => updateDependency(dep.id)}
                                 disabled={updateStatus[dep.id]?.loading}

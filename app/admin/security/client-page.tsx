@@ -195,8 +195,21 @@ export default function SecurityClientPage() {
   const checkForUpdates = async () => {
     try {
       const response = await fetch("/api/dependencies/scheduled-update")
+
+      // Handle non-OK responses
       if (!response.ok) {
-        console.error("Scheduled update check failed:", await response.text())
+        const errorData = await response.json()
+        console.error("Scheduled update check failed:", errorData.error || (await response.text()))
+
+        // If the error is about missing tables, we can ignore it silently
+        if (
+          errorData.message &&
+          (errorData.message.includes("table does not exist") || errorData.message.includes("not found"))
+        ) {
+          console.log("Dependencies tables not set up yet, skipping scheduled update")
+          return
+        }
+
         return
       }
 

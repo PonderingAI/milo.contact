@@ -5,6 +5,30 @@ export async function GET() {
   try {
     const supabase = createAdminClient()
 
+    // Check if dependency_settings table exists
+    const { data: settingsTableExists, error: checkSettingsError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependency_settings",
+    })
+
+    if (checkSettingsError) {
+      console.error("Error checking if dependency_settings table exists:", checkSettingsError)
+      return NextResponse.json(
+        {
+          error: "Failed to check if dependency_settings table exists",
+          details: checkSettingsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // If settings table doesn't exist, return early
+    if (!settingsTableExists) {
+      return NextResponse.json({
+        message: "Dependency settings table does not exist",
+        action: "Please set up the dependency tables first",
+      })
+    }
+
     // Get the global update mode
     const { data: settings, error: settingsError } = await supabase
       .from("dependency_settings")
@@ -12,9 +36,39 @@ export async function GET() {
       .limit(1)
       .single()
 
-    if (settingsError && settingsError.code !== "PGRST116") {
+    if (settingsError) {
       console.error("Error fetching dependency settings:", settingsError)
-      return NextResponse.json({ error: "Failed to fetch dependency settings" }, { status: 500 })
+      return NextResponse.json(
+        {
+          error: "Failed to fetch dependency settings",
+          details: settingsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // Check if dependencies table exists
+    const { data: depsTableExists, error: checkDepsError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependencies",
+    })
+
+    if (checkDepsError) {
+      console.error("Error checking if dependencies table exists:", checkDepsError)
+      return NextResponse.json(
+        {
+          error: "Failed to check if dependencies table exists",
+          details: checkDepsError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    // If dependencies table doesn't exist, return early
+    if (!depsTableExists) {
+      return NextResponse.json({
+        message: "Dependencies table does not exist",
+        action: "Please set up the dependency tables first",
+      })
     }
 
     const globalMode = settings?.update_mode || "conservative"
@@ -28,7 +82,13 @@ export async function GET() {
 
     if (fetchError) {
       console.error("Error fetching dependencies:", fetchError)
-      return NextResponse.json({ error: "Failed to fetch dependencies" }, { status: 500 })
+      return NextResponse.json(
+        {
+          error: "Failed to fetch dependencies",
+          details: fetchError.message,
+        },
+        { status: 500 },
+      )
     }
 
     if (!dependencies || dependencies.length === 0) {
