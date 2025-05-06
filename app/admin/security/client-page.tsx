@@ -15,6 +15,7 @@ import { Progress } from "@/components/ui/progress"
 import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
 import { DraggableWidget } from "@/components/admin/draggable-widget"
 import { WidgetSelector, type WidgetOption } from "@/components/admin/widget-selector"
+import DependencySetupAlert from "@/components/admin/dependency-setup-alert"
 import {
   AlertCircle,
   CheckCircle,
@@ -777,6 +778,8 @@ export default function SecurityClientPage() {
           </Button>
         </div>
       )}
+
+      <DependencySetupAlert />
 
       {showUpdateResults && updateResults.length > 0 && (
         <div className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6">

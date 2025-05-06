@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
-import { createAdminClient } from "@/lib/supabase-browser"
 
 export default function DependencyTableSetupGuide({ onSetupComplete }: { onSetupComplete: () => void }) {
   const [loading, setLoading] = useState(false)
@@ -135,15 +134,27 @@ USING (
     setSuccess(null)
 
     try {
-      const supabase = createAdminClient()
-      const { error } = await supabase.rpc("run_sql", { sql })
+      const response = await fetch("/api/setup-dependencies-tables", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ sql }),
+      })
 
-      if (error) {
-        throw new Error(error.message)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || errorData.details || "Failed to execute SQL")
       }
 
-      setSuccess("SQL executed successfully!")
-      onSetupComplete()
+      const data = await response.json()
+
+      if (data.success) {
+        setSuccess("SQL executed successfully!")
+        onSetupComplete()
+      } else {
+        throw new Error(data.error || "Unknown error")
+      }
     } catch (err) {
       console.error("Error executing SQL:", err)
       setError(err instanceof Error ? err.message : "An unexpected error occurred")
