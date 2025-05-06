@@ -41,6 +41,7 @@ export default function AdminDashboard() {
         <AdminCard title="Media" description="Upload and manage media files" link="/admin/media" />
         <AdminCard title="Settings" description="Configure site settings" link="/admin/settings" />
         <AdminCard title="Users" description="Manage user access and permissions" link="/admin/users" />
+        <AdminCard title="Security" description="Manage security and dependencies" link="/admin/security" />
       </div>
     </div>
   )

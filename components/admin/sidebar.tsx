@@ -34,8 +34,8 @@ export default function AdminSidebar() {
             </Link>
           </li>
           <li>
-            <Link href="/admin/dependencies" className="block py-2 px-4 rounded hover:bg-gray-800">
-              Dependencies
+            <Link href="/admin/security" className="block py-2 px-4 rounded hover:bg-gray-800">
+              Security
             </Link>
           </li>
           <li className="mt-8">
