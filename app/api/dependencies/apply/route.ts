@@ -1,22 +1,5 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { exec } from "child_process"
-import { promisify } from "util"
-
-const execAsync = promisify(exec)
-
-// Helper function to update a dependency
-async function updateDependency(name: string, version: string | null) {
-  try {
-    const command = version ? `npm install ${name}@${version} --save-exact` : `npm install ${name}@latest`
-
-    const { stdout, stderr } = await execAsync(command)
-    return { success: true, stdout, stderr }
-  } catch (error) {
-    console.error(`Error updating ${name}:`, error)
-    throw new Error(`Failed to update ${name}: ${error instanceof Error ? error.message : String(error)}`)
-  }
-}
 
 export async function POST() {
   try {
@@ -26,40 +9,38 @@ export async function POST() {
     const { data: dependencies, error: fetchError } = await supabase
       .from("dependencies")
       .select("*")
-      .or(
-        "update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_update.eq.true),and(update_mode.eq.global,and(global_mode.eq.aggressive,or(global_mode.eq.conservative,has_security_update.eq.true)))",
-      )
+      .or("update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_issue.eq.true)")
       .eq("locked", false)
 
     if (fetchError) {
-      return NextResponse.json({ error: fetchError.message }, { status: 500 })
+      console.error("Error fetching dependencies:", fetchError)
+      return NextResponse.json({ error: "Failed to fetch dependencies" }, { status: 500 })
     }
 
     if (!dependencies || dependencies.length === 0) {
       return NextResponse.json({ message: "No dependencies to update" })
     }
 
-    // Update each dependency
+    // Update each dependency in the database
     const results = []
 
     for (const dep of dependencies) {
       try {
         // In a real implementation, this would actually update the dependency
-        // For now, we'll simulate success
-        // await updateDependency(dep.name, dep.latest_version)
+        // For now, we'll just update the database record
 
-        // Update the database
         const { error: updateError } = await supabase
           .from("dependencies")
           .update({
             current_version: dep.latest_version,
             last_updated: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            has_security_update: false,
+            has_security_issue: false,
           })
           .eq("id", dep.id)
 
         if (updateError) {
+          console.error(`Error updating dependency ${dep.name}:`, updateError)
           results.push({
             name: dep.name,
             success: false,
@@ -74,6 +55,7 @@ export async function POST() {
           })
         }
       } catch (error) {
+        console.error(`Error processing dependency ${dep.name}:`, error)
         results.push({
           name: dep.name,
           success: false,

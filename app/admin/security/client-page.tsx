@@ -196,7 +196,7 @@ export default function SecurityClientPage() {
     try {
       const response = await fetch("/api/dependencies/scheduled-update")
       if (!response.ok) {
-        console.error("Scheduled update check failed")
+        console.error("Scheduled update check failed:", await response.text())
         return
       }
 
@@ -984,7 +984,7 @@ export default function SecurityClientPage() {
                               value={dep.updateMode}
                               onValueChange={(value) => updateDependencyMode(dep.id, value)}
                               showLabels={false}
-                              className="max-w-[300px]"
+                              className="w-[300px] max-w-full"
                             />
                           </td>
                           <td className="py-3 px-4">

@@ -1,16 +1,20 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 
-// This endpoint will be called by a cron job every hour
 export async function GET() {
   try {
     const supabase = createAdminClient()
 
     // Get the global update mode
-    const { data: settings, error: settingsError } = await supabase.from("dependency_settings").select("*").single()
+    const { data: settings, error: settingsError } = await supabase
+      .from("dependency_settings")
+      .select("*")
+      .limit(1)
+      .single()
 
-    if (settingsError) {
-      return NextResponse.json({ error: settingsError.message }, { status: 500 })
+    if (settingsError && settingsError.code !== "PGRST116") {
+      console.error("Error fetching dependency settings:", settingsError)
+      return NextResponse.json({ error: "Failed to fetch dependency settings" }, { status: 500 })
     }
 
     const globalMode = settings?.update_mode || "conservative"
@@ -19,13 +23,12 @@ export async function GET() {
     const { data: dependencies, error: fetchError } = await supabase
       .from("dependencies")
       .select("*")
-      .or(
-        `update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_update.eq.true),and(update_mode.eq.global,and(${globalMode}.eq.aggressive,or(${globalMode}.eq.conservative,has_security_update.eq.true)))`,
-      )
+      .or(`update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_issue.eq.true)`)
       .eq("locked", false)
 
     if (fetchError) {
-      return NextResponse.json({ error: fetchError.message }, { status: 500 })
+      console.error("Error fetching dependencies:", fetchError)
+      return NextResponse.json({ error: "Failed to fetch dependencies" }, { status: 500 })
     }
 
     if (!dependencies || dependencies.length === 0) {
@@ -38,7 +41,7 @@ export async function GET() {
     for (const dep of dependencies) {
       try {
         // In a real implementation, this would actually update the dependency
-        // For now, we'll just update the database
+        // For now, we'll just update the database record
 
         const { error: updateError } = await supabase
           .from("dependencies")
@@ -46,11 +49,12 @@ export async function GET() {
             current_version: dep.latest_version,
             last_updated: new Date().toISOString(),
             updated_at: new Date().toISOString(),
-            has_security_update: false,
+            has_security_issue: false,
           })
           .eq("id", dep.id)
 
         if (updateError) {
+          console.error(`Error updating dependency ${dep.name}:`, updateError)
           results.push({
             name: dep.name,
             success: false,
@@ -65,6 +69,7 @@ export async function GET() {
           })
         }
       } catch (error) {
+        console.error(`Error processing dependency ${dep.name}:`, error)
         results.push({
           name: dep.name,
           success: false,
@@ -72,13 +77,6 @@ export async function GET() {
         })
       }
     }
-
-    // Log the update to the security_audits table
-    await supabase.from("security_audits").insert({
-      type: "scheduled_update",
-      results: results,
-      created_at: new Date().toISOString(),
-    })
 
     return NextResponse.json({
       success: true,
