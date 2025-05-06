@@ -7,16 +7,25 @@ import { Copy, Check, AlertCircle } from "lucide-react"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 
-// Extremely simplified SQL script - just creates tables without complex RLS
+// Simplified SQL script to set up all required tables
 const COMPLETE_SETUP_SQL = `
--- Enable UUID extension
+-- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Create user_roles table first
+CREATE TABLE IF NOT EXISTS user_roles (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID NOT NULL,
+  role TEXT NOT NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(user_id, role)
+);
 
 -- Create projects table
 CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
-  slug TEXT UNIQUE,
+  slug TEXT UNIQUE NOT NULL,
   description TEXT,
   content TEXT,
   thumbnail_url TEXT,
@@ -32,19 +41,28 @@ CREATE TABLE IF NOT EXISTS projects (
 -- Create site_settings table
 CREATE TABLE IF NOT EXISTS site_settings (
   id SERIAL PRIMARY KEY,
-  key TEXT UNIQUE NOT NULL,
-  value TEXT,
+  site_title TEXT NOT NULL DEFAULT 'Portfolio Site',
+  site_description TEXT DEFAULT 'My professional portfolio',
+  contact_email TEXT,
+  social_links JSONB DEFAULT '{}',
+  hero_image TEXT,
+  about_image TEXT,
+  about_text TEXT,
+  services JSONB DEFAULT '[]',
+  meta_image TEXT,
+  favicon TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create bts_images table
+-- Create bts_images table (behind the scenes images)
 CREATE TABLE IF NOT EXISTS bts_images (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   image_url TEXT NOT NULL,
   caption TEXT,
-  category TEXT,
+  sort_order INTEGER DEFAULT 0,
+  category TEXT DEFAULT 'general',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -55,7 +73,12 @@ CREATE TABLE IF NOT EXISTS media (
   filepath TEXT NOT NULL,
   filesize INTEGER,
   filetype TEXT,
-  public_url TEXT,
+  width INTEGER,
+  height INTEGER,
+  alt_text TEXT,
+  title TEXT,
+  description TEXT,
+  uploaded_by UUID,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -70,17 +93,79 @@ CREATE TABLE IF NOT EXISTS contact_messages (
   read BOOLEAN DEFAULT FALSE
 );
 
--- Create a simple security table
-CREATE TABLE IF NOT EXISTS security (
+-- Create dependencies table
+CREATE TABLE IF NOT EXISTS dependencies (
   id SERIAL PRIMARY KEY,
-  user_id UUID UNIQUE,
-  is_admin BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  name VARCHAR(255) NOT NULL UNIQUE,
+  current_version VARCHAR(100) NOT NULL,
+  latest_version VARCHAR(100),
+  locked BOOLEAN DEFAULT FALSE,
+  locked_version VARCHAR(100),
+  update_mode VARCHAR(50) DEFAULT 'global',
+  last_checked TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  has_security_update BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
--- Create simple indexes
+-- Create dependency_settings table
+CREATE TABLE IF NOT EXISTS dependency_settings (
+  id SERIAL PRIMARY KEY,
+  update_mode VARCHAR(50) DEFAULT 'conservative',
+  auto_update_enabled BOOLEAN DEFAULT FALSE,
+  update_schedule VARCHAR(100) DEFAULT 'daily',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Insert default settings
+INSERT INTO dependency_settings (update_mode, auto_update_enabled, update_schedule)
+VALUES ('conservative', FALSE, 'daily')
+ON CONFLICT DO NOTHING;
+
+-- Create security_audits table
+CREATE TABLE IF NOT EXISTS security_audits (
+  id SERIAL PRIMARY KEY,
+  audit_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  vulnerabilities_found INTEGER DEFAULT 0,
+  packages_scanned INTEGER DEFAULT 0,
+  security_score INTEGER DEFAULT 100,
+  audit_summary JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Enable RLS on all tables
+ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE bts_images ENABLE ROW LEVEL SECURITY;
+ALTER TABLE media ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dependencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dependency_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE security_audits ENABLE ROW LEVEL SECURITY;
+
+-- Create basic policies
+-- Allow public read access to most tables
+CREATE POLICY "public_select" ON projects FOR SELECT USING (true);
+CREATE POLICY "public_select" ON site_settings FOR SELECT USING (true);
+CREATE POLICY "public_select" ON bts_images FOR SELECT USING (true);
+CREATE POLICY "public_select" ON media FOR SELECT USING (true);
+
+-- Allow contact form submissions
+CREATE POLICY "public_insert" ON contact_messages FOR INSERT WITH CHECK (true);
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
 CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category);
+CREATE INDEX IF NOT EXISTS idx_projects_featured ON projects(featured);
 CREATE INDEX IF NOT EXISTS idx_bts_images_project_id ON bts_images(project_id);
+CREATE INDEX IF NOT EXISTS idx_contact_messages_created_at ON contact_messages(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_contact_messages_read ON contact_messages(read);
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_role ON user_roles(role);
 `
 
 export default function SetupTablesPopup() {
@@ -93,7 +178,17 @@ export default function SetupTablesPopup() {
     const checkTables = async () => {
       try {
         // Check for required tables
-        const requiredTables = ["projects", "site_settings", "bts_images", "media", "contact_messages", "security"]
+        const requiredTables = [
+          "projects",
+          "site_settings",
+          "bts_images",
+          "media",
+          "contact_messages",
+          "dependencies",
+          "dependency_settings",
+          "security_audits",
+          "user_roles",
+        ]
 
         const missingTablesList: string[] = []
 
@@ -135,30 +230,26 @@ export default function SetupTablesPopup() {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-gray-900 text-white">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
-            <AlertCircle className="h-5 w-5 text-red-500" />
-            Database Setup Required
+            <AlertCircle className="h-5 w-5 text-orange-500" />
+            Database Tables Setup Required
           </DialogTitle>
           <DialogDescription>
-            Your portfolio needs database tables to work properly. Copy and run this simple SQL script in Supabase.
+            Your portfolio requires database tables that are currently missing. Copy the SQL below and run it in your
+            Supabase SQL Editor.
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 space-y-4">
-          <div className="bg-gray-800/50 p-4 rounded-md">
+          <div className="bg-gray-100 dark:bg-gray-800 p-4 rounded-md">
             <div className="flex justify-between items-center mb-2">
-              <Button
-                onClick={copyToClipboard}
-                variant="outline"
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none"
-                size="lg"
-              >
+              <Button onClick={copyToClipboard} variant="outline" className="flex items-center gap-2" size="lg">
                 {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 {copied ? "Copied!" : "Copy SQL"}
               </Button>
-              <h3 className="font-medium">Simple SQL Setup Script</h3>
+              <h3 className="font-medium">Complete SQL Setup Script</h3>
             </div>
 
             <div className="max-h-[50vh] overflow-auto rounded-md">
@@ -176,26 +267,28 @@ export default function SetupTablesPopup() {
             </div>
           </div>
 
-          <div className="bg-blue-900/20 border border-blue-800 rounded-md p-4">
-            <h3 className="font-medium text-blue-400 mb-2">Quick Instructions:</h3>
-            <ol className="list-decimal list-inside text-blue-300 space-y-2">
-              <li>Copy the SQL code above</li>
-              <li>Go to Supabase → SQL Editor</li>
-              <li>Paste the code and click "Run"</li>
-              <li>Refresh this page</li>
-            </ol>
-          </div>
-
           {missingTables.length > 0 && (
-            <div className="bg-red-900/20 border border-red-800 rounded-md p-4">
-              <h3 className="font-medium text-red-400 mb-2">Missing Tables:</h3>
-              <ul className="list-disc list-inside text-red-300">
+            <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4">
+              <h3 className="font-medium mb-2">Missing Tables:</h3>
+              <ul className="list-disc list-inside">
                 {missingTables.map((table) => (
                   <li key={table}>{table}</li>
                 ))}
               </ul>
             </div>
           )}
+
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4">
+            <h3 className="font-medium mb-2">Instructions:</h3>
+            <ol className="list-decimal list-inside space-y-2">
+              <li>Copy the SQL code above using the "Copy SQL" button</li>
+              <li>Go to your Supabase project dashboard</li>
+              <li>Click on "SQL Editor" in the left sidebar</li>
+              <li>Paste the SQL code into the editor</li>
+              <li>Click "Run" to execute the SQL and create all required tables</li>
+              <li>Return to your portfolio site and refresh the page</li>
+            </ol>
+          </div>
         </div>
 
         <div className="flex justify-end mt-4">
