@@ -139,69 +139,125 @@ CREATE TABLE IF NOT EXISTS security_audits (
 -- Add RLS policies for all tables
 -- User roles table
 ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow users to read their own roles" ON user_roles FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY "Allow admins to manage user roles" ON user_roles FOR ALL USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow users to read their own roles" ON user_roles 
+  FOR SELECT USING (auth.uid() = user_id);
+  
+-- This policy needs to be created differently since we don't have any admins yet
+-- We'll create a basic policy that allows the first user to become an admin
+CREATE POLICY "Allow initial admin setup" ON user_roles 
+  FOR INSERT WITH CHECK (true);
+  
+-- Once we have at least one admin, we can create policies that check for admin role
+CREATE POLICY "Allow admins to manage user roles" ON user_roles 
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Projects table
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read access to projects" ON projects FOR SELECT USING (true);
-CREATE POLICY "Allow admin write access to projects" ON projects FOR ALL USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow public read access to projects" ON projects 
+  FOR SELECT USING (true);
+CREATE POLICY "Allow admin write access to projects" ON projects 
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Site settings table
 ALTER TABLE site_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read access to site_settings" ON site_settings FOR SELECT USING (true);
-CREATE POLICY "Allow admin write access to site_settings" ON site_settings FOR ALL USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow public read access to site_settings" ON site_settings 
+  FOR SELECT USING (true);
+CREATE POLICY "Allow admin write access to site_settings" ON site_settings 
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- BTS images table
 ALTER TABLE bts_images ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read access to bts_images" ON bts_images FOR SELECT USING (true);
-CREATE POLICY "Allow admin write access to bts_images" ON bts_images FOR ALL USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow public read access to bts_images" ON bts_images 
+  FOR SELECT USING (true);
+CREATE POLICY "Allow admin write access to bts_images" ON bts_images 
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Media table
 ALTER TABLE media ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow public read access to media" ON media FOR SELECT USING (true);
-CREATE POLICY "Allow admin write access to media" ON media FOR ALL USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow public read access to media" ON media 
+  FOR SELECT USING (true);
+CREATE POLICY "Allow admin write access to media" ON media 
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Contact messages table
 ALTER TABLE contact_messages ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow anyone to insert messages" ON contact_messages FOR INSERT TO public WITH CHECK (true);
-CREATE POLICY "Allow admins to read messages" ON contact_messages FOR SELECT USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
-CREATE POLICY "Allow admins to update messages" ON contact_messages FOR UPDATE USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow anyone to insert messages" ON contact_messages 
+  FOR INSERT WITH CHECK (true);
+CREATE POLICY "Allow admins to read messages" ON contact_messages 
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
+CREATE POLICY "Allow admins to update messages" ON contact_messages 
+  FOR UPDATE USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Dependencies table
 ALTER TABLE dependencies ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow authenticated users to read dependencies" ON dependencies FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins to manage dependencies" ON dependencies FOR ALL TO authenticated USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow authenticated users to read dependencies" ON dependencies 
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins to manage dependencies" ON dependencies 
+  FOR ALL TO authenticated USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Dependency settings table
 ALTER TABLE dependency_settings ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow authenticated users to read dependency settings" ON dependency_settings FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins to manage dependency settings" ON dependency_settings FOR ALL TO authenticated USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow authenticated users to read dependency settings" ON dependency_settings 
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins to manage dependency settings" ON dependency_settings 
+  FOR ALL TO authenticated USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Security audits table
 ALTER TABLE security_audits ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Allow authenticated users to read security audits" ON security_audits FOR SELECT TO authenticated USING (true);
-CREATE POLICY "Allow admins to manage security audits" ON security_audits FOR ALL TO authenticated USING (
-  EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'admin')
-);
+CREATE POLICY "Allow authenticated users to read security audits" ON security_audits 
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY "Allow admins to manage security audits" ON security_audits 
+  FOR ALL TO authenticated USING (
+    EXISTS (
+      SELECT 1 FROM user_roles 
+      WHERE user_id = auth.uid() AND user_roles.role = 'admin'
+    )
+  );
 
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
@@ -280,29 +336,30 @@ export default function SetupTablesPopup() {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-xl">
             <AlertCircle className="h-5 w-5 text-red-500" />
-            Database Setup Required
+            Database Tables Setup Required
           </DialogTitle>
           <DialogDescription>
-            Your portfolio needs database tables to work properly. Follow these simple steps:
+            Your portfolio requires database tables that are currently missing. Copy the SQL below and run it in your
+            Supabase SQL Editor.
           </DialogDescription>
         </DialogHeader>
 
         <div className="mt-4 space-y-4">
-          {/* Big prominent copy button at the top */}
-          <div className="sticky top-0 z-10 bg-blue-600 hover:bg-blue-700 rounded-md p-4 flex items-center justify-between">
-            <span className="font-medium text-white">Step 1: Copy this SQL code</span>
-            <Button
-              onClick={copyToClipboard}
-              variant="secondary"
-              className="bg-white text-blue-700 hover:bg-gray-100 flex items-center gap-2 font-bold"
-            >
-              {copied ? <Check className="h-5 w-5" /> : <Copy className="h-5 w-5" />}
-              {copied ? "Copied!" : "COPY SQL CODE"}
-            </Button>
-          </div>
-
           <div className="bg-gray-800/50 p-4 rounded-md">
-            <div className="max-h-[30vh] overflow-auto rounded-md">
+            <div className="flex justify-between items-center mb-2">
+              <Button
+                onClick={copyToClipboard}
+                variant="outline"
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white border-none"
+                size="lg"
+              >
+                {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                {copied ? "Copied!" : "Copy SQL"}
+              </Button>
+              <h3 className="font-medium">Complete SQL Setup Script</h3>
+            </div>
+
+            <div className="max-h-[50vh] overflow-auto rounded-md">
               <SyntaxHighlighter
                 language="sql"
                 style={vscDarkPlus}
@@ -317,34 +374,26 @@ export default function SetupTablesPopup() {
             </div>
           </div>
 
-          <div className="bg-blue-900/20 border border-blue-800 rounded-md p-4">
-            <h3 className="font-medium text-blue-400 mb-2">What to do next:</h3>
-            <ol className="list-decimal list-inside text-blue-300 space-y-3 text-base">
-              <li className="p-2 bg-blue-900/30 rounded">
-                <strong>Step 2:</strong> Go to your Supabase dashboard and click on "SQL Editor" in the left sidebar
-              </li>
-              <li className="p-2 bg-blue-900/30 rounded">
-                <strong>Step 3:</strong> Create a "New Query" and paste the SQL code you copied
-              </li>
-              <li className="p-2 bg-blue-900/30 rounded">
-                <strong>Step 4:</strong> Click the "Run" button to create all the tables
-              </li>
-              <li className="p-2 bg-blue-900/30 rounded">
-                <strong>Step 5:</strong> Return to your portfolio site and refresh the page
-              </li>
-            </ol>
+          <div className="bg-red-900/20 border border-red-800 rounded-md p-4">
+            <h3 className="font-medium text-red-400 mb-2">Missing Tables:</h3>
+            <ul className="list-disc list-inside text-red-300">
+              {missingTables.map((table) => (
+                <li key={table}>{table}</li>
+              ))}
+            </ul>
           </div>
 
-          {missingTables.length > 0 && (
-            <div className="bg-red-900/20 border border-red-800 rounded-md p-4">
-              <h3 className="font-medium text-red-400 mb-2">Missing Tables:</h3>
-              <ul className="list-disc list-inside text-red-300">
-                {missingTables.map((table) => (
-                  <li key={table}>{table}</li>
-                ))}
-              </ul>
-            </div>
-          )}
+          <div className="bg-blue-900/20 border border-blue-800 rounded-md p-4">
+            <h3 className="font-medium text-blue-400 mb-2">Instructions:</h3>
+            <ol className="list-decimal list-inside text-blue-300 space-y-2">
+              <li>Copy the SQL code above using the "Copy SQL" button</li>
+              <li>Go to your Supabase project dashboard</li>
+              <li>Click on "SQL Editor" in the left sidebar</li>
+              <li>Paste the SQL code into the editor</li>
+              <li>Click "Run" to execute the SQL and create all required tables</li>
+              <li>Return to your portfolio site and refresh the page</li>
+            </ol>
+          </div>
         </div>
 
         <div className="flex justify-end mt-4">
