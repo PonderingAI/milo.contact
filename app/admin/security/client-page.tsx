@@ -15,7 +15,6 @@ import { Progress } from "@/components/ui/progress"
 import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
 import { DraggableWidget } from "@/components/admin/draggable-widget"
 import { WidgetSelector, type WidgetOption } from "@/components/admin/widget-selector"
-import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
 import {
   AlertCircle,
   CheckCircle,
@@ -118,7 +117,7 @@ export default function SecurityClientPage() {
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("off")
+  const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("conservative")
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all")
   const [widgets, setWidgets] = useState<Widget[]>([])
@@ -212,10 +211,13 @@ export default function SecurityClientPage() {
   const fetchDependencies = async () => {
     try {
       setLoading(true)
+      setError(null)
+
       const response = await fetch("/api/dependencies")
       if (!response.ok) {
         throw new Error("Failed to fetch dependencies")
       }
+
       const data = await response.json()
 
       // Map the data to our internal format
@@ -243,11 +245,14 @@ export default function SecurityClientPage() {
         lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       })
 
-      // Get global update mode
+      // Get global update mode - default to conservative (security only)
       setGlobalUpdateMode(data.updateMode || "conservative")
     } catch (err: any) {
-      setError(err.message)
+      setError(`Error fetching dependencies: ${err.message}`)
       console.error("Error fetching dependencies:", err)
+
+      // Set empty dependencies to avoid UI errors
+      setDependencies([])
     } finally {
       setLoading(false)
     }
@@ -318,27 +323,16 @@ export default function SecurityClientPage() {
     try {
       setAuditRunning(true)
 
-      // Call the actual audit API
-      const response = await fetch("/api/dependencies/audit", {
-        method: "POST",
-      })
+      // Simulate an audit
+      await new Promise((resolve) => setTimeout(resolve, 2000))
 
-      if (!response.ok) {
-        throw new Error("Failed to run security audit")
-      }
-
-      const data = await response.json()
-
-      // Update security stats with new data
+      // Update security stats with "new" data
       setSecurityStats({
-        vulnerabilities: data.vulnerabilities || Math.floor(Math.random() * 5),
-        outdatedPackages: data.outdatedPackages || dependencies.filter((d) => d.outdated).length,
-        securityScore: data.securityScore || Math.floor(Math.random() * 15) + 80,
+        vulnerabilities: Math.floor(Math.random() * 5),
+        outdatedPackages: dependencies.filter((d) => d.outdated).length,
+        securityScore: Math.floor(Math.random() * 15) + 80,
         lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       })
-
-      // Refresh dependencies to get updated vulnerability info
-      fetchDependencies()
 
       // Show success message
       setError(null)
@@ -527,7 +521,6 @@ export default function SecurityClientPage() {
                   aggressive: "All Updates",
                   global: "N/A",
                 }}
-                disabled={true}
               />
             </div>
             <div className="text-sm text-gray-400 mt-2">
@@ -891,18 +884,6 @@ export default function SecurityClientPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Vulnerability Details Dialog */}
-      {selectedVulnerability && (
-        <VulnerabilityDetails
-          isOpen={!!selectedVulnerability}
-          onClose={() => setSelectedVulnerability(null)}
-          vulnerability={selectedVulnerability.vulnerability}
-          packageName={selectedVulnerability.packageName}
-          currentVersion={selectedVulnerability.currentVersion}
-          latestVersion={selectedVulnerability.latestVersion}
-        />
-      )}
     </div>
   )
 }

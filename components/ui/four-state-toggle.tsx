@@ -43,16 +43,18 @@ export function FourStateToggle({
       className={cn("flex flex-col space-y-2 w-full", disabled && "opacity-50 cursor-not-allowed", className)}
       {...props}
     >
-      <div className="flex items-center justify-between">
-        {showLabels && <span className="text-xs font-medium text-gray-400">{labels.off}</span>}
-        {showLabels && <span className="text-xs font-medium text-gray-400">{labels.conservative}</span>}
-        {showLabels && <span className="text-xs font-medium text-gray-400">{labels.aggressive}</span>}
-        {showLabels && <span className="text-xs font-medium text-gray-400">{labels.global}</span>}
-      </div>
-      <div className="relative h-8 bg-gray-800 rounded-full p-1 flex items-center">
+      {showLabels && (
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-medium text-gray-400">{labels.off}</span>
+          <span className="text-xs font-medium text-gray-400">{labels.conservative}</span>
+          <span className="text-xs font-medium text-gray-400">{labels.aggressive}</span>
+          <span className="text-xs font-medium text-gray-400">{labels.global}</span>
+        </div>
+      )}
+      <div className="relative h-10 bg-gray-800 rounded-full p-1 flex items-center">
         <div
           className={cn(
-            "absolute h-6 w-1/4 rounded-full transition-all duration-200 ease-in-out",
+            "absolute h-8 w-1/4 rounded-full transition-all duration-200 ease-in-out",
             value === "off" && "left-1 bg-gray-600",
             value === "conservative" && "left-[calc(25%-0.25rem)] bg-blue-600",
             value === "aggressive" && "left-[calc(50%-0.5rem)] bg-green-600",
