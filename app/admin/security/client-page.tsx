@@ -123,18 +123,21 @@ export default function SecurityClientPage() {
   const [widgets, setWidgets] = useState<Widget[]>([])
   const [availableWidgetsForAdd, setAvailableWidgetsForAdd] = useState<WidgetOption[]>([])
   const [securityStats, setSecurityStats] = useState<SecurityStats>({
-    vulnerabilities: 3,
-    outdatedPackages: 5,
-    securityScore: 85,
+    vulnerabilities: 0,
+    outdatedPackages: 0,
+    securityScore: 100,
     lastScan: new Date().toLocaleDateString(),
   })
   const [auditRunning, setAuditRunning] = useState(false)
+  const [applyingChanges, setApplyingChanges] = useState(false)
   const [selectedVulnerability, setSelectedVulnerability] = useState<{
     vulnerability: any
     packageName: string
     currentVersion: string
     latestVersion: string
   } | null>(null)
+  const [updateResults, setUpdateResults] = useState<any[]>([])
+  const [showUpdateResults, setShowUpdateResults] = useState(false)
 
   // Load widgets from localStorage on initial render
   useEffect(() => {
@@ -177,13 +180,42 @@ export default function SecurityClientPage() {
     }
   }, [isSignedIn])
 
+  // Set up hourly check for updates
+  useEffect(() => {
+    // Initial check
+    checkForUpdates()
+
+    // Set up interval for hourly checks
+    const intervalId = setInterval(checkForUpdates, 60 * 60 * 1000) // 1 hour in milliseconds
+
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId)
+  }, [])
+
+  const checkForUpdates = async () => {
+    try {
+      const response = await fetch("/api/dependencies/scheduled-update")
+      if (!response.ok) {
+        console.error("Scheduled update check failed")
+        return
+      }
+
+      const data = await response.json()
+
+      // If any dependencies were updated, refresh the list
+      if (data.updated > 0) {
+        fetchDependencies()
+      }
+    } catch (error) {
+      console.error("Error checking for updates:", error)
+    }
+  }
+
   const applyChanges = async () => {
     try {
-      setLoading(true)
+      setApplyingChanges(true)
       setError(null)
-
-      // Show a message that changes are being applied
-      setError("Applying changes and restarting server...")
+      setShowUpdateResults(false)
 
       // Call the API to apply changes
       const response = await fetch("/api/dependencies/apply", {
@@ -194,17 +226,19 @@ export default function SecurityClientPage() {
         throw new Error("Failed to apply changes")
       }
 
-      // Simulate server restart
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      const data = await response.json()
 
-      // Clear the message and refresh dependencies
-      setError(null)
+      // Store the results
+      setUpdateResults(data.results || [])
+      setShowUpdateResults(true)
+
+      // Refresh dependencies
       fetchDependencies()
     } catch (err: any) {
       setError(err.message)
       console.error("Error applying changes:", err)
     } finally {
-      setLoading(false)
+      setApplyingChanges(false)
     }
   }
 
@@ -241,8 +275,8 @@ export default function SecurityClientPage() {
       setSecurityStats({
         vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
         outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
-        securityScore: data.securityScore || 85,
-        lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
+        securityScore: data.securityScore || calculateSecurityScore(mappedDependencies),
+        lastScan: data.lastScan || new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       })
 
       // Get global update mode - default to conservative (security only)
@@ -256,6 +290,27 @@ export default function SecurityClientPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  // Calculate a security score based on vulnerabilities
+  const calculateSecurityScore = (deps: Dependency[]) => {
+    const totalDeps = deps.length
+    if (totalDeps === 0) return 100
+
+    const vulnerableDeps = deps.filter((d) => d.hasSecurityIssue).length
+    const outdatedDeps = deps.filter((d) => d.outdated).length
+
+    // Calculate score: start with 100 and deduct points
+    let score = 100
+
+    // Deduct more for vulnerable dependencies
+    score -= (vulnerableDeps / totalDeps) * 50
+
+    // Deduct less for outdated dependencies
+    score -= (outdatedDeps / totalDeps) * 20
+
+    // Ensure score is between 0 and 100
+    return Math.max(0, Math.min(100, Math.round(score)))
   }
 
   const updateGlobalMode = async (value: ToggleState) => {
@@ -322,17 +377,29 @@ export default function SecurityClientPage() {
   const runSecurityAudit = async () => {
     try {
       setAuditRunning(true)
+      setError(null)
 
-      // Simulate an audit
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Call the actual audit API
+      const response = await fetch("/api/dependencies/audit", {
+        method: "POST",
+      })
 
-      // Update security stats with "new" data
+      if (!response.ok) {
+        throw new Error("Failed to run security audit")
+      }
+
+      const data = await response.json()
+
+      // Update security stats with new data
       setSecurityStats({
-        vulnerabilities: Math.floor(Math.random() * 5),
-        outdatedPackages: dependencies.filter((d) => d.outdated).length,
-        securityScore: Math.floor(Math.random() * 15) + 80,
+        vulnerabilities: data.vulnerabilities || 0,
+        outdatedPackages: data.outdatedPackages || dependencies.filter((d) => d.outdated).length,
+        securityScore: data.securityScore || 100,
         lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
       })
+
+      // Refresh dependencies to get updated vulnerability info
+      fetchDependencies()
 
       // Show success message
       setError(null)
@@ -540,27 +607,42 @@ export default function SecurityClientPage() {
       case "recent-activity":
         return (
           <div className="space-y-3">
-            <div className="flex items-start">
-              <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">Security scan completed</p>
-                <p className="text-xs text-gray-500">{securityStats.lastScan}</p>
-              </div>
-            </div>
-            <div className="flex items-start">
-              <Package className="h-4 w-4 text-blue-500 mr-2 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">Package updates available</p>
-                <p className="text-xs text-gray-500">{securityStats.outdatedPackages} packages can be updated</p>
-              </div>
-            </div>
-            <div className="flex items-start">
-              <Shield className="h-4 w-4 text-purple-500 mr-2 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">Security policy updated</p>
-                <p className="text-xs text-gray-500">Yesterday at 2:30 PM</p>
-              </div>
-            </div>
+            {updateResults.length > 0 ? (
+              updateResults.slice(0, 3).map((result, index) => (
+                <div key={index} className="flex items-start">
+                  {result.success ? (
+                    <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium">
+                      {result.name} {result.success ? `updated to ${result.to}` : "update failed"}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <>
+                <div className="flex items-start">
+                  <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Security scan completed</p>
+                    <p className="text-xs text-gray-500">{securityStats.lastScan}</p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <Package className="h-4 w-4 text-blue-500 mr-2 mt-0.5" />
+                  <div>
+                    <p className="text-sm font-medium">Package updates available</p>
+                    <p className="text-xs text-gray-500">{securityStats.outdatedPackages} packages can be updated</p>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         )
 
@@ -584,27 +666,27 @@ export default function SecurityClientPage() {
       case "update-history":
         return (
           <div className="space-y-3">
-            <div className="flex items-start">
-              <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">tailwindcss updated to 3.3.5</p>
-                <p className="text-xs text-gray-500">Today at 10:15 AM</p>
-              </div>
-            </div>
-            <div className="flex items-start">
-              <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">react-dom updated to 18.2.0</p>
-                <p className="text-xs text-gray-500">Yesterday at 3:45 PM</p>
-              </div>
-            </div>
-            <div className="flex items-start">
-              <AlertCircle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">postcss update failed</p>
-                <p className="text-xs text-gray-500">Yesterday at 3:42 PM</p>
-              </div>
-            </div>
+            {updateResults.length > 0 ? (
+              updateResults.map((result, index) => (
+                <div key={index} className="flex items-start">
+                  {result.success ? (
+                    <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium">
+                      {result.name} {result.success ? `updated to ${result.to}` : "update failed"}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-sm text-gray-400">No recent updates</p>
+            )}
           </div>
         )
 
@@ -648,9 +730,18 @@ export default function SecurityClientPage() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Security Center</h1>
         <div className="flex space-x-2">
-          <Button onClick={applyChanges} variant="destructive" size="sm">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Apply Now
+          <Button onClick={applyChanges} variant="destructive" size="sm" disabled={applyingChanges}>
+            {applyingChanges ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Applying...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Apply Now
+              </>
+            )}
           </Button>
           <Button onClick={fetchDependencies} variant="outline" size="sm" className="border-gray-700">
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -671,6 +762,37 @@ export default function SecurityClientPage() {
           >
             Dismiss
           </Button>
+        </div>
+      )}
+
+      {showUpdateResults && updateResults.length > 0 && (
+        <div className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6">
+          <div className="flex items-center mb-2">
+            <CheckCircle className="mr-2 h-5 w-5" />
+            <span className="font-medium">Updates applied successfully</span>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowUpdateResults(false)}
+              className="ml-auto text-white hover:bg-green-800/50"
+            >
+              Dismiss
+            </Button>
+          </div>
+          <div className="mt-2 space-y-1">
+            {updateResults.map((result, index) => (
+              <div key={index} className="text-sm flex items-center">
+                {result.success ? (
+                  <CheckCircle className="h-3 w-3 text-green-400 mr-2" />
+                ) : (
+                  <AlertCircle className="h-3 w-3 text-red-400 mr-2" />
+                )}
+                <span>
+                  {result.name}: {result.success ? `${result.from} → ${result.to}` : result.error}
+                </span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -862,7 +984,7 @@ export default function SecurityClientPage() {
                               value={dep.updateMode}
                               onValueChange={(value) => updateDependencyMode(dep.id, value)}
                               showLabels={false}
-                              className="max-w-[240px]"
+                              className="max-w-[300px]"
                             />
                           </td>
                           <td className="py-3 px-4">

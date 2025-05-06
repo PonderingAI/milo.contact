@@ -1,33 +1,26 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { exec } from "child_process"
-import { promisify } from "util"
 
-const execAsync = promisify(exec)
-
-// Helper function to update a dependency
-async function updateDependency(name: string, version: string | null) {
-  try {
-    const command = version ? `npm install ${name}@${version} --save-exact` : `npm install ${name}@latest`
-
-    const { stdout, stderr } = await execAsync(command)
-    return { success: true, stdout, stderr }
-  } catch (error) {
-    console.error(`Error updating ${name}:`, error)
-    throw new Error(`Failed to update ${name}: ${error instanceof Error ? error.message : String(error)}`)
-  }
-}
-
-export async function POST() {
+// This endpoint will be called by a cron job every hour
+export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Get dependencies that need to be updated based on their update mode
+    // Get the global update mode
+    const { data: settings, error: settingsError } = await supabase.from("dependency_settings").select("*").single()
+
+    if (settingsError) {
+      return NextResponse.json({ error: settingsError.message }, { status: 500 })
+    }
+
+    const globalMode = settings?.update_mode || "conservative"
+
+    // Get dependencies that should be auto-updated based on their update mode
     const { data: dependencies, error: fetchError } = await supabase
       .from("dependencies")
       .select("*")
       .or(
-        "update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_update.eq.true),and(update_mode.eq.global,and(global_mode.eq.aggressive,or(global_mode.eq.conservative,has_security_update.eq.true)))",
+        `update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_update.eq.true),and(update_mode.eq.global,and(${globalMode}.eq.aggressive,or(${globalMode}.eq.conservative,has_security_update.eq.true)))`,
       )
       .eq("locked", false)
 
@@ -36,19 +29,17 @@ export async function POST() {
     }
 
     if (!dependencies || dependencies.length === 0) {
-      return NextResponse.json({ message: "No dependencies to update" })
+      return NextResponse.json({ message: "No dependencies to auto-update" })
     }
 
-    // Update each dependency
+    // Update each dependency in the database
     const results = []
 
     for (const dep of dependencies) {
       try {
         // In a real implementation, this would actually update the dependency
-        // For now, we'll simulate success
-        // await updateDependency(dep.name, dep.latest_version)
+        // For now, we'll just update the database
 
-        // Update the database
         const { error: updateError } = await supabase
           .from("dependencies")
           .update({
@@ -82,6 +73,13 @@ export async function POST() {
       }
     }
 
+    // Log the update to the security_audits table
+    await supabase.from("security_audits").insert({
+      type: "scheduled_update",
+      results: results,
+      created_at: new Date().toISOString(),
+    })
+
     return NextResponse.json({
       success: true,
       updated: results.filter((r) => r.success).length,
@@ -89,7 +87,7 @@ export async function POST() {
       results,
     })
   } catch (error) {
-    console.error("Error applying dependency updates:", error)
+    console.error("Error in scheduled update:", error)
     return NextResponse.json(
       {
         error: "An unexpected error occurred",

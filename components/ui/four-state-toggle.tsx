@@ -51,14 +51,14 @@ export function FourStateToggle({
           <span className="text-xs font-medium text-gray-400">{labels.global}</span>
         </div>
       )}
-      <div className="relative h-10 bg-gray-800 rounded-full p-1 flex items-center">
+      <div className="relative h-10 bg-gray-800 rounded-full p-1 flex items-center min-w-[300px]">
         <div
           className={cn(
             "absolute h-8 w-1/4 rounded-full transition-all duration-200 ease-in-out",
             value === "off" && "left-1 bg-gray-600",
-            value === "conservative" && "left-[calc(25%-0.25rem)] bg-blue-600",
-            value === "aggressive" && "left-[calc(50%-0.5rem)] bg-green-600",
-            value === "global" && "left-[calc(75%-0.75rem)] bg-purple-600",
+            value === "conservative" && "left-[calc(25%+1px)] bg-blue-600",
+            value === "aggressive" && "left-[calc(50%+1px)] bg-green-600",
+            value === "global" && "left-[calc(75%+1px)] bg-purple-600",
           )}
         />
         <button
