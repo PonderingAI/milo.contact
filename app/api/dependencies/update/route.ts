@@ -1,47 +1,72 @@
 import { NextResponse } from "next/server"
 import { exec } from "child_process"
 import { promisify } from "util"
-import fs from "fs"
-import path from "path"
+import { createAdminClient } from "@/lib/supabase-server"
 
 const execAsync = promisify(exec)
 
-// Helper function to update a dependency
-async function updateDependency(name: string, version: string | null) {
-  try {
-    const command = version ? `npm install ${name}@${version} --save-exact` : `npm install ${name}@latest`
-
-    const { stdout, stderr } = await execAsync(command)
-    return { success: true, stdout, stderr }
-  } catch (error) {
-    console.error(`Error updating ${name}:`, error)
-    throw new Error(`Failed to update ${name}: ${error instanceof Error ? error.message : String(error)}`)
-  }
-}
-
-// Helper function to get package.json
-async function getPackageJson() {
-  const packageJsonPath = path.join(process.cwd(), "package.json")
-  try {
-    const packageJsonContent = await fs.promises.readFile(packageJsonPath, "utf8")
-    return JSON.parse(packageJsonContent)
-  } catch (error) {
-    console.error("Error reading package.json:", error)
-    throw new Error("Failed to read package.json")
-  }
-}
-
 export async function POST(request: Request) {
   try {
-    const { packageName } = await request.json()
+    const { name, version } = await request.json()
 
-    // In a real implementation, this would run npm/yarn update
-    // For now, we'll simulate a delay and return success
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    if (!name) {
+      return NextResponse.json({ error: "Package name is required" }, { status: 400 })
+    }
 
-    return NextResponse.json({ success: true, packageName })
+    // Run npm update for the specific package
+    const updateCommand = version ? `npm install ${name}@${version} --save-exact` : `npm update ${name}`
+
+    console.log(`Executing: ${updateCommand}`)
+
+    const { stdout, stderr } = await execAsync(updateCommand, { timeout: 60000 })
+
+    // Get the new version
+    const { stdout: lsOutput } = await execAsync(`npm ls ${name} --json --depth=0`)
+    const lsData = JSON.parse(lsOutput)
+    const newVersion = lsData.dependencies?.[name]?.version
+
+    // Update the database if it exists
+    const supabase = createAdminClient()
+
+    // Check if dependencies table exists
+    const { data: tableExists, error: checkError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependencies",
+    })
+
+    if (!checkError && tableExists) {
+      // Update the dependency in the database
+      const { error: updateError } = await supabase.from("dependencies").upsert(
+        {
+          name,
+          current_version: newVersion,
+          latest_version: newVersion,
+          has_security_update: false,
+          last_updated: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "name" },
+      )
+
+      if (updateError) {
+        console.error("Error updating dependency in database:", updateError)
+      }
+    }
+
+    return NextResponse.json({
+      success: true,
+      name,
+      newVersion,
+      stdout,
+      stderr,
+    })
   } catch (error) {
-    console.error("Error in update dependency API:", error)
-    return NextResponse.json({ error: "Failed to update dependency" }, { status: 500 })
+    console.error("Error updating dependency:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to update dependency",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }

@@ -1,63 +1,112 @@
 import { NextResponse } from "next/server"
+import { exec } from "child_process"
+import { promisify } from "util"
 import { createAdminClient } from "@/lib/supabase-server"
+
+const execAsync = promisify(exec)
 
 export async function POST() {
   try {
     const supabase = createAdminClient()
 
-    // Get dependencies that need to be updated based on their update mode
-    const { data: dependencies, error: fetchError } = await supabase
-      .from("dependencies")
-      .select("*")
-      .or("update_mode.eq.aggressive,and(update_mode.eq.conservative,has_security_issue.eq.true)")
-      .eq("locked", false)
+    // Check if dependencies table exists
+    const { data: tableExists, error: checkError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependencies",
+    })
 
-    if (fetchError) {
-      console.error("Error fetching dependencies:", fetchError)
-      return NextResponse.json({ error: "Failed to fetch dependencies" }, { status: 500 })
+    // Get the list of dependencies to update
+    let dependenciesToUpdate = []
+
+    if (!checkError && tableExists) {
+      // Get global update mode
+      const { data: settings, error: settingsError } = await supabase
+        .from("dependency_settings")
+        .select("update_mode")
+        .limit(1)
+        .single()
+
+      const globalMode = settingsError ? "conservative" : settings?.update_mode || "conservative"
+
+      // Get dependencies based on update mode
+      const { data: deps, error: depsError } = await supabase
+        .from("dependencies")
+        .select("name, update_mode, has_security_update, locked")
+
+      if (!depsError && deps) {
+        // Filter dependencies based on update mode
+        dependenciesToUpdate = deps
+          .filter((dep) => {
+            if (dep.locked) return false
+
+            const mode = dep.update_mode === "global" ? globalMode : dep.update_mode
+
+            if (mode === "auto") return true
+            if (mode === "conservative" && dep.has_security_update) return true
+            return false
+          })
+          .map((dep) => dep.name)
+      }
     }
 
-    if (!dependencies || dependencies.length === 0) {
-      return NextResponse.json({ message: "No dependencies to update" })
+    // If no dependencies in database, get outdated dependencies
+    if (dependenciesToUpdate.length === 0) {
+      try {
+        const { stdout } = await execAsync("npm outdated --json")
+        const outdatedDeps = JSON.parse(stdout)
+        dependenciesToUpdate = Object.keys(outdatedDeps)
+      } catch (err) {
+        // If no outdated dependencies, npm outdated exits with code 1
+        console.log("No outdated dependencies found")
+      }
     }
 
-    // Update each dependency in the database
+    if (dependenciesToUpdate.length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "No dependencies to update",
+      })
+    }
+
+    // Update each dependency
     const results = []
 
-    for (const dep of dependencies) {
+    for (const name of dependenciesToUpdate) {
       try {
-        // In a real implementation, this would actually update the dependency
-        // For now, we'll just update the database record
+        const { stdout } = await execAsync(`npm update ${name}`)
 
-        const { error: updateError } = await supabase
-          .from("dependencies")
-          .update({
-            current_version: dep.latest_version,
-            last_updated: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            has_security_issue: false,
-          })
-          .eq("id", dep.id)
+        // Get the new version
+        const { stdout: lsOutput } = await execAsync(`npm ls ${name} --json --depth=0`)
+        const lsData = JSON.parse(lsOutput)
+        const newVersion = lsData.dependencies?.[name]?.version
 
-        if (updateError) {
-          console.error(`Error updating dependency ${dep.name}:`, updateError)
-          results.push({
-            name: dep.name,
-            success: false,
-            error: updateError.message,
-          })
-        } else {
-          results.push({
-            name: dep.name,
-            success: true,
-            from: dep.current_version,
-            to: dep.latest_version,
-          })
+        // Update the database if it exists
+        if (!checkError && tableExists) {
+          const { error: updateError } = await supabase.from("dependencies").upsert(
+            {
+              name,
+              current_version: newVersion,
+              latest_version: newVersion,
+              has_security_update: false,
+              last_updated: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "name" },
+          )
+
+          if (updateError) {
+            console.error(`Error updating ${name} in database:`, updateError)
+          }
         }
-      } catch (error) {
-        console.error(`Error processing dependency ${dep.name}:`, error)
+
         results.push({
-          name: dep.name,
+          name,
+          success: true,
+          newVersion,
+        })
+      } catch (error) {
+        console.error(`Error updating ${name}:`, error)
+        results.push({
+          name,
           success: false,
           error: error instanceof Error ? error.message : String(error),
         })
@@ -71,10 +120,10 @@ export async function POST() {
       results,
     })
   } catch (error) {
-    console.error("Error applying dependency updates:", error)
+    console.error("Error applying updates:", error)
     return NextResponse.json(
       {
-        error: "An unexpected error occurred",
+        error: "Failed to apply updates",
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },

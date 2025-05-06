@@ -5,12 +5,20 @@
  * It ensures only one instance of the client is created to prevent multiple GoTrueClient warnings.
  */
 
-import { createClient } from "@supabase/supabase-js"
+import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 // Singleton instances
 let browserClient: SupabaseClient | null = null
 let adminClient: SupabaseClient | null = null
+
+/**
+ * Create a Supabase client (compatibility export for existing code)
+ * @deprecated Use getSupabaseBrowserClient instead
+ */
+export const createClient = (options = {}): SupabaseClient => {
+  return getSupabaseBrowserClient()
+}
 
 /**
  * Get a Supabase client for browser usage
@@ -22,7 +30,7 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-    return createClient(supabaseUrl, supabaseAnonKey, {
+    return supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
@@ -35,7 +43,7 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
     const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
-    browserClient = createClient(supabaseUrl, supabaseAnonKey, {
+    browserClient = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         storageKey: "milo-portfolio-auth",
         persistSession: true,
@@ -67,7 +75,7 @@ export function createAdminClient(): SupabaseClient {
       throw new Error("SUPABASE_SERVICE_ROLE_KEY is not defined")
     }
 
-    adminClient = createClient(supabaseUrl, supabaseServiceRoleKey, {
+    adminClient = supabaseCreateClient(supabaseUrl, supabaseServiceRoleKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
