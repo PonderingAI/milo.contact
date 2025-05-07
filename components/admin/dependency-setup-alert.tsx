@@ -25,19 +25,50 @@ export default function DependencySetupAlert() {
       const response = await fetch("/api/dependencies/check-tables")
 
       if (!response.ok) {
-        throw new Error("Failed to check tables")
+        // If the check fails, try to set up the tables
+        try {
+          await fetch("/api/dependencies/setup", { method: "POST" })
+          setTablesExist({
+            dependencies: true,
+            dependency_settings: true,
+          })
+          return
+        } catch (setupError) {
+          console.error("Error setting up tables:", setupError)
+          throw new Error("Failed to check and set up tables")
+        }
       }
 
       const data = await response.json()
 
       if (data.success) {
         setTablesExist(data.tables)
+
+        // If tables don't exist, try to set them up automatically
+        if (!data.tables.dependencies || !data.tables.dependency_settings) {
+          try {
+            await fetch("/api/dependencies/setup", { method: "POST" })
+            // Recheck after setup
+            setTimeout(checkTables, 2000)
+          } catch (setupError) {
+            console.error("Error setting up tables:", setupError)
+          }
+        }
       } else {
         throw new Error(data.error || "Unknown error checking tables")
       }
     } catch (err) {
       console.error("Error checking tables:", err)
       setError(err instanceof Error ? err.message : String(err))
+
+      // Try to set up the tables anyway
+      try {
+        await fetch("/api/dependencies/setup", { method: "POST" })
+        // Recheck after setup
+        setTimeout(checkTables, 2000)
+      } catch (setupError) {
+        console.error("Error setting up tables:", setupError)
+      }
     } finally {
       setLoading(false)
     }

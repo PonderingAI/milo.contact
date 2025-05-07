@@ -253,8 +253,9 @@ export default function SecurityClientPage() {
       setSetupMessage(null)
 
       const response = await fetch("/api/dependencies")
+
       if (!response.ok) {
-        throw new Error("Failed to fetch dependencies")
+        throw new Error(`Failed to fetch dependencies: ${response.status} ${response.statusText}`)
       }
 
       const data = await response.json()
@@ -262,6 +263,13 @@ export default function SecurityClientPage() {
       // Check if setup is needed
       if (data.setupNeeded) {
         setSetupMessage(data.setupMessage || "Setting up dependency system...")
+
+        // Try to set up the tables
+        try {
+          await fetch("/api/dependencies/setup", { method: "POST" })
+        } catch (setupError) {
+          console.error("Error setting up dependency tables:", setupError)
+        }
       }
 
       // Map the data to our internal format
@@ -270,12 +278,12 @@ export default function SecurityClientPage() {
         name: dep.name,
         currentVersion: dep.currentVersion || dep.current_version,
         latestVersion: dep.latestVersion || dep.latest_version,
-        outdated: dep.outdated || (dep.currentVersion !== dep.latestVersion && dep.latestVersion),
+        outdated: dep.outdated || (dep.latestVersion !== dep.currentVersion && dep.latestVersion),
         locked: dep.locked || false,
         description: dep.description || "",
-        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_issue || false,
+        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_update || false,
         securityDetails: dep.securityDetails || dep.security_details,
-        updateMode: dep.updateMode || "global",
+        updateMode: dep.updateMode || dep.update_mode || "global",
         isDev: dep.isDev || dep.is_dev || false,
       }))
 
@@ -297,6 +305,14 @@ export default function SecurityClientPage() {
 
       // Set empty dependencies to avoid UI errors
       setDependencies([])
+
+      // Try to set up the tables
+      try {
+        await fetch("/api/dependencies/setup", { method: "POST" })
+        setSetupMessage("Attempting to set up dependency tables. Please refresh in a moment.")
+      } catch (setupError) {
+        console.error("Error setting up dependency tables:", setupError)
+      }
     } finally {
       setLoading(false)
     }

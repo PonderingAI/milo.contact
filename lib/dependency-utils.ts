@@ -86,7 +86,7 @@ export async function getDependenciesFromPackageJson(): Promise<{
  */
 export async function getPackageDescriptions(packageNames: string[]): Promise<Record<string, string>> {
   const descriptions: Record<string, string> = {}
-  const batchSize = 10
+  const batchSize = 5 // Reduce batch size to avoid rate limiting
   const batches = []
 
   // Split package names into batches to avoid too many concurrent requests
@@ -103,6 +103,8 @@ export async function getPackageDescriptions(packageNames: string[]): Promise<Re
           if (response.ok) {
             const data = await response.json()
             descriptions[name] = data.description || "No description available"
+          } else {
+            descriptions[name] = "Description unavailable"
           }
         } catch (error) {
           console.error(`Error fetching description for ${name}:`, error)
@@ -110,6 +112,11 @@ export async function getPackageDescriptions(packageNames: string[]): Promise<Re
         }
       }),
     )
+
+    // Add a small delay between batches to avoid rate limiting
+    if (batches.length > 1) {
+      await new Promise((resolve) => setTimeout(resolve, 500))
+    }
   }
 
   return descriptions
