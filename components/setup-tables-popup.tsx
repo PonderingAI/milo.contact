@@ -21,6 +21,11 @@ CREATE TABLE IF NOT EXISTS user_roles (
   UNIQUE(user_id, role)
 );
 
+-- CRITICAL: Add the role column to user_roles if it doesn't exist
+ALTER TABLE user_roles
+  ADD COLUMN IF NOT EXISTS user_id UUID,
+  ADD COLUMN IF NOT EXISTS role TEXT;
+
 -- Create projects table if it doesn't exist
 CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -70,22 +75,6 @@ ALTER TABLE bts_images
   ADD COLUMN IF NOT EXISTS project_id UUID,
   ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'general';
 
--- Add foreign key if it doesn't exist (wrapped in PL/pgSQL to handle errors)
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint WHERE conname = 'bts_images_project_id_fkey'
-  ) THEN
-    ALTER TABLE bts_images 
-      ADD CONSTRAINT bts_images_project_id_fkey 
-      FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE;
-  END IF;
-EXCEPTION
-  WHEN others THEN
-    -- If there's an error (like the referenced table doesn't exist yet), just continue
-    RAISE NOTICE 'Could not add foreign key constraint: %', SQLERRM;
-END $$;
-
 -- Create media table if it doesn't exist
 CREATE TABLE IF NOT EXISTS media (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -120,7 +109,7 @@ ALTER TABLE contact_messages
 -- Create dependencies table if it doesn't exist
 CREATE TABLE IF NOT EXISTS dependencies (
   id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL UNIQUE,
+  name VARCHAR(255) NOT NULL,
   current_version VARCHAR(100) NOT NULL,
   latest_version VARCHAR(100),
   locked BOOLEAN DEFAULT FALSE,
@@ -132,6 +121,19 @@ CREATE TABLE IF NOT EXISTS dependencies (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Add UNIQUE constraint to dependencies.name if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'dependencies_name_key'
+  ) THEN
+    ALTER TABLE dependencies ADD CONSTRAINT dependencies_name_key UNIQUE (name);
+  END IF;
+EXCEPTION
+  WHEN others THEN
+    RAISE NOTICE 'Could not add unique constraint to dependencies.name: %', SQLERRM;
+END $$;
 
 -- Create dependency_settings table if it doesn't exist
 CREATE TABLE IF NOT EXISTS dependency_settings (
@@ -175,83 +177,71 @@ ALTER TABLE security_audits ENABLE ROW LEVEL SECURITY;
 -- Allow public read access to most tables
 DO $$
 BEGIN
-  -- Drop policies if they exist to avoid conflicts
+  -- Create policies (will error if they already exist, so we'll catch those errors)
   BEGIN
-    DROP POLICY IF EXISTS "public_select" ON projects;
-  EXCEPTION WHEN others THEN
-    -- Policy doesn't exist, continue
+    CREATE POLICY "public_select" ON projects FOR SELECT USING (true);
+  EXCEPTION WHEN duplicate_object THEN
+    -- Policy already exists, continue
   END;
   
   BEGIN
-    DROP POLICY IF EXISTS "public_select" ON site_settings;
-  EXCEPTION WHEN others THEN
-    -- Policy doesn't exist, continue
+    CREATE POLICY "public_select" ON site_settings FOR SELECT USING (true);
+  EXCEPTION WHEN duplicate_object THEN
+    -- Policy already exists, continue
   END;
   
   BEGIN
-    DROP POLICY IF EXISTS "public_select" ON bts_images;
-  EXCEPTION WHEN others THEN
-    -- Policy doesn't exist, continue
+    CREATE POLICY "public_select" ON bts_images FOR SELECT USING (true);
+  EXCEPTION WHEN duplicate_object THEN
+    -- Policy already exists, continue
   END;
   
   BEGIN
-    DROP POLICY IF EXISTS "public_select" ON media;
-  EXCEPTION WHEN others THEN
-    -- Policy doesn't exist, continue
+    CREATE POLICY "public_select" ON media FOR SELECT USING (true);
+  EXCEPTION WHEN duplicate_object THEN
+    -- Policy already exists, continue
   END;
   
   BEGIN
-    DROP POLICY IF EXISTS "public_insert" ON contact_messages;
-  EXCEPTION WHEN others THEN
-    -- Policy doesn't exist, continue
+    -- Allow contact form submissions
+    CREATE POLICY "public_insert" ON contact_messages FOR INSERT WITH CHECK (true);
+  EXCEPTION WHEN duplicate_object THEN
+    -- Policy already exists, continue
   END;
-  
-  -- Create policies
-  CREATE POLICY "public_select" ON projects FOR SELECT USING (true);
-  CREATE POLICY "public_select" ON site_settings FOR SELECT USING (true);
-  CREATE POLICY "public_select" ON bts_images FOR SELECT USING (true);
-  CREATE POLICY "public_select" ON media FOR SELECT USING (true);
-  
-  -- Allow contact form submissions
-  CREATE POLICY "public_insert" ON contact_messages FOR INSERT WITH CHECK (true);
 END $$;
 
 -- Create indexes for better performance
--- First check if indexes exist to avoid errors
-DO $$
-BEGIN
-  -- Projects indexes
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_projects_category') THEN
-    CREATE INDEX idx_projects_category ON projects(category);
-  END IF;
-  
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_projects_featured') THEN
-    CREATE INDEX idx_projects_featured ON projects(featured);
-  END IF;
-  
-  -- BTS images indexes
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_bts_images_project_id') THEN
-    CREATE INDEX idx_bts_images_project_id ON bts_images(project_id);
-  END IF;
-  
-  -- Contact messages indexes
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_contact_messages_created_at') THEN
-    CREATE INDEX idx_contact_messages_created_at ON contact_messages(created_at DESC);
-  END IF;
-  
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_contact_messages_read') THEN
-    CREATE INDEX idx_contact_messages_read ON contact_messages(read);
-  END IF;
-  
-  -- User roles indexes
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_user_roles_user_id') THEN
-    CREATE INDEX idx_user_roles_user_id ON user_roles(user_id);
-  END IF;
-  
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'idx_user_roles_role') THEN
-    CREATE INDEX idx_user_roles_role ON user_roles(role);
-  END IF;
-END $$;
+-- First ensure columns exist, then create indexes
+
+-- User roles indexes
+ALTER TABLE user_roles 
+  ADD COLUMN IF NOT EXISTS user_id UUID,
+  ADD COLUMN IF NOT EXISTS role TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_user_roles_user_id ON user_roles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_roles_role ON user_roles(role);
+
+-- Projects indexes
+ALTER TABLE projects 
+  ADD COLUMN IF NOT EXISTS category TEXT,
+  ADD COLUMN IF NOT EXISTS featured BOOLEAN DEFAULT false;
+
+CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category);
+CREATE INDEX IF NOT EXISTS idx_projects_featured ON projects(featured);
+
+-- BTS images indexes
+ALTER TABLE bts_images 
+  ADD COLUMN IF NOT EXISTS project_id UUID;
+
+CREATE INDEX IF NOT EXISTS idx_bts_images_project_id ON bts_images(project_id);
+
+-- Contact messages indexes
+ALTER TABLE contact_messages 
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  ADD COLUMN IF NOT EXISTS read BOOLEAN DEFAULT FALSE;
+
+CREATE INDEX IF NOT EXISTS idx_contact_messages_created_at ON contact_messages(created_at);
+CREATE INDEX IF NOT EXISTS idx_contact_messages_read ON contact_messages(read);
 `
 
 export default function SetupTablesPopup() {
