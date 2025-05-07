@@ -2,9 +2,17 @@
 
 ## Database Setup
 
-- [ ] Create a comprehensive setup script that handles all database setup in one go
+- [x] Create a robust SQL setup script that works with existing tables
 - [ ] Add proper error handling and recovery for database setup
 - [ ] Create a database migration system for future updates
+
+## Dependency Management
+
+- [ ] Implement dependency tracking system as suggested:
+  - [ ] Detect unused/missing/outdated deps using tools like depcheck or npm-check
+  - [ ] Expose project dependencies via Express JSON endpoint
+  - [ ] Watch package.json (or npm ls --json) for changes using Chokidar
+  - [ ] Push updates to browser in real-time with Server-Sent Events
 
 ## Storage Buckets
 

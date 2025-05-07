@@ -147,162 +147,6 @@ async function syncDependenciesWithDatabase(supabase, allDeps, outdated, vulnera
   }
 }
 
-export async function GET() {
-  try {
-    const supabase = createAdminClient()
-
-    // Try to get dependencies from the database first
-    const { data: dbDeps, error: dbError } = await supabase.from("dependencies").select("*")
-
-    // If there's an error or no dependencies in the database, get them from package.json
-    if (dbError || !dbDeps || dbDeps.length === 0) {
-      // If tables don't exist, set them up
-      if (dbError && dbError.message.includes("does not exist")) {
-        await fetch("/api/dependencies/setup", { method: "POST" })
-      }
-
-      // Get dependencies from package.json
-      const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
-      const allDeps = [...dependencies, ...devDependencies]
-
-      // Get outdated packages
-      const outdated = await getOutdatedPackages()
-
-      // Get security vulnerabilities
-      const vulnerabilities = await getSecurityVulnerabilities()
-
-      // Sync with database if it exists now
-      const syncResult = await syncDependenciesWithDatabase(supabase, allDeps, outdated, vulnerabilities)
-
-      if (syncResult.error) {
-        // Return the dependencies from package.json directly
-        const mappedDeps = allDeps.map((dep) => {
-          const outdatedInfo = outdated[dep.name]
-          const latestVersion = outdatedInfo?.latest || dep.currentVersion
-          const isOutdated = !!outdatedInfo
-          const hasSecurityIssue = vulnerabilities?.vulnerabilities?.[dep.name] !== undefined
-          const securityDetails = hasSecurityIssue ? vulnerabilities?.vulnerabilities?.[dep.name] : null
-
-          return {
-            id: dep.name,
-            name: dep.name,
-            currentVersion: dep.currentVersion,
-            latestVersion,
-            outdated: isOutdated,
-            locked: false,
-            updateMode: "global",
-            hasSecurityIssue,
-            securityDetails,
-            isDev: dep.isDev,
-          }
-        })
-
-        // Calculate security stats
-        const vulnerabilityCount = Object.keys(vulnerabilities?.vulnerabilities || {}).length
-        const outdatedCount = Object.keys(outdated).length
-        const securityScore = calculateSecurityScore(mappedDeps)
-
-        return NextResponse.json({
-          dependencies: mappedDeps,
-          vulnerabilities: vulnerabilityCount,
-          outdatedPackages: outdatedCount,
-          securityScore,
-          lastScan: new Date().toISOString(),
-          updateMode: "conservative",
-          setupNeeded: true,
-          setupMessage: syncResult.error,
-        })
-      }
-
-      // Try to get dependencies from the database again after sync
-      const { data: syncedDeps, error: syncedError } = await supabase.from("dependencies").select("*")
-
-      if (syncedError || !syncedDeps || syncedDeps.length === 0) {
-        return NextResponse.json(
-          {
-            error: "Failed to retrieve dependencies after sync",
-            details: syncedError?.message,
-          },
-          { status: 500 },
-        )
-      }
-
-      // Map database dependencies to the expected format
-      const mappedDeps = syncedDeps.map((dep) => ({
-        id: dep.id,
-        name: dep.name,
-        currentVersion: dep.current_version,
-        latestVersion: dep.latest_version,
-        outdated: dep.outdated,
-        locked: dep.locked,
-        updateMode: dep.update_mode,
-        hasSecurityIssue: dep.has_security_update,
-        securityDetails: dep.security_details,
-        isDev: dep.is_dev,
-      }))
-
-      // Get global settings
-      const { data: settings } = await supabase.from("dependency_settings").select("*").limit(1)
-      const globalUpdateMode = settings?.[0]?.update_mode || "conservative"
-
-      // Calculate security stats
-      const vulnerabilityCount = mappedDeps.filter((dep) => dep.hasSecurityIssue).length
-      const outdatedCount = mappedDeps.filter((dep) => dep.outdated).length
-      const securityScore = calculateSecurityScore(mappedDeps)
-
-      return NextResponse.json({
-        dependencies: mappedDeps,
-        vulnerabilities: vulnerabilityCount,
-        outdatedPackages: outdatedCount,
-        securityScore,
-        lastScan: new Date().toISOString(),
-        updateMode: globalUpdateMode,
-      })
-    }
-
-    // Map database dependencies to the expected format
-    const mappedDeps = dbDeps.map((dep) => ({
-      id: dep.id,
-      name: dep.name,
-      currentVersion: dep.current_version,
-      latestVersion: dep.latest_version,
-      outdated: dep.outdated,
-      locked: dep.locked,
-      updateMode: dep.update_mode,
-      hasSecurityIssue: dep.has_security_update,
-      securityDetails: dep.security_details,
-      isDev: dep.is_dev,
-    }))
-
-    // Get global settings
-    const { data: settings } = await supabase.from("dependency_settings").select("*").limit(1)
-    const globalUpdateMode = settings?.[0]?.update_mode || "conservative"
-
-    // Calculate security stats
-    const vulnerabilityCount = mappedDeps.filter((dep) => dep.hasSecurityIssue).length
-    const outdatedCount = mappedDeps.filter((dep) => dep.outdated).length
-    const securityScore = calculateSecurityScore(mappedDeps)
-
-    return NextResponse.json({
-      dependencies: mappedDeps,
-      vulnerabilities: vulnerabilityCount,
-      outdatedPackages: outdatedCount,
-      securityScore,
-      lastScan: new Date().toISOString(),
-      updateMode: globalUpdateMode,
-    })
-  } catch (error) {
-    console.error("Error in dependencies API:", error)
-    return NextResponse.json(
-      {
-        error: "An unexpected error occurred",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
-  }
-}
-
 // Helper function to calculate security score
 function calculateSecurityScore(deps) {
   const totalDeps = deps.length
@@ -323,6 +167,89 @@ function calculateSecurityScore(deps) {
   // Ensure score is between 0 and 100
   return Math.max(0, Math.min(100, Math.round(score)))
 }
+
+export async function GET() {
+  try {
+    // Check if we have access to package.json
+    let packageJson
+    try {
+      const packageJsonPath = require.resolve("../../../package.json")
+      const packageJsonContent = fs.readFileSync(packageJsonPath, "utf8")
+      packageJson = JSON.parse(packageJsonContent)
+    } catch (error) {
+      console.error("Error reading package.json:", error)
+      return NextResponse.json(
+        {
+          error: "Could not read package.json",
+          dependencies: {},
+          devDependencies: {},
+        },
+        { status: 500 },
+      )
+    }
+
+    // Get dependencies from package.json
+    const dependencies = packageJson.dependencies || {}
+    const devDependencies = packageJson.devDependencies || {}
+
+    // Check if the dependencies table exists in the database
+    const supabase = createAdminClient()
+    const { data: tableExists, error: tableCheckError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependencies",
+    })
+
+    if (tableCheckError) {
+      console.error("Error checking if dependencies table exists:", tableCheckError)
+      return NextResponse.json({
+        dependencies,
+        devDependencies,
+        databaseStatus: "error",
+        error: "Could not check if dependencies table exists",
+      })
+    }
+
+    // If the table doesn't exist, just return the dependencies from package.json
+    if (!tableExists) {
+      return NextResponse.json({
+        dependencies,
+        devDependencies,
+        databaseStatus: "table_missing",
+      })
+    }
+
+    // Get dependencies from the database
+    const { data: dbDependencies, error: dbError } = await supabase.from("dependencies").select("*")
+
+    if (dbError) {
+      console.error("Error fetching dependencies from database:", dbError)
+      return NextResponse.json({
+        dependencies,
+        devDependencies,
+        databaseStatus: "error",
+        error: "Could not fetch dependencies from database",
+      })
+    }
+
+    // Get dependency settings
+    const { data: settings, error: settingsError } = await supabase.from("dependency_settings").select("*").limit(1)
+
+    const dependencySettings = settings && settings.length > 0 ? settings[0] : null
+
+    // Return both package.json dependencies and database dependencies
+    return NextResponse.json({
+      dependencies,
+      devDependencies,
+      dbDependencies: dbDependencies || [],
+      settings: dependencySettings,
+      databaseStatus: "ok",
+    })
+  } catch (error) {
+    console.error("Error in dependencies API:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  }
+}
+
+import fs from "fs"
 
 export async function POST(request: Request) {
   try {
