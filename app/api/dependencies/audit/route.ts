@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server"
-import { exec } from "child_process"
-import { promisify } from "util"
-
-const execAsync = promisify(exec)
+import { getSecurityVulnerabilities } from "@/lib/dependency-utils"
+import { createAdminClient } from "@/lib/supabase-server"
 
 export async function GET() {
   try {
-    // Run npm audit --json to get security vulnerabilities
-    const { stdout } = await execAsync("npm audit --json", { timeout: 30000 })
-
-    // Parse the JSON output
-    const auditData = JSON.parse(stdout)
+    // Run security audit
+    const auditData = await getSecurityVulnerabilities()
 
     // Extract the vulnerabilities
     const vulnerabilities = auditData.vulnerabilities || {}
@@ -20,6 +15,29 @@ export async function GET() {
     const totalDependencies = metadata.totalDependencies || 1 // Avoid division by zero
     const vulnerableCount = Object.keys(vulnerabilities).length
     const securityScore = Math.max(0, Math.min(100, 100 - (vulnerableCount / totalDependencies) * 100))
+
+    // Store audit results in database if it exists
+    const supabase = createAdminClient()
+
+    // Check if security_audits table exists
+    const { data: tableExists, error: checkError } = await supabase.rpc("check_table_exists", {
+      table_name: "security_audits",
+    })
+
+    if (!checkError && tableExists) {
+      // Insert audit results
+      const { error: insertError } = await supabase.from("security_audits").insert({
+        audit_date: new Date().toISOString(),
+        vulnerabilities_found: vulnerableCount,
+        packages_scanned: totalDependencies,
+        security_score: Math.round(securityScore),
+        audit_summary: auditData,
+      })
+
+      if (insertError) {
+        console.error("Error inserting security audit:", insertError)
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -31,28 +49,6 @@ export async function GET() {
   } catch (error) {
     console.error("Error running security audit:", error)
 
-    // If the command fails but returns data about vulnerabilities
-    if (error instanceof Error && "stdout" in error) {
-      try {
-        const auditData = JSON.parse((error as any).stdout)
-        const vulnerabilities = auditData.vulnerabilities || {}
-        const metadata = auditData.metadata || {}
-        const totalDependencies = metadata.totalDependencies || 1
-        const vulnerableCount = Object.keys(vulnerabilities).length
-        const securityScore = Math.max(0, Math.min(100, 100 - (vulnerableCount / totalDependencies) * 100))
-
-        return NextResponse.json({
-          success: true,
-          vulnerabilities,
-          metadata,
-          securityScore: Math.round(securityScore),
-          vulnerableCount,
-        })
-      } catch (parseError) {
-        // If parsing fails, continue to the error response
-      }
-    }
-
     return NextResponse.json(
       {
         error: "Failed to run security audit",
@@ -61,4 +57,9 @@ export async function GET() {
       { status: 500 },
     )
   }
+}
+
+export async function POST() {
+  // POST method for running an audit and storing results
+  return GET()
 }
