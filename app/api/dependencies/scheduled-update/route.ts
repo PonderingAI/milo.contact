@@ -1,5 +1,21 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
+import { exec } from "child_process"
+import { promisify } from "util"
+
+const execAsync = promisify(exec)
+
+// Helper function to update a dependency
+async function updateDependency(name: string, version: string | null) {
+  try {
+    const command = version ? `npm install ${name}@${version} --save-exact` : `npm install ${name}@latest`
+    const { stdout, stderr } = await execAsync(command)
+    return { success: true, stdout, stderr }
+  } catch (error) {
+    console.error(`Error updating ${name}:`, error)
+    throw new Error(`Failed to update ${name}: ${error instanceof Error ? error.message : String(error)}`)
+  }
+}
 
 export async function GET() {
   try {
