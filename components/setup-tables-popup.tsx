@@ -25,15 +25,15 @@ CREATE TABLE IF NOT EXISTS user_roles (
 CREATE TABLE IF NOT EXISTS projects (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   title TEXT NOT NULL,
-  slug TEXT UNIQUE NOT NULL,
   description TEXT,
-  content TEXT,
-  thumbnail_url TEXT,
+  image TEXT,
   category TEXT,
-  featured BOOLEAN DEFAULT false,
+  type TEXT,
+  role TEXT,
   date DATE,
   client TEXT,
-  tags TEXT[],
+  url TEXT,
+  featured BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -41,16 +41,8 @@ CREATE TABLE IF NOT EXISTS projects (
 -- Create site_settings table
 CREATE TABLE IF NOT EXISTS site_settings (
   id SERIAL PRIMARY KEY,
-  site_title TEXT NOT NULL DEFAULT 'Portfolio Site',
-  site_description TEXT DEFAULT 'My professional portfolio',
-  contact_email TEXT,
-  social_links JSONB DEFAULT '{}',
-  hero_image TEXT,
-  about_image TEXT,
-  about_text TEXT,
-  services JSONB DEFAULT '[]',
-  meta_image TEXT,
-  favicon TEXT,
+  key TEXT UNIQUE NOT NULL,
+  value TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -60,9 +52,7 @@ CREATE TABLE IF NOT EXISTS bts_images (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   image_url TEXT NOT NULL,
-  caption TEXT,
-  sort_order INTEGER DEFAULT 0,
-  category TEXT DEFAULT 'general',
+  category TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
@@ -158,7 +148,6 @@ CREATE POLICY "public_select" ON media FOR SELECT USING (true);
 CREATE POLICY "public_insert" ON contact_messages FOR INSERT WITH CHECK (true);
 
 -- Create indexes for better performance
-CREATE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
 CREATE INDEX IF NOT EXISTS idx_projects_category ON projects(category);
 CREATE INDEX IF NOT EXISTS idx_projects_featured ON projects(featured);
 CREATE INDEX IF NOT EXISTS idx_bts_images_project_id ON bts_images(project_id);
