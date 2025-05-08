@@ -1,49 +1,22 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 import { applyDependencyUpdates } from "@/lib/dependency-utils"
+import { checkTableExists } from "@/lib/table-utils"
 
 export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Check if dependencies table exists
-    const { data: depsTableExists, error: checkDepsError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependencies",
-    })
-
-    if (checkDepsError) {
-      console.error("Error checking if dependencies table exists:", checkDepsError)
-      return NextResponse.json(
-        {
-          error: "Failed to check if dependencies table exists",
-          details: checkDepsError.message,
-        },
-        { status: 500 },
-      )
-    }
+    // Use the more reliable table check function
+    const depsTableExists = await checkTableExists("dependencies")
+    const settingsTableExists = await checkTableExists("dependency_settings")
 
     // If dependencies table doesn't exist, return early
     if (!depsTableExists) {
       return NextResponse.json({
         message: "Dependencies table does not exist",
-        action: 'Please set up the dependency tables first",t',
+        action: "Please set up the dependency tables first",
       })
-    }
-
-    // Check if dependency_settings table exists
-    const { data: settingsTableExists, error: checkSettingsError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependency_settings",
-    })
-
-    if (checkSettingsError) {
-      console.error("Error checking if dependency_settings table exists:", checkSettingsError)
-      return NextResponse.json(
-        {
-          error: "Failed to check if dependency_settings table exists",
-          details: checkSettingsError.message,
-        },
-        { status: 500 },
-      )
     }
 
     // Get the global update mode (default to conservative if table doesn't exist)

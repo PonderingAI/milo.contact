@@ -199,7 +199,7 @@ export default function SecurityClientPage() {
       // Handle non-OK responses
       if (!response.ok) {
         const errorData = await response.json()
-        console.error("Scheduled update check failed:", errorData.error || (await response.text()))
+        console.error("Scheduled update check failed:", errorData.error || errorData.message || "Unknown error")
         return
       }
 
