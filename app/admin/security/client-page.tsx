@@ -260,6 +260,16 @@ export default function SecurityClientPage() {
 
       const data = await response.json()
 
+      // Check if we have dependencies
+      if (!data.dependencies || data.dependencies.length === 0) {
+        // Try to initialize dependencies if none exist
+        try {
+          await fetch("/api/dependencies/initialize", { method: "POST" })
+        } catch (initError) {
+          console.error("Error initializing dependencies:", initError)
+        }
+      }
+
       // Map the data to our internal format
       const mappedDependencies = (data.dependencies || []).map((dep: any) => ({
         id: dep.id || dep.name,

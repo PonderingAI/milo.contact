@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
@@ -14,6 +14,17 @@ export default function DependencySetupAlert() {
     dependency_settings: false,
   })
   const [error, setError] = useState<string | null>(null)
+  const [setupAttempted, setSetupAttempted] = useState(false)
+  const checkTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const setupTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Clear timeouts on component unmount
+  useEffect(() => {
+    return () => {
+      if (checkTimeoutRef.current) clearTimeout(checkTimeoutRef.current)
+      if (setupTimeoutRef.current) clearTimeout(setupTimeoutRef.current)
+    }
+  }, [])
 
   useEffect(() => {
     checkTables()
@@ -25,18 +36,7 @@ export default function DependencySetupAlert() {
       const response = await fetch("/api/dependencies/check-tables")
 
       if (!response.ok) {
-        // If the check fails, try to set up the tables
-        try {
-          await fetch("/api/dependencies/setup", { method: "POST" })
-          setTablesExist({
-            dependencies: true,
-            dependency_settings: true,
-          })
-          return
-        } catch (setupError) {
-          console.error("Error setting up tables:", setupError)
-          throw new Error("Failed to check and set up tables")
-        }
+        throw new Error("Failed to check tables")
       }
 
       const data = await response.json()
@@ -44,12 +44,16 @@ export default function DependencySetupAlert() {
       if (data.success) {
         setTablesExist(data.tables)
 
-        // If tables don't exist, try to set them up automatically
-        if (!data.tables.dependencies || !data.tables.dependency_settings) {
+        // If tables don't exist and we haven't attempted setup yet, try to set them up
+        if ((!data.tables.dependencies || !data.tables.dependency_settings) && !setupAttempted) {
+          setSetupAttempted(true)
           try {
             await fetch("/api/dependencies/setup", { method: "POST" })
-            // Recheck after setup
-            setTimeout(checkTables, 2000)
+            // Schedule a single recheck after setup
+            if (setupTimeoutRef.current) clearTimeout(setupTimeoutRef.current)
+            setupTimeoutRef.current = setTimeout(() => {
+              checkTables()
+            }, 5000) // Check again after 5 seconds
           } catch (setupError) {
             console.error("Error setting up tables:", setupError)
           }
@@ -60,15 +64,6 @@ export default function DependencySetupAlert() {
     } catch (err) {
       console.error("Error checking tables:", err)
       setError(err instanceof Error ? err.message : String(err))
-
-      // Try to set up the tables anyway
-      try {
-        await fetch("/api/dependencies/setup", { method: "POST" })
-        // Recheck after setup
-        setTimeout(checkTables, 2000)
-      } catch (setupError) {
-        console.error("Error setting up tables:", setupError)
-      }
     } finally {
       setLoading(false)
     }
@@ -76,7 +71,27 @@ export default function DependencySetupAlert() {
 
   const handleSetupComplete = () => {
     setShowSetupGuide(false)
+    setSetupAttempted(true)
     checkTables()
+  }
+
+  const handleManualSetup = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch("/api/dependencies/setup", { method: "POST" })
+      if (!response.ok) {
+        throw new Error("Failed to set up tables")
+      }
+
+      // Wait 3 seconds before checking tables again
+      setTimeout(() => {
+        checkTables()
+      }, 3000)
+    } catch (error) {
+      console.error("Error setting up tables:", error)
+      setError(error instanceof Error ? error.message : String(error))
+      setLoading(false)
+    }
   }
 
   if (loading) {
@@ -101,9 +116,12 @@ export default function DependencySetupAlert() {
           The dependency management system requires database tables to be set up. Please click the button below to set
           up the required tables.
         </AlertDescription>
-        <div className="mt-4">
+        <div className="mt-4 flex gap-2">
           <Button onClick={() => setShowSetupGuide(true)} variant="outline" className="bg-gray-800">
             Set Up Dependencies Tables
+          </Button>
+          <Button onClick={handleManualSetup} variant="outline" className="bg-gray-800" disabled={loading}>
+            {loading ? "Setting up..." : "Quick Setup"}
           </Button>
         </div>
       </Alert>
