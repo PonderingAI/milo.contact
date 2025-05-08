@@ -1,272 +1,166 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { exec } from "child_process"
-import { promisify } from "util"
-import fs from "fs"
-import path from "path"
 
-const execAsync = promisify(exec)
+// Hardcoded dependencies as fallback
+const FALLBACK_DEPENDENCIES = [
+  {
+    name: "next",
+    current_version: "14.0.3",
+    latest_version: "14.0.3",
+    is_dev: false,
+    description: "The React Framework for the Web",
+  },
+  {
+    name: "react",
+    current_version: "18.2.0",
+    latest_version: "18.2.0",
+    is_dev: false,
+    description: "React is a JavaScript library for building user interfaces.",
+  },
+  {
+    name: "react-dom",
+    current_version: "18.2.0",
+    latest_version: "18.2.0",
+    is_dev: false,
+    description: "React package for working with the DOM.",
+  },
+  {
+    name: "@supabase/supabase-js",
+    current_version: "2.38.4",
+    latest_version: "2.38.4",
+    is_dev: false,
+    description: "Supabase client for JavaScript",
+  },
+  {
+    name: "nodemailer",
+    current_version: "6.9.9",
+    latest_version: "6.9.9",
+    is_dev: false,
+    description: "Easy as cake e-mail sending from your Node.js applications",
+  },
+  {
+    name: "tailwindcss",
+    current_version: "3.3.0",
+    latest_version: "3.3.0",
+    is_dev: false,
+    description: "A utility-first CSS framework for rapidly building custom user interfaces.",
+  },
+  {
+    name: "typescript",
+    current_version: "5.0.4",
+    latest_version: "5.0.4",
+    is_dev: true,
+    description: "TypeScript is a language for application scale JavaScript development",
+  },
+  {
+    name: "eslint",
+    current_version: "8.38.0",
+    latest_version: "8.38.0",
+    is_dev: true,
+    description: "An AST-based pattern checker for JavaScript.",
+  },
+  {
+    name: "@types/react",
+    current_version: "18.0.28",
+    latest_version: "18.0.28",
+    is_dev: true,
+    description: "TypeScript definitions for React",
+  },
+  {
+    name: "@types/node",
+    current_version: "18.15.11",
+    latest_version: "18.15.11",
+    is_dev: true,
+    description: "TypeScript definitions for Node.js",
+  },
+]
 
-// Helper function to get dependencies using npm CLI
-async function getDependenciesFromPackageJson() {
+// Helper function to check if a table exists without using RPC
+async function checkTableExists(supabase, tableName) {
   try {
-    // Use npm list --json to get all installed dependencies
-    const { stdout: listOutput } = await execAsync("npm list --json --depth=0", { timeout: 30000 })
-    const npmList = JSON.parse(listOutput)
+    // Query the information_schema to check if the table exists
+    const { data, error } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .eq("table_name", tableName)
+      .single()
 
-    // Extract dependencies and devDependencies
-    const dependencies = Object.entries(npmList.dependencies || {}).map(([name, info]) => ({
-      name,
-      current_version: (info as any).version,
-      is_dev: false,
-    }))
-
-    const devDependencies = []
-
-    // Try to get dev dependencies separately
-    try {
-      const packageJsonPath = path.join(process.cwd(), "package.json")
-      const packageJsonContent = fs.readFileSync(packageJsonPath, "utf8")
-      const packageJson = JSON.parse(packageJsonContent)
-
-      // Add dev dependencies if they exist in package.json
-      if (packageJson.devDependencies) {
-        Object.entries(packageJson.devDependencies).forEach(([name, version]) => {
-          devDependencies.push({
-            name,
-            current_version: version.toString().replace(/^\^|~/, ""),
-            is_dev: true,
-          })
-        })
-      }
-    } catch (devDepError) {
-      console.error("Error reading dev dependencies:", devDepError)
+    if (error) {
+      console.error(`Error checking if ${tableName} exists:`, error)
+      // Try alternative method if this fails
+      return await fallbackTableCheck(supabase, tableName)
     }
 
-    return { dependencies, devDependencies }
+    return !!data
   } catch (error) {
-    console.error("Error getting dependencies from npm list:", error)
-
-    // Fallback to hardcoded dependencies if we can't get them from npm list
-    return {
-      dependencies: [
-        { name: "next", current_version: "14.0.3", is_dev: false },
-        { name: "react", current_version: "18.2.0", is_dev: false },
-        { name: "react-dom", current_version: "18.2.0", is_dev: false },
-        { name: "@supabase/supabase-js", current_version: "2.38.4", is_dev: false },
-        { name: "nodemailer", current_version: "6.9.9", is_dev: false },
-        { name: "tailwindcss", current_version: "3.3.0", is_dev: false },
-      ],
-      devDependencies: [
-        { name: "typescript", current_version: "5.0.4", is_dev: true },
-        { name: "eslint", current_version: "8.38.0", is_dev: true },
-        { name: "@types/react", current_version: "18.0.28", is_dev: true },
-        { name: "@types/node", current_version: "18.15.11", is_dev: true },
-      ],
-    }
+    console.error(`Error in checkTableExists for ${tableName}:`, error)
+    // Try alternative method if this fails
+    return await fallbackTableCheck(supabase, tableName)
   }
 }
 
-// Helper function to get package descriptions from npm registry
-async function getPackageDescriptions(packageNames) {
-  const descriptions = {}
-
-  for (const name of packageNames) {
-    try {
-      const response = await fetch(`https://registry.npmjs.org/${name}`)
-      if (response.ok) {
-        const data = await response.json()
-        descriptions[name] = data.description || "No description available"
-      }
-    } catch (error) {
-      console.error(`Error fetching description for ${name}:`, error)
-      descriptions[name] = "Description unavailable"
-    }
-  }
-
-  return descriptions
-}
-
-// Helper function to get outdated packages
-async function getOutdatedPackages() {
+// Fallback method to check if a table exists
+async function fallbackTableCheck(supabase, tableName) {
   try {
-    const { stdout } = await execAsync("npm outdated --json")
-    return JSON.parse(stdout || "{}")
+    // Try to query the table directly with a limit
+    const { error } = await supabase.from(tableName).select("*").limit(1)
+
+    // If no error, table exists
+    return !error
   } catch (error) {
-    // npm outdated returns exit code 1 if there are outdated packages
-    if (error instanceof Error && "stdout" in error) {
-      try {
-        return JSON.parse((error as any).stdout || "{}")
-      } catch (parseError) {
-        console.error("Error parsing npm outdated output:", parseError)
-        return {}
-      }
-    }
-    console.error("Error running npm outdated:", error)
-    return {}
+    console.error(`Fallback check failed for ${tableName}:`, error)
+    return false
   }
-}
-
-// Helper function to get security vulnerabilities
-async function getSecurityVulnerabilities() {
-  try {
-    const { stdout } = await execAsync("npm audit --json")
-    return JSON.parse(stdout || "{}")
-  } catch (error) {
-    // npm audit returns exit code 1 if there are vulnerabilities
-    if (error instanceof Error && "stdout" in error) {
-      try {
-        return JSON.parse((error as any).stdout || "{}")
-      } catch (parseError) {
-        console.error("Error parsing npm audit output:", parseError)
-        return {}
-      }
-    }
-    console.error("Error running npm audit:", error)
-    return {}
-  }
-}
-
-// Helper function to calculate security score
-function calculateSecurityScore(deps) {
-  const totalDeps = deps.length
-  if (totalDeps === 0) return 100
-
-  const vulnerableDeps = deps.filter((d) => d.has_security_update).length
-  const outdatedDeps = deps.filter((d) => d.outdated).length
-
-  // Calculate score: start with 100 and deduct points
-  let score = 100
-
-  // Deduct more for vulnerable dependencies
-  score -= (vulnerableDeps / totalDeps) * 50
-
-  // Deduct less for outdated dependencies
-  score -= (outdatedDeps / totalDeps) * 20
-
-  // Ensure score is between 0 and 100
-  return Math.max(0, Math.min(100, Math.round(score)))
 }
 
 export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Check if dependencies table exists
-    const { data: tableExists, error: tableCheckError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependencies",
-    })
+    // First, check if we can connect to Supabase at all
+    try {
+      const { error: connectionError } = await supabase.from("_dummy_query_").select("*").limit(1)
 
-    if (tableCheckError) {
-      console.error("Error checking if dependencies table exists:", tableCheckError)
-      return NextResponse.json(
-        {
-          error: "Failed to check if dependencies table exists",
-          details: tableCheckError.message,
-        },
-        { status: 500 },
-      )
+      // If we get a specific error about relation not existing, connection is working
+      if (connectionError && !connectionError.message.includes("does not exist")) {
+        console.error("Supabase connection error:", connectionError)
+        throw new Error("Failed to connect to Supabase")
+      }
+    } catch (connectionError) {
+      // If this is not a "relation does not exist" error, there's a connection issue
+      if (
+        connectionError instanceof Error &&
+        !connectionError.message.includes("does not exist") &&
+        !connectionError.message.includes("_dummy_query_")
+      ) {
+        console.error("Supabase connection test failed:", connectionError)
+        return NextResponse.json(
+          {
+            error: "Database connection failed",
+            dependencies: FALLBACK_DEPENDENCIES,
+            fallback: true,
+            tableExists: false,
+          },
+          { status: 200 },
+        ) // Return 200 with fallback data
+      }
     }
 
-    // Get dependencies from package.json
-    const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
-    const allDeps = [...dependencies, ...devDependencies]
+    // Check if dependencies table exists without using RPC
+    const tableExists = await checkTableExists(supabase, "dependencies")
 
-    // Get package descriptions
-    const packageNames = allDeps.map((dep) => dep.name)
-    const descriptions = await getPackageDescriptions(packageNames)
-
-    // Add descriptions to dependencies
-    const depsWithDescriptions = allDeps.map((dep) => ({
-      ...dep,
-      description: descriptions[dep.name] || "No description available",
-    }))
-
-    // If table doesn't exist, return dependencies from package.json
+    // If table doesn't exist, return fallback data
     if (!tableExists) {
       return NextResponse.json({
-        dependencies: depsWithDescriptions,
+        dependencies: FALLBACK_DEPENDENCIES,
         tableExists: false,
-        message: "Dependencies table does not exist. Using package.json data.",
+        message: "Dependencies table does not exist. Using fallback data.",
+        fallback: true,
       })
     }
 
-    // Try to get outdated packages and security vulnerabilities
-    let outdated = {}
-    let vulnerabilities = {}
-
-    try {
-      outdated = await getOutdatedPackages()
-    } catch (error) {
-      console.error("Error getting outdated packages:", error)
-    }
-
-    try {
-      vulnerabilities = await getSecurityVulnerabilities()
-    } catch (error) {
-      console.error("Error getting security vulnerabilities:", error)
-    }
-
-    // Sync dependencies with database
-    for (const dep of depsWithDescriptions) {
-      const outdatedInfo = outdated[dep.name]
-      const latestVersion = outdatedInfo?.latest || dep.current_version
-      const isOutdated = !!outdatedInfo
-      const hasSecurityIssue = vulnerabilities?.vulnerabilities?.[dep.name] !== undefined
-
-      // Check if dependency exists in database
-      const { data: existingDep, error: fetchError } = await supabase
-        .from("dependencies")
-        .select("id")
-        .eq("name", dep.name)
-        .maybeSingle()
-
-      if (fetchError && !fetchError.message.includes("No rows found")) {
-        console.error(`Error checking if dependency ${dep.name} exists:`, fetchError)
-        continue
-      }
-
-      if (existingDep) {
-        // Update existing dependency
-        const { error: updateError } = await supabase
-          .from("dependencies")
-          .update({
-            current_version: dep.current_version,
-            latest_version: latestVersion,
-            outdated: isOutdated,
-            has_security_update: hasSecurityIssue,
-            is_dev: dep.is_dev,
-            description: dep.description,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingDep.id)
-
-        if (updateError) {
-          console.error(`Error updating dependency ${dep.name}:`, updateError)
-        }
-      } else {
-        // Insert new dependency
-        const { error: insertError } = await supabase.from("dependencies").insert({
-          name: dep.name,
-          current_version: dep.current_version,
-          latest_version: latestVersion,
-          outdated: isOutdated,
-          locked: false,
-          update_mode: "global",
-          has_security_update: hasSecurityIssue,
-          is_dev: dep.is_dev,
-          description: dep.description,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-
-        if (insertError) {
-          console.error(`Error inserting dependency ${dep.name}:`, insertError)
-        }
-      }
-    }
-
-    // Get all dependencies from database
+    // Get dependencies from database
     const { data: dbDeps, error: fetchError } = await supabase.from("dependencies").select("*")
 
     if (fetchError) {
@@ -275,19 +169,32 @@ export async function GET() {
         {
           error: "Failed to fetch dependencies from database",
           details: fetchError.message,
-          dependencies: depsWithDescriptions, // Return package.json data as fallback
+          dependencies: FALLBACK_DEPENDENCIES,
+          fallback: true,
         },
-        { status: 500 },
-      )
+        { status: 200 },
+      ) // Return 200 with fallback data
     }
 
-    // Calculate security score
-    const securityScore = calculateSecurityScore(dbDeps || [])
+    // If no dependencies in database, return fallback
+    if (!dbDeps || dbDeps.length === 0) {
+      return NextResponse.json({
+        dependencies: FALLBACK_DEPENDENCIES,
+        tableExists: true,
+        message: "No dependencies found in database. Using fallback data.",
+        fallback: true,
+      })
+    }
+
+    // Calculate security score (simplified)
+    const vulnerableDeps = dbDeps.filter((d) => d.has_security_update).length
+    const outdatedDeps = dbDeps.filter((d) => d.outdated).length
+    const securityScore = Math.max(0, Math.min(100, 100 - vulnerableDeps * 10 - outdatedDeps * 5))
 
     return NextResponse.json({
-      dependencies: dbDeps || depsWithDescriptions,
-      vulnerabilities: Object.keys(vulnerabilities?.vulnerabilities || {}).length,
-      outdatedPackages: Object.keys(outdated || {}).length,
+      dependencies: dbDeps,
+      vulnerabilities: vulnerableDeps,
+      outdatedPackages: outdatedDeps,
       securityScore,
       lastScan: new Date().toISOString(),
       tableExists: true,
@@ -295,30 +202,17 @@ export async function GET() {
   } catch (error) {
     console.error("Error in dependencies API:", error)
 
-    // Try to get dependencies from package.json as fallback
-    try {
-      const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
-      const allDeps = [...dependencies, ...devDependencies]
-
-      return NextResponse.json(
-        {
-          error: "An unexpected error occurred, using package.json as fallback",
-          details: error instanceof Error ? error.message : String(error),
-          dependencies: allDeps,
-          fallback: true,
-        },
-        { status: 500 },
-      )
-    } catch (fallbackError) {
-      return NextResponse.json(
-        {
-          error: "Failed to fetch dependencies",
-          details: error instanceof Error ? error.message : String(error),
-          fallbackError: fallbackError instanceof Error ? fallbackError.message : String(fallbackError),
-        },
-        { status: 500 },
-      )
-    }
+    // Always return a 200 with fallback data instead of 500
+    return NextResponse.json(
+      {
+        error: "An unexpected error occurred, using fallback data",
+        details: error instanceof Error ? error.message : String(error),
+        dependencies: FALLBACK_DEPENDENCIES,
+        fallback: true,
+        tableExists: false,
+      },
+      { status: 200 },
+    )
   }
 }
 
@@ -328,21 +222,8 @@ export async function POST(request: Request) {
     const body = await request.json()
     const { id, name, current_version, latest_version, locked, locked_version, update_mode } = body
 
-    // Check if dependencies table exists
-    const { data: tableExists, error: checkError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependencies",
-    })
-
-    if (checkError) {
-      console.error("Error checking if dependencies table exists:", checkError)
-      return NextResponse.json(
-        {
-          error: "Failed to check if dependencies table exists",
-          details: checkError.message,
-        },
-        { status: 500 },
-      )
-    }
+    // Check if dependencies table exists without using RPC
+    const tableExists = await checkTableExists(supabase, "dependencies")
 
     // If table doesn't exist, return appropriate message
     if (!tableExists) {
@@ -392,6 +273,8 @@ export async function POST(request: Request) {
         locked: locked || false,
         locked_version: locked_version,
         update_mode: update_mode || "global",
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
       })
 
       if (insertError) {
