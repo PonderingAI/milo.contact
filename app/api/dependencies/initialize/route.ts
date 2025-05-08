@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { getDependenciesFromPackageJson, getPackageDescriptions } from "@/lib/dependency-utils"
+import fs from "fs"
+import path from "path"
 
 export async function POST() {
   try {
@@ -33,8 +34,37 @@ export async function POST() {
       )
     }
 
-    // Get dependencies from package.json
-    const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
+    // Read package.json
+    let packageJson
+    try {
+      const packageJsonPath = path.join(process.cwd(), "package.json")
+      const packageJsonContent = fs.readFileSync(packageJsonPath, "utf8")
+      packageJson = JSON.parse(packageJsonContent)
+    } catch (readError) {
+      console.error("Error reading package.json:", readError)
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Error reading package.json",
+          details: readError instanceof Error ? readError.message : String(readError),
+        },
+        { status: 500 },
+      )
+    }
+
+    // Extract dependencies
+    const dependencies = Object.entries(packageJson.dependencies || {}).map(([name, version]) => ({
+      name,
+      current_version: String(version).replace(/[^0-9.]/g, ""),
+      is_dev: false,
+    }))
+
+    const devDependencies = Object.entries(packageJson.devDependencies || {}).map(([name, version]) => ({
+      name,
+      current_version: String(version).replace(/[^0-9.]/g, ""),
+      is_dev: true,
+    }))
+
     const allDeps = [...dependencies, ...devDependencies]
 
     if (allDeps.length === 0) {
@@ -44,15 +74,8 @@ export async function POST() {
       })
     }
 
-    // Get package descriptions
-    const packageNames = allDeps.map((dep) => dep.name)
-    const descriptions = await getPackageDescriptions(packageNames)
-
     // Check if dependencies already exist in the database
-    const { data: existingDeps, error: fetchError } = await supabase
-      .from("dependencies")
-      .select("name")
-      .in("name", packageNames)
+    const { data: existingDeps, error: fetchError } = await supabase.from("dependencies").select("name")
 
     if (fetchError) {
       console.error("Error fetching existing dependencies:", fetchError)
@@ -69,7 +92,7 @@ export async function POST() {
     const existingDepNames = existingDeps?.map((dep) => dep.name) || []
     const newDeps = allDeps.filter((dep) => !existingDepNames.includes(dep.name))
 
-    if (newDeps.length === 0) {
+    if (newDeps.length === 0 && existingDepNames.length > 0) {
       return NextResponse.json({
         success: true,
         message: "All dependencies already exist in the database",
@@ -82,28 +105,32 @@ export async function POST() {
       name: dep.name,
       current_version: dep.current_version,
       latest_version: dep.current_version, // Will be updated later by check-updates
-      description: descriptions[dep.name] || "",
       is_dev: dep.is_dev,
+      description: `${dep.name} package`,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }))
 
-    const { error: insertError } = await supabase.from("dependencies").insert(depsToInsert)
+    if (depsToInsert.length > 0) {
+      const { error: insertError } = await supabase.from("dependencies").insert(depsToInsert)
 
-    if (insertError) {
-      console.error("Error inserting dependencies:", insertError)
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Error inserting dependencies",
-          details: insertError.message,
-        },
-        { status: 500 },
-      )
+      if (insertError) {
+        console.error("Error inserting dependencies:", insertError)
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Error inserting dependencies",
+            details: insertError.message,
+          },
+          { status: 500 },
+        )
+      }
     }
 
     return NextResponse.json({
       success: true,
       message: "Dependencies initialized successfully",
-      added: newDeps.length,
+      added: depsToInsert.length,
     })
   } catch (error) {
     console.error("Error initializing dependencies:", error)
@@ -116,4 +143,8 @@ export async function POST() {
       { status: 500 },
     )
   }
+}
+
+export async function GET() {
+  return POST()
 }
