@@ -1,113 +1,129 @@
 import { NextResponse } from "next/server"
+import { exec } from "child_process"
+import { promisify } from "util"
 import { createAdminClient } from "@/lib/supabase-server"
-import { checkTableExists } from "@/lib/table-utils"
-import { getOutdatedPackages, getOutdatedPackagesWithNcu, getSecurityVulnerabilities } from "@/lib/dependency-utils"
 
-export async function POST() {
+const execAsync = promisify(exec)
+
+export async function GET() {
   try {
-    const supabase = createAdminClient()
+    console.log("Running npm outdated to check for updates...")
 
-    // Check if dependencies table exists
-    const dependenciesTableExists = await checkTableExists("dependencies")
+    // First try npm outdated --json
+    let outdatedDeps = {}
+    let method = "npm-outdated"
 
-    if (!dependenciesTableExists) {
-      return NextResponse.json(
-        {
-          error: "Dependencies table does not exist",
-          success: false,
-        },
-        { status: 404 },
-      )
-    }
-
-    // Get outdated packages using npm outdated
-    let outdatedPackages = {}
     try {
-      outdatedPackages = await getOutdatedPackages()
-    } catch (error) {
-      console.error("Error getting outdated packages with npm outdated:", error)
+      // Run npm outdated --json to get outdated dependencies
+      const { stdout } = await execAsync("npm outdated --json", { timeout: 30000 })
 
-      // Try with npm-check-updates as fallback
-      try {
-        outdatedPackages = await getOutdatedPackagesWithNcu()
-      } catch (ncuError) {
-        console.error("Error getting outdated packages with npm-check-updates:", ncuError)
-        // Continue without outdated info
+      // Parse the JSON output
+      if (stdout && stdout.trim()) {
+        outdatedDeps = JSON.parse(stdout)
+        console.log(`Found ${Object.keys(outdatedDeps).length} outdated packages using npm outdated`)
+      }
+    } catch (error) {
+      console.log("Error or non-zero exit code from npm outdated (expected if packages are outdated)")
+
+      // npm outdated returns exit code 1 if there are outdated packages
+      if (error instanceof Error && "stdout" in error) {
+        try {
+          const stdout = (error as any).stdout
+          if (stdout && stdout.trim()) {
+            outdatedDeps = JSON.parse(stdout)
+            console.log(`Found ${Object.keys(outdatedDeps).length} outdated packages from npm outdated stderr`)
+          }
+        } catch (parseError) {
+          console.error("Error parsing npm outdated output:", parseError)
+
+          // If npm outdated fails, try npm-check-updates
+          try {
+            console.log("Trying npm-check-updates as fallback...")
+            method = "ncu"
+
+            const { stdout: ncuStdout } = await execAsync("npx npm-check-updates --jsonUpgraded", { timeout: 30000 })
+
+            if (ncuStdout && ncuStdout.trim()) {
+              const ncuResult = JSON.parse(ncuStdout)
+
+              // Transform ncu output to match npm outdated format
+              outdatedDeps = {}
+              for (const [name, version] of Object.entries(ncuResult)) {
+                outdatedDeps[name] = {
+                  current: "unknown", // We'll update this from package.json later
+                  wanted: "unknown",
+                  latest: version,
+                  location: "unknown",
+                  dependent: "unknown",
+                  type: "unknown",
+                }
+              }
+
+              console.log(`Found ${Object.keys(outdatedDeps).length} outdated packages using npm-check-updates`)
+            }
+          } catch (ncuError) {
+            console.error("Error running npm-check-updates:", ncuError)
+            // Continue with empty outdated deps
+          }
+        }
       }
     }
 
-    // Get security vulnerabilities
-    let vulnerabilities = {}
-    try {
-      vulnerabilities = await getSecurityVulnerabilities()
-    } catch (error) {
-      console.error("Error getting security vulnerabilities:", error)
-      // Continue without vulnerability info
-    }
+    // Update the database with the outdated packages info
+    const supabase = createAdminClient()
 
-    // Get all dependencies from database
+    // Get all dependencies from the database
     const { data: dependencies, error: fetchError } = await supabase.from("dependencies").select("*")
 
     if (fetchError) {
       console.error("Error fetching dependencies:", fetchError)
-      return NextResponse.json(
-        {
-          error: "Failed to fetch dependencies",
-          success: false,
-        },
-        { status: 500 },
-      )
-    }
+    } else if (dependencies && dependencies.length > 0) {
+      console.log(`Updating ${dependencies.length} dependencies in the database...`)
 
-    // Update dependencies with outdated and vulnerability info
-    for (const dep of dependencies || []) {
-      const outdatedInfo = outdatedPackages[dep.name]
-      const latestVersion = outdatedInfo?.latest || dep.current_version
-      const isOutdated = !!outdatedInfo
-      const hasSecurityIssue = vulnerabilities?.vulnerabilities?.[dep.name] !== undefined
+      // Update each dependency
+      for (const dep of dependencies) {
+        const outdatedInfo = outdatedDeps[dep.name]
+        const isOutdated = !!outdatedInfo
+        const latestVersion = outdatedInfo?.latest || dep.current_version
 
-      // Update dependency in database
-      const { error: updateError } = await supabase
-        .from("dependencies")
-        .update({
-          latest_version: latestVersion,
-          outdated: isOutdated,
-          has_security_update: hasSecurityIssue,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("name", dep.name)
+        // Update the dependency in the database
+        const { error: updateError } = await supabase
+          .from("dependencies")
+          .update({
+            latest_version: latestVersion,
+            outdated: isOutdated,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("name", dep.name)
 
-      if (updateError) {
-        console.error(`Error updating dependency ${dep.name}:`, updateError)
+        if (updateError) {
+          console.error(`Error updating dependency ${dep.name}:`, updateError)
+        }
       }
-    }
 
-    // Record the audit
-    const { error: auditError } = await supabase.from("security_audits").insert({
-      scan_type: "manual",
-      vulnerabilities_found: Object.keys(vulnerabilities?.vulnerabilities || {}).length,
-      outdated_packages: Object.keys(outdatedPackages).length,
-      created_at: new Date().toISOString(),
-    })
-
-    if (auditError) {
-      console.error("Error recording security audit:", auditError)
+      console.log("Database updated successfully")
     }
 
     return NextResponse.json({
       success: true,
-      outdatedCount: Object.keys(outdatedPackages).length,
-      vulnerabilitiesCount: Object.keys(vulnerabilities?.vulnerabilities || {}).length,
+      outdated: outdatedDeps,
+      count: Object.keys(outdatedDeps).length,
+      method: method,
     })
   } catch (error) {
     console.error("Error checking for updates:", error)
+
     return NextResponse.json(
       {
         error: "Failed to check for updates",
         details: error instanceof Error ? error.message : String(error),
-        success: false,
       },
       { status: 500 },
     )
   }
+}
+
+// Also support POST for manual triggering
+export async function POST() {
+  return GET()
 }

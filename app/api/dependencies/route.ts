@@ -1,84 +1,67 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { checkTableExists, getDependenciesFromDatabase } from "@/lib/table-utils"
 
 export async function GET() {
   try {
-    // Get dependencies using the more reliable function
-    const { dependencies, error } = await getDependenciesFromDatabase()
+    const supabase = createAdminClient()
 
-    if (error) {
-      console.error("Error fetching dependencies:", error)
-      // Return empty array instead of error to avoid breaking the UI
+    // Simply fetch dependencies from the table
+    const { data: dependencies, error: fetchError } = await supabase.from("dependencies").select("*").order("name")
+
+    if (fetchError) {
+      console.error("Error fetching dependencies:", fetchError)
       return NextResponse.json({
+        success: false,
+        error: "Error fetching dependencies",
         dependencies: [],
-        vulnerabilities: 0,
-        outdatedPackages: 0,
-        securityScore: 100,
-        lastScan: new Date().toISOString(),
-        error: error,
       })
     }
 
-    // Count vulnerabilities and outdated packages
-    const vulnerabilities = dependencies.filter((dep) => dep.has_security_update).length
-    const outdatedPackages = dependencies.filter((dep) => dep.outdated).length
-
-    // Calculate security score
-    const securityScore = calculateSecurityScore(dependencies)
-
     // Get settings
-    const supabase = createAdminClient()
-    const settingsTableExists = await checkTableExists("dependency_settings")
+    const { data: settings, error: settingsError } = await supabase
+      .from("dependency_settings")
+      .select("*")
+      .limit(1)
+      .single()
 
-    let updateMode = "conservative"
-    if (settingsTableExists) {
-      const { data: settings } = await supabase.from("dependency_settings").select("update_mode").limit(1).single()
-
-      if (settings) {
-        updateMode = settings.update_mode
-      }
+    if (settingsError && !settingsError.message.includes("No rows found")) {
+      console.error("Error fetching dependency settings:", settingsError)
     }
 
+    // Count vulnerabilities and outdated packages
+    const vulnerabilities = dependencies?.filter((dep) => dep.has_security_update).length || 0
+    const outdatedPackages = dependencies?.filter((dep) => dep.outdated).length || 0
+
     return NextResponse.json({
-      dependencies,
+      success: true,
+      dependencies: dependencies || [],
+      updateMode: settings?.update_mode || "conservative",
       vulnerabilities,
       outdatedPackages,
-      securityScore,
-      updateMode,
+      securityScore: calculateSecurityScore(dependencies || []),
       lastScan: new Date().toISOString(),
     })
   } catch (error) {
     console.error("Error in dependencies API:", error)
-    // Return empty array instead of error to avoid breaking the UI
     return NextResponse.json({
+      success: false,
+      error: "An unexpected error occurred",
       dependencies: [],
-      vulnerabilities: 0,
-      outdatedPackages: 0,
-      securityScore: 100,
-      lastScan: new Date().toISOString(),
-      error: error instanceof Error ? error.message : String(error),
     })
   }
 }
 
-// Calculate security score based on vulnerabilities and outdated packages
-function calculateSecurityScore(dependencies: any[]): number {
-  const totalDeps = dependencies.length
+// Calculate security score
+function calculateSecurityScore(deps: any[]): number {
+  const totalDeps = deps.length
   if (totalDeps === 0) return 100
 
-  const vulnerableDeps = dependencies.filter((dep) => dep.has_security_update).length
-  const outdatedDeps = dependencies.filter((dep) => dep.outdated).length
+  const vulnerableDeps = deps.filter((d) => d.has_security_update).length
+  const outdatedDeps = deps.filter((d) => d.outdated).length
 
-  // Calculate score: start with 100 and deduct points
   let score = 100
-
-  // Deduct more for vulnerable dependencies
   score -= (vulnerableDeps / totalDeps) * 50
-
-  // Deduct less for outdated dependencies
   score -= (outdatedDeps / totalDeps) * 20
 
-  // Ensure score is between 0 and 100
   return Math.max(0, Math.min(100, Math.round(score)))
 }
