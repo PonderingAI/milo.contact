@@ -117,6 +117,7 @@ export default function SecurityClientPage() {
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [setupMessage, setSetupMessage] = useState<string | null>(null)
   const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("conservative")
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all")
@@ -199,7 +200,7 @@ export default function SecurityClientPage() {
       // Handle non-OK responses
       if (!response.ok) {
         const errorData = await response.json()
-        console.error("Scheduled update check failed:", errorData.error || errorData.message || "Unknown error")
+        console.error("Scheduled update check failed:", errorData.error || (await response.text()))
         return
       }
 
@@ -226,8 +227,7 @@ export default function SecurityClientPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to apply changes")
+        throw new Error("Failed to apply changes")
       }
 
       const data = await response.json()
@@ -239,7 +239,7 @@ export default function SecurityClientPage() {
       // Refresh dependencies
       fetchDependencies()
     } catch (err: any) {
-      setError(err.message || "Error applying changes")
+      setError(err.message)
       console.error("Error applying changes:", err)
     } finally {
       setApplyingChanges(false)
@@ -250,24 +250,18 @@ export default function SecurityClientPage() {
     try {
       setLoading(true)
       setError(null)
+      setSetupMessage(null)
 
       const response = await fetch("/api/dependencies")
-
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to fetch dependencies")
+        throw new Error("Failed to fetch dependencies")
       }
 
       const data = await response.json()
 
-      // Check if we have dependencies
-      if (!data.dependencies || data.dependencies.length === 0) {
-        // Try to initialize dependencies if none exist
-        try {
-          await fetch("/api/dependencies/initialize", { method: "POST" })
-        } catch (initError) {
-          console.error("Error initializing dependencies:", initError)
-        }
+      // Check if setup is needed
+      if (data.setupNeeded) {
+        setSetupMessage(data.setupMessage || "Setting up dependency system...")
       }
 
       // Map the data to our internal format
@@ -276,12 +270,12 @@ export default function SecurityClientPage() {
         name: dep.name,
         currentVersion: dep.currentVersion || dep.current_version,
         latestVersion: dep.latestVersion || dep.latest_version,
-        outdated: dep.outdated || (dep.latestVersion !== dep.currentVersion && dep.latestVersion),
+        outdated: dep.outdated || (dep.currentVersion !== dep.latestVersion && dep.latestVersion),
         locked: dep.locked || false,
         description: dep.description || "",
-        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_update || false,
+        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_issue || false,
         securityDetails: dep.securityDetails || dep.security_details,
-        updateMode: dep.updateMode || dep.update_mode || "global",
+        updateMode: dep.updateMode || "global",
         isDev: dep.isDev || dep.is_dev || false,
       }))
 
@@ -298,7 +292,7 @@ export default function SecurityClientPage() {
       // Get global update mode - default to conservative (security only)
       setGlobalUpdateMode(data.updateMode || "conservative")
     } catch (err: any) {
-      setError(err.message || "Error fetching dependencies")
+      setError(`Error fetching dependencies: ${err.message}`)
       console.error("Error fetching dependencies:", err)
 
       // Set empty dependencies to avoid UI errors
@@ -335,21 +329,15 @@ export default function SecurityClientPage() {
       if (value === "global") return
 
       setGlobalUpdateMode(value)
-
-      const response = await fetch("/api/dependencies/settings", {
+      await fetch("/api/dependencies/settings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ updateMode: value }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to update settings")
-      }
     } catch (err: any) {
-      setError(err.message || "Error updating settings")
+      setError(err.message)
       console.error("Error updating settings:", err)
     }
   }
@@ -360,20 +348,15 @@ export default function SecurityClientPage() {
       setDependencies((prev) => prev.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep)))
 
       // Send to API
-      const response = await fetch("/api/dependencies/update-mode", {
+      await fetch("/api/dependencies/update-mode", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ id, updateMode: value }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to update dependency mode")
-      }
     } catch (err: any) {
-      setError(err.message || "Error updating dependency mode")
+      setError(err.message)
       console.error("Error updating dependency mode:", err)
       // Revert on error
       fetchDependencies()
@@ -386,20 +369,15 @@ export default function SecurityClientPage() {
       setDependencies((prev) => prev.map((dep) => ({ ...dep, updateMode: "global" })))
 
       // Send to API
-      const response = await fetch("/api/dependencies/reset-all", {
+      await fetch("/api/dependencies/reset-all", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ updateMode: "global" }),
       })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to reset settings")
-      }
     } catch (err: any) {
-      setError(err.message || "Error resetting settings")
+      setError(err.message)
       console.error("Error resetting settings:", err)
       // Revert on error
       fetchDependencies()
@@ -417,8 +395,7 @@ export default function SecurityClientPage() {
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to run security audit")
+        throw new Error("Failed to run security audit")
       }
 
       const data = await response.json()
@@ -437,7 +414,7 @@ export default function SecurityClientPage() {
       // Show success message
       setError(null)
     } catch (err: any) {
-      setError(err.message || "Error running security audit")
+      setError(err.message)
       console.error("Error running security audit:", err)
     } finally {
       setAuditRunning(false)
@@ -798,6 +775,21 @@ export default function SecurityClientPage() {
         </div>
       )}
 
+      {setupMessage && (
+        <div className="bg-blue-900/30 border border-blue-800 text-white p-4 rounded-md mb-6 flex items-center">
+          <Info className="mr-2 h-5 w-5" />
+          <span>{setupMessage}</span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSetupMessage(null)}
+            className="ml-auto text-white hover:bg-blue-800/50"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+
       {showUpdateResults && updateResults.length > 0 && (
         <div className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6">
           <div className="flex items-center mb-2">
@@ -1039,67 +1031,6 @@ export default function SecurityClientPage() {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {selectedVulnerability && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 rounded-lg max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-start mb-4">
-                <h3 className="text-xl font-bold">Vulnerability Details</h3>
-                <Button variant="ghost" size="sm" onClick={() => setSelectedVulnerability(null)}>
-                  ✕
-                </Button>
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <h4 className="font-medium">Package</h4>
-                  <p>{selectedVulnerability.packageName}</p>
-                </div>
-                <div>
-                  <h4 className="font-medium">Current Version</h4>
-                  <p>{selectedVulnerability.currentVersion}</p>
-                </div>
-                <div>
-                  <h4 className="font-medium">Latest Version</h4>
-                  <p>{selectedVulnerability.latestVersion}</p>
-                </div>
-                <div>
-                  <h4 className="font-medium">Severity</h4>
-                  <p className="capitalize">{selectedVulnerability.vulnerability.severity || "Unknown"}</p>
-                </div>
-                <div>
-                  <h4 className="font-medium">Description</h4>
-                  <p>{selectedVulnerability.vulnerability.description || "No description available"}</p>
-                </div>
-                {selectedVulnerability.vulnerability.url && (
-                  <div>
-                    <h4 className="font-medium">More Information</h4>
-                    <a
-                      href={selectedVulnerability.vulnerability.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-blue-400 hover:underline"
-                    >
-                      View Advisory
-                    </a>
-                  </div>
-                )}
-              </div>
-              <div className="mt-6">
-                <Button
-                  onClick={() => {
-                    setSelectedVulnerability(null)
-                    // Trigger update for this package
-                  }}
-                  className="bg-red-600 hover:bg-red-700"
-                >
-                  Update Package
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

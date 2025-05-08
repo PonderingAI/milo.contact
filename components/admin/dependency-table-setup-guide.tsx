@@ -134,7 +134,6 @@ USING (
     setSuccess(null)
 
     try {
-      // First try the setup-dependencies-tables endpoint
       const response = await fetch("/api/setup-dependencies-tables", {
         method: "POST",
         headers: {
@@ -144,25 +143,8 @@ USING (
       })
 
       if (!response.ok) {
-        // If that fails, try the dependencies/setup endpoint
-        const setupResponse = await fetch("/api/dependencies/setup", {
-          method: "POST",
-        })
-
-        if (!setupResponse.ok) {
-          const errorData = await setupResponse.json()
-          throw new Error(errorData.error || errorData.details || "Failed to execute SQL")
-        }
-
-        const setupData = await setupResponse.json()
-
-        if (setupData.success) {
-          setSuccess("SQL executed successfully!")
-          onSetupComplete()
-          return
-        } else {
-          throw new Error(setupData.error || "Unknown error")
-        }
+        const errorData = await response.json()
+        throw new Error(errorData.error || errorData.details || "Failed to execute SQL")
       }
 
       const data = await response.json()
@@ -175,27 +157,7 @@ USING (
       }
     } catch (err) {
       console.error("Error executing SQL:", err)
-
-      // Try one more approach - direct setup
-      try {
-        const directSetupResponse = await fetch("/api/dependencies/setup", {
-          method: "POST",
-        })
-
-        if (directSetupResponse.ok) {
-          const directSetupData = await directSetupResponse.json()
-          if (directSetupData.success) {
-            setSuccess("Tables set up successfully!")
-            onSetupComplete()
-            return
-          }
-        }
-
-        setError(err instanceof Error ? err.message : "An unexpected error occurred")
-      } catch (directSetupError) {
-        console.error("Error with direct setup:", directSetupError)
-        setError(err instanceof Error ? err.message : "An unexpected error occurred")
-      }
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
     } finally {
       setLoading(false)
     }

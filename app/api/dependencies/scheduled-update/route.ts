@@ -1,15 +1,25 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { applyDependencyUpdates } from "@/lib/dependency-utils"
-import { checkTableExists } from "@/lib/table-utils"
 
 export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Use the more reliable table check function
-    const depsTableExists = await checkTableExists("dependencies")
-    const settingsTableExists = await checkTableExists("dependency_settings")
+    // Check if dependencies table exists
+    const { data: depsTableExists, error: checkDepsError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependencies",
+    })
+
+    if (checkDepsError) {
+      console.error("Error checking if dependencies table exists:", checkDepsError)
+      return NextResponse.json(
+        {
+          error: "Failed to check if dependencies table exists",
+          details: checkDepsError.message,
+        },
+        { status: 500 },
+      )
+    }
 
     // If dependencies table doesn't exist, return early
     if (!depsTableExists) {
@@ -17,6 +27,22 @@ export async function GET() {
         message: "Dependencies table does not exist",
         action: "Please set up the dependency tables first",
       })
+    }
+
+    // Check if dependency_settings table exists
+    const { data: settingsTableExists, error: checkSettingsError } = await supabase.rpc("check_table_exists", {
+      table_name: "dependency_settings",
+    })
+
+    if (checkSettingsError) {
+      console.error("Error checking if dependency_settings table exists:", checkSettingsError)
+      return NextResponse.json(
+        {
+          error: "Failed to check if dependency_settings table exists",
+          details: checkSettingsError.message,
+        },
+        { status: 500 },
+      )
     }
 
     // Get the global update mode (default to conservative if table doesn't exist)
@@ -34,14 +60,76 @@ export async function GET() {
       }
     }
 
-    // Apply updates based on global mode
-    const result = await applyDependencyUpdates(globalMode as any)
+    // Get dependencies that should be auto-updated based on their update mode
+    const { data: dependencies, error: fetchError } = await supabase
+      .from("dependencies")
+      .select("*")
+      .or(`update_mode.eq.auto,and(update_mode.eq.conservative,has_security_update.eq.true)`)
+      .eq("locked", false)
+
+    if (fetchError) {
+      console.error("Error fetching dependencies:", fetchError)
+      return NextResponse.json(
+        {
+          error: "Failed to fetch dependencies",
+          details: fetchError.message,
+        },
+        { status: 500 },
+      )
+    }
+
+    if (!dependencies || dependencies.length === 0) {
+      return NextResponse.json({ message: "No dependencies to auto-update" })
+    }
+
+    // Update each dependency in the database
+    const results = []
+
+    for (const dep of dependencies) {
+      try {
+        // In a real implementation, this would actually update the dependency
+        // For now, we'll just update the database record
+
+        const { error: updateError } = await supabase
+          .from("dependencies")
+          .update({
+            current_version: dep.latest_version,
+            last_updated: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            has_security_update: false,
+          })
+          .eq("id", dep.id)
+
+        if (updateError) {
+          console.error(`Error updating dependency ${dep.name}:`, updateError)
+          results.push({
+            name: dep.name,
+            success: false,
+            error: updateError.message,
+          })
+        } else {
+          results.push({
+            name: dep.name,
+            success: true,
+            from: dep.current_version,
+            to: dep.latest_version,
+          })
+        }
+      } catch (error) {
+        console.error(`Error processing dependency ${dep.name}:`, error)
+        results.push({
+          name: dep.name,
+          success: false,
+          error: error instanceof Error ? error.message : String(error),
+        })
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      updated: result.updated,
-      failed: result.failed,
-      results: result.results,
+      updated: results.filter((r) => r.success).length,
+      failed: results.filter((r) => !r.success).length,
+      results,
     })
   } catch (error) {
     console.error("Error in scheduled update:", error)

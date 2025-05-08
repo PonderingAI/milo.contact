@@ -7,6 +7,7 @@ import AdminCheck from "@/components/admin/admin-check"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase-browser"
 import { AlertCircle, CheckCircle, AlertTriangle, Package, Shield, RefreshCw } from "lucide-react"
+import PackageJsonManager from "@/components/admin/package-json-manager"
 
 interface Dependency {
   id?: number
@@ -274,6 +275,10 @@ export default function ClientDependenciesPage() {
     <AdminCheck>
       <div className="container mx-auto p-6">
         <h1 className="text-3xl font-bold mb-6">Dependency Management</h1>
+
+        <PackageJsonManager />
+
+        <div className="mt-8"></div>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
