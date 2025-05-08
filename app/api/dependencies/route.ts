@@ -1,111 +1,86 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
+import { checkDependencyTablesExist } from "@/lib/check-tables"
+import { setupDependencyTables } from "@/lib/setup-dependency-tables"
 
 export async function GET() {
   try {
-    const supabase = createAdminClient()
-
     // Check if tables exist
-    const { data: tablesExist, error: checkError } = await supabase.rpc("check_table_exists", {
-      table_name: "dependencies",
-    })
+    const tablesExist = await checkDependencyTablesExist()
 
-    if (checkError) {
-      console.error("Error checking if tables exist:", checkError)
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Error checking if tables exist",
-          dependencies: [],
-        },
-        { status: 200 }, // Return 200 to avoid triggering error handling
-      )
-    }
-
-    // If tables don't exist, return empty array
+    // If tables don't exist, try to set them up
     if (!tablesExist) {
-      return NextResponse.json({
-        success: false,
-        error: "Dependencies table does not exist",
-        dependencies: [],
-      })
+      console.log("Dependency tables don't exist, setting them up...")
+      const setupSuccess = await setupDependencyTables()
+
+      if (!setupSuccess) {
+        return NextResponse.json({
+          success: false,
+          error: "Failed to set up dependency tables",
+          dependencies: [],
+        })
+      }
     }
+
+    const supabase = createAdminClient()
 
     // Fetch dependencies
     const { data: dependencies, error: fetchError } = await supabase.from("dependencies").select("*").order("name")
 
     if (fetchError) {
       console.error("Error fetching dependencies:", fetchError)
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Error fetching dependencies",
-          dependencies: [],
-        },
-        { status: 200 }, // Return 200 to avoid triggering error handling
-      )
+      return NextResponse.json({
+        success: false,
+        error: "Error fetching dependencies",
+        dependencies: [],
+      })
     }
 
-    // Fetch global settings
+    // Fetch settings
     const { data: settings, error: settingsError } = await supabase
       .from("dependency_settings")
       .select("*")
       .limit(1)
       .single()
 
-    if (settingsError && settingsError.code !== "PGRST116") {
-      // PGRST116 is "no rows returned" which is fine
+    if (settingsError && !settingsError.message.includes("No rows found")) {
       console.error("Error fetching dependency settings:", settingsError)
     }
 
-    // Count vulnerabilities and outdated packages
-    const vulnerabilities = dependencies?.filter((dep) => dep.has_security_update).length || 0
-    const outdatedPackages = dependencies?.filter((dep) => dep.outdated).length || 0
-
-    // Calculate security score
-    const securityScore = calculateSecurityScore(dependencies || [])
+    // Calculate stats
+    const vulnerabilities = dependencies?.filter((d) => d.has_security_update).length || 0
+    const outdatedPackages = dependencies?.filter((d) => d.outdated).length || 0
 
     return NextResponse.json({
       success: true,
       dependencies: dependencies || [],
       updateMode: settings?.update_mode || "conservative",
-      autoUpdateEnabled: settings?.auto_update_enabled || false,
-      updateSchedule: settings?.update_schedule || "daily",
       vulnerabilities,
       outdatedPackages,
-      securityScore,
+      securityScore: calculateSecurityScore(dependencies || []),
       lastScan: settings?.updated_at || new Date().toISOString(),
     })
   } catch (error) {
     console.error("Error in dependencies API:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        error: "An unexpected error occurred",
-        dependencies: [],
-      },
-      { status: 200 }, // Return 200 to avoid triggering error handling
-    )
+    return NextResponse.json({
+      success: false,
+      error: "An unexpected error occurred",
+      dependencies: [],
+    })
   }
 }
 
-// Calculate a security score based on vulnerabilities
-function calculateSecurityScore(dependencies: any[]) {
-  const totalDeps = dependencies.length
+// Calculate security score
+function calculateSecurityScore(deps) {
+  const totalDeps = deps.length
   if (totalDeps === 0) return 100
 
-  const vulnerableDeps = dependencies.filter((d) => d.has_security_update).length
-  const outdatedDeps = dependencies.filter((d) => d.outdated).length
+  const vulnerableDeps = deps.filter((d) => d.has_security_update).length
+  const outdatedDeps = deps.filter((d) => d.outdated).length
 
-  // Calculate score: start with 100 and deduct points
   let score = 100
-
-  // Deduct more for vulnerable dependencies
   score -= (vulnerableDeps / totalDeps) * 50
-
-  // Deduct less for outdated dependencies
   score -= (outdatedDeps / totalDeps) * 20
 
-  // Ensure score is between 0 and 100
   return Math.max(0, Math.min(100, Math.round(score)))
 }
