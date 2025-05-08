@@ -60,24 +60,7 @@ export async function getDependenciesFromPackageJson(): Promise<{
     }
   } catch (error) {
     console.error("Error reading package.json:", error)
-
-    // Fallback to hardcoded dependencies if we can't read package.json
-    return {
-      dependencies: [
-        { name: "next", current_version: "14.0.3", is_dev: false },
-        { name: "react", current_version: "18.2.0", is_dev: false },
-        { name: "react-dom", current_version: "18.2.0", is_dev: false },
-        { name: "@supabase/supabase-js", current_version: "2.38.4", is_dev: false },
-        { name: "nodemailer", current_version: "6.9.9", is_dev: false },
-        { name: "tailwindcss", current_version: "3.3.0", is_dev: false },
-      ],
-      devDependencies: [
-        { name: "typescript", current_version: "5.0.4", is_dev: true },
-        { name: "eslint", current_version: "8.38.0", is_dev: true },
-        { name: "@types/react", current_version: "18.0.28", is_dev: true },
-        { name: "@types/node", current_version: "18.15.11", is_dev: true },
-      ],
-    }
+    throw new Error("Failed to read package.json")
   }
 }
 
@@ -124,22 +107,66 @@ export async function getPackageDescriptions(packageNames: string[]): Promise<Re
 
 /**
  * Get outdated packages using npm outdated
+ * This function handles the non-zero exit code that npm outdated returns when packages are outdated
  */
 export async function getOutdatedPackages(): Promise<Record<string, any>> {
   try {
+    // Run npm outdated --json to get outdated dependencies
     const { stdout } = await execAsync("npm outdated --json", { timeout: 30000 })
+
+    // Parse the JSON output
     return JSON.parse(stdout || "{}")
   } catch (error) {
     // npm outdated returns exit code 1 if there are outdated packages
+    // This is expected behavior, so we need to handle it
     if (error instanceof Error && "stdout" in error) {
       try {
-        return JSON.parse((error as any).stdout || "{}")
+        // Try to parse the stdout even though the command "failed"
+        const stdout = (error as any).stdout
+        if (stdout && stdout.trim()) {
+          return JSON.parse(stdout)
+        }
       } catch (parseError) {
         console.error("Error parsing npm outdated output:", parseError)
-        return {}
       }
     }
+
     console.error("Error running npm outdated:", error)
+    return {}
+  }
+}
+
+/**
+ * Alternative implementation using npm-check-updates (ncu)
+ * This avoids the exit code issue with npm outdated
+ */
+export async function getOutdatedPackagesWithNcu(): Promise<Record<string, any>> {
+  try {
+    // Run npx npm-check-updates --jsonUpgraded to get outdated dependencies
+    const { stdout } = await execAsync("npx npm-check-updates --jsonUpgraded", { timeout: 30000 })
+
+    // Parse the JSON output
+    const result = JSON.parse(stdout || "{}")
+
+    // Transform the output to match npm outdated format
+    const outdated: Record<string, any> = {}
+
+    for (const [name, version] of Object.entries(result)) {
+      // Get the current version from package.json
+      const packageJson = JSON.parse(fs.readFileSync(path.join(process.cwd(), "package.json"), "utf8"))
+      const current = packageJson.dependencies?.[name] || packageJson.devDependencies?.[name] || "unknown"
+
+      outdated[name] = {
+        current: current.replace(/^\^|~/, ""),
+        wanted: current.replace(/^\^|~/, ""),
+        latest: version,
+        location: "package.json",
+      }
+    }
+
+    return outdated
+  } catch (error) {
+    console.error("Error running npm-check-updates:", error)
     return {}
   }
 }
@@ -155,10 +182,12 @@ export async function getSecurityVulnerabilities(): Promise<Record<string, any>>
     // npm audit returns exit code 1 if there are vulnerabilities
     if (error instanceof Error && "stdout" in error) {
       try {
-        return JSON.parse((error as any).stdout || "{}")
+        const stdout = (error as any).stdout
+        if (stdout && stdout.trim()) {
+          return JSON.parse(stdout)
+        }
       } catch (parseError) {
         console.error("Error parsing npm audit output:", parseError)
-        return {}
       }
     }
     console.error("Error running npm audit:", error)
@@ -303,7 +332,13 @@ export async function runDependencyScan(): Promise<{
   let vulnerabilities = {}
 
   try {
-    outdated = await getOutdatedPackages()
+    // Try both methods to get outdated packages
+    try {
+      outdated = await getOutdatedPackages()
+    } catch (error) {
+      console.error("Error getting outdated packages with npm outdated, trying ncu:", error)
+      outdated = await getOutdatedPackagesWithNcu()
+    }
   } catch (error) {
     console.error("Error getting outdated packages:", error)
   }

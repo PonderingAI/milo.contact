@@ -1,21 +1,25 @@
 import { NextResponse } from "next/server"
-import { exec } from "child_process"
-import { promisify } from "util"
-
-const execAsync = promisify(exec)
+import { getOutdatedPackages, getOutdatedPackagesWithNcu } from "@/lib/dependency-utils"
 
 export async function GET() {
   try {
-    // Run npm outdated --json to get outdated dependencies
-    const { stdout } = await execAsync("npm outdated --json", { timeout: 30000 })
-
-    // Parse the JSON output (if empty, there are no outdated dependencies)
+    // First try with npm outdated
     let outdatedDeps = {}
+    let error = null
+
     try {
-      outdatedDeps = JSON.parse(stdout)
-    } catch (e) {
-      // If parsing fails, it's likely because there are no outdated dependencies
-      outdatedDeps = {}
+      outdatedDeps = await getOutdatedPackages()
+    } catch (err) {
+      console.error("Error using npm outdated, trying npm-check-updates:", err)
+      error = err
+
+      // Fall back to npm-check-updates
+      try {
+        outdatedDeps = await getOutdatedPackagesWithNcu()
+      } catch (ncuErr) {
+        console.error("Error using npm-check-updates:", ncuErr)
+        throw ncuErr
+      }
     }
 
     return NextResponse.json({
@@ -25,20 +29,6 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Error checking for updates:", error)
-
-    // If the command fails but returns data about outdated packages
-    if (error instanceof Error && "stdout" in error) {
-      try {
-        const outdatedDeps = JSON.parse((error as any).stdout)
-        return NextResponse.json({
-          success: true,
-          outdated: outdatedDeps,
-          count: Object.keys(outdatedDeps).length,
-        })
-      } catch (parseError) {
-        // If parsing fails, continue to the error response
-      }
-    }
 
     return NextResponse.json(
       {
