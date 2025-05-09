@@ -1,63 +1,41 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 
-// Helper function to check if a table exists
-async function checkTableExists(supabase, tableName) {
-  try {
-    // Query the information_schema to check if the table exists
-    const { data, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_schema", "public")
-      .eq("table_name", tableName)
-      .single()
-
-    if (error) {
-      console.error(`Error checking if ${tableName} exists:`, error)
-      return false
-    }
-
-    return !!data
-  } catch (error) {
-    console.error(`Error in checkTableExists for ${tableName}:`, error)
-    return false
-  }
-}
-
 export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // List of tables required for the dependency system
-    const requiredTables = ["dependencies", "dependency_settings", "security_audits"]
+    // List of tables to check
+    const tables = ["dependencies", "dependency_settings"]
+    const results = {}
 
     // Check each table
-    const tableStatus = {}
-    let allTablesExist = true
+    for (const table of tables) {
+      try {
+        const { data, error } = await supabase
+          .from("information_schema.tables")
+          .select("table_name")
+          .eq("table_schema", "public")
+          .eq("table_name", table)
+          .single()
 
-    for (const tableName of requiredTables) {
-      const exists = await checkTableExists(supabase, tableName)
-      tableStatus[tableName] = exists
-
-      if (!exists) {
-        allTablesExist = false
+        results[table] = !error && !!data
+      } catch (error) {
+        console.error(`Error checking if ${table} exists:`, error)
+        results[table] = false
       }
     }
 
     return NextResponse.json({
-      success: true,
-      allTablesExist,
-      tableStatus,
-      missingTables: requiredTables.filter((table) => !tableStatus[table]),
+      tables: results,
+      allExist: Object.values(results).every(Boolean),
     })
   } catch (error) {
     console.error("Error checking tables:", error)
     return NextResponse.json(
       {
-        success: false,
-        error: "Failed to check tables",
-        message: "There was an error checking if the required tables exist.",
-        details: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : "Unknown error",
+        message: "Failed to check database tables.",
       },
       { status: 500 },
     )

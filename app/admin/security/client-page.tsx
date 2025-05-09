@@ -318,23 +318,24 @@ export default function SecurityClientPage() {
       setDiagnosticInfo(null)
 
       const response = await fetch("/api/dependencies")
+      const data = await response.json()
 
-      if (!response.ok) {
-        const errorData = await response.json()
+      // Store the full response for diagnostics
+      setDiagnosticInfo(data)
 
-        // Check if setup is needed
-        if (response.status === 404 && errorData.setupNeeded) {
-          setSetupMessage(errorData.setupMessage || "The dependency system needs to be set up.")
-          setDiagnosticInfo(errorData)
-          setDependencies([])
-          return
-        }
-
-        throw new Error(errorData.message || errorData.error || "Failed to fetch dependencies")
+      // Check for setup needed
+      if (data.setupNeeded) {
+        setSetupMessage(data.setupMessage || "The dependency system needs to be set up.")
+        setDependencies([])
+        return
       }
 
-      const data = await response.json()
-      setDiagnosticInfo(data) // Store the full response for diagnostics
+      // Check for error
+      if (data.error) {
+        setError(`Error: ${data.message || data.error}`)
+        setDependencies([])
+        return
+      }
 
       // If no dependencies found, show a clear message
       if (!data.dependencies || data.dependencies.length === 0) {
@@ -344,18 +345,18 @@ export default function SecurityClientPage() {
       }
 
       // Map the data to our internal format
-      const mappedDependencies = data.dependencies.map((dep: any) => ({
+      const mappedDependencies = data.dependencies.map((dep) => ({
         id: dep.id || dep.name,
         name: dep.name,
-        currentVersion: dep.currentVersion || dep.current_version,
-        latestVersion: dep.latestVersion || dep.latest_version,
-        outdated: dep.outdated || (dep.currentVersion !== dep.latestVersion && dep.latestVersion),
+        currentVersion: dep.current_version || dep.currentVersion,
+        latestVersion: dep.latest_version || dep.latestVersion,
+        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latest_version),
         locked: dep.locked || false,
         description: dep.description || "",
-        hasSecurityIssue: dep.hasSecurityIssue || dep.has_security_issue || false,
-        securityDetails: dep.securityDetails || dep.security_details,
-        updateMode: dep.updateMode || "global",
-        isDev: dep.isDev || dep.is_dev || false,
+        hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
+        securityDetails: dep.security_details || dep.securityDetails,
+        updateMode: dep.update_mode || dep.updateMode || "global",
+        isDev: dep.is_dev || dep.isDev || false,
       }))
 
       setDependencies(mappedDependencies)
@@ -370,11 +371,9 @@ export default function SecurityClientPage() {
 
       // Get global update mode - default to conservative (security only)
       setGlobalUpdateMode(data.updateMode || "conservative")
-    } catch (err: any) {
+    } catch (err) {
       console.error("Error fetching dependencies:", err)
-      setError(`Error fetching dependencies: ${err.message}`)
-
-      // Set empty dependencies to avoid UI errors
+      setError(`Error fetching dependencies: ${err instanceof Error ? err.message : String(err)}`)
       setDependencies([])
     } finally {
       setLoading(false)
