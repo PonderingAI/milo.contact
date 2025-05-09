@@ -21,6 +21,10 @@ const publicRoutes = [
   "/api/upload-app-icons",
   "/api/favicon",
   "/setup-database",
+  // Add dependency API routes to public routes
+  "/api/dependencies",
+  "/api/dependencies/(.*)",
+  "/api/setup-dependencies-tables",
 ]
 
 export default clerkMiddleware({

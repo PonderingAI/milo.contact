@@ -1,104 +1,112 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { exec } from "child_process"
-import { promisify } from "util"
 import fs from "fs"
 import path from "path"
+import { exec } from "child_process"
+import util from "util"
 
-const execAsync = promisify(exec)
+const execPromise = util.promisify(exec)
 
-export async function GET() {
-  const status = {
-    database: "unknown" as "unknown" | "ok" | "error",
-    tables: "unknown" as "unknown" | "ok" | "error" | "missing",
-    packageJson: "unknown" as "unknown" | "ok" | "error" | "missing",
-    npm: "unknown" as "unknown" | "ok" | "error",
-    details: {} as Record<string, any>,
-  }
-
-  // Check database connection
+// Helper function to check if a table exists
+async function checkTableExists(supabase, tableName) {
   try {
-    const supabase = createAdminClient()
-    const { error: connectionError } = await supabase.from("_dummy_query_").select("*").limit(1)
+    // Query the information_schema to check if the table exists
+    const { data, error } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .eq("table_name", tableName)
+      .single()
 
-    // If we get a specific error about relation not existing, connection is working
-    if (connectionError && connectionError.message.includes("does not exist")) {
-      status.database = "ok"
-    } else if (connectionError) {
-      status.database = "error"
-      status.details.databaseError = connectionError.message
-    } else {
-      status.database = "ok"
+    if (error) {
+      console.error(`Error checking if ${tableName} exists:`, error)
+      return false
     }
 
-    // Check if dependencies table exists
-    try {
-      const { data: tableExists, error: tableError } = await supabase.rpc("check_table_exists", {
-        table_name: "dependencies",
-      })
-
-      if (tableError) {
-        status.tables = "error"
-        status.details.tableCheckError = tableError.message
-      } else {
-        status.tables = tableExists ? "ok" : "missing"
-      }
-    } catch (tableCheckError) {
-      status.tables = "error"
-      status.details.tableCheckError =
-        tableCheckError instanceof Error ? tableCheckError.message : String(tableCheckError)
-
-      // Try alternative method to check if table exists
-      try {
-        const { error: queryError } = await supabase.from("dependencies").select("count").limit(1)
-        status.tables = queryError && queryError.message.includes("does not exist") ? "missing" : "ok"
-      } catch (alternativeCheckError) {
-        // Keep the original error status
-      }
-    }
-  } catch (dbError) {
-    status.database = "error"
-    status.details.databaseError = dbError instanceof Error ? dbError.message : String(dbError)
+    return !!data
+  } catch (error) {
+    console.error(`Error in checkTableExists for ${tableName}:`, error)
+    return false
   }
+}
 
-  // Check package.json
+// Check if package.json exists
+async function checkPackageJson() {
   try {
     const packageJsonPath = path.join(process.cwd(), "package.json")
-    if (fs.existsSync(packageJsonPath)) {
-      try {
-        const packageJsonContent = fs.readFileSync(packageJsonPath, "utf8")
-        JSON.parse(packageJsonContent) // Validate JSON
-        status.packageJson = "ok"
-      } catch (parseError) {
-        status.packageJson = "error"
-        status.details.packageJsonError = parseError instanceof Error ? parseError.message : String(parseError)
-      }
-    } else {
-      status.packageJson = "missing"
-    }
-  } catch (fsError) {
-    status.packageJson = "error"
-    status.details.packageJsonError = fsError instanceof Error ? fsError.message : String(fsError)
+    await fs.promises.access(packageJsonPath, fs.constants.F_OK)
+    return { exists: true, error: null }
+  } catch (error) {
+    return { exists: false, error }
   }
+}
 
-  // Check npm
+// Check if npm is available
+async function checkNpm() {
   try {
-    const { stdout } = await execAsync("npm --version", { timeout: 5000 })
-    status.npm = "ok"
-    status.details.npmVersion = stdout.trim()
-  } catch (npmError) {
-    status.npm = "error"
-    status.details.npmError = npmError instanceof Error ? npmError.message : String(npmError)
+    await execPromise("npm --version")
+    return { available: true, error: null }
+  } catch (error) {
+    return { available: false, error }
   }
+}
 
-  return NextResponse.json({
-    status: {
-      database: status.database,
-      tables: status.tables,
-      packageJson: status.packageJson,
-      npm: status.npm,
-    },
-    details: status.details,
-    timestamp: new Date().toISOString(),
-  })
+export async function GET() {
+  try {
+    // Check database connection
+    let databaseStatus = "unknown"
+    let tablesStatus = "unknown"
+    let packageJsonStatus = "unknown"
+    let npmStatus = "unknown"
+
+    // Check database connection
+    try {
+      const supabase = createAdminClient()
+      const { error: connectionError } = await supabase.from("_dummy_query_").select("*").limit(1)
+
+      // If we get a specific error about relation not existing, connection is working
+      if (connectionError && connectionError.message.includes("does not exist")) {
+        databaseStatus = "ok"
+
+        // Check if dependencies table exists
+        const tableExists = await checkTableExists(supabase, "dependencies")
+        tablesStatus = tableExists ? "ok" : "missing"
+      } else {
+        databaseStatus = "error"
+      }
+    } catch (error) {
+      databaseStatus = "error"
+    }
+
+    // Check package.json
+    const { exists: packageJsonExists, error: packageJsonError } = await checkPackageJson()
+    packageJsonStatus = packageJsonExists ? "ok" : "missing"
+
+    // Check npm
+    const { available: npmAvailable, error: npmError } = await checkNpm()
+    npmStatus = npmAvailable ? "ok" : "error"
+
+    return NextResponse.json({
+      status: {
+        database: databaseStatus,
+        tables: tablesStatus,
+        packageJson: packageJsonStatus,
+        npm: npmStatus,
+      },
+      details: {
+        packageJsonError: packageJsonError ? packageJsonError.message : null,
+        npmError: npmError ? npmError.message : null,
+      },
+    })
+  } catch (error) {
+    console.error("Error checking system status:", error)
+    return NextResponse.json(
+      {
+        error: "Failed to check system status",
+        message: "There was an error checking the system status.",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
+  }
 }

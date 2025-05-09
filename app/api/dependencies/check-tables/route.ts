@@ -14,28 +14,12 @@ async function checkTableExists(supabase, tableName) {
 
     if (error) {
       console.error(`Error checking if ${tableName} exists:`, error)
-      // Try alternative method if this fails
-      return await fallbackTableCheck(supabase, tableName)
+      return false
     }
 
     return !!data
   } catch (error) {
     console.error(`Error in checkTableExists for ${tableName}:`, error)
-    // Try alternative method if this fails
-    return await fallbackTableCheck(supabase, tableName)
-  }
-}
-
-// Fallback method to check if a table exists
-async function fallbackTableCheck(supabase, tableName) {
-  try {
-    // Try to query the table directly with a limit
-    const { error } = await supabase.from(tableName).select("*").limit(1)
-
-    // If no error, table exists
-    return !error
-  } catch (error) {
-    console.error(`Fallback check failed for ${tableName}:`, error)
     return false
   }
 }
@@ -44,45 +28,36 @@ export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Check each table individually
-    const depsTableExists = await checkTableExists(supabase, "dependencies")
-    const settingsTableExists = await checkTableExists(supabase, "dependency_settings")
-    const securityAuditsTableExists = await checkTableExists(supabase, "security_audits")
+    // List of tables required for the dependency system
+    const requiredTables = ["dependencies", "dependency_settings", "security_audits"]
 
-    // Determine which tables are missing
-    const missingTables = []
-    if (!depsTableExists) missingTables.push("dependencies")
-    if (!settingsTableExists) missingTables.push("dependency_settings")
-    if (!securityAuditsTableExists) missingTables.push("security_audits")
+    // Check each table
+    const tableStatus = {}
+    let allTablesExist = true
 
-    // Create a more specific message based on what's missing
-    let setupMessage = ""
-    if (missingTables.length === 0) {
-      setupMessage = "All dependency tables are set up correctly."
-    } else if (missingTables.length === 1) {
-      setupMessage = `The ${missingTables[0]} table is missing. Please run the setup to create it.`
-    } else {
-      setupMessage = `The following tables are missing: ${missingTables.join(", ")}. Please run the setup to create them.`
+    for (const tableName of requiredTables) {
+      const exists = await checkTableExists(supabase, tableName)
+      tableStatus[tableName] = exists
+
+      if (!exists) {
+        allTablesExist = false
+      }
     }
 
     return NextResponse.json({
       success: true,
-      tables: {
-        dependencies: depsTableExists,
-        dependency_settings: settingsTableExists,
-        security_audits: securityAuditsTableExists,
-      },
-      allTablesExist: missingTables.length === 0,
-      missingTables: missingTables,
-      setupMessage: setupMessage,
+      allTablesExist,
+      tableStatus,
+      missingTables: requiredTables.filter((table) => !tableStatus[table]),
     })
   } catch (error) {
     console.error("Error checking tables:", error)
     return NextResponse.json(
       {
-        error: "Failed to check tables",
-        details: error instanceof Error ? error.message : String(error),
         success: false,
+        error: "Failed to check tables",
+        message: "There was an error checking if the required tables exist.",
+        details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },
     )
