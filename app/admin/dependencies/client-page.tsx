@@ -18,10 +18,6 @@ import {
   FileJson,
   Grid3X3,
 } from "lucide-react"
-import PackageJsonManager from "@/components/admin/package-json-manager"
-import DependencyScanner from "@/components/admin/dependency-scanner"
-import ManualDependencyEntry from "@/components/admin/manual-dependency-entry"
-import DependencySetupAlert from "@/components/admin/dependency-setup-alert"
 import { WidgetSelector } from "@/components/admin/widget-selector"
 
 interface Dependency {
@@ -48,7 +44,7 @@ interface ErrorState {
 }
 
 export default function ClientDependenciesPage() {
-  const { isLoaded, isSignedIn } = useUser()
+  const { isLoaded, isSignedIn, user } = useUser()
   const router = useRouter()
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [securityScore, setSecurityScore] = useState(100)
@@ -81,16 +77,19 @@ export default function ClientDependenciesPage() {
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [showWidgetSelector, setShowWidgetSelector] = useState(false)
 
-  const supabase = createClient()
+  // Create Supabase client safely
+  const supabase = typeof window !== "undefined" ? createClient() : null
 
+  // Safe effect for authentication check
   useEffect(() => {
-    if (isLoaded && !isSignedIn) {
+    if (isLoaded && !isSignedIn && typeof window !== "undefined") {
       router.push("/sign-in?redirect_url=/admin/dependencies")
     }
   }, [isLoaded, isSignedIn, router])
 
+  // Safe effect for data loading
   useEffect(() => {
-    if (isSignedIn) {
+    if (isSignedIn && typeof window !== "undefined") {
       checkSystemStatus()
       checkTablesExist()
       fetchDependencies()
@@ -98,12 +97,21 @@ export default function ClientDependenciesPage() {
   }, [isSignedIn])
 
   const checkSystemStatus = async () => {
+    if (typeof window === "undefined") return
+
     try {
       const response = await fetch("/api/dependencies/system-status")
 
       if (response.ok) {
         const data = await response.json()
-        setSystemStatus(data.status)
+        setSystemStatus(
+          data.status || {
+            database: "unknown",
+            tables: "unknown",
+            packageJson: "unknown",
+            npm: "unknown",
+          },
+        )
         setDebugInfo((prev) => ({ ...prev, systemStatus: data }))
       }
     } catch (err) {
@@ -113,63 +121,100 @@ export default function ClientDependenciesPage() {
   }
 
   const checkTablesExist = async () => {
-    try {
-      const response = await fetch("/api/dependencies/check-tables")
+    if (typeof window === "undefined" || !supabase) return
 
-      if (!response.ok) {
-        throw new Error("Failed to check if tables exist")
+    try {
+      // First try the API route
+      try {
+        const response = await fetch("/api/dependencies/check-tables")
+
+        if (response.ok) {
+          const data = await response.json()
+
+          if (data.success) {
+            const allTablesExist = data.allTablesExist
+            setTablesExist(allTablesExist)
+            setSystemStatus((prev) => ({ ...prev, tables: allTablesExist ? "ok" : "missing" }))
+
+            // If tables exist, mark setup as complete
+            if (allTablesExist) {
+              setSetupComplete(true)
+            }
+            return
+          }
+        }
+      } catch (apiError) {
+        console.error("API route error, falling back to direct check:", apiError)
       }
 
-      const data = await response.json()
+      // Fallback: Check directly with Supabase
+      try {
+        // Check if the dependencies table exists
+        const { data: exists, error } = await supabase.rpc("check_table_exists", {
+          table_name: "dependencies",
+        })
 
-      if (data.success) {
-        const allTablesExist = data.allTablesExist
-        setTablesExist(allTablesExist)
-        setSystemStatus((prev) => ({ ...prev, tables: allTablesExist ? "ok" : "missing" }))
+        if (error && error.code !== "PGRST116") {
+          console.error("Error checking if table exists:", error)
+          setSystemStatus((prev) => ({ ...prev, tables: "error" }))
+          return
+        }
+
+        setTablesExist(!!exists)
+        setSystemStatus((prev) => ({ ...prev, tables: exists ? "ok" : "missing" }))
 
         // If tables exist, mark setup as complete
-        if (allTablesExist) {
+        if (exists) {
           setSetupComplete(true)
         }
-      } else {
-        throw new Error(data.error || "Unknown error checking tables")
+      } catch (err) {
+        console.error("Error checking if tables exist:", err)
+        setSystemStatus((prev) => ({ ...prev, tables: "error" }))
       }
     } catch (err) {
-      console.error("Error checking if tables exist:", err)
-      setSystemStatus((prev) => ({ ...prev, tables: "error" }))
+      console.error("Error in checkTablesExist:", err)
       setDebugInfo((prev) => ({ ...prev, tableCheckError: err }))
     }
   }
 
   const fetchDependencies = async () => {
+    if (typeof window === "undefined") return
+
     setLoading(true)
     setError(null)
 
     try {
-      const response = await fetch("/api/dependencies/list")
+      // Try the list endpoint first
+      let response = await fetch("/api/dependencies/list")
+
+      // If that fails, try the main endpoint
+      if (!response.ok) {
+        console.log("List endpoint failed, trying main endpoint")
+        response = await fetch("/api/dependencies")
+      }
+
+      // If both fail, use fallback data
+      if (!response.ok) {
+        console.log("Both endpoints failed, using fallback data")
+        setDependencies([])
+        setTablesExist(false)
+        setSystemStatus((prev) => ({
+          ...prev,
+          tables: "missing",
+        }))
+        setLoading(false)
+        return
+      }
+
       const data = await response.json()
 
       // Store the raw response for debugging
       setDebugInfo((prev) => ({ ...prev, dependenciesResponse: data }))
 
-      if (!response.ok) {
-        // Extract detailed error information
-        const errorMessage = data.message || data.error || "Failed to fetch dependencies"
-        const errorDetails = data.details || null
-        const errorCode = data.code || null
-        const suggestions = data.suggestions || generateSuggestions(errorMessage, response.status)
-
-        throw {
-          message: errorMessage,
-          details: errorDetails,
-          code: errorCode,
-          suggestions,
-          rawResponse: data,
-        }
-      }
-
       if (data.dependencies) {
         setDependencies(data.dependencies)
+      } else {
+        setDependencies([])
       }
 
       if (data.securityScore !== undefined) {
@@ -188,7 +233,7 @@ export default function ClientDependenciesPage() {
         setOutdatedCount(data.outdatedPackages)
       }
 
-      setTablesExist(data.tableExists)
+      setTablesExist(data.tableExists || false)
       setSystemStatus((prev) => ({
         ...prev,
         tables: data.tableExists ? "ok" : "missing",
@@ -216,19 +261,6 @@ export default function ClientDependenciesPage() {
           message: "An unexpected error occurred",
           suggestions: ["Try refreshing the page", "Check your network connection"],
         })
-      }
-
-      // Update system status based on error
-      if (err && typeof err === "object" && "rawResponse" in err) {
-        const rawResponse = (err as any).rawResponse
-
-        if (rawResponse && rawResponse.tableExists === false) {
-          setSystemStatus((prev) => ({ ...prev, tables: "missing" }))
-        }
-
-        if (rawResponse && rawResponse.databaseError) {
-          setSystemStatus((prev) => ({ ...prev, database: "error" }))
-        }
       }
     } finally {
       setLoading(false)
@@ -275,6 +307,8 @@ export default function ClientDependenciesPage() {
   }
 
   const updateDependency = async (name: string) => {
+    if (typeof window === "undefined" || !name) return
+
     setUpdateStatus((prev) => ({
       ...prev,
       [name]: { loading: true, error: null },
@@ -315,6 +349,8 @@ export default function ClientDependenciesPage() {
   }
 
   const updateSettings = async (name: string, settings: { update_mode?: string; locked?: boolean }) => {
+    if (typeof window === "undefined" || !supabase || !name) return
+
     if (!tablesExist) {
       setError({
         message: "Database tables not set up",
@@ -381,6 +417,8 @@ export default function ClientDependenciesPage() {
   }
 
   const runSQL = async () => {
+    if (typeof window === "undefined") return
+
     setSqlExecuting(true)
     setSqlSuccess(false)
     setError(null)
@@ -439,10 +477,22 @@ export default function ClientDependenciesPage() {
     })
     .filter((dep) => searchTerm === "" || dep.name.toLowerCase().includes(searchTerm.toLowerCase()))
 
-  if (!isLoaded || !isSignedIn) {
+  if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <p>Loading...</p>
+      </div>
+    )
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <h2 className="text-xl font-bold mb-4">Authentication Required</h2>
+          <p className="mb-4">You need to be signed in to access this page.</p>
+          <Button onClick={() => router.push("/sign-in?redirect_url=/admin/dependencies")}>Sign In</Button>
+        </div>
       </div>
     )
   }
@@ -451,13 +501,15 @@ export default function ClientDependenciesPage() {
     setShowManualEntry(true)
   }
 
+  const handleAddWidget = (widgetId: string) => {
+    console.log("Adding widget:", widgetId)
+    // Implementation would go here
+  }
+
   return (
     <AdminCheck>
       <div className="container mx-auto p-6">
         <h1 className="text-3xl font-bold mb-6">Dependency Management</h1>
-
-        {/* Database Setup Alert */}
-        <DependencySetupAlert />
 
         {/* System Status Indicator */}
         {(systemStatus.database === "error" ||
@@ -559,7 +611,7 @@ export default function ClientDependenciesPage() {
 
         <div className="grid gap-6">
           {/* Display detailed error information */}
-          {error && !error.message.includes("check_table_exists") && (
+          {error && !error.message?.includes("check_table_exists") && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
               <div className="flex items-start">
                 <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
@@ -604,13 +656,24 @@ export default function ClientDependenciesPage() {
             </div>
           )}
 
-          {/* Auto-scan for dependencies if tables exist but no dependencies found */}
-          {tablesExist && dependencies.length === 0 && !loading && (
-            <DependencyScanner onScanComplete={fetchDependencies} autoScan={true} onNetworkError={handleNetworkError} />
+          {/* Setup SQL Button */}
+          {!tablesExist && (
+            <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4">
+              <p className="font-bold">Database tables not set up</p>
+              <p className="mt-2">The dependency management system requires database tables to store settings.</p>
+              <div className="mt-4">
+                <Button onClick={runSQL} disabled={sqlExecuting}>
+                  {sqlExecuting ? "Setting up tables..." : "Set Up Tables"}
+                </Button>
+              </div>
+            </div>
           )}
 
-          {/* Show manual entry when network errors occur */}
-          {showManualEntry && <ManualDependencyEntry onDependencyAdded={fetchDependencies} />}
+          {sqlSuccess && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
+              <p>Tables set up successfully!</p>
+            </div>
+          )}
 
           {/* Widget Selector Button */}
           <div className="flex justify-end mb-4">
@@ -627,21 +690,11 @@ export default function ClientDependenciesPage() {
           {/* Widget Selector */}
           {showWidgetSelector && (
             <div className="mb-6">
-              <WidgetSelector />
+              <WidgetSelector onAddWidget={handleAddWidget} />
             </div>
           )}
 
-          {/* Only show the package.json manager in an advanced section */}
-          {dependencies.length > 0 && (
-            <details className="bg-gray-800 p-4 rounded-lg">
-              <summary className="cursor-pointer font-medium text-lg">Advanced: Package.json Management</summary>
-              <div className="mt-4">
-                <PackageJsonManager />
-              </div>
-            </details>
-          )}
-
-          {loading && dependencies.length === 0 ? (
+          {loading ? (
             <div className="bg-gray-800 p-6 rounded-lg flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mr-3"></div>
               <p>Loading dependency information...</p>
