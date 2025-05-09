@@ -6,7 +6,17 @@ import { useRouter } from "next/navigation"
 import AdminCheck from "@/components/admin/admin-check"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase-browser"
-import { AlertCircle, CheckCircle, AlertTriangle, Package, Shield, RefreshCw } from "lucide-react"
+import {
+  AlertCircle,
+  CheckCircle,
+  AlertTriangle,
+  Package,
+  Shield,
+  RefreshCw,
+  Info,
+  Database,
+  FileJson,
+} from "lucide-react"
 import PackageJsonManager from "@/components/admin/package-json-manager"
 import CheckTableFunctionSetup from "@/components/admin/check-table-function-setup"
 import DependencyScanner from "@/components/admin/dependency-scanner"
@@ -26,13 +36,21 @@ interface Dependency {
   outdated?: boolean
 }
 
+interface ErrorState {
+  message: string
+  details?: string
+  code?: string
+  suggestions?: string[]
+  rawResponse?: any
+}
+
 export default function ClientDependenciesPage() {
   const { isLoaded, isSignedIn } = useUser()
   const router = useRouter()
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [securityScore, setSecurityScore] = useState(100)
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<ErrorState | null>(null)
   const [updateStatus, setUpdateStatus] = useState<Record<string, { loading: boolean; error: string | null }>>({})
   const [filter, setFilter] = useState<"all" | "outdated" | "vulnerable" | "dev" | "prod">("all")
   const [searchTerm, setSearchTerm] = useState("")
@@ -44,6 +62,19 @@ export default function ClientDependenciesPage() {
   const [vulnerabilityCount, setVulnerabilityCount] = useState(0)
   const [outdatedCount, setOutdatedCount] = useState(0)
   const [setupComplete, setSetupComplete] = useState(false)
+  const [showDebug, setShowDebug] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
+  const [systemStatus, setSystemStatus] = useState<{
+    database: "unknown" | "ok" | "error"
+    tables: "unknown" | "ok" | "error" | "missing"
+    packageJson: "unknown" | "ok" | "error" | "missing"
+    npm: "unknown" | "ok" | "error"
+  }>({
+    database: "unknown",
+    tables: "unknown",
+    packageJson: "unknown",
+    npm: "unknown",
+  })
 
   const supabase = createClient()
 
@@ -55,10 +86,26 @@ export default function ClientDependenciesPage() {
 
   useEffect(() => {
     if (isSignedIn) {
+      checkSystemStatus()
       checkTablesExist()
       fetchDependencies()
     }
   }, [isSignedIn])
+
+  const checkSystemStatus = async () => {
+    try {
+      const response = await fetch("/api/dependencies/system-status")
+
+      if (response.ok) {
+        const data = await response.json()
+        setSystemStatus(data.status)
+        setDebugInfo((prev) => ({ ...prev, systemStatus: data }))
+      }
+    } catch (err) {
+      console.error("Error checking system status:", err)
+      setDebugInfo((prev) => ({ ...prev, systemStatusError: err }))
+    }
+  }
 
   const checkTablesExist = async () => {
     try {
@@ -68,10 +115,13 @@ export default function ClientDependenciesPage() {
 
       if (error) {
         console.error("Error checking if table exists:", error)
+        setSystemStatus((prev) => ({ ...prev, tables: "error" }))
+        setDebugInfo((prev) => ({ ...prev, tableCheckError: error }))
         return
       }
 
       setTablesExist(exists)
+      setSystemStatus((prev) => ({ ...prev, tables: exists ? "ok" : "missing" }))
 
       // If tables exist, mark setup as complete
       if (exists) {
@@ -79,6 +129,8 @@ export default function ClientDependenciesPage() {
       }
     } catch (err) {
       console.error("Error checking if tables exist:", err)
+      setSystemStatus((prev) => ({ ...prev, tables: "error" }))
+      setDebugInfo((prev) => ({ ...prev, tableCheckError: err }))
     }
   }
 
@@ -88,13 +140,26 @@ export default function ClientDependenciesPage() {
 
     try {
       const response = await fetch("/api/dependencies")
+      const data = await response.json()
+
+      // Store the raw response for debugging
+      setDebugInfo((prev) => ({ ...prev, dependenciesResponse: data }))
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to fetch dependencies")
-      }
+        // Extract detailed error information
+        const errorMessage = data.message || data.error || "Failed to fetch dependencies"
+        const errorDetails = data.details || null
+        const errorCode = data.code || null
+        const suggestions = data.suggestions || generateSuggestions(errorMessage, response.status)
 
-      const data = await response.json()
+        throw {
+          message: errorMessage,
+          details: errorDetails,
+          code: errorCode,
+          suggestions,
+          rawResponse: data,
+        }
+      }
 
       if (data.dependencies) {
         setDependencies(data.dependencies)
@@ -117,6 +182,11 @@ export default function ClientDependenciesPage() {
       }
 
       setTablesExist(data.tableExists)
+      setSystemStatus((prev) => ({
+        ...prev,
+        tables: data.tableExists ? "ok" : "missing",
+        database: "ok",
+      }))
 
       // If we have dependencies, mark setup as complete
       if (data.dependencies && data.dependencies.length > 0) {
@@ -124,10 +194,77 @@ export default function ClientDependenciesPage() {
       }
     } catch (err) {
       console.error("Error fetching dependencies:", err)
-      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+
+      // Format the error for display
+      if (err instanceof Error) {
+        setError({
+          message: err.message,
+          details: err.stack,
+          suggestions: generateSuggestions(err.message),
+        })
+      } else if (typeof err === "object" && err !== null) {
+        setError(err as any)
+      } else {
+        setError({
+          message: "An unexpected error occurred",
+          suggestions: ["Try refreshing the page", "Check your network connection"],
+        })
+      }
+
+      // Update system status based on error
+      if (err && typeof err === "object" && "rawResponse" in err) {
+        const rawResponse = (err as any).rawResponse
+
+        if (rawResponse && rawResponse.tableExists === false) {
+          setSystemStatus((prev) => ({ ...prev, tables: "missing" }))
+        }
+
+        if (rawResponse && rawResponse.databaseError) {
+          setSystemStatus((prev) => ({ ...prev, database: "error" }))
+        }
+      }
     } finally {
       setLoading(false)
     }
+  }
+
+  // Generate helpful suggestions based on the error
+  const generateSuggestions = (errorMessage: string, statusCode?: number): string[] => {
+    const suggestions: string[] = []
+
+    // Add suggestions based on status code
+    if (statusCode === 404) {
+      suggestions.push("Make sure the API route exists")
+      suggestions.push("Check if the database tables are set up correctly")
+    } else if (statusCode === 500) {
+      suggestions.push("Check the server logs for more details")
+      suggestions.push("Verify your database connection")
+    } else if (statusCode === 401 || statusCode === 403) {
+      suggestions.push("Make sure you're logged in with the correct permissions")
+    }
+
+    // Add suggestions based on error message content
+    if (errorMessage.toLowerCase().includes("database")) {
+      suggestions.push("Verify your database connection settings")
+      suggestions.push("Check if the database tables are set up correctly")
+    }
+
+    if (errorMessage.toLowerCase().includes("permission")) {
+      suggestions.push("Make sure your database user has the correct permissions")
+    }
+
+    if (errorMessage.toLowerCase().includes("table")) {
+      suggestions.push("Try setting up the database tables using the 'Set Up Tables' button")
+    }
+
+    // Add general suggestions if none were added
+    if (suggestions.length === 0) {
+      suggestions.push("Try refreshing the page")
+      suggestions.push("Check your network connection")
+      suggestions.push("Verify that the server is running")
+    }
+
+    return suggestions
   }
 
   const updateDependency = async (name: string) => {
@@ -172,7 +309,10 @@ export default function ClientDependenciesPage() {
 
   const updateSettings = async (name: string, settings: { update_mode?: string; locked?: boolean }) => {
     if (!tablesExist) {
-      setError("Database tables not set up. Please set up the tables first.")
+      setError({
+        message: "Database tables not set up",
+        suggestions: ["Please set up the tables first using the 'Set Up Tables' button"],
+      })
       setShowSetupSQL(true)
       return
     }
@@ -226,7 +366,10 @@ export default function ClientDependenciesPage() {
       setDependencies((prev) => prev.map((dep) => (dep.name === name ? { ...dep, ...settings } : dep)))
     } catch (err) {
       console.error("Error updating settings:", err)
-      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+      setError({
+        message: err instanceof Error ? err.message : "An unexpected error occurred",
+        suggestions: ["Try refreshing the page", "Check your database connection"],
+      })
     }
   }
 
@@ -247,12 +390,20 @@ export default function ClientDependenciesPage() {
 
       setSqlSuccess(true)
       setTablesExist(true)
+      setSystemStatus((prev) => ({ ...prev, tables: "ok" }))
 
       // Refresh dependencies
       await fetchDependencies()
     } catch (err) {
       console.error("Error setting up tables:", err)
-      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+      setError({
+        message: err instanceof Error ? err.message : "Failed to set up tables",
+        suggestions: [
+          "Check your database connection",
+          "Verify that your database user has permission to create tables",
+          "Try running the SQL manually in your database",
+        ],
+      })
     } finally {
       setSqlExecuting(false)
     }
@@ -294,6 +445,104 @@ export default function ClientDependenciesPage() {
       <div className="container mx-auto p-6">
         <h1 className="text-3xl font-bold mb-6">Dependency Management</h1>
 
+        {/* System Status Indicator */}
+        {(systemStatus.database === "error" ||
+          systemStatus.tables === "error" ||
+          systemStatus.tables === "missing" ||
+          systemStatus.packageJson === "error" ||
+          systemStatus.packageJson === "missing" ||
+          systemStatus.npm === "error") && (
+          <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-6">
+            <h3 className="font-bold text-lg mb-2">System Status</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div className="flex items-center">
+                <Database
+                  className={`h-5 w-5 mr-2 ${
+                    systemStatus.database === "ok"
+                      ? "text-green-600"
+                      : systemStatus.database === "error"
+                        ? "text-red-600"
+                        : "text-gray-600"
+                  }`}
+                />
+                <span>
+                  Database:{" "}
+                  {systemStatus.database === "ok"
+                    ? "Connected"
+                    : systemStatus.database === "error"
+                      ? "Connection Error"
+                      : "Unknown"}
+                </span>
+              </div>
+              <div className="flex items-center">
+                <Database
+                  className={`h-5 w-5 mr-2 ${
+                    systemStatus.tables === "ok"
+                      ? "text-green-600"
+                      : systemStatus.tables === "error"
+                        ? "text-red-600"
+                        : systemStatus.tables === "missing"
+                          ? "text-yellow-600"
+                          : "text-gray-600"
+                  }`}
+                />
+                <span>
+                  Tables:{" "}
+                  {systemStatus.tables === "ok"
+                    ? "Available"
+                    : systemStatus.tables === "error"
+                      ? "Error Checking"
+                      : systemStatus.tables === "missing"
+                        ? "Not Set Up"
+                        : "Unknown"}
+                </span>
+              </div>
+              <div className="flex items-center">
+                <FileJson
+                  className={`h-5 w-5 mr-2 ${
+                    systemStatus.packageJson === "ok"
+                      ? "text-green-600"
+                      : systemStatus.packageJson === "error"
+                        ? "text-red-600"
+                        : systemStatus.packageJson === "missing"
+                          ? "text-yellow-600"
+                          : "text-gray-600"
+                  }`}
+                />
+                <span>
+                  package.json:{" "}
+                  {systemStatus.packageJson === "ok"
+                    ? "Available"
+                    : systemStatus.packageJson === "error"
+                      ? "Error Reading"
+                      : systemStatus.packageJson === "missing"
+                        ? "Not Found"
+                        : "Unknown"}
+                </span>
+              </div>
+              <div className="flex items-center">
+                <Package
+                  className={`h-5 w-5 mr-2 ${
+                    systemStatus.npm === "ok"
+                      ? "text-green-600"
+                      : systemStatus.npm === "error"
+                        ? "text-red-600"
+                        : "text-gray-600"
+                  }`}
+                />
+                <span>
+                  npm:{" "}
+                  {systemStatus.npm === "ok"
+                    ? "Available"
+                    : systemStatus.npm === "error"
+                      ? "Error Running Commands"
+                      : "Unknown"}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-6">
           {/* Only show setup components if needed */}
           {!tablesExist && (
@@ -315,7 +564,53 @@ export default function ClientDependenciesPage() {
           )}
 
           {/* Only show the check table function setup if there's an error with it */}
-          {error && error.includes("check_table_exists") && <CheckTableFunctionSetup />}
+          {error && error.message.includes("check_table_exists") && <CheckTableFunctionSetup />}
+
+          {/* Display detailed error information */}
+          {error && !error.message.includes("check_table_exists") && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              <div className="flex items-start">
+                <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="font-bold">{error.message}</p>
+
+                  {error.details && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-sm">Error Details</summary>
+                      <pre className="mt-2 text-xs bg-red-200 p-2 rounded overflow-auto max-h-40">{error.details}</pre>
+                    </details>
+                  )}
+
+                  {error.suggestions && error.suggestions.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-sm font-semibold">Suggestions:</p>
+                      <ul className="list-disc list-inside text-sm mt-1 space-y-1">
+                        {error.suggestions.map((suggestion, index) => (
+                          <li key={index}>{suggestion}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="mt-3 flex items-center">
+                    <button
+                      onClick={() => setShowDebug(!showDebug)}
+                      className="text-xs flex items-center text-red-700 hover:text-red-900"
+                    >
+                      <Info className="h-3 w-3 mr-1" />
+                      {showDebug ? "Hide" : "Show"} Debug Information
+                    </button>
+                  </div>
+
+                  {showDebug && debugInfo && (
+                    <pre className="mt-2 text-xs bg-red-200 p-2 rounded overflow-auto max-h-40">
+                      {JSON.stringify(debugInfo, null, 2)}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Auto-scan for dependencies if tables exist but no dependencies found */}
           {tablesExist && dependencies.length === 0 && !loading && (
@@ -332,12 +627,6 @@ export default function ClientDependenciesPage() {
             </details>
           )}
 
-          {error && !error.includes("check_table_exists") && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              <p>{error}</p>
-            </div>
-          )}
-
           {loading && dependencies.length === 0 ? (
             <div className="bg-gray-800 p-6 rounded-lg flex items-center justify-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mr-3"></div>
@@ -347,6 +636,35 @@ export default function ClientDependenciesPage() {
             <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
               <p className="font-bold">Setting up dependencies...</p>
               <p className="mt-2">We're scanning your project to find dependencies. This may take a moment.</p>
+
+              {/* Add a troubleshooting section */}
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm font-medium">Troubleshooting</summary>
+                <div className="mt-2 text-sm">
+                  <p>If dependencies aren't loading, try these steps:</p>
+                  <ol className="list-decimal list-inside mt-1 space-y-1">
+                    <li>Make sure your package.json file exists and is valid</li>
+                    <li>Verify that npm is installed and accessible</li>
+                    <li>Check that your database connection is working</li>
+                    <li>Ensure the dependencies table is set up correctly</li>
+                    <li>Try manually scanning for dependencies using the button below</li>
+                  </ol>
+
+                  <div className="mt-4">
+                    <Button
+                      onClick={() => {
+                        fetch("/api/dependencies/scan", { method: "POST" })
+                          .then((response) => response.json())
+                          .then(() => fetchDependencies())
+                          .catch((err) => console.error("Error scanning:", err))
+                      }}
+                      className="bg-blue-600 hover:bg-blue-700"
+                    >
+                      Manually Scan Dependencies
+                    </Button>
+                  </div>
+                </div>
+              </details>
             </div>
           ) : (
             dependencies.length > 0 && (
@@ -421,7 +739,13 @@ export default function ClientDependenciesPage() {
                             fetchDependencies()
                           })
                           .catch((err) => {
-                            setError(err.message)
+                            setError({
+                              message: err.message || "Failed to apply updates",
+                              suggestions: [
+                                "Check if npm is installed and accessible",
+                                "Verify that you have write permissions to package.json",
+                              ],
+                            })
                           })
                       }}
                       className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"

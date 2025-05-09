@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { RefreshCw, Package } from "lucide-react"
+import { RefreshCw, Package, AlertCircle, Info } from "lucide-react"
 
 interface DependencyScannerProps {
   onScanComplete?: () => void
@@ -19,8 +19,15 @@ export default function DependencyScanner({ onScanComplete, autoScan = false }: 
     errors?: number
     total?: number
   } | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  const [error, setError] = useState<{
+    message: string
+    details?: string
+    code?: string
+    suggestions?: string[]
+  } | null>(null)
   const [hasAutoScanned, setHasAutoScanned] = useState(false)
+  const [debugInfo, setDebugInfo] = useState<any>(null)
+  const [showDebug, setShowDebug] = useState(false)
 
   useEffect(() => {
     // Auto-scan on component mount if autoScan is true and we haven't already auto-scanned
@@ -34,6 +41,7 @@ export default function DependencyScanner({ onScanComplete, autoScan = false }: 
     setScanning(true)
     setResult(null)
     setError(null)
+    setDebugInfo(null)
 
     try {
       const response = await fetch("/api/dependencies/scan", {
@@ -41,9 +49,21 @@ export default function DependencyScanner({ onScanComplete, autoScan = false }: 
       })
 
       const data = await response.json()
+      setDebugInfo(data) // Store full response for debugging
 
       if (!response.ok) {
-        throw new Error(data.message || data.error || "Failed to scan dependencies")
+        // Extract detailed error information
+        const errorMessage = data.message || data.error || "Failed to scan dependencies"
+        const errorDetails = data.details || data.stack || null
+        const errorCode = data.code || null
+        const suggestions = data.suggestions || generateSuggestions(errorMessage, response.status)
+
+        throw {
+          message: errorMessage,
+          details: errorDetails,
+          code: errorCode,
+          suggestions,
+        }
       }
 
       setResult(data)
@@ -54,10 +74,69 @@ export default function DependencyScanner({ onScanComplete, autoScan = false }: 
       }
     } catch (err) {
       console.error("Error scanning dependencies:", err)
-      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+
+      // Format the error for display
+      if (err instanceof Error) {
+        setError({
+          message: err.message,
+          details: err.stack,
+          suggestions: generateSuggestions(err.message),
+        })
+      } else if (typeof err === "object" && err !== null) {
+        setError(err as any)
+      } else {
+        setError({
+          message: "An unexpected error occurred",
+          suggestions: ["Try refreshing the page", "Check your network connection"],
+        })
+      }
     } finally {
       setScanning(false)
     }
+  }
+
+  // Generate helpful suggestions based on the error
+  const generateSuggestions = (errorMessage: string, statusCode?: number): string[] => {
+    const suggestions: string[] = []
+
+    // Add suggestions based on status code
+    if (statusCode === 404) {
+      suggestions.push("Make sure the API route exists")
+      suggestions.push("Check if the database tables are set up correctly")
+    } else if (statusCode === 500) {
+      suggestions.push("Check the server logs for more details")
+      suggestions.push("Verify your database connection")
+    } else if (statusCode === 401 || statusCode === 403) {
+      suggestions.push("Make sure you're logged in with the correct permissions")
+    }
+
+    // Add suggestions based on error message content
+    if (errorMessage.toLowerCase().includes("database")) {
+      suggestions.push("Verify your database connection settings")
+      suggestions.push("Check if the database tables are set up correctly")
+    }
+
+    if (errorMessage.toLowerCase().includes("permission")) {
+      suggestions.push("Make sure your database user has the correct permissions")
+    }
+
+    if (errorMessage.toLowerCase().includes("package.json")) {
+      suggestions.push("Verify that your package.json file exists and is valid")
+    }
+
+    if (errorMessage.toLowerCase().includes("npm")) {
+      suggestions.push("Make sure npm is installed and accessible")
+      suggestions.push("Try running npm commands manually to see if they work")
+    }
+
+    // Add general suggestions if none were added
+    if (suggestions.length === 0) {
+      suggestions.push("Try refreshing the page")
+      suggestions.push("Check your network connection")
+      suggestions.push("Verify that the server is running")
+    }
+
+    return suggestions
   }
 
   // If auto-scanning and still in progress, show minimal UI
@@ -88,7 +167,46 @@ export default function DependencyScanner({ onScanComplete, autoScan = false }: 
 
       {error && (
         <div className="bg-red-900/30 border border-red-700 text-red-200 px-4 py-3 rounded mb-4">
-          <p>{error}</p>
+          <div className="flex items-start">
+            <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+            <div>
+              <p className="font-bold">{error.message}</p>
+
+              {error.details && (
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-sm">Error Details</summary>
+                  <pre className="mt-2 text-xs bg-red-950/50 p-2 rounded overflow-auto max-h-40">{error.details}</pre>
+                </details>
+              )}
+
+              {error.suggestions && error.suggestions.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-sm font-semibold">Suggestions:</p>
+                  <ul className="list-disc list-inside text-sm mt-1 space-y-1">
+                    {error.suggestions.map((suggestion, index) => (
+                      <li key={index}>{suggestion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-3 flex items-center">
+                <button
+                  onClick={() => setShowDebug(!showDebug)}
+                  className="text-xs flex items-center text-red-300 hover:text-white"
+                >
+                  <Info className="h-3 w-3 mr-1" />
+                  {showDebug ? "Hide" : "Show"} Debug Information
+                </button>
+              </div>
+
+              {showDebug && debugInfo && (
+                <pre className="mt-2 text-xs bg-red-950/50 p-2 rounded overflow-auto max-h-40">
+                  {JSON.stringify(debugInfo, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
