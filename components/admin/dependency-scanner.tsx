@@ -1,14 +1,15 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { RefreshCw, Package } from "lucide-react"
 
 interface DependencyScannerProps {
   onScanComplete?: () => void
+  autoScan?: boolean
 }
 
-export default function DependencyScanner({ onScanComplete }: DependencyScannerProps) {
+export default function DependencyScanner({ onScanComplete, autoScan = false }: DependencyScannerProps) {
   const [scanning, setScanning] = useState(false)
   const [result, setResult] = useState<{
     success?: boolean
@@ -19,6 +20,15 @@ export default function DependencyScanner({ onScanComplete }: DependencyScannerP
     total?: number
   } | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [hasAutoScanned, setHasAutoScanned] = useState(false)
+
+  useEffect(() => {
+    // Auto-scan on component mount if autoScan is true and we haven't already auto-scanned
+    if (autoScan && !hasAutoScanned && !result) {
+      scanDependencies()
+      setHasAutoScanned(true)
+    }
+  }, [autoScan, hasAutoScanned, result])
 
   const scanDependencies = async () => {
     setScanning(true)
@@ -48,6 +58,21 @@ export default function DependencyScanner({ onScanComplete }: DependencyScannerP
     } finally {
       setScanning(false)
     }
+  }
+
+  // If auto-scanning and still in progress, show minimal UI
+  if (autoScan && scanning && !result && !error) {
+    return (
+      <div className="bg-gray-800 p-6 rounded-lg mb-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mr-3"></div>
+        <p>Scanning project dependencies...</p>
+      </div>
+    )
+  }
+
+  // If auto-scan completed successfully and no errors, don't show the component at all
+  if (autoScan && result && result.success && !error) {
+    return null
   }
 
   return (
@@ -83,7 +108,7 @@ export default function DependencyScanner({ onScanComplete }: DependencyScannerP
 
       <Button onClick={scanDependencies} disabled={scanning} className="flex items-center">
         <RefreshCw className={`h-4 w-4 mr-2 ${scanning ? "animate-spin" : ""}`} />
-        {scanning ? "Scanning..." : "Scan Dependencies"}
+        {scanning ? "Scanning..." : result && result.success ? "Scan Again" : "Scan Dependencies"}
       </Button>
     </div>
   )

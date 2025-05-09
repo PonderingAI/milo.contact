@@ -43,6 +43,7 @@ export default function ClientDependenciesPage() {
   const [lastScan, setLastScan] = useState<string | null>(null)
   const [vulnerabilityCount, setVulnerabilityCount] = useState(0)
   const [outdatedCount, setOutdatedCount] = useState(0)
+  const [setupComplete, setSetupComplete] = useState(false)
 
   const supabase = createClient()
 
@@ -71,6 +72,11 @@ export default function ClientDependenciesPage() {
       }
 
       setTablesExist(exists)
+
+      // If tables exist, mark setup as complete
+      if (exists) {
+        setSetupComplete(true)
+      }
     } catch (err) {
       console.error("Error checking if tables exist:", err)
     }
@@ -111,6 +117,11 @@ export default function ClientDependenciesPage() {
       }
 
       setTablesExist(data.tableExists)
+
+      // If we have dependencies, mark setup as complete
+      if (data.dependencies && data.dependencies.length > 0) {
+        setSetupComplete(true)
+      }
     } catch (err) {
       console.error("Error fetching dependencies:", err)
       setError(err instanceof Error ? err.message : "An unexpected error occurred")
@@ -247,6 +258,11 @@ export default function ClientDependenciesPage() {
     }
   }
 
+  const handleSetupComplete = () => {
+    setSetupComplete(true)
+    fetchDependencies()
+  }
+
   const filteredDependencies = dependencies
     .filter((dep) => {
       if (filter === "outdated") {
@@ -279,27 +295,11 @@ export default function ClientDependenciesPage() {
         <h1 className="text-3xl font-bold mb-6">Dependency Management</h1>
 
         <div className="grid gap-6">
-          <CheckTableFunctionSetup />
-
-          {tablesExist && dependencies.length === 0 && <DependencyScanner onScanComplete={fetchDependencies} />}
-
-          <PackageJsonManager />
-
-          <div className="mt-8"></div>
-
-          {error && (
-            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
-              <p>{error}</p>
-            </div>
-          )}
-
+          {/* Only show setup components if needed */}
           {!tablesExist && (
             <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4">
               <p className="font-bold">Database tables not set up</p>
-              <p className="mt-2">
-                The dependency management system requires database tables to store settings. You can still view your
-                dependencies, but to save settings you need to set up the tables.
-              </p>
+              <p className="mt-2">The dependency management system requires database tables to store settings.</p>
               <div className="mt-4">
                 <Button onClick={runSQL} disabled={sqlExecuting}>
                   {sqlExecuting ? "Setting up tables..." : "Set Up Tables"}
@@ -314,152 +314,165 @@ export default function ClientDependenciesPage() {
             </div>
           )}
 
-          {dependencies.length === 0 && tablesExist ? (
+          {/* Only show the check table function setup if there's an error with it */}
+          {error && error.includes("check_table_exists") && <CheckTableFunctionSetup />}
+
+          {/* Auto-scan for dependencies if tables exist but no dependencies found */}
+          {tablesExist && dependencies.length === 0 && !loading && (
+            <DependencyScanner onScanComplete={fetchDependencies} autoScan={true} />
+          )}
+
+          {/* Only show the package.json manager in an advanced section */}
+          {dependencies.length > 0 && (
+            <details className="bg-gray-800 p-4 rounded-lg">
+              <summary className="cursor-pointer font-medium text-lg">Advanced: Package.json Management</summary>
+              <div className="mt-4">
+                <PackageJsonManager />
+              </div>
+            </details>
+          )}
+
+          {error && !error.includes("check_table_exists") && (
+            <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+              <p>{error}</p>
+            </div>
+          )}
+
+          {loading && dependencies.length === 0 ? (
+            <div className="bg-gray-800 p-6 rounded-lg flex items-center justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mr-3"></div>
+              <p>Loading dependency information...</p>
+            </div>
+          ) : dependencies.length === 0 && tablesExist ? (
             <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
-              <p className="font-bold">No dependencies found</p>
-              <p className="mt-2">
-                Use the Dependency Scanner above to scan your project and add dependencies to the management system.
-              </p>
+              <p className="font-bold">Setting up dependencies...</p>
+              <p className="mt-2">We're scanning your project to find dependencies. This may take a moment.</p>
             </div>
           ) : (
-            <div className="bg-gray-800 p-6 rounded-lg mb-8">
-              <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Dependency Management</h2>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm">
-                    Security Score:
-                    <span
-                      className={`ml-2 px-2 py-1 rounded ${
-                        securityScore > 80 ? "bg-green-500" : securityScore > 60 ? "bg-yellow-500" : "bg-red-500"
-                      }`}
-                    >
-                      {securityScore}%
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <p className="mb-4">
-                Manage your project dependencies, set update preferences, and keep your project up-to-date.
-              </p>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-gray-700 p-4 rounded-lg flex items-center">
-                  <Package className="h-8 w-8 mr-3 text-blue-400" />
-                  <div>
-                    <h3 className="font-medium">Total Dependencies</h3>
-                    <p className="text-2xl">{dependencies.length}</p>
+            dependencies.length > 0 && (
+              <div className="bg-gray-800 p-6 rounded-lg mb-8">
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-xl font-bold">Dependency Management</h2>
+                  <div className="flex items-center gap-2">
+                    <div className="text-sm">
+                      Security Score:
+                      <span
+                        className={`ml-2 px-2 py-1 rounded ${
+                          securityScore > 80 ? "bg-green-500" : securityScore > 60 ? "bg-yellow-500" : "bg-red-500"
+                        }`}
+                      >
+                        {securityScore}%
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-gray-700 p-4 rounded-lg flex items-center">
-                  <AlertTriangle className="h-8 w-8 mr-3 text-yellow-400" />
-                  <div>
-                    <h3 className="font-medium">Outdated</h3>
-                    <p className="text-2xl">{outdatedCount}</p>
+                <p className="mb-4">
+                  Manage your project dependencies, set update preferences, and keep your project up-to-date.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-gray-700 p-4 rounded-lg flex items-center">
+                    <Package className="h-8 w-8 mr-3 text-blue-400" />
+                    <div>
+                      <h3 className="font-medium">Total Dependencies</h3>
+                      <p className="text-2xl">{dependencies.length}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-700 p-4 rounded-lg flex items-center">
+                    <AlertTriangle className="h-8 w-8 mr-3 text-yellow-400" />
+                    <div>
+                      <h3 className="font-medium">Outdated</h3>
+                      <p className="text-2xl">{outdatedCount}</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-gray-700 p-4 rounded-lg flex items-center">
+                    <Shield className="h-8 w-8 mr-3 text-red-400" />
+                    <div>
+                      <h3 className="font-medium">Security Issues</h3>
+                      <p className="text-2xl">{vulnerabilityCount}</p>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-gray-700 p-4 rounded-lg flex items-center">
-                  <Shield className="h-8 w-8 mr-3 text-red-400" />
-                  <div>
-                    <h3 className="font-medium">Security Issues</h3>
-                    <p className="text-2xl">{vulnerabilityCount}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex flex-col md:flex-row gap-4 mb-6">
-                <button
-                  onClick={fetchDependencies}
-                  disabled={loading}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-                  {loading ? "Refreshing..." : "Refresh Dependencies"}
-                </button>
-
-                <button
-                  onClick={() => {
-                    fetch("/api/dependencies/apply", { method: "POST" })
-                      .then((response) => {
-                        if (!response.ok) {
-                          throw new Error("Failed to apply updates")
-                        }
-                        return response.json()
-                      })
-                      .then(() => {
-                        fetchDependencies()
-                      })
-                      .catch((err) => {
-                        setError(err.message)
-                      })
-                  }}
-                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-                >
-                  Apply Updates Now
-                </button>
-
-                <button
-                  onClick={() => {
-                    fetch("/api/dependencies/scan", { method: "POST" })
-                      .then((response) => {
-                        if (!response.ok) {
-                          throw new Error("Failed to scan dependencies")
-                        }
-                        return response.json()
-                      })
-                      .then(() => {
-                        fetchDependencies()
-                      })
-                      .catch((err) => {
-                        setError(err.message)
-                      })
-                  }}
-                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
-                >
-                  Scan for New Dependencies
-                </button>
-              </div>
-
-              <div className="flex flex-col md:flex-row gap-4 mb-6">
-                <div className="flex-1">
-                  <label htmlFor="filter" className="block text-sm font-medium mb-1">
-                    Filter
-                  </label>
-                  <select
-                    id="filter"
-                    value={filter}
-                    onChange={(e) => setFilter(e.target.value as any)}
-                    className="w-full p-2 bg-gray-700 rounded"
+                <div className="flex flex-col md:flex-row gap-4 mb-6">
+                  <button
+                    onClick={fetchDependencies}
+                    disabled={loading}
+                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
                   >
-                    <option value="all">All Dependencies</option>
-                    <option value="outdated">Outdated</option>
-                    <option value="vulnerable">Security Vulnerabilities</option>
-                    <option value="dev">Development Dependencies</option>
-                    <option value="prod">Production Dependencies</option>
-                  </select>
+                    <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                    {loading ? "Refreshing..." : "Refresh Dependencies"}
+                  </button>
+
+                  {outdatedCount > 0 && (
+                    <button
+                      onClick={() => {
+                        fetch("/api/dependencies/apply", { method: "POST" })
+                          .then((response) => {
+                            if (!response.ok) {
+                              throw new Error("Failed to apply updates")
+                            }
+                            return response.json()
+                          })
+                          .then(() => {
+                            fetchDependencies()
+                          })
+                          .catch((err) => {
+                            setError(err.message)
+                          })
+                      }}
+                      className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                    >
+                      Apply Updates Now
+                    </button>
+                  )}
                 </div>
 
-                <div className="flex-1">
-                  <label htmlFor="search" className="block text-sm font-medium mb-1">
-                    Search
-                  </label>
-                  <input
-                    id="search"
-                    type="text"
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    placeholder="Search dependencies..."
-                    className="w-full p-2 bg-gray-700 rounded"
-                  />
-                </div>
+                <details className="mb-6">
+                  <summary className="cursor-pointer font-medium">Advanced Filtering Options</summary>
+                  <div className="mt-4 flex flex-col md:flex-row gap-4">
+                    <div className="flex-1">
+                      <label htmlFor="filter" className="block text-sm font-medium mb-1">
+                        Filter
+                      </label>
+                      <select
+                        id="filter"
+                        value={filter}
+                        onChange={(e) => setFilter(e.target.value as any)}
+                        className="w-full p-2 bg-gray-700 rounded"
+                      >
+                        <option value="all">All Dependencies</option>
+                        <option value="outdated">Outdated</option>
+                        <option value="vulnerable">Security Vulnerabilities</option>
+                        <option value="dev">Development Dependencies</option>
+                        <option value="prod">Production Dependencies</option>
+                      </select>
+                    </div>
+
+                    <div className="flex-1">
+                      <label htmlFor="search" className="block text-sm font-medium mb-1">
+                        Search
+                      </label>
+                      <input
+                        id="search"
+                        type="text"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        placeholder="Search dependencies..."
+                        className="w-full p-2 bg-gray-700 rounded"
+                      />
+                    </div>
+                  </div>
+                </details>
+
+                {lastScan && (
+                  <div className="text-sm text-gray-400 mb-2">Last scanned: {new Date(lastScan).toLocaleString()}</div>
+                )}
               </div>
-
-              {lastScan && (
-                <div className="text-sm text-gray-400 mb-2">Last scanned: {new Date(lastScan).toLocaleString()}</div>
-              )}
-            </div>
+            )
           )}
 
           {dependencies.length > 0 && (

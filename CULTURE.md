@@ -35,4 +35,23 @@ This document outlines the key principles specific to this project, which serves
 
 - **Incremental Adoption**: Design systems to allow for incremental adoption in client projects. Not all clients will need all features.
 
+- **Minimize User Clicks**: Design admin interfaces to require the fewest clicks possible to accomplish tasks:
+  - Automate routine operations where possible
+  - Start necessary processes automatically without user intervention
+  - Only show options that are relevant to the current context
+
+- **Progressive Disclosure**: Hide complexity from novice users:
+  - Show basic options by default
+  - Place advanced features in intuitive sub-menus
+  - Automate technical setup steps where possible
+
+- **Contextual UI**: Only show UI elements that are relevant to the current state:
+  - Don't show buttons for actions that can't be performed
+  - Automatically trigger necessary setup processes
+  - Adapt the interface based on the user's permissions and the system state
+
 Remember that every line of code in public pages has a performance cost. Be intentional about what runs where.
+
+\`\`\`
+
+Now, let's update the dependency scanner component to support automatic scanning:
