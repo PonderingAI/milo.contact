@@ -50,8 +50,21 @@ This document outlines the key principles specific to this project, which serves
   - Automatically trigger necessary setup processes
   - Adapt the interface based on the user's permissions and the system state
 
-Remember that every line of code in public pages has a performance cost. Be intentional about what runs where.
+- **Robust Primary Solutions Before Fallbacks**: Focus on making one approach work robustly before implementing fallbacks:
+  - Ensure the primary solution works completely and reliably
+  - Only add fallbacks after the main approach is solid and well-tested
+  - Fallbacks should be for exceptional cases, not to compensate for a weak primary implementation
+  - Error gracefully when things fail rather than silently falling back to potentially inconsistent alternatives
+  - Document the primary approach thoroughly before adding alternatives
 
+- **Never Remove Working Features**: Preserve existing functionality even when making improvements:
+  - Fix bugs and improve performance without removing features
+  - Maintain backward compatibility with existing user workflows
+  - If a feature needs replacement, implement the new version before removing the old one
+  - Get explicit approval before removing or significantly changing any user-facing feature
+  - Document all feature changes thoroughly
+
+Remember that every line of code in public pages has a performance cost. Be intentional about what runs where.
 \`\`\`
 
-Now, let's update the dependency scanner component to support automatic scanning:
+Now, let's restore the Security Center with the widget functionality intact, while improving the dependency section:

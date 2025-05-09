@@ -23,11 +23,12 @@ import {
   RefreshCw,
   AlertTriangle,
   Settings,
-  Clock,
+  Info,
   Activity,
   Search,
-  Info,
+  Clock,
 } from "lucide-react"
+import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
 
 // Types
 interface Dependency {
@@ -139,6 +140,9 @@ export default function SecurityClientPage() {
   } | null>(null)
   const [updateResults, setUpdateResults] = useState<any[]>([])
   const [showUpdateResults, setShowUpdateResults] = useState(false)
+  const [diagnosticInfo, setDiagnosticInfo] = useState<any>(null)
+  const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const [setupAttempted, setSetupAttempted] = useState(false)
 
   // Load widgets from localStorage on initial render
   useEffect(() => {
@@ -215,6 +219,66 @@ export default function SecurityClientPage() {
     }
   }
 
+  const setupDependencySystem = async () => {
+    try {
+      setSetupAttempted(true)
+      setLoading(true)
+      setError(null)
+      setSetupMessage("Setting up dependency management system...")
+
+      const response = await fetch("/api/dependencies/setup", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to set up dependency system")
+      }
+
+      const data = await response.json()
+      setSetupMessage(data.message || "Dependency system set up successfully. Scanning dependencies...")
+
+      // After setup, scan for dependencies
+      await scanDependencies()
+    } catch (err: any) {
+      setError(`Error setting up dependency system: ${err.message}`)
+      console.error("Error setting up dependency system:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const scanDependencies = async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      setSetupMessage("Scanning dependencies...")
+
+      const response = await fetch("/api/dependencies/scan", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to scan dependencies")
+      }
+
+      // Refresh dependencies after scan
+      await fetchDependencies()
+      setSetupMessage("Dependency scan completed successfully.")
+
+      // Clear setup message after a delay
+      setTimeout(() => {
+        setSetupMessage(null)
+      }, 3000)
+    } catch (err: any) {
+      setError(`Error scanning dependencies: ${err.message}`)
+      console.error("Error scanning dependencies:", err)
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const applyChanges = async () => {
     try {
       setApplyingChanges(true)
@@ -227,7 +291,8 @@ export default function SecurityClientPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to apply changes")
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to apply changes")
       }
 
       const data = await response.json()
@@ -239,7 +304,7 @@ export default function SecurityClientPage() {
       // Refresh dependencies
       fetchDependencies()
     } catch (err: any) {
-      setError(err.message)
+      setError(`Error applying changes: ${err.message}`)
       console.error("Error applying changes:", err)
     } finally {
       setApplyingChanges(false)
@@ -250,22 +315,36 @@ export default function SecurityClientPage() {
     try {
       setLoading(true)
       setError(null)
-      setSetupMessage(null)
+      setDiagnosticInfo(null)
 
       const response = await fetch("/api/dependencies")
+
       if (!response.ok) {
-        throw new Error("Failed to fetch dependencies")
+        const errorData = await response.json()
+
+        // Check if setup is needed
+        if (response.status === 404 && errorData.setupNeeded) {
+          setSetupMessage(errorData.setupMessage || "The dependency system needs to be set up.")
+          setDiagnosticInfo(errorData)
+          setDependencies([])
+          return
+        }
+
+        throw new Error(errorData.message || errorData.error || "Failed to fetch dependencies")
       }
 
       const data = await response.json()
+      setDiagnosticInfo(data) // Store the full response for diagnostics
 
-      // Check if setup is needed
-      if (data.setupNeeded) {
-        setSetupMessage(data.setupMessage || "Setting up dependency system...")
+      // If no dependencies found, show a clear message
+      if (!data.dependencies || data.dependencies.length === 0) {
+        setDependencies([])
+        setError("No dependencies found. Please run a dependency scan to populate the database.")
+        return
       }
 
       // Map the data to our internal format
-      const mappedDependencies = (data.dependencies || []).map((dep: any) => ({
+      const mappedDependencies = data.dependencies.map((dep: any) => ({
         id: dep.id || dep.name,
         name: dep.name,
         currentVersion: dep.currentVersion || dep.current_version,
@@ -292,8 +371,8 @@ export default function SecurityClientPage() {
       // Get global update mode - default to conservative (security only)
       setGlobalUpdateMode(data.updateMode || "conservative")
     } catch (err: any) {
-      setError(`Error fetching dependencies: ${err.message}`)
       console.error("Error fetching dependencies:", err)
+      setError(`Error fetching dependencies: ${err.message}`)
 
       // Set empty dependencies to avoid UI errors
       setDependencies([])
@@ -329,15 +408,20 @@ export default function SecurityClientPage() {
       if (value === "global") return
 
       setGlobalUpdateMode(value)
-      await fetch("/api/dependencies/settings", {
+      const response = await fetch("/api/dependencies/settings", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ updateMode: value }),
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to update settings")
+      }
     } catch (err: any) {
-      setError(err.message)
+      setError(`Error updating settings: ${err.message}`)
       console.error("Error updating settings:", err)
     }
   }
@@ -348,15 +432,20 @@ export default function SecurityClientPage() {
       setDependencies((prev) => prev.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep)))
 
       // Send to API
-      await fetch("/api/dependencies/update-mode", {
+      const response = await fetch("/api/dependencies/update-mode", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ id, updateMode: value }),
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to update dependency mode")
+      }
     } catch (err: any) {
-      setError(err.message)
+      setError(`Error updating dependency mode: ${err.message}`)
       console.error("Error updating dependency mode:", err)
       // Revert on error
       fetchDependencies()
@@ -369,15 +458,20 @@ export default function SecurityClientPage() {
       setDependencies((prev) => prev.map((dep) => ({ ...dep, updateMode: "global" })))
 
       // Send to API
-      await fetch("/api/dependencies/reset-all", {
+      const response = await fetch("/api/dependencies/reset-all", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ updateMode: "global" }),
       })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to reset settings")
+      }
     } catch (err: any) {
-      setError(err.message)
+      setError(`Error resetting settings: ${err.message}`)
       console.error("Error resetting settings:", err)
       // Revert on error
       fetchDependencies()
@@ -395,7 +489,8 @@ export default function SecurityClientPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to run security audit")
+        const errorData = await response.json()
+        throw new Error(errorData.message || errorData.error || "Failed to run security audit")
       }
 
       const data = await response.json()
@@ -410,11 +505,8 @@ export default function SecurityClientPage() {
 
       // Refresh dependencies to get updated vulnerability info
       fetchDependencies()
-
-      // Show success message
-      setError(null)
     } catch (err: any) {
-      setError(err.message)
+      setError(`Error running security audit: ${err.message}`)
       console.error("Error running security audit:", err)
     } finally {
       setAuditRunning(false)
@@ -749,7 +841,7 @@ export default function SecurityClientPage() {
             ) : (
               <>
                 <RefreshCw className="mr-2 h-4 w-4" />
-                Apply Now
+                Apply Updates
               </>
             )}
           </Button>
@@ -763,7 +855,28 @@ export default function SecurityClientPage() {
       {error && (
         <div className="bg-red-900/30 border border-red-800 text-white p-4 rounded-md mb-6 flex items-center">
           <AlertCircle className="mr-2 h-5 w-5" />
-          <span>{error}</span>
+          <div className="flex-1">
+            <span>{error}</span>
+
+            {/* Add diagnostic information toggle */}
+            {diagnosticInfo && (
+              <div className="mt-2">
+                <button
+                  onClick={() => setShowDiagnostics(!showDiagnostics)}
+                  className="text-xs flex items-center text-red-300 hover:text-white"
+                >
+                  <Info className="h-3 w-3 mr-1" />
+                  {showDiagnostics ? "Hide" : "Show"} Diagnostic Information
+                </button>
+
+                {showDiagnostics && (
+                  <pre className="mt-2 text-xs bg-red-950/50 p-2 rounded overflow-auto max-h-40">
+                    {JSON.stringify(diagnosticInfo, null, 2)}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
           <Button
             variant="ghost"
             size="sm"
@@ -778,15 +891,29 @@ export default function SecurityClientPage() {
       {setupMessage && (
         <div className="bg-blue-900/30 border border-blue-800 text-white p-4 rounded-md mb-6 flex items-center">
           <Info className="mr-2 h-5 w-5" />
-          <span>{setupMessage}</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setSetupMessage(null)}
-            className="ml-auto text-white hover:bg-blue-800/50"
-          >
-            Dismiss
-          </Button>
+          <div className="flex-1">
+            <span>{setupMessage}</span>
+            {!setupAttempted && (
+              <div className="mt-2">
+                <Button size="sm" onClick={setupDependencySystem} className="mr-2">
+                  Set Up Dependency System
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setSetupMessage(null)}>
+                  Dismiss
+                </Button>
+              </div>
+            )}
+          </div>
+          {setupAttempted && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSetupMessage(null)}
+              className="ml-auto text-white hover:bg-blue-800/50"
+            >
+              Dismiss
+            </Button>
+          )}
         </div>
       )}
 
@@ -863,9 +990,14 @@ export default function SecurityClientPage() {
                   <CardTitle>Dependency Management</CardTitle>
                   <CardDescription>Manage your project dependencies and updates</CardDescription>
                 </div>
-                <Button variant="outline" size="sm" onClick={resetAllSettings} className="border-gray-700">
-                  Reset All Settings
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={scanDependencies} className="border-gray-700">
+                    Scan Dependencies
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={resetAllSettings} className="border-gray-700">
+                    Reset Settings
+                  </Button>
+                </div>
               </div>
 
               <div className="flex flex-col sm:flex-row gap-4 mt-4">
@@ -930,10 +1062,36 @@ export default function SecurityClientPage() {
                 </div>
               ) : dependencies.length === 0 ? (
                 <div className="text-center py-8">
-                  <p>No dependencies found. This could be because the system is still setting up.</p>
-                  <Button className="mt-4" onClick={fetchDependencies}>
-                    Retry
-                  </Button>
+                  <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+                  <p className="text-xl font-semibold mb-2">No dependencies found</p>
+                  <p className="text-gray-400 mb-4 max-w-md mx-auto">
+                    This could be because the dependency system is still setting up or there was an error fetching the
+                    data.
+                  </p>
+                  <div className="space-y-4">
+                    <div className="flex justify-center gap-4">
+                      <Button onClick={setupDependencySystem} disabled={setupAttempted}>
+                        {setupAttempted ? "Setup Attempted" : "Setup System"}
+                      </Button>
+                      <Button onClick={scanDependencies}>
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Scan Dependencies
+                      </Button>
+                    </div>
+
+                    <div className="mt-6 bg-gray-800 p-4 rounded-md text-left max-w-md mx-auto">
+                      <h3 className="font-medium mb-2 flex items-center">
+                        <Info className="h-4 w-4 mr-2" />
+                        Troubleshooting Steps
+                      </h3>
+                      <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
+                        <li>Check if the database tables are set up correctly</li>
+                        <li>Verify that your package.json file exists and is valid</li>
+                        <li>Make sure npm is installed and accessible on the server</li>
+                        <li>Check the server logs for more detailed error information</li>
+                      </ol>
+                    </div>
+                  </div>
                 </div>
               ) : filteredDependencies.length === 0 ? (
                 <div className="text-center py-8">
@@ -1031,6 +1189,17 @@ export default function SecurityClientPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {selectedVulnerability && (
+        <VulnerabilityDetails
+          isOpen={!!selectedVulnerability}
+          onClose={() => setSelectedVulnerability(null)}
+          vulnerability={selectedVulnerability.vulnerability}
+          packageName={selectedVulnerability.packageName}
+          currentVersion={selectedVulnerability.currentVersion}
+          latestVersion={selectedVulnerability.latestVersion}
+        />
+      )}
     </div>
   )
 }

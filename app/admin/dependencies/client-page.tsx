@@ -20,6 +20,7 @@ import {
 import PackageJsonManager from "@/components/admin/package-json-manager"
 import CheckTableFunctionSetup from "@/components/admin/check-table-function-setup"
 import DependencyScanner from "@/components/admin/dependency-scanner"
+import ManualDependencyEntry from "@/components/admin/manual-dependency-entry"
 
 interface Dependency {
   id?: number
@@ -75,6 +76,7 @@ export default function ClientDependenciesPage() {
     packageJson: "unknown",
     npm: "unknown",
   })
+  const [showManualEntry, setShowManualEntry] = useState(false)
 
   const supabase = createClient()
 
@@ -440,6 +442,10 @@ export default function ClientDependenciesPage() {
     )
   }
 
+  const handleNetworkError = () => {
+    setShowManualEntry(true)
+  }
+
   return (
     <AdminCheck>
       <div className="container mx-auto p-6">
@@ -614,8 +620,11 @@ export default function ClientDependenciesPage() {
 
           {/* Auto-scan for dependencies if tables exist but no dependencies found */}
           {tablesExist && dependencies.length === 0 && !loading && (
-            <DependencyScanner onScanComplete={fetchDependencies} autoScan={true} />
+            <DependencyScanner onScanComplete={fetchDependencies} autoScan={true} onNetworkError={handleNetworkError} />
           )}
+
+          {/* Show manual entry when network errors occur */}
+          {showManualEntry && <ManualDependencyEntry onDependencyAdded={fetchDependencies} />}
 
           {/* Only show the package.json manager in an advanced section */}
           {dependencies.length > 0 && (
