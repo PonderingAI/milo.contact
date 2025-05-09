@@ -16,11 +16,13 @@ import {
   Info,
   Database,
   FileJson,
+  Grid3X3,
 } from "lucide-react"
 import PackageJsonManager from "@/components/admin/package-json-manager"
-import CheckTableFunctionSetup from "@/components/admin/check-table-function-setup"
 import DependencyScanner from "@/components/admin/dependency-scanner"
 import ManualDependencyEntry from "@/components/admin/manual-dependency-entry"
+import DependencySetupAlert from "@/components/admin/dependency-setup-alert"
+import { WidgetSelector } from "@/components/admin/widget-selector"
 
 interface Dependency {
   id?: number
@@ -77,6 +79,7 @@ export default function ClientDependenciesPage() {
     npm: "unknown",
   })
   const [showManualEntry, setShowManualEntry] = useState(false)
+  const [showWidgetSelector, setShowWidgetSelector] = useState(false)
 
   const supabase = createClient()
 
@@ -111,23 +114,25 @@ export default function ClientDependenciesPage() {
 
   const checkTablesExist = async () => {
     try {
-      const { data: exists, error } = await supabase.rpc("check_table_exists", {
-        table_name: "dependencies",
-      })
+      const response = await fetch("/api/dependencies/check-tables")
 
-      if (error) {
-        console.error("Error checking if table exists:", error)
-        setSystemStatus((prev) => ({ ...prev, tables: "error" }))
-        setDebugInfo((prev) => ({ ...prev, tableCheckError: error }))
-        return
+      if (!response.ok) {
+        throw new Error("Failed to check if tables exist")
       }
 
-      setTablesExist(exists)
-      setSystemStatus((prev) => ({ ...prev, tables: exists ? "ok" : "missing" }))
+      const data = await response.json()
 
-      // If tables exist, mark setup as complete
-      if (exists) {
-        setSetupComplete(true)
+      if (data.success) {
+        const allTablesExist = data.allTablesExist
+        setTablesExist(allTablesExist)
+        setSystemStatus((prev) => ({ ...prev, tables: allTablesExist ? "ok" : "missing" }))
+
+        // If tables exist, mark setup as complete
+        if (allTablesExist) {
+          setSetupComplete(true)
+        }
+      } else {
+        throw new Error(data.error || "Unknown error checking tables")
       }
     } catch (err) {
       console.error("Error checking if tables exist:", err)
@@ -141,7 +146,7 @@ export default function ClientDependenciesPage() {
     setError(null)
 
     try {
-      const response = await fetch("/api/dependencies")
+      const response = await fetch("/api/dependencies/list")
       const data = await response.json()
 
       // Store the raw response for debugging
@@ -451,6 +456,9 @@ export default function ClientDependenciesPage() {
       <div className="container mx-auto p-6">
         <h1 className="text-3xl font-bold mb-6">Dependency Management</h1>
 
+        {/* Database Setup Alert */}
+        <DependencySetupAlert />
+
         {/* System Status Indicator */}
         {(systemStatus.database === "error" ||
           systemStatus.tables === "error" ||
@@ -550,28 +558,6 @@ export default function ClientDependenciesPage() {
         )}
 
         <div className="grid gap-6">
-          {/* Only show setup components if needed */}
-          {!tablesExist && (
-            <div className="bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-3 rounded mb-4">
-              <p className="font-bold">Database tables not set up</p>
-              <p className="mt-2">The dependency management system requires database tables to store settings.</p>
-              <div className="mt-4">
-                <Button onClick={runSQL} disabled={sqlExecuting}>
-                  {sqlExecuting ? "Setting up tables..." : "Set Up Tables"}
-                </Button>
-              </div>
-            </div>
-          )}
-
-          {sqlSuccess && (
-            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4">
-              <p>Tables set up successfully!</p>
-            </div>
-          )}
-
-          {/* Only show the check table function setup if there's an error with it */}
-          {error && error.message.includes("check_table_exists") && <CheckTableFunctionSetup />}
-
           {/* Display detailed error information */}
           {error && !error.message.includes("check_table_exists") && (
             <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -625,6 +611,25 @@ export default function ClientDependenciesPage() {
 
           {/* Show manual entry when network errors occur */}
           {showManualEntry && <ManualDependencyEntry onDependencyAdded={fetchDependencies} />}
+
+          {/* Widget Selector Button */}
+          <div className="flex justify-end mb-4">
+            <Button
+              onClick={() => setShowWidgetSelector(!showWidgetSelector)}
+              variant="outline"
+              className="flex items-center gap-2"
+            >
+              <Grid3X3 className="h-4 w-4" />
+              {showWidgetSelector ? "Hide Widgets" : "Customize Widgets"}
+            </Button>
+          </div>
+
+          {/* Widget Selector */}
+          {showWidgetSelector && (
+            <div className="mb-6">
+              <WidgetSelector />
+            </div>
+          )}
 
           {/* Only show the package.json manager in an advanced section */}
           {dependencies.length > 0 && (

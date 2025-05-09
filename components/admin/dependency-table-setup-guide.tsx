@@ -5,7 +5,15 @@ import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 
-export default function DependencyTableSetupGuide({ onSetupComplete }: { onSetupComplete: () => void }) {
+interface DependencyTableSetupGuideProps {
+  onSetupComplete: () => void
+  missingTables?: string[]
+}
+
+export default function DependencyTableSetupGuide({
+  onSetupComplete,
+  missingTables = ["dependencies", "dependency_settings", "security_audits"],
+}: DependencyTableSetupGuideProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -128,6 +136,18 @@ USING (
 );
   `.trim()
 
+  // Combined SQL for all missing tables
+  const combinedSQL = `
+-- Combined SQL to create all missing tables
+BEGIN;
+${missingTables.includes("dependencies") ? dependenciesTableSQL : ""}
+
+${missingTables.includes("dependency_settings") ? dependencySettingsTableSQL : ""}
+
+${missingTables.includes("security_audits") ? securityAuditsTableSQL : ""}
+COMMIT;
+  `.trim()
+
   const runSQL = async (sql: string) => {
     setLoading(true)
     setError(null)
@@ -150,7 +170,7 @@ USING (
       const data = await response.json()
 
       if (data.success) {
-        setSuccess("SQL executed successfully!")
+        setSuccess(data.message || "SQL executed successfully!")
         onSetupComplete()
       } else {
         throw new Error(data.error || "Unknown error")
@@ -163,17 +183,54 @@ USING (
     }
   }
 
+  const setupAllTables = async () => {
+    setLoading(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const response = await fetch("/api/setup-dependencies-tables", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || errorData.details || "Failed to set up tables")
+      }
+
+      const data = await response.json()
+
+      if (data.success) {
+        setSuccess(data.message || "Tables set up successfully!")
+        onSetupComplete()
+      } else {
+        throw new Error(data.error || "Unknown error")
+      }
+    } catch (err) {
+      console.error("Error setting up tables:", err)
+      setError(err instanceof Error ? err.message : "An unexpected error occurred")
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
     setSuccess("SQL copied to clipboard!")
   }
 
+  // Determine which tab to show by default (first missing table)
+  const defaultTab = missingTables.length > 0 ? missingTables[0] : "dependencies"
+
   return (
     <div className="bg-gray-800 p-6 rounded-lg">
       <h2 className="text-xl font-bold mb-4">Dependencies Table Setup</h2>
       <p className="mb-6">
-        The dependencies management system requires several database tables to be set up. You can either run the SQL
-        directly from this interface or copy it to run manually in your database management tool.
+        {missingTables.length === 1
+          ? `The ${missingTables[0]} table needs to be set up.`
+          : `The following tables need to be set up: ${missingTables.join(", ")}.`}
+        You can either run the SQL directly from this interface or copy it to run manually in your database management
+        tool.
       </p>
 
       {error && (
@@ -188,60 +245,102 @@ USING (
         </div>
       )}
 
-      <Tabs defaultValue="dependencies">
+      <div className="mb-6">
+        <Button onClick={setupAllTables} disabled={loading} className="w-full bg-blue-600 hover:bg-blue-700">
+          {loading ? "Setting up tables..." : "Set Up All Missing Tables Automatically"}
+        </Button>
+        <p className="text-sm text-gray-400 mt-2">
+          This will automatically create all missing tables in one operation.
+        </p>
+      </div>
+
+      <Tabs defaultValue={defaultTab}>
         <TabsList className="mb-4">
-          <TabsTrigger value="dependencies">Dependencies Table</TabsTrigger>
-          <TabsTrigger value="settings">Settings Table</TabsTrigger>
-          <TabsTrigger value="audits">Security Audits Table</TabsTrigger>
+          {missingTables.includes("dependencies") && <TabsTrigger value="dependencies">Dependencies Table</TabsTrigger>}
+          {missingTables.includes("dependency_settings") && (
+            <TabsTrigger value="dependency_settings">Settings Table</TabsTrigger>
+          )}
+          {missingTables.includes("security_audits") && (
+            <TabsTrigger value="security_audits">Security Audits Table</TabsTrigger>
+          )}
+          {missingTables.length > 1 && <TabsTrigger value="combined">Combined SQL</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="dependencies">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold mb-2">Dependencies Table</h3>
-            <p className="mb-2">This table stores information about your project dependencies.</p>
-            <Textarea value={dependenciesTableSQL} readOnly className="h-64 font-mono text-sm bg-gray-900 mb-4" />
-            <div className="flex gap-2">
-              <Button onClick={() => runSQL(dependenciesTableSQL)} disabled={loading}>
-                {loading ? "Running..." : "Run SQL"}
-              </Button>
-              <Button variant="outline" onClick={() => copyToClipboard(dependenciesTableSQL)}>
-                Copy SQL
-              </Button>
+        {missingTables.includes("dependencies") && (
+          <TabsContent value="dependencies">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold mb-2">Dependencies Table</h3>
+              <p className="mb-2">This table stores information about your project dependencies.</p>
+              <Textarea value={dependenciesTableSQL} readOnly className="h-64 font-mono text-sm bg-gray-900 mb-4" />
+              <div className="flex gap-2">
+                <Button onClick={() => runSQL(dependenciesTableSQL)} disabled={loading}>
+                  {loading ? "Running..." : "Run SQL"}
+                </Button>
+                <Button variant="outline" onClick={() => copyToClipboard(dependenciesTableSQL)}>
+                  Copy SQL
+                </Button>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
+        )}
 
-        <TabsContent value="settings">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold mb-2">Dependency Settings Table</h3>
-            <p className="mb-2">This table stores global settings for dependency management.</p>
-            <Textarea value={dependencySettingsTableSQL} readOnly className="h-64 font-mono text-sm bg-gray-900 mb-4" />
-            <div className="flex gap-2">
-              <Button onClick={() => runSQL(dependencySettingsTableSQL)} disabled={loading}>
-                {loading ? "Running..." : "Run SQL"}
-              </Button>
-              <Button variant="outline" onClick={() => copyToClipboard(dependencySettingsTableSQL)}>
-                Copy SQL
-              </Button>
+        {missingTables.includes("dependency_settings") && (
+          <TabsContent value="dependency_settings">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold mb-2">Dependency Settings Table</h3>
+              <p className="mb-2">This table stores global settings for dependency management.</p>
+              <Textarea
+                value={dependencySettingsTableSQL}
+                readOnly
+                className="h-64 font-mono text-sm bg-gray-900 mb-4"
+              />
+              <div className="flex gap-2">
+                <Button onClick={() => runSQL(dependencySettingsTableSQL)} disabled={loading}>
+                  {loading ? "Running..." : "Run SQL"}
+                </Button>
+                <Button variant="outline" onClick={() => copyToClipboard(dependencySettingsTableSQL)}>
+                  Copy SQL
+                </Button>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
+        )}
 
-        <TabsContent value="audits">
-          <div className="mb-4">
-            <h3 className="text-lg font-semibold mb-2">Security Audits Table</h3>
-            <p className="mb-2">This table stores security audit results for your dependencies.</p>
-            <Textarea value={securityAuditsTableSQL} readOnly className="h-64 font-mono text-sm bg-gray-900 mb-4" />
-            <div className="flex gap-2">
-              <Button onClick={() => runSQL(securityAuditsTableSQL)} disabled={loading}>
-                {loading ? "Running..." : "Run SQL"}
-              </Button>
-              <Button variant="outline" onClick={() => copyToClipboard(securityAuditsTableSQL)}>
-                Copy SQL
-              </Button>
+        {missingTables.includes("security_audits") && (
+          <TabsContent value="security_audits">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold mb-2">Security Audits Table</h3>
+              <p className="mb-2">This table stores security audit results for your dependencies.</p>
+              <Textarea value={securityAuditsTableSQL} readOnly className="h-64 font-mono text-sm bg-gray-900 mb-4" />
+              <div className="flex gap-2">
+                <Button onClick={() => runSQL(securityAuditsTableSQL)} disabled={loading}>
+                  {loading ? "Running..." : "Run SQL"}
+                </Button>
+                <Button variant="outline" onClick={() => copyToClipboard(securityAuditsTableSQL)}>
+                  Copy SQL
+                </Button>
+              </div>
             </div>
-          </div>
-        </TabsContent>
+          </TabsContent>
+        )}
+
+        {missingTables.length > 1 && (
+          <TabsContent value="combined">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold mb-2">Combined SQL</h3>
+              <p className="mb-2">This SQL will create all missing tables in a single transaction.</p>
+              <Textarea value={combinedSQL} readOnly className="h-64 font-mono text-sm bg-gray-900 mb-4" />
+              <div className="flex gap-2">
+                <Button onClick={() => runSQL(combinedSQL)} disabled={loading}>
+                  {loading ? "Running..." : "Run SQL"}
+                </Button>
+                <Button variant="outline" onClick={() => copyToClipboard(combinedSQL)}>
+                  Copy SQL
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       <div className="mt-6">

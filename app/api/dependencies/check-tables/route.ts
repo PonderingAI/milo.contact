@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 
-// Helper function to check if a table exists without using RPC
+// Helper function to check if a table exists
 async function checkTableExists(supabase, tableName) {
   try {
     // Query the information_schema to check if the table exists
@@ -44,18 +44,37 @@ export async function GET() {
   try {
     const supabase = createAdminClient()
 
-    // Check if dependencies table exists without using RPC
+    // Check each table individually
     const depsTableExists = await checkTableExists(supabase, "dependencies")
-
-    // Check if dependency_settings table exists without using RPC
     const settingsTableExists = await checkTableExists(supabase, "dependency_settings")
+    const securityAuditsTableExists = await checkTableExists(supabase, "security_audits")
+
+    // Determine which tables are missing
+    const missingTables = []
+    if (!depsTableExists) missingTables.push("dependencies")
+    if (!settingsTableExists) missingTables.push("dependency_settings")
+    if (!securityAuditsTableExists) missingTables.push("security_audits")
+
+    // Create a more specific message based on what's missing
+    let setupMessage = ""
+    if (missingTables.length === 0) {
+      setupMessage = "All dependency tables are set up correctly."
+    } else if (missingTables.length === 1) {
+      setupMessage = `The ${missingTables[0]} table is missing. Please run the setup to create it.`
+    } else {
+      setupMessage = `The following tables are missing: ${missingTables.join(", ")}. Please run the setup to create them.`
+    }
 
     return NextResponse.json({
       success: true,
       tables: {
         dependencies: depsTableExists,
         dependency_settings: settingsTableExists,
+        security_audits: securityAuditsTableExists,
       },
+      allTablesExist: missingTables.length === 0,
+      missingTables: missingTables,
+      setupMessage: setupMessage,
     })
   } catch (error) {
     console.error("Error checking tables:", error)
@@ -63,6 +82,7 @@ export async function GET() {
       {
         error: "Failed to check tables",
         details: error instanceof Error ? error.message : String(error),
+        success: false,
       },
       { status: 500 },
     )

@@ -15,12 +15,35 @@ export interface WidgetOption {
 }
 
 interface WidgetSelectorProps {
-  availableWidgets: WidgetOption[]
-  onAddWidget: (widgetId: string) => void
+  availableWidgets?: WidgetOption[]
+  onAddWidget?: (widgetId: string) => void
 }
 
-export function WidgetSelector({ availableWidgets, onAddWidget }: WidgetSelectorProps) {
+export function WidgetSelector({ availableWidgets = [], onAddWidget = () => {} }: WidgetSelectorProps) {
   const [open, setOpen] = useState(false)
+
+  const defaultWidgets = [
+    {
+      id: "dependency-overview",
+      title: "Dependency Overview",
+      description: "Shows a summary of your project dependencies",
+      icon: <span className="w-4 h-4 bg-blue-500 rounded-full inline-block mr-2"></span>,
+    },
+    {
+      id: "security-alerts",
+      title: "Security Alerts",
+      description: "Displays security vulnerabilities in your dependencies",
+      icon: <span className="w-4 h-4 bg-red-500 rounded-full inline-block mr-2"></span>,
+    },
+    {
+      id: "update-status",
+      title: "Update Status",
+      description: "Shows which packages need updates",
+      icon: <span className="w-4 h-4 bg-green-500 rounded-full inline-block mr-2"></span>,
+    },
+  ]
+
+  const widgetsToShow = availableWidgets.length > 0 ? availableWidgets : defaultWidgets
 
   const handleAddWidget = (widgetId: string) => {
     onAddWidget(widgetId)
@@ -39,7 +62,7 @@ export function WidgetSelector({ availableWidgets, onAddWidget }: WidgetSelector
         <div className="space-y-4">
           <h4 className="font-medium text-sm">Add widgets to your dashboard</h4>
           <div className="grid gap-2">
-            {availableWidgets.map((widget) => (
+            {widgetsToShow.map((widget) => (
               <Button
                 key={widget.id}
                 variant="outline"

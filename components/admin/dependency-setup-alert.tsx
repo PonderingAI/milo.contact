@@ -9,10 +9,13 @@ import DependencyTableSetupGuide from "./dependency-table-setup-guide"
 export default function DependencySetupAlert() {
   const [showSetupGuide, setShowSetupGuide] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [tablesExist, setTablesExist] = useState({
+  const [tablesStatus, setTablesStatus] = useState({
     dependencies: false,
     dependency_settings: false,
+    security_audits: false,
   })
+  const [missingTables, setMissingTables] = useState<string[]>([])
+  const [setupMessage, setSetupMessage] = useState("")
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -31,7 +34,9 @@ export default function DependencySetupAlert() {
       const data = await response.json()
 
       if (data.success) {
-        setTablesExist(data.tables)
+        setTablesStatus(data.tables)
+        setMissingTables(data.missingTables || [])
+        setSetupMessage(data.setupMessage || "")
       } else {
         throw new Error(data.error || "Unknown error checking tables")
       }
@@ -48,6 +53,7 @@ export default function DependencySetupAlert() {
     checkTables()
   }
 
+  // If all tables exist, don't show the alert
   if (loading) {
     return (
       <div className="flex items-center justify-center p-4">
@@ -57,7 +63,8 @@ export default function DependencySetupAlert() {
     )
   }
 
-  if (tablesExist.dependencies && tablesExist.dependency_settings) {
+  // If all tables exist, don't show the alert
+  if (missingTables.length === 0) {
     return null
   }
 
@@ -65,21 +72,20 @@ export default function DependencySetupAlert() {
     <div className="mb-6">
       <Alert variant="destructive">
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Database tables not set up</AlertTitle>
+        <AlertTitle>Database tables not fully set up</AlertTitle>
         <AlertDescription>
-          The dependency management system requires database tables to be set up. Please click the button below to set
-          up the required tables.
+          {setupMessage || "Some dependency management tables are missing. Please set up the required tables."}
         </AlertDescription>
         <div className="mt-4">
           <Button onClick={() => setShowSetupGuide(true)} variant="outline" className="bg-gray-800">
-            Set Up Dependencies Tables
+            Set Up Missing Tables
           </Button>
         </div>
       </Alert>
 
       {showSetupGuide && (
         <div className="mt-4">
-          <DependencyTableSetupGuide onSetupComplete={handleSetupComplete} />
+          <DependencyTableSetupGuide onSetupComplete={handleSetupComplete} missingTables={missingTables} />
         </div>
       )}
     </div>

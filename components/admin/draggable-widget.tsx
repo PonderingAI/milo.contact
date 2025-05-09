@@ -1,59 +1,57 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
-import { Grip, X, ChevronUp, ChevronDown } from "lucide-react"
-import { cn } from "@/lib/utils"
+import { Grip, X } from "lucide-react"
 
-interface DraggableWidgetProps {
+interface Widget {
   id: string
-  title: string
-  onRemove: (id: string) => void
-  onDragStart: (e: React.DragEvent, id: string) => void
-  onDragOver: (e: React.DragEvent) => void
-  onDrop: (e: React.DragEvent, id: string) => void
-  className?: string
-  children: React.ReactNode
+  name: string
+  description?: string
+  enabled: boolean
+  position?: number
 }
 
-export function DraggableWidget({
-  id,
-  title,
-  onRemove,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  className,
-  children,
-}: DraggableWidgetProps) {
-  const [collapsed, setCollapsed] = useState(false)
+interface DraggableWidgetProps {
+  widget: Widget
+  onRemove?: (id: string) => void
+  onToggle?: (id: string, enabled: boolean) => void
+}
+
+export function DraggableWidget({ widget, onRemove = () => {}, onToggle = () => {} }: DraggableWidgetProps) {
+  const [isDragging, setIsDragging] = useState(false)
+
+  const handleToggle = (checked: boolean) => {
+    onToggle(widget.id, checked)
+  }
 
   return (
-    <Card
-      className={cn("bg-gray-900 border-gray-800", className)}
-      draggable
-      onDragStart={(e) => onDragStart(e, id)}
-      onDragOver={onDragOver}
-      onDrop={(e) => onDrop(e, id)}
-    >
-      <CardHeader className="p-3 flex flex-row items-center space-y-0 border-b border-gray-800">
-        <div className="flex items-center flex-1">
-          <Grip className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
-          <CardTitle className="text-sm font-medium">{title}</CardTitle>
+    <Card className={`bg-gray-700 border-gray-600 ${isDragging ? "opacity-50" : ""}`}>
+      <CardHeader className="flex flex-row items-center justify-between p-4">
+        <div className="flex items-center">
+          <Grip className="h-4 w-4 mr-2 cursor-move text-gray-400" />
+          <CardTitle className="text-base">{widget.name}</CardTitle>
         </div>
-        <div className="flex items-center space-x-1">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCollapsed(!collapsed)}>
-            {collapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-          </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6 hover:text-red-400" onClick={() => onRemove(id)}>
+        <div className="flex items-center space-x-2">
+          <Switch checked={widget.enabled} onCheckedChange={handleToggle} aria-label={`Toggle ${widget.name}`} />
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => onRemove(widget.id)}
+            className="h-8 w-8 p-0 text-gray-400 hover:text-white"
+          >
             <X className="h-4 w-4" />
+            <span className="sr-only">Remove</span>
           </Button>
         </div>
       </CardHeader>
-      {!collapsed && <CardContent className="p-4">{children}</CardContent>}
+      {widget.description && (
+        <CardContent className="pt-0 pb-4 px-4">
+          <p className="text-sm text-gray-300">{widget.description}</p>
+        </CardContent>
+      )}
     </Card>
   )
 }
