@@ -13,27 +13,11 @@ export async function GET() {
       .eq("table_name", "dependencies")
       .single()
 
-    if (tableCheckError && tableCheckError.code !== "PGRST116") {
-      console.error("Error checking if dependencies table exists:", tableCheckError)
-      return NextResponse.json(
-        {
-          dependencies: [],
-          error: "Failed to check if dependencies table exists",
-          details: tableCheckError.message,
-          setupNeeded: true,
-          setupMessage: "The dependency management system needs to be set up.",
-          tableExists: false,
-        },
-        { status: 500 },
-      )
-    }
-
-    // If table doesn't exist, return empty array with setup message
-    if (!tableExists) {
+    // If table doesn't exist, return a simple response indicating setup is needed
+    if (!tableExists || tableCheckError) {
       return NextResponse.json({
         dependencies: [],
         setupNeeded: true,
-        setupMessage: "The dependency management system needs to be set up.",
         tableExists: false,
       })
     }
@@ -43,15 +27,11 @@ export async function GET() {
 
     if (fetchError) {
       console.error("Error fetching dependencies:", fetchError)
-      return NextResponse.json(
-        {
-          dependencies: [],
-          error: "Failed to fetch dependencies",
-          details: fetchError.message,
-          tableExists: true,
-        },
-        { status: 500 },
-      )
+      return NextResponse.json({
+        dependencies: [],
+        error: "Failed to fetch dependencies",
+        tableExists: true,
+      })
     }
 
     return NextResponse.json({
@@ -60,16 +40,10 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Error in dependencies API:", error)
-    return NextResponse.json(
-      {
-        dependencies: [],
-        error: "An unexpected error occurred",
-        details: error instanceof Error ? error.message : String(error),
-        setupNeeded: true,
-        setupMessage: "The dependency management system needs to be set up.",
-        tableExists: false,
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({
+      dependencies: [],
+      setupNeeded: true,
+      tableExists: false,
+    })
   }
 }
