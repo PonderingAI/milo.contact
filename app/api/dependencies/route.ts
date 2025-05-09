@@ -1,79 +1,11 @@
 import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
+import { exec } from "child_process"
+import { promisify } from "util"
+import fs from "fs"
+import path from "path"
 
-// Hardcoded dependencies as fallback
-const FALLBACK_DEPENDENCIES = [
-  {
-    name: "next",
-    current_version: "14.0.3",
-    latest_version: "14.0.3",
-    is_dev: false,
-    description: "The React Framework for the Web",
-  },
-  {
-    name: "react",
-    current_version: "18.2.0",
-    latest_version: "18.2.0",
-    is_dev: false,
-    description: "React is a JavaScript library for building user interfaces.",
-  },
-  {
-    name: "react-dom",
-    current_version: "18.2.0",
-    latest_version: "18.2.0",
-    is_dev: false,
-    description: "React package for working with the DOM.",
-  },
-  {
-    name: "@supabase/supabase-js",
-    current_version: "2.38.4",
-    latest_version: "2.38.4",
-    is_dev: false,
-    description: "Supabase client for JavaScript",
-  },
-  {
-    name: "nodemailer",
-    current_version: "6.9.9",
-    latest_version: "6.9.9",
-    is_dev: false,
-    description: "Easy as cake e-mail sending from your Node.js applications",
-  },
-  {
-    name: "tailwindcss",
-    current_version: "3.3.0",
-    latest_version: "3.3.0",
-    is_dev: false,
-    description: "A utility-first CSS framework for rapidly building custom user interfaces.",
-  },
-  {
-    name: "typescript",
-    current_version: "5.0.4",
-    latest_version: "5.0.4",
-    is_dev: true,
-    description: "TypeScript is a language for application scale JavaScript development",
-  },
-  {
-    name: "eslint",
-    current_version: "8.38.0",
-    latest_version: "8.38.0",
-    is_dev: true,
-    description: "An AST-based pattern checker for JavaScript.",
-  },
-  {
-    name: "@types/react",
-    current_version: "18.0.28",
-    latest_version: "18.0.28",
-    is_dev: true,
-    description: "TypeScript definitions for React",
-  },
-  {
-    name: "@types/node",
-    current_version: "18.15.11",
-    latest_version: "18.15.11",
-    is_dev: true,
-    description: "TypeScript definitions for Node.js",
-  },
-]
+const execAsync = promisify(exec)
 
 // Helper function to check if a table exists without using RPC
 async function checkTableExists(supabase, tableName) {
@@ -114,6 +46,52 @@ async function fallbackTableCheck(supabase, tableName) {
   }
 }
 
+// Helper function to get dependencies from package.json
+async function getDependenciesFromPackageJson() {
+  try {
+    // Try to read package.json directly from the file system
+    const packageJsonPath = path.join(process.cwd(), "package.json")
+    const packageJsonContent = fs.readFileSync(packageJsonPath, "utf8")
+    const packageJson = JSON.parse(packageJsonContent)
+
+    return {
+      dependencies: Object.entries(packageJson.dependencies || {}).map(([name, version]) => ({
+        name,
+        current_version: version.toString().replace(/^\^|~/, ""),
+        is_dev: false,
+      })),
+      devDependencies: Object.entries(packageJson.devDependencies || {}).map(([name, version]) => ({
+        name,
+        current_version: version.toString().replace(/^\^|~/, ""),
+        is_dev: true,
+      })),
+    }
+  } catch (error) {
+    console.error("Error reading package.json:", error)
+    return { dependencies: [], devDependencies: [] }
+  }
+}
+
+// Helper function to get package descriptions from npm registry
+async function getPackageDescriptions(packageNames) {
+  const descriptions = {}
+
+  for (const name of packageNames) {
+    try {
+      const response = await fetch(`https://registry.npmjs.org/${name}`)
+      if (response.ok) {
+        const data = await response.json()
+        descriptions[name] = data.description || "No description available"
+      }
+    } catch (error) {
+      console.error(`Error fetching description for ${name}:`, error)
+      descriptions[name] = "Description unavailable"
+    }
+  }
+
+  return descriptions
+}
+
 export async function GET() {
   try {
     const supabase = createAdminClient()
@@ -138,26 +116,26 @@ export async function GET() {
         return NextResponse.json(
           {
             error: "Database connection failed",
-            dependencies: FALLBACK_DEPENDENCIES,
-            fallback: true,
-            tableExists: false,
+            message: "Could not connect to the database. Please check your connection settings.",
           },
-          { status: 200 },
-        ) // Return 200 with fallback data
+          { status: 500 },
+        )
       }
     }
 
     // Check if dependencies table exists without using RPC
     const tableExists = await checkTableExists(supabase, "dependencies")
 
-    // If table doesn't exist, return fallback data
+    // If table doesn't exist, return appropriate error
     if (!tableExists) {
-      return NextResponse.json({
-        dependencies: FALLBACK_DEPENDENCIES,
-        tableExists: false,
-        message: "Dependencies table does not exist. Using fallback data.",
-        fallback: true,
-      })
+      return NextResponse.json(
+        {
+          error: "Dependencies table does not exist",
+          message: "The dependencies table has not been set up. Please set up the table first.",
+          tableExists: false,
+        },
+        { status: 404 },
+      )
     }
 
     // Get dependencies from database
@@ -168,25 +146,24 @@ export async function GET() {
       return NextResponse.json(
         {
           error: "Failed to fetch dependencies from database",
+          message: "There was an error retrieving dependencies from the database.",
           details: fetchError.message,
-          dependencies: FALLBACK_DEPENDENCIES,
-          fallback: true,
         },
-        { status: 200 },
-      ) // Return 200 with fallback data
+        { status: 500 },
+      )
     }
 
-    // If no dependencies in database, return fallback
+    // If no dependencies in database, return empty array
     if (!dbDeps || dbDeps.length === 0) {
       return NextResponse.json({
-        dependencies: FALLBACK_DEPENDENCIES,
+        dependencies: [],
         tableExists: true,
-        message: "No dependencies found in database. Using fallback data.",
-        fallback: true,
+        message: "No dependencies found in database.",
+        empty: true,
       })
     }
 
-    // Calculate security score (simplified)
+    // Calculate security score
     const vulnerableDeps = dbDeps.filter((d) => d.has_security_update).length
     const outdatedDeps = dbDeps.filter((d) => d.outdated).length
     const securityScore = Math.max(0, Math.min(100, 100 - vulnerableDeps * 10 - outdatedDeps * 5))
@@ -201,17 +178,13 @@ export async function GET() {
     })
   } catch (error) {
     console.error("Error in dependencies API:", error)
-
-    // Always return a 200 with fallback data instead of 500
     return NextResponse.json(
       {
-        error: "An unexpected error occurred, using fallback data",
+        error: "An unexpected error occurred",
+        message: "There was an unexpected error processing your request.",
         details: error instanceof Error ? error.message : String(error),
-        dependencies: FALLBACK_DEPENDENCIES,
-        fallback: true,
-        tableExists: false,
       },
-      { status: 200 },
+      { status: 500 },
     )
   }
 }
@@ -230,6 +203,7 @@ export async function POST(request: Request) {
       return NextResponse.json(
         {
           error: "Dependencies table does not exist",
+          message: "The dependencies table has not been set up. Please set up the table first.",
           tablesMissing: true,
         },
         { status: 404 },
@@ -255,6 +229,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error: "Failed to update dependency",
+            message: "There was an error updating the dependency in the database.",
             details: updateError.message,
           },
           { status: 500 },
@@ -282,6 +257,7 @@ export async function POST(request: Request) {
         return NextResponse.json(
           {
             error: "Failed to add dependency",
+            message: "There was an error adding the dependency to the database.",
             details: insertError.message,
           },
           { status: 500 },
@@ -294,6 +270,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "Invalid request. Missing required fields.",
+        message: "The request is missing required fields.",
       },
       { status: 400 },
     )
@@ -302,6 +279,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         error: "An unexpected error occurred",
+        message: "There was an unexpected error processing your request.",
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },

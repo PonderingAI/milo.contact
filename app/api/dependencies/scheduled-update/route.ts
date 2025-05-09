@@ -49,10 +49,13 @@ export async function GET() {
 
     // If dependencies table doesn't exist, return early
     if (!depsTableExists) {
-      return NextResponse.json({
-        message: "Dependencies table does not exist",
-        action: "Please set up the dependency tables first",
-      })
+      return NextResponse.json(
+        {
+          error: "Dependencies table does not exist",
+          message: "The dependencies table has not been set up. Please set up the table first.",
+        },
+        { status: 404 },
+      )
     }
 
     // Check if dependency_settings table exists without using RPC
@@ -85,6 +88,7 @@ export async function GET() {
       return NextResponse.json(
         {
           error: "Failed to fetch dependencies",
+          message: "There was an error retrieving dependencies from the database.",
           details: fetchError.message,
         },
         { status: 500 },
@@ -92,7 +96,10 @@ export async function GET() {
     }
 
     if (!dependencies || dependencies.length === 0) {
-      return NextResponse.json({ message: "No dependencies to auto-update" })
+      return NextResponse.json({
+        message: "No dependencies to auto-update",
+        empty: true,
+      })
     }
 
     // Update each dependency in the database
@@ -149,6 +156,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error: "An unexpected error occurred",
+        message: "There was an unexpected error processing your request.",
         details: error instanceof Error ? error.message : String(error),
       },
       { status: 500 },
