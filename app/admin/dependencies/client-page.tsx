@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase-browser"
 import { AlertCircle, CheckCircle, AlertTriangle, Package, Shield, RefreshCw } from "lucide-react"
 import PackageJsonManager from "@/components/admin/package-json-manager"
 import CheckTableFunctionSetup from "@/components/admin/check-table-function-setup"
+import DependencyScanner from "@/components/admin/dependency-scanner"
 
 interface Dependency {
   id?: number
@@ -279,6 +280,9 @@ export default function ClientDependenciesPage() {
 
         <div className="grid gap-6">
           <CheckTableFunctionSetup />
+
+          {tablesExist && dependencies.length === 0 && <DependencyScanner onScanComplete={fetchDependencies} />}
+
           <PackageJsonManager />
 
           <div className="mt-8"></div>
@@ -310,247 +314,281 @@ export default function ClientDependenciesPage() {
             </div>
           )}
 
-          <div className="bg-gray-800 p-6 rounded-lg mb-8">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">Dependency Management</h2>
-              <div className="flex items-center gap-2">
-                <div className="text-sm">
-                  Security Score:
-                  <span
-                    className={`ml-2 px-2 py-1 rounded ${
-                      securityScore > 80 ? "bg-green-500" : securityScore > 60 ? "bg-yellow-500" : "bg-red-500"
-                    }`}
-                  >
-                    {securityScore}%
-                  </span>
-                </div>
-              </div>
+          {dependencies.length === 0 && tablesExist ? (
+            <div className="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-4">
+              <p className="font-bold">No dependencies found</p>
+              <p className="mt-2">
+                Use the Dependency Scanner above to scan your project and add dependencies to the management system.
+              </p>
             </div>
-
-            <p className="mb-4">
-              Manage your project dependencies, set update preferences, and keep your project up-to-date.
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-              <div className="bg-gray-700 p-4 rounded-lg flex items-center">
-                <Package className="h-8 w-8 mr-3 text-blue-400" />
-                <div>
-                  <h3 className="font-medium">Total Dependencies</h3>
-                  <p className="text-2xl">{dependencies.length}</p>
+          ) : (
+            <div className="bg-gray-800 p-6 rounded-lg mb-8">
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="text-xl font-bold">Dependency Management</h2>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm">
+                    Security Score:
+                    <span
+                      className={`ml-2 px-2 py-1 rounded ${
+                        securityScore > 80 ? "bg-green-500" : securityScore > 60 ? "bg-yellow-500" : "bg-red-500"
+                      }`}
+                    >
+                      {securityScore}%
+                    </span>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-gray-700 p-4 rounded-lg flex items-center">
-                <AlertTriangle className="h-8 w-8 mr-3 text-yellow-400" />
-                <div>
-                  <h3 className="font-medium">Outdated</h3>
-                  <p className="text-2xl">{outdatedCount}</p>
+              <p className="mb-4">
+                Manage your project dependencies, set update preferences, and keep your project up-to-date.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                <div className="bg-gray-700 p-4 rounded-lg flex items-center">
+                  <Package className="h-8 w-8 mr-3 text-blue-400" />
+                  <div>
+                    <h3 className="font-medium">Total Dependencies</h3>
+                    <p className="text-2xl">{dependencies.length}</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-700 p-4 rounded-lg flex items-center">
+                  <AlertTriangle className="h-8 w-8 mr-3 text-yellow-400" />
+                  <div>
+                    <h3 className="font-medium">Outdated</h3>
+                    <p className="text-2xl">{outdatedCount}</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-700 p-4 rounded-lg flex items-center">
+                  <Shield className="h-8 w-8 mr-3 text-red-400" />
+                  <div>
+                    <h3 className="font-medium">Security Issues</h3>
+                    <p className="text-2xl">{vulnerabilityCount}</p>
+                  </div>
                 </div>
               </div>
 
-              <div className="bg-gray-700 p-4 rounded-lg flex items-center">
-                <Shield className="h-8 w-8 mr-3 text-red-400" />
-                <div>
-                  <h3 className="font-medium">Security Issues</h3>
-                  <p className="text-2xl">{vulnerabilityCount}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <button
-                onClick={fetchDependencies}
-                disabled={loading}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-                {loading ? "Refreshing..." : "Refresh Dependencies"}
-              </button>
-
-              <button
-                onClick={() => {
-                  fetch("/api/dependencies/apply", { method: "POST" })
-                    .then((response) => {
-                      if (!response.ok) {
-                        throw new Error("Failed to apply updates")
-                      }
-                      return response.json()
-                    })
-                    .then(() => {
-                      fetchDependencies()
-                    })
-                    .catch((err) => {
-                      setError(err.message)
-                    })
-                }}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-              >
-                Apply Updates Now
-              </button>
-            </div>
-
-            <div className="flex flex-col md:flex-row gap-4 mb-6">
-              <div className="flex-1">
-                <label htmlFor="filter" className="block text-sm font-medium mb-1">
-                  Filter
-                </label>
-                <select
-                  id="filter"
-                  value={filter}
-                  onChange={(e) => setFilter(e.target.value as any)}
-                  className="w-full p-2 bg-gray-700 rounded"
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <button
+                  onClick={fetchDependencies}
+                  disabled={loading}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center"
                 >
-                  <option value="all">All Dependencies</option>
-                  <option value="outdated">Outdated</option>
-                  <option value="vulnerable">Security Vulnerabilities</option>
-                  <option value="dev">Development Dependencies</option>
-                  <option value="prod">Production Dependencies</option>
-                </select>
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
+                  {loading ? "Refreshing..." : "Refresh Dependencies"}
+                </button>
+
+                <button
+                  onClick={() => {
+                    fetch("/api/dependencies/apply", { method: "POST" })
+                      .then((response) => {
+                        if (!response.ok) {
+                          throw new Error("Failed to apply updates")
+                        }
+                        return response.json()
+                      })
+                      .then(() => {
+                        fetchDependencies()
+                      })
+                      .catch((err) => {
+                        setError(err.message)
+                      })
+                  }}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+                >
+                  Apply Updates Now
+                </button>
+
+                <button
+                  onClick={() => {
+                    fetch("/api/dependencies/scan", { method: "POST" })
+                      .then((response) => {
+                        if (!response.ok) {
+                          throw new Error("Failed to scan dependencies")
+                        }
+                        return response.json()
+                      })
+                      .then(() => {
+                        fetchDependencies()
+                      })
+                      .catch((err) => {
+                        setError(err.message)
+                      })
+                  }}
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700"
+                >
+                  Scan for New Dependencies
+                </button>
               </div>
 
-              <div className="flex-1">
-                <label htmlFor="search" className="block text-sm font-medium mb-1">
-                  Search
-                </label>
-                <input
-                  id="search"
-                  type="text"
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Search dependencies..."
-                  className="w-full p-2 bg-gray-700 rounded"
-                />
+              <div className="flex flex-col md:flex-row gap-4 mb-6">
+                <div className="flex-1">
+                  <label htmlFor="filter" className="block text-sm font-medium mb-1">
+                    Filter
+                  </label>
+                  <select
+                    id="filter"
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value as any)}
+                    className="w-full p-2 bg-gray-700 rounded"
+                  >
+                    <option value="all">All Dependencies</option>
+                    <option value="outdated">Outdated</option>
+                    <option value="vulnerable">Security Vulnerabilities</option>
+                    <option value="dev">Development Dependencies</option>
+                    <option value="prod">Production Dependencies</option>
+                  </select>
+                </div>
+
+                <div className="flex-1">
+                  <label htmlFor="search" className="block text-sm font-medium mb-1">
+                    Search
+                  </label>
+                  <input
+                    id="search"
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Search dependencies..."
+                    className="w-full p-2 bg-gray-700 rounded"
+                  />
+                </div>
               </div>
+
+              {lastScan && (
+                <div className="text-sm text-gray-400 mb-2">Last scanned: {new Date(lastScan).toLocaleString()}</div>
+              )}
             </div>
+          )}
 
-            {lastScan && (
-              <div className="text-sm text-gray-400 mb-2">Last scanned: {new Date(lastScan).toLocaleString()}</div>
-            )}
-          </div>
-
-          <div className="bg-gray-800 rounded-lg overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-700">
-                <thead className="bg-gray-700">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Package
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Current Version
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Latest Version
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Description
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700">
-                  {loading ? (
+          {dependencies.length > 0 && (
+            <div className="bg-gray-800 rounded-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-700">
+                  <thead className="bg-gray-700">
                     <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center">
-                        <div className="flex justify-center">
-                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-                        </div>
-                        <p className="mt-2">Loading dependencies...</p>
-                      </td>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Package
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Current Version
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Latest Version
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Description
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Type
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                        Actions
+                      </th>
                     </tr>
-                  ) : dependencies.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center">
-                        No dependencies found.
-                      </td>
-                    </tr>
-                  ) : filteredDependencies.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-4 text-center">
-                        No dependencies match your filter criteria.
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredDependencies.map((dep) => (
-                      <tr key={dep.name}>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="font-medium">{dep.name}</div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">{dep.current_version}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {dep.latest_version ? (
-                            <span
-                              className={
-                                dep.current_version === dep.latest_version
-                                  ? "text-green-500"
-                                  : dep.has_security_update
-                                    ? "text-red-500"
-                                    : "text-yellow-500"
-                              }
-                            >
-                              {dep.latest_version}
-                              {dep.has_security_update && (
-                                <span className="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded">Security</span>
-                              )}
-                            </span>
-                          ) : (
-                            <span className="text-gray-400">Unknown</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="text-sm text-gray-300 max-w-md truncate">
-                            {dep.description || "No description available"}
+                  </thead>
+                  <tbody className="divide-y divide-gray-700">
+                    {loading ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-4 text-center">
+                          <div className="flex justify-center">
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
                           </div>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded text-xs ${dep.is_dev ? "bg-purple-600" : "bg-blue-600"}`}>
-                            {dep.is_dev ? "Development" : "Production"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {dep.outdated ? (
-                            <span className="flex items-center text-yellow-500">
-                              <AlertTriangle className="h-4 w-4 mr-1" /> Outdated
-                            </span>
-                          ) : dep.has_security_update ? (
-                            <span className="flex items-center text-red-500">
-                              <AlertCircle className="h-4 w-4 mr-1" /> Vulnerable
-                            </span>
-                          ) : (
-                            <span className="flex items-center text-green-500">
-                              <CheckCircle className="h-4 w-4 mr-1" /> Up to date
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          {dep.latest_version && dep.current_version !== dep.latest_version && (
-                            <button
-                              onClick={() => updateDependency(dep.name)}
-                              disabled={updateStatus[dep.name]?.loading}
-                              className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 mr-2"
-                            >
-                              {updateStatus[dep.name]?.loading ? "Updating..." : "Update"}
-                            </button>
-                          )}
-                          {updateStatus[dep.name]?.error && (
-                            <div className="text-red-500 text-xs mt-1">{updateStatus[dep.name].error}</div>
-                          )}
+                          <p className="mt-2">Loading dependencies...</p>
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : dependencies.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-4 text-center">
+                          No dependencies found.
+                        </td>
+                      </tr>
+                    ) : filteredDependencies.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-4 text-center">
+                          No dependencies match your filter criteria.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredDependencies.map((dep) => (
+                        <tr key={dep.name}>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="font-medium">{dep.name}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">{dep.current_version}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {dep.latest_version ? (
+                              <span
+                                className={
+                                  dep.current_version === dep.latest_version
+                                    ? "text-green-500"
+                                    : dep.has_security_update
+                                      ? "text-red-500"
+                                      : "text-yellow-500"
+                                }
+                              >
+                                {dep.latest_version}
+                                {dep.has_security_update && (
+                                  <span className="ml-2 text-xs bg-red-600 text-white px-2 py-1 rounded">Security</span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">Unknown</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="text-sm text-gray-300 max-w-md truncate">
+                              {dep.description || "No description available"}
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-1 rounded text-xs ${dep.is_dev ? "bg-purple-600" : "bg-blue-600"}`}
+                            >
+                              {dep.is_dev ? "Development" : "Production"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {dep.outdated ? (
+                              <span className="flex items-center text-yellow-500">
+                                <AlertTriangle className="h-4 w-4 mr-1" /> Outdated
+                              </span>
+                            ) : dep.has_security_update ? (
+                              <span className="flex items-center text-red-500">
+                                <AlertCircle className="h-4 w-4 mr-1" /> Vulnerable
+                              </span>
+                            ) : (
+                              <span className="flex items-center text-green-500">
+                                <CheckCircle className="h-4 w-4 mr-1" /> Up to date
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {dep.latest_version && dep.current_version !== dep.latest_version && (
+                              <button
+                                onClick={() => updateDependency(dep.name)}
+                                disabled={updateStatus[dep.name]?.loading}
+                                className="px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 mr-2"
+                              >
+                                {updateStatus[dep.name]?.loading ? "Updating..." : "Update"}
+                              </button>
+                            )}
+                            {updateStatus[dep.name]?.error && (
+                              <div className="text-red-500 text-xs mt-1">{updateStatus[dep.name].error}</div>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </AdminCheck>
