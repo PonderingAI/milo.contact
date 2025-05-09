@@ -6,62 +6,70 @@ export async function GET() {
     const supabase = createAdminClient()
 
     // Check if the dependencies table exists
-    try {
-      const { data, error } = await supabase
-        .from("information_schema.tables")
-        .select("table_name")
-        .eq("table_schema", "public")
-        .eq("table_name", "dependencies")
-        .single()
+    const { data: tableExists, error: tableCheckError } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .eq("table_name", "dependencies")
+      .single()
 
-      if (error || !data) {
-        // Table doesn't exist, return a structured response
-        return NextResponse.json({
+    if (tableCheckError && tableCheckError.code !== "PGRST116") {
+      console.error("Error checking if dependencies table exists:", tableCheckError)
+      return NextResponse.json(
+        {
           dependencies: [],
+          error: "Failed to check if dependencies table exists",
+          details: tableCheckError.message,
           setupNeeded: true,
           setupMessage: "The dependency management system needs to be set up.",
           tableExists: false,
-        })
-      }
-    } catch (error) {
-      console.error("Error checking if dependencies table exists:", error)
-      // Return a fallback response
+        },
+        { status: 500 },
+      )
+    }
+
+    // If table doesn't exist, return empty array with setup message
+    if (!tableExists) {
       return NextResponse.json({
         dependencies: [],
         setupNeeded: true,
-        setupMessage: "Error checking database tables. Please set up the dependency system.",
-        error: error instanceof Error ? error.message : "Unknown error",
+        setupMessage: "The dependency management system needs to be set up.",
+        tableExists: false,
       })
     }
 
-    // Try to get dependencies from the table
-    try {
-      const { data: dependencies, error } = await supabase.from("dependencies").select("*")
+    // If table exists, fetch dependencies
+    const { data: dependencies, error: fetchError } = await supabase.from("dependencies").select("*").order("name")
 
-      if (error) {
-        throw error
-      }
-
-      return NextResponse.json({
-        dependencies: dependencies || [],
-        tableExists: true,
-      })
-    } catch (error) {
-      console.error("Error fetching dependencies:", error)
-      // Return empty dependencies with an error message
-      return NextResponse.json({
-        dependencies: [],
-        tableExists: true,
-        error: error instanceof Error ? error.message : "Unknown error",
-        message: "Failed to fetch dependencies. Please try again.",
-      })
+    if (fetchError) {
+      console.error("Error fetching dependencies:", fetchError)
+      return NextResponse.json(
+        {
+          dependencies: [],
+          error: "Failed to fetch dependencies",
+          details: fetchError.message,
+          tableExists: true,
+        },
+        { status: 500 },
+      )
     }
-  } catch (error) {
-    console.error("Unexpected error in dependencies API:", error)
+
     return NextResponse.json({
-      dependencies: [],
-      error: error instanceof Error ? error.message : "Unknown error",
-      message: "An unexpected error occurred.",
+      dependencies: dependencies || [],
+      tableExists: true,
     })
+  } catch (error) {
+    console.error("Error in dependencies API:", error)
+    return NextResponse.json(
+      {
+        dependencies: [],
+        error: "An unexpected error occurred",
+        details: error instanceof Error ? error.message : String(error),
+        setupNeeded: true,
+        setupMessage: "The dependency management system needs to be set up.",
+        tableExists: false,
+      },
+      { status: 500 },
+    )
   }
 }
