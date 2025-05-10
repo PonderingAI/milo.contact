@@ -28,6 +28,7 @@ interface DependencyListProps {
   updateDependencyMode: (id: string, value: ToggleState) => void
   viewVulnerabilityDetails: (dependency: Dependency) => void
   viewDependabotAlertDetails: (dependency: Dependency) => void
+  clearFilters: () => void
 }
 
 export function DependencyList({
@@ -37,6 +38,7 @@ export function DependencyList({
   updateDependencyMode,
   viewVulnerabilityDetails,
   viewDependabotAlertDetails,
+  clearFilters,
 }: DependencyListProps) {
   const filteredDependencies = dependencies
     .filter((dep) => {
@@ -98,13 +100,7 @@ export function DependencyList({
     return (
       <div className="text-center py-8">
         <p>No dependencies match your search or filter criteria.</p>
-        <Button
-          variant="outline"
-          className="mt-4 border-gray-700"
-          onClick={() => {
-            // This will be handled by the parent component
-          }}
-        >
+        <Button variant="outline" className="mt-4 border-gray-700" onClick={clearFilters}>
           Clear Filters
         </Button>
       </div>
