@@ -12,15 +12,20 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient()
 
-    // Try to select from the table
-    const { error } = await supabase.from(tableName).select("count").limit(1)
+    // Check if the table exists in the information schema
+    const { data, error } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .eq("table_name", tableName)
+      .single()
 
-    // If error code is 42P01, table doesn't exist
-    if (error && error.code === "42P01") {
-      return NextResponse.json({ exists: false })
+    if (error && error.code !== "PGRST116") {
+      console.error("Error checking if table exists:", error)
+      return NextResponse.json({ error: error.message, exists: false }, { status: 500 })
     }
 
-    return NextResponse.json({ exists: true })
+    return NextResponse.json({ exists: !!data })
   } catch (error: any) {
     console.error("Error checking if table exists:", error)
     return NextResponse.json({ error: error.message, exists: false }, { status: 500 })

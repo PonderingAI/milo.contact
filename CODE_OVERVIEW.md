@@ -1,0 +1,285 @@
+# Code Overview - Milo Presedo Portfolio
+
+This document provides a comprehensive overview of all files in the codebase, organized by functionality. Use this as a quick reference to understand what code already exists and how different parts of the application relate to each other.
+
+## Table of Contents
+
+1. [Core Components](#core-components)
+2. [Admin Components](#admin-components)
+3. [UI Components](#ui-components)
+4. [Pages](#pages)
+5. [API Routes](#api-routes)
+6. [Authentication & Security](#authentication--security)
+7. [Database & Storage](#database--storage)
+8. [Configuration Files](#configuration-files)
+9. [Utilities & Helpers](#utilities--helpers)
+10. [Documentation](#documentation)
+
+## Core Components
+
+These components form the main building blocks of the public-facing site.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `components/hero-section.tsx` | Main hero/banner on the homepage | Supports both image and video backgrounds, dynamic text from site settings |
+| `components/about-section.tsx` | About section on the homepage | Profile image and multi-paragraph text from site settings |
+| `components/services-section.tsx` | Services grid on the homepage | Interactive service cards with project filtering |
+| `components/contact-section.tsx` | Contact form section | Email submission, social links, integration with database |
+| `components/project-category.tsx` | Grid of projects by category | Filtering, pagination, animations with Framer Motion |
+| `components/project-card.tsx` | Individual project preview card | Thumbnail, title, role display, hover effects |
+| `components/project-mini-card.tsx` | Smaller project card variant | Used in related projects and service popups |
+| `components/video-player.tsx` | Embedded video player | Supports YouTube, Vimeo, responsive design |
+| `components/custom-cursor.tsx` | Custom cursor effects | Custom cursor styling and animations |
+| `components/media-hosting-guide.tsx` | Guide on hosting media | Instructions for users on hosting media |
+
+## Admin Components
+
+These components are used in the admin dashboard and management interfaces.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `components/admin/bts-image-manager.tsx` | Behind-the-scenes image management | Upload, edit, delete BTS images for projects |
+| `components/admin/image-uploader.tsx` | General image upload component | Direct upload to storage, progress indication |
+| `components/admin/unified-media-library.tsx` | Complete media management | Browse, search, organize media assets |
+| `components/admin/media-selector.tsx` | Media selection dialog | Select media from library for insertion |
+| `components/admin/site-information-form.tsx` | Site settings editor | Edit all site content in a structured form |
+| `components/admin/project-form.tsx` | Project creation/editing form | Metadata editing, image selection, validation |
+| `components/admin/delete-project-button.tsx` | Project deletion with confirmation | Confirmation dialog, deletion with cascading effects |
+| `components/admin/user-role-manager.tsx` | User role assignment | Add/remove roles from users |
+| `components/admin/admin-check.tsx` | Admin permission verification | Checks if user has admin privileges |
+| `components/admin/favicon-uploader.tsx` | Upload site favicon | Handles favicon image processing |
+| `components/admin/app-icons-uploader.tsx` | Upload app icons | Handles app icon package upload |
+| `components/admin/sql-setup-guide.tsx` | SQL setup instructions | Guides for database table creation |
+| `components/admin/contact-table-setup-guide.tsx` | Contact table setup | Specific guide for contact messages table |
+| `components/admin/sidebar.tsx` | Admin navigation sidebar | Links to all admin sections |
+| `components/admin/dependency-scanner.tsx` | Scans project dependencies | Analyzes NPM dependencies for updates |
+| `components/admin/manual-dependency-entry.tsx` | Manual dependency management | Add dependencies manually |
+| `components/admin/dependency-table-setup-guide.tsx` | Dependency tables setup | Guide for setting up dependency tables |
+| `components/admin/check-table-function-setup.tsx` | Database function setup | Sets up check table exists function |
+| `components/admin/package-json-manager.tsx` | Package.json management | Edit and update package.json |
+| `components/admin/vulnerability-details.tsx` | Security vulnerability details | Shows detailed security info |
+| `components/admin/dependency-setup-alert.tsx` | Dependency setup alert | Notification for dependency setup |
+| `components/admin/draggable-widget.tsx` | Draggable dashboard widget | Interactive dashboard components |
+| `components/admin/widget-selector.tsx` | Widget selection interface | Add widgets to dashboard |
+
+## UI Components
+
+Reusable UI components from the design system.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `components/ui/badge.tsx` | Small status indicator | Styling variants for different states |
+| `components/ui/three-state-toggle.tsx` | Toggle with three states | Used for tristate selections |
+| `components/ui/four-state-toggle.tsx` | Toggle with four states | Used for quarternary selections |
+| `components/database-setup-alert.tsx` | Database setup notification | Alerts users to setup requirements |
+| `components/dynamic-favicons.tsx` | Dynamic favicon component | Changes favicon based on settings |
+| `components/setup-tables-popup.tsx` | Database tables setup popup | Guides users through table setup |
+
+## Pages
+
+Page components that represent routes in the application.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `app/page.tsx` | Homepage | Main landing page with all sections |
+| `app/projects/page.tsx` | Projects listing page | Lists all projects with filtering |
+| `app/projects/[id]/page.tsx` | Individual project detail | Shows complete project information |
+| `app/projects/loading.tsx` | Projects page loading state | Loading UI for projects |
+| `app/projects/projects-content.tsx` | Projects page content | Extracted content for better organization |
+| `app/projects/[id]/project-detail-content.tsx` | Project detail content | Content for project detail page |
+| `app/media-hosting/page.tsx` | Media hosting guide page | Instructions for media hosting |
+| `app/backend-setup/page.tsx` | Backend setup guide | Instructions for setting up backend |
+| `app/auth/callback/page.tsx` | Auth callback handler | Processes authentication callbacks |
+| `app/auth/callback/loading.tsx` | Auth callback loading | Loading state for auth callback |
+| `app/admin/page.tsx` | Admin dashboard | Main admin control panel |
+| `app/admin/projects/page.tsx` | Projects management | List and manage all projects |
+| `app/admin/projects/new/page.tsx` | New project creation | Create new projects |
+| `app/admin/projects/[id]/edit/page.tsx` | Project editing | Edit existing projects |
+| `app/admin/projects/[id]/edit-client/page.tsx` | Client-side project editing | Client-side components for project editing |
+| `app/admin/projects/client-page.tsx` | Projects list client side | Client components for projects list |
+| `app/admin/users/page.tsx` | User management | List and manage users |
+| `app/admin/settings/page.tsx` | Site settings | Manage site-wide settings |
+| `app/admin/settings/client-page.tsx` | Client-side settings | Client components for settings |
+| `app/admin/media/page.tsx` | Media management | Browse and manage media |
+| `app/admin/security/page.tsx` | Security center | Security monitoring and controls |
+| `app/admin/security/client-page.tsx` | Client-side security | Client components for security |
+| `app/admin/dependencies/page.tsx` | Dependency management | Manage package dependencies |
+| `app/admin/dependencies/client-page.tsx` | Client-side dependencies | Client components for dependencies |
+| `app/admin/not-found.tsx` | Admin 404 page | Admin-specific not found page |
+| `app/admin/permission-denied/page.tsx` | Permission denied | Access denied page |
+| `app/admin/static-fallback.tsx` | Static fallback | Fallback for static generation |
+| `app/admin/bootstrap/page.tsx` | Admin bootstrap | Initial admin setup |
+| `app/admin/seed-projects/page.tsx` | Project seeding | Seed sample projects |
+| `app/admin/debug/debug-client.tsx` | Debug client | Client-side debugging tools |
+| `app/debug/page.tsx` | Debug page | General debugging tools |
+| `app/debug-clerk/page.tsx` | Clerk debugging | Auth provider debugging |
+| `app/auth-test/page.tsx` | Auth testing | Authentication testing tools |
+| `app/sign-in/[[...sign-in]]/page.tsx` | Sign in page | User login |
+| `app/sign-up/[[...sign-up]]/page.tsx` | Sign up page | User registration |
+| `app/setup/page.tsx` | Setup page | General setup instructions |
+| `app/setup-database/page.tsx` | Database setup | Database setup guide |
+| `app/layout.tsx` | Root layout | Main app layout wrapper |
+
+## API Routes
+
+Server endpoints that provide data and functionality.
+
+| File Path | Description | Relations |
+|-----------|-------------|-----------|
+| `app/api/setup-storage/route.ts` | Setup storage containers | Creates and configures storage buckets |
+| `app/api/seed-database/route.ts` | Seed database with initial data | Populates database with sample data |
+| `app/api/test-supabase/route.ts` | Test Supabase connection | Verifies database connectivity |
+| `app/api/admin/create-user/route.ts` | Create new users | User creation with role assignment |
+| `app/api/admin/update-password/route.ts` | Update user passwords | Password management |
+| `app/api/admin/confirm-user/route.ts` | Confirm new users | User email confirmation |
+| `app/api/admin/toggle-role/route.ts` | Toggle user roles | Role management |
+| `app/api/create-tables/route.ts` | Create database tables | Sets up all required tables |
+| `app/api/webhook/route.ts` | Webhook handler | Processes external webhooks |
+| `app/api/test-clerk/route.ts` | Test Clerk auth | Authentication provider testing |
+| `app/api/test-auth/route.ts` | General auth testing | Authentication testing |
+| `app/api/assign-admin/route.ts` | Assign admin role | Give users admin privileges |
+| `app/api/setup-icons-bucket/route.ts` | Setup icons storage | Configure icon storage |
+| `app/api/setup-bts-images-table/route.ts` | Setup BTS images table | Create table for behind-the-scenes images |
+| `app/api/setup-media-table/route.ts` | Setup media table | Create media library table |
+| `app/api/setup-media-storage-policy/route.ts` | Setup media storage policies | Configure storage access rules |
+| `app/api/setup-all/route.ts` | Setup everything | One-click complete setup |
+| `app/api/convert-to-webp/route.ts` | Convert images to WebP | Image optimization |
+| `app/api/bulk-upload/route.ts` | Bulk media upload | Handles multiple file uploads |
+| `app/api/setup-site-settings/route.ts` | Setup site settings table | Creates settings storage |
+| `app/api/create-site-settings-table/route.ts` | Create settings table | Alternative settings table creation |
+| `app/api/settings/route.ts` | Manage site settings | Get/set site configuration |
+| `app/api/setup-database/route.ts` | Setup database | Complete database setup |
+| `app/api/upload-app-icons/route.ts` | Upload app icons | Process app icon uploads |
+| `app/api/favicon/route.ts` | Manage favicon | Get/set site favicon |
+| `app/api/setup-contact-messages-table/route.ts` | Setup contact table | Create table for contact form submissions |
+| `app/api/contact/route.ts` | Contact form submission | Process contact form data |
+| `app/api/setup-dependencies-table/route.ts` | Setup dependencies table | Create dependency management table |
+| `app/api/check-table-exists/route.ts` | Check if table exists | Verify table existence |
+| `app/api/setup-dependency-settings-table/route.ts` | Setup dependency settings | Create settings for dependency system |
+| `app/api/setup-security-audits-table/route.ts` | Setup security audits | Create security audit logs table |
+| `app/api/setup-dependencies/route.ts` | Setup all dependency tables | Complete dependency system setup |
+| `app/api/execute-sql/route.ts` | Execute SQL statements | Direct SQL execution |
+| `app/api/create-check-table-function/route.ts` | Create table check function | Setup SQL function for table checking |
+| `app/api/setup-site-settings-table/route.ts` | Setup site settings table | Alternative settings table setup |
+| `app/api/setup-widget-tables/route.ts` | Setup widget tables | Create tables for dashboard widgets |
+| `app/api/dependencies/route.ts` | Main dependencies API | Dependency system entry point |
+| `app/api/dependencies/list/route.ts` | List dependencies | Get all dependencies |
+| `app/api/dependencies/scan/route.ts` | Scan dependencies | Analyze project for dependencies |
+| `app/api/dependencies/fallback-scan/route.ts` | Fallback dependency scan | Alternative scanning method |
+| `app/api/dependencies/setup/route.ts` | Setup dependency system | Initialize dependency management |
+| `app/api/dependencies/settings/route.ts` | Dependency settings | Manage dependency system config |
+| `app/api/dependencies/lock/route.ts` | Lock dependencies | Prevent dependency changes |
+| `app/api/dependencies/apply/route.ts` | Apply dependency updates | Update dependencies |
+| `app/api/dependencies/update/route.ts` | Update specific dependency | Single dependency update |
+| `app/api/dependencies/audit/route.ts` | Audit dependencies | Security audit |
+| `app/api/dependencies/auto-update/route.ts` | Auto-update dependencies | Automatic updates |
+| `app/api/dependencies/check-updates/route.ts` | Check for updates | Look for new versions |
+| `app/api/dependencies/generate-package-json/route.ts` | Generate package.json | Create package.json file |
+| `app/api/dependencies/scheduled-update/route.ts` | Scheduled updates | Periodic update checks |
+| `app/api/dependencies/check-tables/route.ts` | Check dependency tables | Verify table existence |
+| `app/api/dependencies/system-status/route.ts` | Dependency system status | Check system health |
+
+## Authentication & Security
+
+Files related to authentication, authorization, and security.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `lib/auth-utils.ts` | Authentication utilities | Helper functions for auth |
+| `lib/server-auth-utils.ts` | Server-side auth utilities | Server-specific auth helpers |
+| `middleware.ts` | Next.js middleware | Route protection, redirects |
+| `app/manifest.ts` | PWA manifest | Progressive Web App configuration |
+
+## Database & Storage
+
+Files that handle database operations and storage.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `lib/supabase.ts` | Supabase client | Database connection utilities |
+| `lib/supabase-browser.ts` | Browser-side Supabase client | Client-side database access |
+| `lib/supabase-server.ts` | Server-side Supabase client | Server-side database access |
+| `lib/project-data.ts` | Project data utilities | Project data processing helpers |
+| `sql/create-tables.sql` | Main tables creation | SQL for creating core tables |
+| `sql/create-bts-images-table.sql` | BTS images table | SQL for BTS images |
+| `sql/create-functions.sql` | Database functions | SQL functions and procedures |
+| `sql/create-projects-table.sql` | Projects table | Projects storage schema |
+| `sql/create-site-settings-table.sql` | Settings table | Site configuration storage |
+| `sql/create-contact-messages-table.sql` | Contact messages table | Contact form submissions storage |
+| `sql/create-dependencies-table.sql` | Dependencies table | Dependency system storage |
+| `sql/create-dependency-settings-table.sql` | Dependency settings table | Dependency configuration storage |
+| `sql/create-security-audits-table.sql` | Security audits table | Security logs storage |
+| `sql/create-dependency-system.sql` | Complete dependency system | All dependency-related tables |
+| `sql/create-check-table-exists-function.sql` | Table existence check | Function to verify table existence |
+| `sql/create-direct-sql-execution.sql` | Direct SQL execution | Function for executing arbitrary SQL |
+| `sql/create-widget-tables.sql` | Widget tables | Dashboard widget storage |
+
+## Configuration Files
+
+Files that configure the application and its dependencies.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `tailwind.config.ts` | Tailwind CSS configuration | Design system settings |
+| `next.config.mjs` | Next.js configuration | Framework settings |
+| `app/globals.css` | Global CSS | Application-wide styles |
+| `package.json` | NPM package definition | Dependencies list |
+| `tsconfig.json` | TypeScript configuration | Type checking settings |
+| `.env.example` | Environment variables example | Template for environment setup |
+| `.env.local` | Local environment variables | Local configuration |
+
+## Utilities & Helpers
+
+Helper functions and utilities used throughout the application.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `lib/utils.ts` | General utilities | Various helper functions |
+| `hooks/use-mobile.tsx` | Mobile detection | Responsive design helper |
+| `hooks/use-toast.ts` | Toast notifications | User notification system |
+| `types/global.d.ts` | Global type definitions | TypeScript types |
+
+## Documentation
+
+Documentation and guides for the application.
+
+| File Path | Description | Key Features |
+|-----------|-------------|--------------|
+| `README.md` | Main documentation | Project overview and setup |
+| `CHANGELOG.md` | Version history | Changes log |
+| `CONTRIBUTING.md` | Contribution guide | How to contribute |
+| `SECURITY.md` | Security guidelines | Security practices |
+| `CULTURE.md` | Development culture | Team practices and principles |
+| `docs/MEDIA-STORAGE.md` | Media storage guide | Media management documentation |
+| `docs/EMAIL-SETUP.md` | Email setup guide | Email system configuration |
+| `docs/DEPENDENCIES.md` | Dependencies guide | Dependency management documentation |
+| `docs/SECURITY.md` | Security documentation | Detailed security information |
+| `docs/TODO.md` | Todo list | Pending tasks |
+| `CODE_OVERVIEW.md` | Code overview | This document |
+
+## Feature Relationships
+
+### Public Site Features
+
+- **Homepage Flow**: `app/page.tsx` → `hero-section.tsx` → `about-section.tsx` → `services-section.tsx` → `contact-section.tsx`
+- **Projects Display**: `projects/page.tsx` → `projects-content.tsx` → `project-category.tsx` → `project-card.tsx`
+- **Project Details**: `projects/[id]/page.tsx` → `project-detail-content.tsx` → `video-player.tsx` (if video) → `project-mini-card.tsx` (for related projects)
+
+### Admin Features
+
+- **User Management**: `admin/users/page.tsx` → `user-role-manager.tsx` → `admin/toggle-role/route.ts`
+- **Project Management**: `admin/projects/page.tsx` → `admin/projects/client-page.tsx` → `project-form.tsx` → `image-uploader.tsx` → `media-selector.tsx` → `unified-media-library.tsx`
+- **Media Management**: `admin/media/page.tsx` → `unified-media-library.tsx` → `bulk-upload/route.ts` → `convert-to-webp/route.ts`
+- **Site Settings**: `admin/settings/page.tsx` → `admin/settings/client-page.tsx` → `site-information-form.tsx` → `app-icons-uploader.tsx` → `favicon-uploader.tsx`
+- **Security Center**: `admin/security/page.tsx` → `admin/security/client-page.tsx` → `dependency-scanner.tsx` → `vulnerability-details.tsx`
+- **Dependency Management**: `admin/dependencies/page.tsx` → `admin/dependencies/client-page.tsx` → `dependency-scanner.tsx` → `manual-dependency-entry.tsx`
+
+### Database Setup Flow
+
+- **Initial Setup**: `setup/page.tsx` → `setup-database/page.tsx` → `setup-all/route.ts`
+- **Table Setup**: `database-setup-alert.tsx` → `setup-tables-popup.tsx` → Various setup routes
+
+### Authentication Flow
+
+- **Sign In**: `sign-in/page.tsx` → Auth callback → `auth/callback/page.tsx` → Redirect to admin
+- **Admin Protection**: `middleware.ts` → `admin-check.tsx` → Redirect to `permission-denied/page.tsx` if needed
