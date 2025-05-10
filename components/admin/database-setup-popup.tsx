@@ -3,12 +3,19 @@
 import { useEffect } from "react"
 import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, Copy, Check, Database, RefreshCw } from "lucide-react"
+import { AlertCircle, Copy, Check, Database, RefreshCw, X } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 
 // Define the table configuration type
@@ -49,6 +56,8 @@ export function DatabaseSetupPopup({
   const [missingTables, setMissingTables] = useState<string[]>([])
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<string>("all")
+  const [setupCompleted, setSetupCompleted] = useState(false)
+  const [forceClose, setForceClose] = useState(false)
 
   // Define all possible tables with their SQL
   const allTables: TableConfig[] = [
@@ -780,6 +789,10 @@ ON user_widgets(position);`,
 
   // Function to check if tables exist
   const checkTables = useCallback(async () => {
+    if (forceClose || setupCompleted) {
+      return
+    }
+
     setChecking(true)
     try {
       const missing: string[] = []
@@ -816,6 +829,12 @@ ON user_widgets(position);`,
       // Only open the popup if there are missing required tables
       if (missing.length > 0) {
         setOpen(true)
+      } else {
+        setOpen(false)
+        setSetupCompleted(true)
+        if (onSetupComplete) {
+          onSetupComplete()
+        }
       }
     } catch (error) {
       console.error("Error checking tables:", error)
@@ -823,7 +842,7 @@ ON user_widgets(position);`,
     } finally {
       setChecking(false)
     }
-  }, [requiredSections, customTables])
+  }, [requiredSections, customTables, forceClose, setupCompleted, onSetupComplete])
 
   // Function to generate SQL for selected tables
   const generateSQL = () => {
@@ -895,11 +914,16 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       }
 
       setSuccess("Database tables created successfully!")
-      setOpen(false)
 
-      if (onSetupComplete) {
-        onSetupComplete()
-      }
+      // Wait a moment before closing to show success message
+      setTimeout(() => {
+        setOpen(false)
+        setSetupCompleted(true)
+
+        if (onSetupComplete) {
+          onSetupComplete()
+        }
+      }, 1500)
     } catch (error) {
       console.error("Error executing SQL:", error)
       setError(error instanceof Error ? error.message : "An unexpected error occurred")
@@ -939,18 +963,66 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     return Array.from(categories)
   }
 
+  // Handle force close
+  const handleForceClose = () => {
+    setForceClose(true)
+    setOpen(false)
+    setSetupCompleted(true)
+
+    if (onSetupComplete) {
+      onSetupComplete()
+    }
+
+    // Store in localStorage to prevent popup from showing again
+    try {
+      localStorage.setItem("database_setup_completed", "true")
+    } catch (e) {
+      console.error("Could not save to localStorage", e)
+    }
+  }
+
   // Check for missing tables on component mount
   useEffect(() => {
+    // Check if setup was previously completed
+    try {
+      const completed = localStorage.getItem("database_setup_completed")
+      if (completed === "true") {
+        setForceClose(true)
+        setSetupCompleted(true)
+        return
+      }
+    } catch (e) {
+      console.error("Could not read from localStorage", e)
+    }
+
     checkTables()
   }, [checkTables])
 
+  // If force closed or setup completed, don't render
+  if (forceClose || (setupCompleted && !open)) {
+    return null
+  }
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog
+      open={open}
+      onOpenChange={(isOpen) => {
+        // Only allow closing if we're not loading
+        if (!loading) {
+          setOpen(isOpen)
+        }
+      }}
+    >
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Database className="h-5 w-5" />
-            {title}
+          <DialogTitle className="flex items-center justify-between gap-2 text-xl">
+            <div className="flex items-center">
+              <Database className="h-5 w-5 mr-2" />
+              {title}
+            </div>
+            <Button variant="ghost" size="icon" onClick={handleForceClose} title="Skip setup (not recommended)">
+              <X className="h-4 w-4" />
+            </Button>
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
@@ -1046,15 +1118,18 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             <Textarea value={generateSQL()} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-3 justify-end">
+          <DialogFooter className="flex flex-col sm:flex-row gap-3">
             <Button variant="outline" onClick={copyToClipboard}>
               {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
               {copied ? "Copied!" : "Copy SQL"}
             </Button>
+            <Button variant="outline" onClick={handleForceClose}>
+              Skip Setup
+            </Button>
             <Button onClick={executeSQL} disabled={loading}>
               {loading ? "Creating tables..." : "Create Tables Automatically"}
             </Button>
-          </div>
+          </DialogFooter>
 
           <div className="text-sm text-gray-500 mt-2">
             <p>

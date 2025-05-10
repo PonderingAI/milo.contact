@@ -1,21 +1,52 @@
 "use client"
 
-import { useState } from "react"
+import type React from "react"
+
+import { useState, useEffect } from "react"
 import DatabaseSetupPopup from "@/components/admin/database-setup-popup"
 
-export default function AdminDatabaseCheck() {
-  const [setupComplete, setSetupComplete] = useState(false)
+interface AdminDatabaseCheckProps {
+  children: React.ReactNode
+}
 
-  // This component will render the database setup popup when needed
-  // It's designed to be included in the admin layout
+export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps) {
+  const [setupComplete, setSetupComplete] = useState(false)
+  const [initialCheckDone, setInitialCheckDone] = useState(false)
+
+  // Check if setup was previously completed
+  useEffect(() => {
+    try {
+      const completed = localStorage.getItem("database_setup_completed")
+      if (completed === "true") {
+        setSetupComplete(true)
+      }
+    } catch (e) {
+      console.error("Could not read from localStorage", e)
+    }
+
+    setInitialCheckDone(true)
+  }, [])
+
+  const handleSetupComplete = () => {
+    setSetupComplete(true)
+    try {
+      localStorage.setItem("database_setup_completed", "true")
+    } catch (e) {
+      console.error("Could not save to localStorage", e)
+    }
+  }
+
+  // Don't render anything until we've checked localStorage
+  if (!initialCheckDone) {
+    return null
+  }
 
   return (
     <>
-      <DatabaseSetupPopup
-        requiredTables={["user_roles", "site_settings"]}
-        adminOnly={true}
-        onSetupComplete={() => setSetupComplete(true)}
-      />
+      {!setupComplete && (
+        <DatabaseSetupPopup requiredSections={["core"]} adminOnly={true} onSetupComplete={handleSetupComplete} />
+      )}
+      {children}
     </>
   )
 }
