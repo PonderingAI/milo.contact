@@ -14,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, Copy, Check, Database, RefreshCw } from "lucide-react"
+import { AlertCircle, Copy, Check, Database, RefreshCw, X } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { DATABASE_TABLES, getTableByName, getSqlFilesForTables } from "@/lib/database-schema"
 
@@ -38,7 +38,7 @@ export function DatabaseSetupPopup({
 }: DatabaseSetupPopupProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [checking, setChecking] = useState(true)
+  const [checking, setChecking] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -48,6 +48,8 @@ export function DatabaseSetupPopup({
   const [sqlContent, setSqlContent] = useState<string>("")
   const [forceClose, setForceClose] = useState(false)
   const [isAdminPage, setIsAdminPage] = useState(false)
+  const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
 
   // Check if we're on an admin page
   useEffect(() => {
@@ -63,66 +65,96 @@ export function DatabaseSetupPopup({
   }, [adminOnly])
 
   // Function to check if tables exist - using a more reliable method
-  const checkTables = useCallback(async () => {
-    setChecking(true)
-    setError(null)
+  const checkTables = useCallback(
+    async (shouldOpenPopup = true) => {
+      if (checking) return // Prevent multiple simultaneous checks
 
-    try {
-      const response = await fetch("/api/direct-table-check", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tables:
-            customTables.length > 0
-              ? customTables
-              : DATABASE_TABLES.filter(
-                  (table) => requiredSections.includes("all") || requiredSections.includes(table.category),
-                ).map((table) => table.name),
-        }),
-      })
+      setChecking(true)
+      setError(null)
+      setLastRefreshTime(new Date())
 
-      if (!response.ok) {
-        throw new Error("Failed to check tables")
-      }
+      try {
+        const response = await fetch("/api/direct-table-check", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            tables:
+              customTables.length > 0
+                ? customTables
+                : DATABASE_TABLES.filter(
+                    (table) => requiredSections.includes("all") || requiredSections.includes(table.category),
+                  ).map((table) => table.name),
+          }),
+        })
 
-      const data = await response.json()
-
-      if (data.error) {
-        console.error("Error checking tables:", data.error)
-        throw new Error(data.error)
-      }
-
-      // data.missingTables contains the list of tables that don't exist
-      const missingTablesList = data.missingTables || []
-
-      setMissingTables(missingTablesList)
-      setSelectedTables(missingTablesList)
-
-      // Only open the popup if there are missing tables and we're on an admin page
-      if (missingTablesList.length > 0 && isAdminPage) {
-        setOpen(true)
-        // Load SQL content for missing tables
-        loadSqlContent(missingTablesList)
-      } else {
-        setOpen(false)
-        if (onSetupComplete) {
-          onSetupComplete()
+        if (!response.ok) {
+          throw new Error("Failed to check tables")
         }
-      }
-    } catch (error) {
-      console.error("Error checking tables:", error)
-      setError("Failed to check database tables. Please try again.")
 
-      // If we can't check tables, don't show the popup on non-admin pages
-      if (!isAdminPage && adminOnly) {
-        setForceClose(true)
+        const data = await response.json()
+
+        if (data.error) {
+          console.error("Error checking tables:", data.error)
+          throw new Error(data.error)
+        }
+
+        // data.missingTables contains the list of tables that don't exist
+        const missingTablesList = data.missingTables || []
+
+        // Only update state if there's a change to avoid unnecessary re-renders
+        if (JSON.stringify(missingTablesList) !== JSON.stringify(missingTables)) {
+          setMissingTables(missingTablesList)
+          setSelectedTables(missingTablesList)
+        }
+
+        // Only open the popup if there are missing tables, we're on an admin page, and we should open it
+        if (missingTablesList.length > 0 && isAdminPage && shouldOpenPopup) {
+          setOpen(true)
+          // Load SQL content for missing tables
+          loadSqlContent(missingTablesList)
+        } else if (missingTablesList.length === 0) {
+          // If no missing tables, close the popup and call onSetupComplete
+          if (open) {
+            setSuccess("All required tables exist!")
+            setTimeout(() => {
+              setOpen(false)
+              if (onSetupComplete) {
+                onSetupComplete()
+              }
+            }, 1500)
+          } else if (onSetupComplete) {
+            onSetupComplete()
+          }
+        } else if (open) {
+          // If popup is already open, just update the SQL content
+          loadSqlContent(missingTablesList)
+        }
+      } catch (error) {
+        console.error("Error checking tables:", error)
+        setError("Failed to check database tables. Please try again.")
+
+        // If we can't check tables, don't show the popup on non-admin pages
+        if (!isAdminPage && adminOnly) {
+          setForceClose(true)
+        }
+      } finally {
+        setChecking(false)
       }
-    } finally {
-      setChecking(false)
-    }
-  }, [requiredSections, customTables, forceClose, onSetupComplete, adminOnly, isAdminPage])
+    },
+    [
+      requiredSections,
+      customTables,
+      forceClose,
+      onSetupComplete,
+      adminOnly,
+      isAdminPage,
+      open,
+      missingTables,
+      checking,
+    ],
+  )
 
   // Function to generate SQL for selected tables
   const generateSQL = () => {
@@ -165,12 +197,9 @@ export function DatabaseSetupPopup({
 
       setSuccess("Database tables created successfully!")
 
-      // Wait a moment before closing to show success message
+      // Wait a moment before checking tables again
       setTimeout(() => {
-        setOpen(false)
-        if (onSetupComplete) {
-          onSetupComplete()
-        }
+        checkTables(false) // Check tables but don't reopen popup
       }, 1500)
     } catch (error) {
       console.error("Error executing SQL:", error)
@@ -225,6 +254,24 @@ export function DatabaseSetupPopup({
     checkTables()
   }, [checkTables])
 
+  // Set up auto-refresh
+  useEffect(() => {
+    let intervalId: NodeJS.Timeout | null = null
+
+    if (open && autoRefreshEnabled) {
+      // Refresh every 30 seconds instead of 2 seconds
+      intervalId = setInterval(() => {
+        checkTables(false) // Don't reopen popup on refresh
+      }, 30000)
+    }
+
+    return () => {
+      if (intervalId) {
+        clearInterval(intervalId)
+      }
+    }
+  }, [open, autoRefreshEnabled, checkTables])
+
   // Get categories that have missing tables
   const getCategories = () => {
     const categories = new Set<string>()
@@ -252,24 +299,47 @@ export function DatabaseSetupPopup({
 
   // Handle manual setup completion
   const handleManualSetupComplete = () => {
-    setSuccess("Setup marked as complete. Refreshing page...")
+    setSuccess("Setup marked as complete. Checking tables...")
 
-    // Wait a moment before closing to show success message
+    // Check tables again to verify
     setTimeout(() => {
-      setOpen(false)
-      if (onSetupComplete) {
-        onSetupComplete()
-      }
+      checkTables(false) // Check tables but don't reopen popup
     }, 1500)
+  }
+
+  // Handle force close
+  const handleForceClose = () => {
+    setForceClose(true)
+    setOpen(false)
+    if (onSetupComplete) {
+      onSetupComplete()
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !loading && setOpen(isOpen)}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-xl">
-            <Database className="h-5 w-5 mr-2" />
-            {title}
+          <DialogTitle className="flex items-center justify-between gap-2 text-xl">
+            <div className="flex items-center">
+              <Database className="h-5 w-5 mr-2" />
+              {title}
+            </div>
+            <div className="flex items-center space-x-2">
+              <Button variant="outline" size="sm" onClick={copyToClipboard} className="h-8 px-2">
+                {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                {copied ? "Copied" : "Copy SQL"}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleForceClose}
+                title="Skip setup (not recommended)"
+                className="h-8 w-8"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
@@ -291,10 +361,21 @@ export function DatabaseSetupPopup({
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">Missing Tables</h3>
-            <Button variant="outline" size="sm" onClick={checkTables} disabled={checking}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="flex items-center space-x-2">
+              <div className="text-xs text-gray-500">
+                {lastRefreshTime && `Last checked: ${lastRefreshTime.toLocaleTimeString()}`}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => checkTables(false)}
+                disabled={checking}
+                className="h-8"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
+                Refresh
+              </Button>
+            </div>
           </div>
 
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
@@ -397,9 +478,6 @@ export function DatabaseSetupPopup({
     </Dialog>
   )
 }
-
-// Add default export for backward compatibility
-// export default DatabaseSetupPopup
 
 interface SetupTablesPopupProps {
   requiredTables?: string[]
