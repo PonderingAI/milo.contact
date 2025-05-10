@@ -1,41 +1,55 @@
+import { NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
-import { type NextRequest, NextResponse } from "next/server"
+import { getTableByName } from "@/lib/database-schema"
 
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const { tables } = await request.json()
 
-    if (!tables || !Array.isArray(tables) || tables.length === 0) {
-      return NextResponse.json({ error: "Missing or invalid tables parameter" }, { status: 400 })
+    // Validate table names
+    const invalidTables = tables.filter((tableName) => !getTableByName(tableName))
+    if (invalidTables.length > 0) {
+      return NextResponse.json(
+        {
+          error: `The following tables are not defined in the database schema: ${invalidTables.join(", ")}`,
+        },
+        { status: 400 },
+      )
     }
 
     const supabase = createAdminClient()
+    const missingTables = []
 
-    // Query information_schema directly to check which tables exist
-    const { data, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_schema", "public")
-      .in("table_name", tables)
+    // Check each table
+    for (const tableName of tables) {
+      try {
+        const { data, error } = await supabase
+          .from("information_schema.tables")
+          .select("table_name")
+          .eq("table_schema", "public")
+          .eq("table_name", tableName)
+          .single()
 
-    if (error) {
-      console.error("Error checking tables:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+        if (error || !data) {
+          missingTables.push(tableName)
+        }
+      } catch (error) {
+        console.error(`Error checking if ${tableName} exists:`, error)
+        missingTables.push(tableName)
+      }
     }
 
-    // Get the list of tables that exist
-    const existingTables = data?.map((row) => row.table_name) || []
-
-    // Find which tables are missing
-    const missingTables = tables.filter((table) => !existingTables.includes(table))
-
     return NextResponse.json({
-      existingTables,
       missingTables,
-      allTablesExist: missingTables.length === 0,
+      allExist: missingTables.length === 0,
     })
-  } catch (error: any) {
-    console.error("Error in direct table check:", error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+  } catch (error) {
+    console.error("Error checking tables:", error)
+    return NextResponse.json(
+      {
+        error: error instanceof Error ? error.message : "Unknown error",
+      },
+      { status: 500 },
+    )
   }
 }

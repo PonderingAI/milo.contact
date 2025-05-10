@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Database } from "lucide-react"
 import { SetupTablesPopup } from "@/components/setup-tables-popup"
+import { getTablesForSection } from "@/lib/database-schema"
 
 export function DependencySystemSetup() {
   const [loading, setLoading] = useState(true)
@@ -12,6 +13,9 @@ export function DependencySystemSetup() {
   const [showSetup, setShowSetup] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [setupComplete, setSetupComplete] = useState(false)
+
+  // Get required tables for the security section
+  const requiredTables = getTablesForSection("security").map((table) => table.name)
 
   useEffect(() => {
     checkTables()
@@ -22,7 +26,13 @@ export function DependencySystemSetup() {
       setLoading(true)
       setError(null)
 
-      const response = await fetch("/api/dependencies/check-tables")
+      const response = await fetch("/api/direct-table-check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tables: requiredTables }),
+      })
 
       if (!response.ok) {
         throw new Error("Failed to check tables")
@@ -30,15 +40,11 @@ export function DependencySystemSetup() {
 
       const data = await response.json()
 
-      if (data.success) {
-        if (!data.allTablesExist) {
-          setMissingTables(data.missingTables || [])
-          setShowSetup(true)
-        } else {
-          setSetupComplete(true)
-        }
+      if (data.allExist) {
+        setSetupComplete(true)
       } else {
-        throw new Error(data.message || "Unknown error checking tables")
+        setMissingTables(data.missingTables || [])
+        setShowSetup(true)
       }
     } catch (err) {
       console.error("Error checking tables:", err)
@@ -107,13 +113,8 @@ export function DependencySystemSetup() {
         </div>
       )}
 
-      {/* This will use your universal SQL setup popup */}
-      {showSetup && (
-        <SetupTablesPopup
-          requiredTables={["dependencies", "dependency_settings", "security_audits"]}
-          onSetupComplete={handleSetupComplete}
-        />
-      )}
+      {/* This will use the universal SQL setup popup */}
+      {showSetup && <SetupTablesPopup requiredTables={requiredTables} onSetupComplete={handleSetupComplete} />}
     </div>
   )
 }

@@ -300,3 +300,43 @@ The dependency management system provides tools for tracking, updating, and secu
 - `security_audits` - Stores results of security audits
 
 The dependency system integrates with the universal SQL setup system to ensure all required tables are created properly.
+
+## Database Management System
+
+The application uses a centralized database management system defined in `lib/database-schema.ts`. This system:
+
+1. Defines all database tables in a single configuration file
+2. Organizes tables by category
+3. Manages dependencies between tables
+4. Provides SQL files for table creation
+5. Integrates with the universal SQL setup popup
+
+Key components:
+
+- `lib/database-schema.ts`: Central registry of all database tables
+- `components/setup-tables-popup.tsx`: Universal popup for setting up database tables
+- `app/api/direct-table-check/route.ts`: API for checking if tables exist
+- `app/api/execute-sql/route.ts`: API for executing SQL statements
+
+When adding new features that require database tables, refer to the `DATABASE-MANAGEMENT.md` guide.
+
+## Existing Database Categories
+
+The system organizes tables into the following categories:
+
+- **core**: Essential tables required for basic functionality (user_roles, site_settings)
+- **content**: Tables for storing content (projects, bts_images, contact_messages)
+- **media**: Tables for media files and assets (media)
+- **security**: Tables for security features (security_audits)
+- **dependencies**: Tables for dependency management (dependencies, dependency_settings)
+- **other**: Miscellaneous tables (widget_types, user_widgets)
+
+## How It Works
+
+1. When a feature needs database tables, it checks if they exist using the central configuration
+2. If tables are missing, it shows the universal setup popup
+3. The popup loads SQL from the appropriate files
+4. The user can execute the SQL automatically or manually
+5. After setup, the feature continues loading
+
+This system ensures a consistent approach to database management across the application.
