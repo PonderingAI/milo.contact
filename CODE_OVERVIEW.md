@@ -49,13 +49,10 @@ These components are used in the admin dashboard and management interfaces.
 | `components/admin/admin-check.tsx` | Admin permission verification | Checks if user has admin privileges |
 | `components/admin/favicon-uploader.tsx` | Upload site favicon | Handles favicon image processing |
 | `components/admin/app-icons-uploader.tsx` | Upload app icons | Handles app icon package upload |
-| `components/admin/sql-setup-guide.tsx` | SQL setup instructions | Guides for database table creation |
-| `components/admin/contact-table-setup-guide.tsx` | Contact table setup | Specific guide for contact messages table |
+| `components/admin/database-setup-popup.tsx` | Unified database setup | Checks for missing tables, generates SQL, handles setup |
 | `components/admin/sidebar.tsx` | Admin navigation sidebar | Links to all admin sections |
 | `components/admin/dependency-scanner.tsx` | Scans project dependencies | Analyzes NPM dependencies for updates |
 | `components/admin/manual-dependency-entry.tsx` | Manual dependency management | Add dependencies manually |
-| `components/admin/dependency-table-setup-guide.tsx` | Dependency tables setup | Guide for setting up dependency tables |
-| `components/admin/check-table-function-setup.tsx` | Database function setup | Sets up check table exists function |
 | `components/admin/package-json-manager.tsx` | Package.json management | Edit and update package.json |
 | `components/admin/vulnerability-details.tsx` | Security vulnerability details | Shows detailed security info |
 | `components/admin/dependency-setup-alert.tsx` | Dependency setup alert | Notification for dependency setup |
@@ -73,7 +70,6 @@ Reusable UI components from the design system.
 | `components/ui/four-state-toggle.tsx` | Toggle with four states | Used for quarternary selections |
 | `components/database-setup-alert.tsx` | Database setup notification | Alerts users to setup requirements |
 | `components/dynamic-favicons.tsx` | Dynamic favicon component | Changes favicon based on settings |
-| `components/setup-tables-popup.tsx` | Database tables setup popup | Guides users through table setup |
 
 ## Pages
 
@@ -111,6 +107,8 @@ Page components that represent routes in the application.
 | `app/admin/bootstrap/page.tsx` | Admin bootstrap | Initial admin setup |
 | `app/admin/seed-projects/page.tsx` | Project seeding | Seed sample projects |
 | `app/admin/debug/debug-client.tsx` | Debug client | Client-side debugging tools |
+| `app/admin/layout.tsx` | Admin layout | Layout for all admin pages |
+| `app/admin/admin-database-check.tsx` | Database check component | Checks for required tables in admin section |
 | `app/debug/page.tsx` | Debug page | General debugging tools |
 | `app/debug-clerk/page.tsx` | Clerk debugging | Auth provider debugging |
 | `app/auth-test/page.tsx` | Auth testing | Authentication testing tools |
@@ -133,35 +131,23 @@ Server endpoints that provide data and functionality.
 | `app/api/admin/update-password/route.ts` | Update user passwords | Password management |
 | `app/api/admin/confirm-user/route.ts` | Confirm new users | User email confirmation |
 | `app/api/admin/toggle-role/route.ts` | Toggle user roles | Role management |
-| `app/api/create-tables/route.ts` | Create database tables | Sets up all required tables |
 | `app/api/webhook/route.ts` | Webhook handler | Processes external webhooks |
 | `app/api/test-clerk/route.ts` | Test Clerk auth | Authentication provider testing |
 | `app/api/test-auth/route.ts` | General auth testing | Authentication testing |
 | `app/api/assign-admin/route.ts` | Assign admin role | Give users admin privileges |
 | `app/api/setup-icons-bucket/route.ts` | Setup icons storage | Configure icon storage |
-| `app/api/setup-bts-images-table/route.ts` | Setup BTS images table | Create table for behind-the-scenes images |
-| `app/api/setup-media-table/route.ts` | Setup media table | Create media library table |
 | `app/api/setup-media-storage-policy/route.ts` | Setup media storage policies | Configure storage access rules |
 | `app/api/setup-all/route.ts` | Setup everything | One-click complete setup |
 | `app/api/convert-to-webp/route.ts` | Convert images to WebP | Image optimization |
 | `app/api/bulk-upload/route.ts` | Bulk media upload | Handles multiple file uploads |
 | `app/api/setup-site-settings/route.ts` | Setup site settings table | Creates settings storage |
-| `app/api/create-site-settings-table/route.ts` | Create settings table | Alternative settings table creation |
 | `app/api/settings/route.ts` | Manage site settings | Get/set site configuration |
 | `app/api/setup-database/route.ts` | Setup database | Complete database setup |
 | `app/api/upload-app-icons/route.ts` | Upload app icons | Process app icon uploads |
 | `app/api/favicon/route.ts` | Manage favicon | Get/set site favicon |
-| `app/api/setup-contact-messages-table/route.ts` | Setup contact table | Create table for contact form submissions |
 | `app/api/contact/route.ts` | Contact form submission | Process contact form data |
-| `app/api/setup-dependencies-table/route.ts` | Setup dependencies table | Create dependency management table |
 | `app/api/check-table-exists/route.ts` | Check if table exists | Verify table existence |
-| `app/api/setup-dependency-settings-table/route.ts` | Setup dependency settings | Create settings for dependency system |
-| `app/api/setup-security-audits-table/route.ts` | Setup security audits | Create security audit logs table |
-| `app/api/setup-dependencies/route.ts` | Setup all dependency tables | Complete dependency system setup |
 | `app/api/execute-sql/route.ts` | Execute SQL statements | Direct SQL execution |
-| `app/api/create-check-table-function/route.ts` | Create table check function | Setup SQL function for table checking |
-| `app/api/setup-site-settings-table/route.ts` | Setup site settings table | Alternative settings table setup |
-| `app/api/setup-widget-tables/route.ts` | Setup widget tables | Create tables for dashboard widgets |
 | `app/api/dependencies/route.ts` | Main dependencies API | Dependency system entry point |
 | `app/api/dependencies/list/route.ts` | List dependencies | Get all dependencies |
 | `app/api/dependencies/scan/route.ts` | Scan dependencies | Analyze project for dependencies |
@@ -200,19 +186,6 @@ Files that handle database operations and storage.
 | `lib/supabase-browser.ts` | Browser-side Supabase client | Client-side database access |
 | `lib/supabase-server.ts` | Server-side Supabase client | Server-side database access |
 | `lib/project-data.ts` | Project data utilities | Project data processing helpers |
-| `sql/create-tables.sql` | Main tables creation | SQL for creating core tables |
-| `sql/create-bts-images-table.sql` | BTS images table | SQL for BTS images |
-| `sql/create-functions.sql` | Database functions | SQL functions and procedures |
-| `sql/create-projects-table.sql` | Projects table | Projects storage schema |
-| `sql/create-site-settings-table.sql` | Settings table | Site configuration storage |
-| `sql/create-contact-messages-table.sql` | Contact messages table | Contact form submissions storage |
-| `sql/create-dependencies-table.sql` | Dependencies table | Dependency system storage |
-| `sql/create-dependency-settings-table.sql` | Dependency settings table | Dependency configuration storage |
-| `sql/create-security-audits-table.sql` | Security audits table | Security logs storage |
-| `sql/create-dependency-system.sql` | Complete dependency system | All dependency-related tables |
-| `sql/create-check-table-exists-function.sql` | Table existence check | Function to verify table existence |
-| `sql/create-direct-sql-execution.sql` | Direct SQL execution | Function for executing arbitrary SQL |
-| `sql/create-widget-tables.sql` | Widget tables | Dashboard widget storage |
 
 ## Configuration Files
 
@@ -256,6 +229,7 @@ Documentation and guides for the application.
 | `docs/SECURITY.md` | Security documentation | Detailed security information |
 | `docs/TODO.md` | Todo list | Pending tasks |
 | `CODE_OVERVIEW.md` | Code overview | This document |
+| `docs/DATABASE-SETUP.md` | Database setup guide | Documentation for the database setup system |
 
 ## Feature Relationships
 
@@ -276,10 +250,26 @@ Documentation and guides for the application.
 
 ### Database Setup Flow
 
-- **Initial Setup**: `setup/page.tsx` → `setup-database/page.tsx` → `setup-all/route.ts`
-- **Table Setup**: `database-setup-alert.tsx` → `setup-tables-popup.tsx` → Various setup routes
+- **Unified Setup**: `admin/layout.tsx` → `admin-database-check.tsx` → `database-setup-popup.tsx` → `check-table-exists/route.ts` → `execute-sql/route.ts`
 
 ### Authentication Flow
 
 - **Sign In**: `sign-in/page.tsx` → Auth callback → `auth/callback/page.tsx` → Redirect to admin
 - **Admin Protection**: `middleware.ts` → `admin-check.tsx` → Redirect to `permission-denied/page.tsx` if needed
+
+## Recent Improvements
+
+### Database Setup System Consolidation
+
+We've recently consolidated multiple database setup components and files into a single, unified system:
+
+1. **Unified Setup Component**: `components/admin/database-setup-popup.tsx` now handles all database table setup needs
+2. **Context-Aware Requirements**: The system only shows tables needed for the current admin section
+3. **Automatic Dependency Resolution**: Tables are created in the correct order based on their dependencies
+4. **Simplified User Experience**: Non-technical users can set up their database with a single click
+5. **Reduced Code Duplication**: Eliminated multiple redundant setup files and SQL scripts
+
+This consolidation has significantly improved maintainability and user experience while reducing the overall codebase size.
+\`\`\`
+
+Now, let's create a dedicated documentation file for the database setup system:
