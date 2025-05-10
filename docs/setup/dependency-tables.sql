@@ -21,19 +21,45 @@ CREATE TABLE IF NOT EXISTS dependencies (
 
 CREATE INDEX IF NOT EXISTS idx_dependencies_name ON dependencies(name);
 
--- Table for dependency settings
-CREATE TABLE IF NOT EXISTS dependency_settings (
-  id SERIAL PRIMARY KEY,
-  setting_key VARCHAR(255) NOT NULL UNIQUE,  -- Changed from 'key' to 'setting_key'
-  value JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Insert default settings
-INSERT INTO dependency_settings (setting_key, value)  -- Changed from 'key' to 'setting_key'
-VALUES ('update_mode', '"conservative"')
-ON CONFLICT (setting_key) DO NOTHING;  -- Changed from 'key' to 'setting_key'
+-- Check if dependency_settings table exists
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'dependency_settings') THEN
+    -- Create the table if it doesn't exist
+    CREATE TABLE dependency_settings (
+      id SERIAL PRIMARY KEY,
+      key_name VARCHAR(255) NOT NULL UNIQUE,
+      value JSONB,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+    
+    -- Insert default settings
+    INSERT INTO dependency_settings (key_name, value)
+    VALUES ('update_mode', '"conservative"');
+  ELSE
+    -- Check which column exists
+    IF EXISTS (SELECT 1 FROM information_schema.columns 
+               WHERE table_name = 'dependency_settings' AND column_name = 'key') THEN
+      -- Insert using 'key' column
+      INSERT INTO dependency_settings (key, value)
+      VALUES ('update_mode', '"conservative"')
+      ON CONFLICT (key) DO NOTHING;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'dependency_settings' AND column_name = 'setting_key') THEN
+      -- Insert using 'setting_key' column
+      INSERT INTO dependency_settings (setting_key, value)
+      VALUES ('update_mode', '"conservative"')
+      ON CONFLICT (setting_key) DO NOTHING;
+    ELSIF EXISTS (SELECT 1 FROM information_schema.columns 
+                 WHERE table_name = 'dependency_settings' AND column_name = 'key_name') THEN
+      -- Insert using 'key_name' column
+      INSERT INTO dependency_settings (key_name, value)
+      VALUES ('update_mode', '"conservative"')
+      ON CONFLICT (key_name) DO NOTHING;
+    END IF;
+  END IF;
+END $$;
 
 -- Table for security audits
 CREATE TABLE IF NOT EXISTS security_audits (
