@@ -29,10 +29,12 @@ import {
   ExternalLink,
   RotateCcw,
   X,
+  Save,
 } from "lucide-react"
 import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
 import { DependencyList } from "@/components/admin/dependency-list"
 import { WidgetComponent } from "@/components/admin/widget"
+import { GridLayout } from "@/components/admin/grid-layout"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "@/components/ui/use-toast"
 
@@ -61,16 +63,18 @@ interface SecurityStats {
   lastScan: string
 }
 
-// Update the Widget interface to include size information
+// Update the Widget interface to include grid position and size
 interface Widget {
   id: string
   type: string
   visible: boolean
   order: number
-  column?: number
-  height?: number
-  width?: number
-  cols?: number
+  x: number
+  y: number
+  w: number
+  h: number
+  collapsed?: boolean
+  static?: boolean
 }
 
 interface DashboardState {
@@ -145,6 +149,11 @@ const availableWidgets: WidgetOption[] = [
   },
 ]
 
+// Grid configuration
+const GRID_COLS = 12
+const GRID_ROW_HEIGHT = 100
+const GRID_GAP = 10
+
 export default function SecurityClientPage() {
   const { isLoaded, isSignedIn, user } = useUser()
   const router = useRouter()
@@ -184,6 +193,8 @@ export default function SecurityClientPage() {
   const [showDiagnostics, setShowDiagnostics] = useState(false)
   const [hasMounted, setHasMounted] = useState(false)
   const [draggingWidgetId, setDraggingWidgetId] = useState<string | null>(null)
+  const [layoutChanged, setLayoutChanged] = useState(false)
+  const [gridSize, setGridSize] = useState(20) // Grid size for snapping
   const widgetRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
   // Load dashboard state from localStorage on initial render
@@ -235,14 +246,23 @@ export default function SecurityClientPage() {
   // Set default widgets
   const setDefaultWidgets = () => {
     const defaultWidgets: Widget[] = [
-      { id: "update-settings", type: "update-settings", visible: true, order: 0 },
-      { id: "reset-settings", type: "reset-settings", visible: true, order: 1 },
-      { id: "security-score", type: "security-score", visible: true, order: 2 },
-      { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 3 },
-      { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 4 },
-      { id: "outdated-packages", type: "outdated-packages", visible: true, order: 5 },
-      { id: "security-recommendations", type: "security-recommendations", visible: true, order: 6 },
-      { id: "recent-activity", type: "recent-activity", visible: true, order: 7 },
+      { id: "update-settings", type: "update-settings", visible: true, order: 0, x: 0, y: 0, w: 4, h: 3 },
+      { id: "reset-settings", type: "reset-settings", visible: true, order: 1, x: 4, y: 0, w: 4, h: 2 },
+      { id: "security-score", type: "security-score", visible: true, order: 2, x: 8, y: 0, w: 4, h: 2 },
+      { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 3, x: 0, y: 3, w: 4, h: 3 },
+      { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 4, x: 4, y: 2, w: 4, h: 3 },
+      { id: "outdated-packages", type: "outdated-packages", visible: true, order: 5, x: 8, y: 2, w: 4, h: 2 },
+      {
+        id: "security-recommendations",
+        type: "security-recommendations",
+        visible: true,
+        order: 6,
+        x: 0,
+        y: 6,
+        w: 6,
+        h: 3,
+      },
+      { id: "recent-activity", type: "recent-activity", visible: true, order: 7, x: 6, y: 5, w: 6, h: 4 },
     ]
     setWidgets(defaultWidgets)
   }
@@ -258,6 +278,9 @@ export default function SecurityClientPage() {
         globalUpdateMode,
       }
       localStorage.setItem("securityDashboardState", JSON.stringify(state))
+
+      // Reset layout changed flag
+      setLayoutChanged(false)
     }
   }, [widgets, activeTab, filter, searchTerm, globalUpdateMode])
 
@@ -266,7 +289,18 @@ export default function SecurityClientPage() {
     if (hasMounted) {
       saveDashboardState()
     }
-  }, [widgets, activeTab, filter, searchTerm, globalUpdateMode, hasMounted, saveDashboardState])
+  }, [activeTab, filter, searchTerm, globalUpdateMode, hasMounted, saveDashboardState])
+
+  // Save layout when it changes, but with debounce
+  useEffect(() => {
+    if (hasMounted && layoutChanged) {
+      const timer = setTimeout(() => {
+        saveDashboardState()
+      }, 1000) // 1 second debounce
+
+      return () => clearTimeout(timer)
+    }
+  }, [widgets, hasMounted, layoutChanged, saveDashboardState])
 
   // Update available widgets for adding
   useEffect(() => {
@@ -280,32 +314,6 @@ export default function SecurityClientPage() {
       router.push("/sign-in?redirect_url=/admin/security")
     }
   }, [isLoaded, isSignedIn, router])
-
-  // Measure widget heights after render
-  useEffect(() => {
-    if (hasMounted && widgets.length > 0) {
-      // Use requestAnimationFrame to ensure DOM is fully rendered
-      requestAnimationFrame(() => {
-        const updatedWidgets = [...widgets]
-        let changed = false
-
-        updatedWidgets.forEach((widget, index) => {
-          const element = widgetRefs.current[widget.id]
-          if (element) {
-            const height = element.offsetHeight
-            if (widget.height !== height) {
-              updatedWidgets[index] = { ...widget, height }
-              changed = true
-            }
-          }
-        })
-
-        if (changed) {
-          setWidgets(updatedWidgets)
-        }
-      })
-    }
-  }, [widgets, hasMounted])
 
   const fetchDependencies = useCallback(async () => {
     if (!isSignedIn) return
@@ -341,7 +349,7 @@ export default function SecurityClientPage() {
         name: dep.name,
         currentVersion: dep.current_version || dep.currentVersion,
         latestVersion: dep.latest_version || dep.latestVersion,
-        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latest_version),
+        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latestVersion),
         locked: dep.locked || false,
         description: dep.description || "",
         hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
@@ -431,10 +439,10 @@ export default function SecurityClientPage() {
       // Refresh dependencies after scan
       await fetchDependencies()
 
-      // Clear setup message after a delay
-      setTimeout(() => {
-        // Success message could be shown here if needed
-      }, 3000)
+      toast({
+        title: "Scan Complete",
+        description: "Dependencies have been scanned successfully",
+      })
     } catch (err: any) {
       setError(`Error scanning dependencies: ${err.message}`)
       console.error("Error scanning dependencies:", err)
@@ -523,6 +531,11 @@ export default function SecurityClientPage() {
         const errorData = await response.json()
         throw new Error(errorData.message || errorData.error || "Failed to update settings")
       }
+
+      toast({
+        title: "Update Mode Changed",
+        description: `Global update mode set to ${value}`,
+      })
     } catch (err: any) {
       setError(`Error updating settings: ${err.message}`)
       console.error("Error updating settings:", err)
@@ -614,6 +627,11 @@ export default function SecurityClientPage() {
 
       // Refresh dependencies to get updated vulnerability info
       fetchDependencies()
+
+      toast({
+        title: "Security Audit Complete",
+        description: "Your dependencies have been audited for security vulnerabilities",
+      })
     } catch (err: any) {
       setError(`Error running security audit: ${err.message}`)
       console.error("Error running security audit:", err)
@@ -624,40 +642,106 @@ export default function SecurityClientPage() {
 
   // Widget management functions
   const handleAddWidget = (widgetId: string) => {
+    // Find the next available position
+    const lastWidget = [...widgets].sort((a, b) => b.y + b.h - (a.y + a.h))[0]
+    const y = lastWidget ? lastWidget.y + lastWidget.h : 0
+
     const newWidget: Widget = {
       id: `${widgetId}-${Date.now()}`,
       type: widgetId,
       visible: true,
       order: widgets.length,
+      x: 0,
+      y,
+      w: 4,
+      h: 3,
     }
 
     const updatedWidgets = [...widgets, newWidget]
     setWidgets(updatedWidgets)
+    setLayoutChanged(true)
   }
 
   const handleRemoveWidget = (id: string) => {
     const updatedWidgets = widgets.filter((w) => w.id !== id)
     setWidgets(updatedWidgets)
+    setLayoutChanged(true)
+  }
+
+  const handleWidgetResize = (
+    id: string,
+    newSize: { width: number; height: number; gridWidth: number; gridHeight: number },
+  ) => {
+    setWidgets((prevWidgets) =>
+      prevWidgets.map((widget) =>
+        widget.id === id
+          ? {
+              ...widget,
+              w: newSize.gridWidth,
+              h: newSize.gridHeight,
+            }
+          : widget,
+      ),
+    )
+    setLayoutChanged(true)
+  }
+
+  const handleWidgetMove = (id: string, newPosition: { x: number; y: number; gridX: number; gridY: number }) => {
+    setWidgets((prevWidgets) =>
+      prevWidgets.map((widget) =>
+        widget.id === id
+          ? {
+              ...widget,
+              x: newPosition.gridX,
+              y: newPosition.gridY,
+            }
+          : widget,
+      ),
+    )
+    setLayoutChanged(true)
+  }
+
+  const handleWidgetCollapse = (id: string, collapsed: boolean) => {
+    setWidgets((prevWidgets) =>
+      prevWidgets.map((widget) =>
+        widget.id === id
+          ? {
+              ...widget,
+              collapsed,
+            }
+          : widget,
+      ),
+    )
+    setLayoutChanged(true)
+  }
+
+  const handleLayoutChange = (newLayout: any[]) => {
+    // Map the layout items back to our widget format
+    const updatedWidgets = widgets.map((widget) => {
+      const layoutItem = newLayout.find((item) => item.id === widget.id)
+      if (layoutItem) {
+        return {
+          ...widget,
+          x: layoutItem.x,
+          y: layoutItem.y,
+          w: layoutItem.w,
+          h: layoutItem.h,
+        }
+      }
+      return widget
+    })
+
+    setWidgets(updatedWidgets)
+    setLayoutChanged(true)
   }
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData("widgetId", id)
     setDraggingWidgetId(id)
-
-    // Add a dragging class to the element
-    const element = document.getElementById(id)
-    if (element) {
-      element.classList.add("dragging")
-    }
   }
 
   const handleDragEnd = () => {
     setDraggingWidgetId(null)
-
-    // Remove dragging class from all elements
-    document.querySelectorAll(".dragging").forEach((el) => {
-      el.classList.remove("dragging")
-    })
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -670,20 +754,30 @@ export default function SecurityClientPage() {
 
     if (draggedId === targetId) return
 
-    const updatedWidgets = [...widgets]
-    const draggedIndex = updatedWidgets.findIndex((w) => w.id === draggedId)
-    const targetIndex = updatedWidgets.findIndex((w) => w.id === targetId)
+    // Find the dragged and target widgets
+    const draggedIndex = widgets.findIndex((w) => w.id === draggedId)
+    const targetIndex = widgets.findIndex((w) => w.id === targetId)
 
     if (draggedIndex === -1 || targetIndex === -1) return
 
-    // Reorder
-    const [draggedWidget] = updatedWidgets.splice(draggedIndex, 1)
-    updatedWidgets.splice(targetIndex, 0, draggedWidget)
+    // Swap positions
+    const updatedWidgets = [...widgets]
+    const draggedWidget = { ...updatedWidgets[draggedIndex] }
+    const targetWidget = { ...updatedWidgets[targetIndex] }
 
-    // Update order property
-    const reorderedWidgets = updatedWidgets.map((w, i) => ({ ...w, order: i }))
+    // Swap x and y coordinates
+    const tempX = draggedWidget.x
+    const tempY = draggedWidget.y
+    draggedWidget.x = targetWidget.x
+    draggedWidget.y = targetWidget.y
+    targetWidget.x = tempX
+    targetWidget.y = tempY
 
-    setWidgets(reorderedWidgets)
+    updatedWidgets[draggedIndex] = draggedWidget
+    updatedWidgets[targetIndex] = targetWidget
+
+    setWidgets(updatedWidgets)
+    setLayoutChanged(true)
 
     // Remove dragging class
     handleDragEnd()
@@ -719,23 +813,6 @@ export default function SecurityClientPage() {
   // Count dependencies using global settings
   const globalDependenciesCount = dependencies.filter((dep) => dep.updateMode === "global").length
   const dependabotAlertCount = dependencies.filter((dep) => dep.hasDependabotAlert).length
-
-  // Add this function to handle widget resizing
-  const handleWidgetResize = (id: string, newSize: { width: number; height: number }) => {
-    setWidgets((prevWidgets) =>
-      prevWidgets.map((widget) =>
-        widget.id === id
-          ? {
-              ...widget,
-              width: newSize.width,
-              height: newSize.height,
-              // Calculate columns based on width
-              cols: Math.min(3, Math.max(1, Math.round(newSize.width / (window.innerWidth / 3)))),
-            }
-          : widget,
-      ),
-    )
-  }
 
   // Render widget content based on type
   const renderWidgetContent = (type: string) => {
@@ -841,13 +918,13 @@ export default function SecurityClientPage() {
       case "update-settings":
         return (
           <div className="space-y-4">
-            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-md">
+            <div className="bg-gray-800/50 p-4 rounded-lg border border-gray-700/50 shadow-md backdrop-blur-sm">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-semibold text-white flex items-center">
                   <Globe className="mr-2 h-5 w-5 text-gray-300" />
                   Global Update Policy
                 </h3>
-                <Badge variant="outline" className="bg-gray-700 text-gray-300 border-gray-600">
+                <Badge variant="outline" className="bg-gray-700/50 text-gray-300 border-gray-600/50">
                   {globalDependenciesCount} packages using this policy
                 </Badge>
               </div>
@@ -867,7 +944,7 @@ export default function SecurityClientPage() {
                 </div>
               </div>
 
-              <div className="text-sm text-gray-300 space-y-2 mt-4 bg-gray-900/60 p-3 rounded-md">
+              <div className="text-sm text-gray-300 space-y-2 mt-4 bg-gray-900/40 p-3 rounded-md">
                 <p className="flex items-center">
                   <span
                     className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "off" ? "bg-gray-400" : "bg-gray-700"}`}
@@ -889,7 +966,7 @@ export default function SecurityClientPage() {
               </div>
 
               {dependabotAlertCount > 0 && (
-                <div className="mt-4 bg-gray-900/60 p-3 rounded-md border border-gray-700">
+                <div className="mt-4 bg-gray-900/40 p-3 rounded-md border border-gray-700/50">
                   <p className="text-sm text-gray-300 flex items-start">
                     <GitPullRequest className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
                     <span>
@@ -1094,28 +1171,6 @@ export default function SecurityClientPage() {
     )
   }
 
-  const checkForScheduledUpdates = useCallback(async () => {
-    console.log("Checking for scheduled updates based on preferences...")
-    try {
-      const response = await fetch("/api/dependencies/scheduled-update")
-      if (response.ok) {
-        const data = await response.json()
-        if (data.updated > 0) {
-          console.log(`Applied ${data.updated} updates based on preferences`)
-          fetchDependencies()
-          setUpdateResults(data.results || [])
-          setShowUpdateResults(true)
-        }
-      }
-    } catch (error) {
-      console.error("Error in scheduled update:", error)
-    }
-  }, [fetchDependencies])
-
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
-
   const memoizedCheckForScheduledUpdates = useCallback(async () => {
     console.log("Checking for scheduled updates based on preferences...")
     try {
@@ -1153,11 +1208,65 @@ export default function SecurityClientPage() {
     return () => clearInterval(intervalId)
   }, [hasMounted, memoizedCheckForScheduledUpdates])
 
+  // Prepare grid items for the layout
+  const gridItems = widgets.map((widget) => {
+    const widgetDef = availableWidgets.find((w) => w.id === widget.type)
+
+    return {
+      id: widget.id,
+      x: widget.x,
+      y: widget.y,
+      w: widget.w,
+      h: widget.h,
+      collapsed: widget.collapsed,
+      content: (
+        <WidgetComponent
+          key={widget.id}
+          id={widget.id}
+          title={widgetDef?.title || widget.type}
+          onRemove={handleRemoveWidget}
+          draggable={true}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          onDragEnd={handleDragEnd}
+          draggingWidgetId={draggingWidgetId}
+          highlighted={widget.type === "update-settings"}
+          onResize={handleWidgetResize}
+          onMove={handleWidgetMove}
+          onCollapse={handleWidgetCollapse}
+          initialSize={{
+            width: widget.w * gridSize,
+            height: widget.h * gridSize,
+            gridWidth: widget.w,
+            gridHeight: widget.h,
+          }}
+          initialPosition={{
+            x: widget.x * gridSize,
+            y: widget.y * gridSize,
+            gridX: widget.x,
+            gridY: widget.y,
+          }}
+          gridSize={gridSize}
+          collapsed={widget.collapsed}
+        >
+          {renderWidgetContent(widget.type)}
+        </WidgetComponent>
+      ),
+    }
+  })
+
   return (
-    <div className="container mx-auto p-6 bg-gray-950 text-gray-100">
+    <div className="container mx-auto p-6 bg-gray-950 text-gray-100 min-h-screen">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Security Center</h1>
         <div className="flex space-x-2">
+          {layoutChanged && (
+            <Button onClick={saveDashboardState} variant="outline" size="sm" className="border-gray-700">
+              <Save className="mr-2 h-4 w-4" />
+              Save Layout
+            </Button>
+          )}
           <Button onClick={fetchDependencies} variant="outline" size="sm" className="border-gray-700">
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
@@ -1294,39 +1403,15 @@ export default function SecurityClientPage() {
           </div>
 
           {/* Grid layout for widgets */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0 auto-rows-min">
-            {widgets
-              .sort((a, b) => a.order - b.order)
-              .map((widget) => {
-                const widgetDef = availableWidgets.find((w) => w.id === widget.type)
-                const isUpdateSettings = widget.type === "update-settings"
-
-                return (
-                  <WidgetComponent
-                    key={widget.id}
-                    id={widget.id}
-                    title={widgetDef?.title || widget.type}
-                    onRemove={handleRemoveWidget}
-                    draggable={true}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                    onDragEnd={handleDragEnd}
-                    draggingWidgetId={draggingWidgetId}
-                    fullWidth={false}
-                    highlighted={isUpdateSettings}
-                    onResize={handleWidgetResize}
-                    initialSize={{
-                      width: widget.width,
-                      height: widget.height,
-                      cols: widget.cols || 1,
-                    }}
-                    className="p-1"
-                  >
-                    {renderWidgetContent(widget.type)}
-                  </WidgetComponent>
-                )
-              })}
+          <div className="relative min-h-[600px]">
+            <GridLayout
+              items={gridItems}
+              cols={GRID_COLS}
+              rowHeight={GRID_ROW_HEIGHT}
+              gap={GRID_GAP}
+              onLayoutChange={handleLayoutChange}
+              className="bg-gray-950"
+            />
           </div>
         </TabsContent>
 
@@ -1552,6 +1637,38 @@ export default function SecurityClientPage() {
         .resizing {
           cursor: nwse-resize !important;
           user-select: none;
+        }
+        
+        .resizing-n {
+          cursor: n-resize !important;
+        }
+        
+        .resizing-s {
+          cursor: s-resize !important;
+        }
+        
+        .resizing-e {
+          cursor: e-resize !important;
+        }
+        
+        .resizing-w {
+          cursor: w-resize !important;
+        }
+        
+        .resizing-ne {
+          cursor: ne-resize !important;
+        }
+        
+        .resizing-nw {
+          cursor: nw-resize !important;
+        }
+        
+        .resizing-se {
+          cursor: se-resize !important;
+        }
+        
+        .resizing-sw {
+          cursor: sw-resize !important;
         }
         
         .resizing * {

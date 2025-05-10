@@ -15,11 +15,12 @@ export async function POST(request: Request) {
     }
 
     // In a database-backed system, this would update the global update mode
-    // Since we're not using a database, we'll just return a success message
+    // Since we're using localStorage for persistence, the client will handle saving the state
 
     return NextResponse.json({
       success: true,
       message: `Global update mode has been set to ${updateMode}.`,
+      updateMode,
     })
   } catch (error) {
     console.error("Error updating global settings:", error)
