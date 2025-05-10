@@ -158,7 +158,7 @@ export function WidgetComponent({
       }}
       exit={{ opacity: 0, scale: 0.9 }}
       transition={{ duration: 0.3 }}
-      className={`mb-4 ${className}`}
+      className={`${className}`}
       style={{
         height: size.height > 0 ? size.height + "px" : "auto",
         width: "100%",

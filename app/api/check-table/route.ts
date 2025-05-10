@@ -1,20 +1,26 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
+import { createClient } from "@supabase/supabase-js"
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const tableName = searchParams.get("table")
+
+  if (!tableName) {
+    return NextResponse.json({ error: "Table name is required" }, { status: 400 })
+  }
+
   try {
-    const { tableName } = await request.json()
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!tableName || typeof tableName !== "string") {
+    if (!supabaseUrl || !supabaseKey) {
       return NextResponse.json(
-        {
-          error: "Invalid request: tableName is required",
-        },
-        { status: 400 },
+        { error: "Supabase credentials are not configured", code: "MISSING_CREDENTIALS" },
+        { status: 500 },
       )
     }
 
-    const supabase = createAdminClient()
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Check if the table exists
     const { data, error } = await supabase
@@ -25,33 +31,27 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
-      // If error code is PGRST116, it means no rows were returned (table doesn't exist)
-      if (error.code === "PGRST116") {
-        return NextResponse.json({
-          exists: false,
-          tableName,
-        })
-      }
-
-      console.error(`Error checking if table ${tableName} exists:`, error)
+      console.error("Error checking table:", error)
       return NextResponse.json(
         {
-          error: `Database error: ${error.message}`,
+          error: "Failed to check table",
+          details: error.message,
+          code: error.code || "DB_ERROR",
+          hint: "This may be due to insufficient permissions or a database connection issue.",
         },
         { status: 500 },
       )
     }
 
-    // If we got here, the table exists
-    return NextResponse.json({
-      exists: true,
-      tableName,
-    })
-  } catch (error) {
-    console.error("Error checking table:", error)
+    return NextResponse.json({ exists: !!data })
+  } catch (error: any) {
+    console.error("Unexpected error checking table:", error)
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Failed to check table",
+        details: error.message || String(error),
+        code: "UNEXPECTED_ERROR",
+        stack: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 },
     )

@@ -34,6 +34,7 @@ import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
 import { DependencyList } from "@/components/admin/dependency-list"
 import { WidgetComponent } from "@/components/admin/widget"
 import { motion, AnimatePresence } from "framer-motion"
+import { toast } from "@/components/ui/use-toast"
 
 // Types
 interface Dependency {
@@ -108,9 +109,15 @@ const availableWidgets: WidgetOption[] = [
   },
   {
     id: "update-settings",
-    title: "Global Update Settings",
+    title: "Global Update Policy",
     description: "Configure automatic update behavior",
     icon: <Globe className="h-4 w-4" />,
+  },
+  {
+    id: "reset-settings",
+    title: "Reset Settings",
+    description: "Reset all dependency settings to defaults",
+    icon: <RotateCcw className="h-4 w-4" />,
   },
   {
     id: "recent-activity",
@@ -229,12 +236,13 @@ export default function SecurityClientPage() {
   const setDefaultWidgets = () => {
     const defaultWidgets: Widget[] = [
       { id: "update-settings", type: "update-settings", visible: true, order: 0 },
-      { id: "security-score", type: "security-score", visible: true, order: 1 },
-      { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 2 },
-      { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 3 },
-      { id: "outdated-packages", type: "outdated-packages", visible: true, order: 4 },
-      { id: "security-recommendations", type: "security-recommendations", visible: true, order: 5 },
-      { id: "recent-activity", type: "recent-activity", visible: true, order: 6 },
+      { id: "reset-settings", type: "reset-settings", visible: true, order: 1 },
+      { id: "security-score", type: "security-score", visible: true, order: 2 },
+      { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 3 },
+      { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 4 },
+      { id: "outdated-packages", type: "outdated-packages", visible: true, order: 5 },
+      { id: "security-recommendations", type: "security-recommendations", visible: true, order: 6 },
+      { id: "recent-activity", type: "recent-activity", visible: true, order: 7 },
     ]
     setWidgets(defaultWidgets)
   }
@@ -299,32 +307,6 @@ export default function SecurityClientPage() {
     }
   }, [widgets, hasMounted])
 
-  // Organize widgets into columns (masonry layout)
-  const organizeWidgetsIntoColumns = useCallback(
-    (columnCount = 3) => {
-      if (widgets.length === 0) return []
-
-      // Create empty columns
-      const columns: Widget[][] = Array.from({ length: columnCount }, () => [])
-
-      // Sort widgets by order
-      const sortedWidgets = [...widgets].sort((a, b) => a.order - b.order)
-
-      // Calculate column heights
-      const columnHeights = Array(columnCount).fill(0)
-
-      // Place each widget in the shortest column
-      sortedWidgets.forEach((widget) => {
-        const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights))
-        columns[shortestColumnIndex].push(widget)
-        columnHeights[shortestColumnIndex] += widget.height || 200 // Use default height if not measured
-      })
-
-      return columns
-    },
-    [widgets],
-  )
-
   const fetchDependencies = useCallback(async () => {
     if (!isSignedIn) return
 
@@ -359,7 +341,7 @@ export default function SecurityClientPage() {
         name: dep.name,
         currentVersion: dep.current_version || dep.currentVersion,
         latestVersion: dep.latest_version || dep.latestVersion,
-        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latestVersion),
+        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latest_version),
         locked: dep.locked || false,
         description: dep.description || "",
         hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
@@ -591,6 +573,11 @@ export default function SecurityClientPage() {
         const errorData = await response.json()
         throw new Error(errorData.message || errorData.error || "Failed to reset settings")
       }
+
+      toast({
+        title: "Settings Reset",
+        description: "All dependency settings have been reset to defaults",
+      })
     } catch (err: any) {
       setError(`Error resetting settings: ${err.message}`)
       console.error("Error resetting settings:", err)
@@ -877,15 +864,6 @@ export default function SecurityClientPage() {
                       aggressive: "All Updates",
                     }}
                   />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-gray-600 bg-gray-700/50 hover:bg-gray-600"
-                    onClick={resetAllSettings}
-                  >
-                    <RotateCcw className="h-4 w-4 mr-1" />
-                    Reset All
-                  </Button>
                 </div>
               </div>
 
@@ -922,6 +900,23 @@ export default function SecurityClientPage() {
                 </div>
               )}
             </div>
+          </div>
+        )
+
+      case "reset-settings":
+        return (
+          <div className="flex flex-col h-full justify-between">
+            <div>
+              <h3 className="text-lg font-semibold mb-2">Reset All Settings</h3>
+              <p className="text-sm text-gray-400 mb-4">
+                Reset all dependency update settings to use the global policy. This will affect {dependencies.length}{" "}
+                packages.
+              </p>
+            </div>
+            <Button variant="outline" onClick={resetAllSettings} className="w-full">
+              <RotateCcw className="h-4 w-4 mr-2" />
+              Reset All Settings
+            </Button>
           </div>
         )
 
@@ -1121,23 +1116,42 @@ export default function SecurityClientPage() {
     setHasMounted(true)
   }, [])
 
+  const memoizedCheckForScheduledUpdates = useCallback(async () => {
+    console.log("Checking for scheduled updates based on preferences...")
+    try {
+      const response = await fetch("/api/dependencies/scheduled-update")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.updated > 0) {
+          console.log(`Applied ${data.updated} updates based on preferences`)
+          await fetchDependencies() // Ensure dependencies are fetched after update
+          setUpdateResults(data.results || [])
+          setShowUpdateResults(true)
+        }
+      }
+    } catch (error) {
+      console.error("Error in scheduled update:", error)
+    }
+  }, [fetchDependencies])
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
   useEffect(() => {
     if (!hasMounted) {
       return
     }
 
     // Run immediately
-    checkForScheduledUpdates()
+    memoizedCheckForScheduledUpdates()
 
     // Set up interval (3 hours = 3 * 60 * 60 * 1000 ms)
-    const intervalId = setInterval(checkForScheduledUpdates, 3 * 60 * 60 * 1000)
+    const intervalId = setInterval(memoizedCheckForScheduledUpdates, 3 * 60 * 60 * 1000)
 
     // Clean up interval on component unmount
     return () => clearInterval(intervalId)
-  }, [hasMounted, checkForScheduledUpdates])
-
-  // Organize widgets into columns for masonry layout
-  const widgetColumns = organizeWidgetsIntoColumns(3)
+  }, [hasMounted, memoizedCheckForScheduledUpdates])
 
   return (
     <div className="container mx-auto p-6 bg-gray-950 text-gray-100">
@@ -1280,7 +1294,7 @@ export default function SecurityClientPage() {
           </div>
 
           {/* Grid layout for widgets */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-min">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0 auto-rows-min">
             {widgets
               .sort((a, b) => a.order - b.order)
               .map((widget) => {
@@ -1299,14 +1313,15 @@ export default function SecurityClientPage() {
                     onDrop={handleDrop}
                     onDragEnd={handleDragEnd}
                     draggingWidgetId={draggingWidgetId}
-                    fullWidth={isUpdateSettings}
+                    fullWidth={false}
                     highlighted={isUpdateSettings}
                     onResize={handleWidgetResize}
                     initialSize={{
                       width: widget.width,
                       height: widget.height,
-                      cols: widget.cols || (isUpdateSettings ? 3 : 1),
+                      cols: widget.cols || 1,
                     }}
+                    className="p-1"
                   >
                     {renderWidgetContent(widget.type)}
                   </WidgetComponent>
