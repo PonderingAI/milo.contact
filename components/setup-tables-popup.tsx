@@ -263,16 +263,16 @@ CREATE INDEX IF NOT EXISTS idx_dependencies_name ON dependencies(name);
 -- Table for dependency settings
 CREATE TABLE IF NOT EXISTS dependency_settings (
   id SERIAL PRIMARY KEY,
-  key VARCHAR(255) NOT NULL UNIQUE,
+  setting_key VARCHAR(255) NOT NULL UNIQUE,
   value JSONB,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Insert default settings
-INSERT INTO dependency_settings (key, value)
+INSERT INTO dependency_settings (setting_key, value)
 VALUES ('update_mode', '"conservative"')
-ON CONFLICT (key) DO NOTHING;
+ON CONFLICT (setting_key) DO NOTHING;
 
 -- Table for security audits
 CREATE TABLE IF NOT EXISTS security_audits (
