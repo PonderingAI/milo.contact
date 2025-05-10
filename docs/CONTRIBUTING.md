@@ -72,9 +72,10 @@ Follow the [Conventional Commits](https://www.conventionalcommits.org/) specific
 
 ## Documentation
 
-- Update README.md when adding new features
+- Update documentation when adding new features
 - Document complex functions and components
 - Keep documentation up to date with code changes
+- [Code Overview](./CODE_OVERVIEW.md)
 
 ## Environment Variables
 
@@ -90,22 +91,4 @@ If you have any questions about contributing, please open an issue or contact th
 Thank you for your contributions!
 \`\`\`
 
-Let's also update the .env.example file to use more generic descriptions without mentioning specific variable names that might be flagged:
-
-```plaintext file=".env.example"
-# Supabase Configuration
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
-
-# Authentication
-NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=your-publishable-key
-CLERK_SECRET_KEY=your-secret-key
-CLERK_WEBHOOK_SECRET=your-webhook-secret
-
-# Site Configuration
-NEXT_PUBLIC_SITE_URL=http://localhost:3000
-BOOTSTRAP_SECRET=your-bootstrap-secret
-
-# Optional: Security and spam protection
-# Add your security keys here (see documentation)
+Now, let's move CHANGELOG.md to docs:

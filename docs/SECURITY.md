@@ -82,6 +82,3 @@ The security system works alongside:
 1. **GitHub's Dependabot**: Complementary functionality for dependency updates
 2. **npm**: Uses npm commands for accurate dependency information
 3. **Supabase**: Stores dependency settings and update history
-\`\`\`
-
-Let's update the security client page to remove the dependency setup alert since it's now automatic:
