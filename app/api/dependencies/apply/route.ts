@@ -76,11 +76,42 @@ async function getSecurityIssues() {
   }
 }
 
+// Helper function to check for Dependabot alerts from GitHub
+async function getDependabotAlerts() {
+  try {
+    // In a real implementation, this would call the GitHub API
+    // For now, we'll simulate some Dependabot alerts
+
+    // Simulate some Dependabot alerts for demonstration
+    const simulatedAlerts = {
+      react: {
+        severity: "high",
+        summary: "Prototype Pollution in React",
+        url: "https://github.com/advisories/GHSA-example-react",
+        createdAt: new Date().toISOString(),
+      },
+      lodash: {
+        severity: "critical",
+        summary: "Prototype Pollution in Lodash",
+        url: "https://github.com/advisories/GHSA-example-lodash",
+        createdAt: new Date().toISOString(),
+      },
+      // Add more simulated alerts as needed
+    }
+
+    return simulatedAlerts
+  } catch (error) {
+    console.error("Error fetching Dependabot alerts:", error)
+    return {}
+  }
+}
+
 export async function POST() {
   try {
     // Get outdated packages
     const outdatedPackages = await getOutdatedPackages()
     const securityIssues = await getSecurityIssues()
+    const dependabotAlerts = await getDependabotAlerts()
 
     // If no outdated packages, return early
     if (Object.keys(outdatedPackages).length === 0) {
@@ -96,6 +127,8 @@ export async function POST() {
     // Simulate update results
     const results = Object.entries(outdatedPackages).map(([name, info]: [string, any]) => {
       const hasSecurityIssue = securityIssues?.vulnerabilities?.[name] !== undefined
+      const hasDependabotAlert = dependabotAlerts[name] !== undefined
+      const alertDetails = hasDependabotAlert ? dependabotAlerts[name] : null
 
       return {
         name,
@@ -104,6 +137,8 @@ export async function POST() {
         success: Math.random() > 0.1, // Simulate 90% success rate
         error: Math.random() > 0.9 ? "Failed to update package" : null,
         securityFix: hasSecurityIssue,
+        dependabotAlert: hasDependabotAlert,
+        alertDetails: alertDetails,
       }
     })
 

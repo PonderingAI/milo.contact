@@ -28,6 +28,8 @@ import {
   Globe,
   GripVertical,
   X,
+  GitPullRequest,
+  ExternalLink,
 } from "lucide-react"
 import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
 import { motion, AnimatePresence } from "framer-motion"
@@ -43,12 +45,15 @@ interface Dependency {
   description: string
   hasSecurityIssue: boolean
   securityDetails?: any
+  hasDependabotAlert?: boolean
+  dependabotAlertDetails?: any
   updateMode: ToggleState
   isDev?: boolean
 }
 
 interface SecurityStats {
   vulnerabilities: number
+  dependabotAlerts: number
   outdatedPackages: number
   securityScore: number
   lastScan: string
@@ -74,6 +79,12 @@ const availableWidgets: WidgetOption[] = [
     title: "Vulnerabilities",
     description: "Known security issues in your dependencies",
     icon: <AlertTriangle className="h-4 w-4" />,
+  },
+  {
+    id: "dependabot-alerts",
+    title: "Dependabot Alerts",
+    description: "Security alerts from GitHub Dependabot",
+    icon: <GitPullRequest className="h-4 w-4" />,
   },
   {
     id: "outdated-packages",
@@ -127,6 +138,7 @@ export default function SecurityClientPage() {
   const [availableWidgetsForAdd, setAvailableWidgetsForAdd] = useState<WidgetOption[]>([])
   const [securityStats, setSecurityStats] = useState<SecurityStats>({
     vulnerabilities: 0,
+    dependabotAlerts: 0,
     outdatedPackages: 0,
     securityScore: 100,
     lastScan: new Date().toLocaleDateString(),
@@ -135,6 +147,12 @@ export default function SecurityClientPage() {
   const [applyingChanges, setApplyingChanges] = useState(false)
   const [selectedVulnerability, setSelectedVulnerability] = useState<{
     vulnerability: any
+    packageName: string
+    currentVersion: string
+    latestVersion: string
+  } | null>(null)
+  const [selectedDependabotAlert, setSelectedDependabotAlert] = useState<{
+    alert: any
     packageName: string
     currentVersion: string
     latestVersion: string
@@ -157,10 +175,11 @@ export default function SecurityClientPage() {
         const defaultWidgets: Widget[] = [
           { id: "update-settings", type: "update-settings", visible: true, order: 0 },
           { id: "security-score", type: "security-score", visible: true, order: 1 },
-          { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 2 },
-          { id: "outdated-packages", type: "outdated-packages", visible: true, order: 3 },
-          { id: "security-recommendations", type: "security-recommendations", visible: true, order: 4 },
-          { id: "recent-activity", type: "recent-activity", visible: true, order: 5 },
+          { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 2 },
+          { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 3 },
+          { id: "outdated-packages", type: "outdated-packages", visible: true, order: 4 },
+          { id: "security-recommendations", type: "security-recommendations", visible: true, order: 5 },
+          { id: "recent-activity", type: "recent-activity", visible: true, order: 6 },
         ]
         setWidgets(defaultWidgets)
         localStorage.setItem("securityWidgets", JSON.stringify(defaultWidgets))
@@ -218,6 +237,8 @@ export default function SecurityClientPage() {
         description: dep.description || "",
         hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
         securityDetails: dep.security_details || dep.securityDetails,
+        hasDependabotAlert: dep.has_dependabot_alert || dep.hasDependabotAlert || false,
+        dependabotAlertDetails: dep.dependabot_alert_details || dep.dependabotAlertDetails,
         updateMode: dep.update_mode || dep.updateMode || "global",
         isDev: dep.is_dev || dep.isDev || false,
       }))
@@ -227,6 +248,7 @@ export default function SecurityClientPage() {
       // Update security stats
       setSecurityStats({
         vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
+        dependabotAlerts: data.dependabotAlerts || mappedDependencies.filter((d) => d.hasDependabotAlert).length,
         outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
         securityScore: data.securityScore || calculateSecurityScore(mappedDependencies),
         lastScan: data.lastScan || new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
@@ -355,13 +377,17 @@ export default function SecurityClientPage() {
     if (totalDeps === 0) return 100
 
     const vulnerableDeps = deps.filter((d) => d.hasSecurityIssue).length
+    const dependabotAlertDeps = deps.filter((d) => d.hasDependabotAlert).length
     const outdatedDeps = deps.filter((d) => d.outdated).length
 
     // Calculate score: start with 100 and deduct points
     let score = 100
 
-    // Deduct more for vulnerable dependencies
-    score -= (vulnerableDeps / totalDeps) * 50
+    // Deduct more for Dependabot alerts (highest priority)
+    score -= (dependabotAlertDeps / totalDeps) * 60
+
+    // Deduct for vulnerable dependencies
+    score -= (vulnerableDeps / totalDeps) * 40
 
     // Deduct less for outdated dependencies
     score -= (outdatedDeps / totalDeps) * 20
@@ -466,6 +492,7 @@ export default function SecurityClientPage() {
       // Update security stats with new data
       setSecurityStats({
         vulnerabilities: data.vulnerabilities || 0,
+        dependabotAlerts: data.dependabotAlerts || 0,
         outdatedPackages: data.outdatedPackages || dependencies.filter((d) => d.outdated).length,
         securityScore: data.securityScore || 100,
         lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
@@ -562,11 +589,23 @@ export default function SecurityClientPage() {
     }
   }
 
+  const viewDependabotAlertDetails = (dependency: Dependency) => {
+    if (dependency.hasDependabotAlert && dependency.dependabotAlertDetails) {
+      setSelectedDependabotAlert({
+        alert: dependency.dependabotAlertDetails,
+        packageName: dependency.name,
+        currentVersion: dependency.currentVersion,
+        latestVersion: dependency.latestVersion,
+      })
+    }
+  }
+
   const filteredDependencies = dependencies
     .filter((dep) => {
       if (filter === "outdated") return dep.outdated
       if (filter === "locked") return dep.locked
       if (filter === "security") return dep.hasSecurityIssue
+      if (filter === "dependabot") return dep.hasDependabotAlert
       if (filter === "dev") return dep.isDev
       return true
     })
@@ -578,29 +617,48 @@ export default function SecurityClientPage() {
 
   // Get severity badge for a dependency
   const getSeverityBadge = (dependency: Dependency) => {
-    if (!dependency.hasSecurityIssue || !dependency.securityDetails) {
-      return null
+    if (dependency.hasDependabotAlert && dependency.dependabotAlertDetails) {
+      const severity = dependency.dependabotAlertDetails.severity?.toLowerCase()
+
+      switch (severity) {
+        case "critical":
+          return <Badge className="bg-red-900/20 text-red-400 border-red-800">Dependabot: Critical</Badge>
+        case "high":
+          return <Badge className="bg-orange-900/20 text-orange-400 border-orange-800">Dependabot: High</Badge>
+        case "moderate":
+        case "medium":
+          return <Badge className="bg-yellow-900/20 text-yellow-400 border-yellow-800">Dependabot: Medium</Badge>
+        case "low":
+          return <Badge className="bg-blue-900/20 text-blue-400 border-blue-800">Dependabot: Low</Badge>
+        default:
+          return <Badge className="bg-purple-900/20 text-purple-400 border-purple-800">Dependabot Alert</Badge>
+      }
     }
 
-    const severity = dependency.securityDetails.severity?.toLowerCase()
+    if (dependency.hasSecurityIssue && dependency.securityDetails) {
+      const severity = dependency.securityDetails.severity?.toLowerCase()
 
-    switch (severity) {
-      case "critical":
-        return <Badge className="bg-red-900/20 text-red-400 border-red-800">Critical</Badge>
-      case "high":
-        return <Badge className="bg-orange-900/20 text-orange-400 border-orange-800">High</Badge>
-      case "moderate":
-      case "medium":
-        return <Badge className="bg-yellow-900/20 text-yellow-400 border-yellow-800">Medium</Badge>
-      case "low":
-        return <Badge className="bg-blue-900/20 text-blue-400 border-blue-800">Low</Badge>
-      default:
-        return <Badge className="bg-red-900/20 text-red-400 border-red-800">Security Issue</Badge>
+      switch (severity) {
+        case "critical":
+          return <Badge className="bg-red-900/20 text-red-400 border-red-800">Critical</Badge>
+        case "high":
+          return <Badge className="bg-orange-900/20 text-orange-400 border-orange-800">High</Badge>
+        case "moderate":
+        case "medium":
+          return <Badge className="bg-yellow-900/20 text-yellow-400 border-yellow-800">Medium</Badge>
+        case "low":
+          return <Badge className="bg-blue-900/20 text-blue-400 border-blue-800">Low</Badge>
+        default:
+          return <Badge className="bg-red-900/20 text-red-400 border-red-800">Security Issue</Badge>
+      }
     }
+
+    return null
   }
 
   // Count dependencies using global settings
   const globalDependenciesCount = dependencies.filter((dep) => dep.updateMode === "global").length
+  const dependabotAlertCount = dependencies.filter((dep) => dep.hasDependabotAlert).length
 
   // Render widget content based on type
   const renderWidgetContent = (type: string) => {
@@ -641,6 +699,43 @@ export default function SecurityClientPage() {
               >
                 View Issues
               </Button>
+            )}
+          </div>
+        )
+
+      case "dependabot-alerts":
+        return (
+          <div>
+            <div className="flex items-center">
+              <div className="text-3xl font-bold">{securityStats.dependabotAlerts}</div>
+              <Badge
+                variant="outline"
+                className={`ml-2 ${securityStats.dependabotAlerts > 0 ? "bg-purple-900/20 text-purple-400 border-purple-800" : "bg-green-900/20 text-green-400 border-green-800"}`}
+              >
+                {securityStats.dependabotAlerts > 0 ? "Critical updates" : "All clear"}
+              </Badge>
+            </div>
+            <p className="text-sm text-gray-400 mt-2">GitHub Dependabot alerts</p>
+            {securityStats.dependabotAlerts > 0 && (
+              <div className="mt-3 space-y-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full"
+                  onClick={() => {
+                    setActiveTab("dependencies")
+                    setFilter("dependabot")
+                  }}
+                >
+                  View Alerts
+                </Button>
+                <div className="bg-purple-900/20 p-2 rounded-md border border-purple-800/50">
+                  <p className="text-xs text-purple-300">
+                    <AlertTriangle className="h-3 w-3 inline-block mr-1" />
+                    Dependabot alerts will be updated automatically regardless of update settings
+                  </p>
+                </div>
+              </div>
             )}
           </div>
         )
@@ -715,6 +810,18 @@ export default function SecurityClientPage() {
                 </p>
               </div>
 
+              {dependabotAlertCount > 0 && (
+                <div className="mt-4 bg-purple-900/30 p-3 rounded-md border border-purple-800/50">
+                  <p className="text-sm text-purple-300 flex items-start">
+                    <GitPullRequest className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                    <span>
+                      <strong>Important:</strong> Packages with Dependabot alerts will be updated automatically
+                      regardless of update mode settings to protect your application from security vulnerabilities.
+                    </span>
+                  </p>
+                </div>
+              )}
+
               <div className="mt-4">
                 <Button
                   variant="outline"
@@ -743,6 +850,12 @@ export default function SecurityClientPage() {
                   <div>
                     <p className="text-sm font-medium">
                       {result.name} {result.success ? `updated to ${result.to}` : "update failed"}
+                      {result.dependabotAlert && (
+                        <Badge className="ml-2 bg-purple-900/20 text-purple-400 border-purple-800">Dependabot</Badge>
+                      )}
+                      {result.forcedUpdate && (
+                        <Badge className="ml-2 bg-blue-900/20 text-blue-400 border-blue-800">Forced</Badge>
+                      )}
                     </p>
                     <p className="text-xs text-gray-500">
                       {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
@@ -802,6 +915,12 @@ export default function SecurityClientPage() {
                   <div>
                     <p className="text-sm font-medium">
                       {result.name} {result.success ? `updated to ${result.to}` : "update failed"}
+                      {result.dependabotAlert && (
+                        <Badge className="ml-2 bg-purple-900/20 text-purple-400 border-purple-800">Dependabot</Badge>
+                      )}
+                      {result.forcedUpdate && (
+                        <Badge className="ml-2 bg-blue-900/20 text-blue-400 border-blue-800">Forced</Badge>
+                      )}
                     </p>
                     <p className="text-xs text-gray-500">
                       {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
@@ -818,15 +937,28 @@ export default function SecurityClientPage() {
       case "security-recommendations":
         return (
           <div className="space-y-4">
-            <div className="flex items-start">
-              <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium">Update vulnerable packages</p>
-                <p className="text-xs text-gray-500">
-                  {securityStats.vulnerabilities} packages have known security vulnerabilities
-                </p>
+            {securityStats.dependabotAlerts > 0 && (
+              <div className="flex items-start">
+                <GitPullRequest className="h-4 w-4 text-purple-500 mr-2 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium">Update Dependabot alerts</p>
+                  <p className="text-xs text-gray-500">
+                    {securityStats.dependabotAlerts} packages have Dependabot alerts
+                  </p>
+                </div>
               </div>
-            </div>
+            )}
+            {securityStats.vulnerabilities > 0 && (
+              <div className="flex items-start">
+                <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium">Update vulnerable packages</p>
+                  <p className="text-xs text-gray-500">
+                    {securityStats.vulnerabilities} packages have known security vulnerabilities
+                  </p>
+                </div>
+              </div>
+            )}
             <div className="flex items-start">
               <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2 mt-0.5" />
               <div>
@@ -1005,6 +1137,14 @@ export default function SecurityClientPage() {
                   )}
                   <span>
                     {result.name}: {result.success ? `${result.from} → ${result.to}` : result.error}
+                    {result.dependabotAlert && (
+                      <Badge className="ml-2 bg-purple-900/20 text-purple-400 border-purple-800 text-xs">
+                        Dependabot
+                      </Badge>
+                    )}
+                    {result.forcedUpdate && (
+                      <Badge className="ml-2 bg-blue-900/20 text-blue-400 border-blue-800 text-xs">Forced</Badge>
+                    )}
                   </span>
                 </motion.div>
               ))}
@@ -1052,7 +1192,9 @@ export default function SecurityClientPage() {
                       <Card
                         className={`bg-gray-800 border-gray-700 transition-all duration-200 ${
                           isUpdateSettings ? "border-blue-700 shadow-lg shadow-blue-900/20" : ""
-                        } ${draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""}`}
+                        } ${widget.type === "dependabot-alerts" ? "border-purple-700 shadow-lg shadow-purple-900/20" : ""} ${
+                          draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""
+                        }`}
                         draggable
                         onDragStart={(e) => handleDragStart(e, widget.id)}
                         onDragEnd={handleDragEnd}
@@ -1062,11 +1204,19 @@ export default function SecurityClientPage() {
                         <CardHeader
                           className={`p-4 flex flex-row items-center justify-between space-y-0 ${
                             isUpdateSettings ? "bg-gradient-to-r from-blue-900/40 to-purple-900/40 rounded-t-lg" : ""
+                          } ${
+                            widget.type === "dependabot-alerts"
+                              ? "bg-gradient-to-r from-purple-900/40 to-pink-900/40 rounded-t-lg"
+                              : ""
                           }`}
                         >
                           <div className="flex items-center">
                             <GripVertical className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
-                            <CardTitle className={`text-sm font-medium ${isUpdateSettings ? "text-blue-200" : ""}`}>
+                            <CardTitle
+                              className={`text-sm font-medium ${isUpdateSettings ? "text-blue-200" : ""} ${
+                                widget.type === "dependabot-alerts" ? "text-purple-200" : ""
+                              }`}
+                            >
                               {widgetDef?.title || widget.type}
                             </CardTitle>
                           </div>
@@ -1126,12 +1276,12 @@ export default function SecurityClientPage() {
                     All
                   </Button>
                   <Button
-                    variant={filter === "outdated" ? "default" : "outline"}
+                    variant={filter === "dependabot" ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setFilter("outdated")}
-                    className={filter !== "outdated" ? "border-gray-700" : ""}
+                    onClick={() => setFilter("dependabot")}
+                    className={filter !== "dependabot" ? "border-gray-700 bg-purple-900/20" : ""}
                   >
-                    Outdated
+                    Dependabot
                   </Button>
                   <Button
                     variant={filter === "security" ? "default" : "outline"}
@@ -1140,6 +1290,14 @@ export default function SecurityClientPage() {
                     className={filter !== "security" ? "border-gray-700" : ""}
                   >
                     Security
+                  </Button>
+                  <Button
+                    variant={filter === "outdated" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setFilter("outdated")}
+                    className={filter !== "outdated" ? "border-gray-700" : ""}
+                  >
+                    Outdated
                   </Button>
                   <Button
                     variant={filter === "locked" ? "default" : "outline"}
@@ -1222,19 +1380,25 @@ export default function SecurityClientPage() {
                             Update Mode
                             <div className="relative ml-1 group">
                               <Info className="h-4 w-4 text-gray-400 cursor-help" />
-                              <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                                <p className="mb-1">
+                              <div className="absolute left-0 bottom-full mb-2 w-80 p-3 bg-gray-800 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                                <p className="mb-2">
                                   <strong>Off:</strong> No automatic updates
                                 </p>
-                                <p className="mb-1">
+                                <p className="mb-2">
                                   <strong>Security Only:</strong> Only apply security patches
                                 </p>
-                                <p className="mb-1">
+                                <p className="mb-2">
                                   <strong>All Updates:</strong> Apply all package updates
                                 </p>
-                                <p>
+                                <p className="mb-2">
                                   <strong>Global:</strong> Use the global setting
                                 </p>
+                                <div className="mt-2 pt-2 border-t border-gray-700">
+                                  <p className="text-purple-300">
+                                    <strong>Note:</strong> Packages with Dependabot alerts will be updated regardless of
+                                    update mode to protect your application from security vulnerabilities.
+                                  </p>
+                                </div>
                               </div>
                             </div>
                           </div>
@@ -1251,7 +1415,11 @@ export default function SecurityClientPage() {
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: 10 }}
                             transition={{ duration: 0.2, delay: index * 0.02 }}
-                            className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${dep.hasSecurityIssue ? "bg-red-900/10" : ""} ${dep.updateMode === "global" ? "border-l-2 border-blue-700" : ""}`}
+                            className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${
+                              dep.hasDependabotAlert ? "bg-purple-900/10" : dep.hasSecurityIssue ? "bg-red-900/10" : ""
+                            } ${dep.updateMode === "global" ? "border-l-2 border-blue-700" : ""} ${
+                              dep.hasDependabotAlert && dep.updateMode === "off" ? "border-l-2 border-purple-700" : ""
+                            }`}
                           >
                             <td className="py-3 px-4">
                               <div className="font-medium flex items-center">
@@ -1269,13 +1437,44 @@ export default function SecurityClientPage() {
                                     Global
                                   </Badge>
                                 )}
+                                {dep.hasDependabotAlert && dep.updateMode === "off" && (
+                                  <Badge
+                                    variant="outline"
+                                    className="ml-2 border-purple-700 text-purple-400 bg-purple-900/20"
+                                  >
+                                    Force Update
+                                  </Badge>
+                                )}
                               </div>
                               <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
+                              {dep.hasDependabotAlert && dep.dependabotAlertDetails?.url && (
+                                <a
+                                  href={dep.dependabotAlertDetails.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-purple-400 hover:text-purple-300 flex items-center mt-1"
+                                >
+                                  View Dependabot Alert
+                                  <ExternalLink className="h-3 w-3 ml-1" />
+                                </a>
+                              )}
                             </td>
                             <td className="py-3 px-4">{dep.currentVersion}</td>
                             <td className="py-3 px-4">{dep.latestVersion}</td>
                             <td className="py-3 px-4">
-                              {dep.hasSecurityIssue ? (
+                              {dep.hasDependabotAlert ? (
+                                <div className="flex items-center gap-1">
+                                  {getSeverityBadge(dep)}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => viewDependabotAlertDetails(dep)}
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : dep.hasSecurityIssue ? (
                                 <div className="flex items-center gap-1">
                                   {getSeverityBadge(dep)}
                                   <Button
@@ -1298,18 +1497,36 @@ export default function SecurityClientPage() {
                               )}
                             </td>
                             <td className="py-3 px-4">
-                              <FourStateToggle
-                                value={dep.updateMode}
-                                onValueChange={(value) => updateDependencyMode(dep.id, value)}
-                                showLabels={false}
-                                className="w-[300px] max-w-full"
-                              />
+                              <div className="relative">
+                                <FourStateToggle
+                                  value={dep.updateMode}
+                                  onValueChange={(value) => updateDependencyMode(dep.id, value)}
+                                  showLabels={false}
+                                  className="w-[300px] max-w-full"
+                                />
+                                {dep.hasDependabotAlert && dep.updateMode === "off" && (
+                                  <div className="absolute -top-2 -right-2 bg-purple-900 text-white text-xs px-1 rounded-full">
+                                    !
+                                  </div>
+                                )}
+                              </div>
+                              {dep.hasDependabotAlert && dep.updateMode === "off" && (
+                                <div className="text-xs text-purple-400 mt-1">
+                                  Will be updated despite "Off" setting due to Dependabot alert
+                                </div>
+                              )}
                             </td>
                             <td className="py-3 px-4">
                               <Button
                                 size="sm"
-                                disabled={!dep.outdated && !dep.hasSecurityIssue}
-                                className={dep.hasSecurityIssue ? "bg-red-600 hover:bg-red-700" : ""}
+                                disabled={!dep.outdated && !dep.hasSecurityIssue && !dep.hasDependabotAlert}
+                                className={
+                                  dep.hasDependabotAlert
+                                    ? "bg-purple-600 hover:bg-purple-700"
+                                    : dep.hasSecurityIssue
+                                      ? "bg-red-600 hover:bg-red-700"
+                                      : ""
+                                }
                               >
                                 Update
                               </Button>
@@ -1335,6 +1552,76 @@ export default function SecurityClientPage() {
           currentVersion={selectedVulnerability.currentVersion}
           latestVersion={selectedVulnerability.latestVersion}
         />
+      )}
+
+      {selectedDependabotAlert && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.9 }}
+            className="bg-gray-900 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
+          >
+            <div className="flex justify-between items-start mb-4">
+              <h2 className="text-xl font-bold flex items-center">
+                <GitPullRequest className="mr-2 h-5 w-5 text-purple-400" />
+                Dependabot Alert: {selectedDependabotAlert.packageName}
+              </h2>
+              <Button variant="ghost" size="sm" onClick={() => setSelectedDependabotAlert(null)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <div className="space-y-4">
+              <div className="bg-purple-900/20 p-4 rounded-md border border-purple-800">
+                <h3 className="font-medium text-purple-300 mb-2">
+                  {selectedDependabotAlert.alert.summary || "Security Vulnerability"}
+                </h3>
+                <div className="flex items-center gap-2 mb-2">
+                  <Badge className="bg-purple-900/40 text-purple-300 border-purple-700">
+                    Severity: {selectedDependabotAlert.alert.severity || "Unknown"}
+                  </Badge>
+                  <Badge className="bg-gray-800 text-gray-300 border-gray-700">
+                    Current: {selectedDependabotAlert.currentVersion}
+                  </Badge>
+                  <Badge className="bg-green-900/20 text-green-300 border-green-700">
+                    Latest: {selectedDependabotAlert.latestVersion}
+                  </Badge>
+                </div>
+                <p className="text-sm text-gray-300">
+                  This package will be automatically updated regardless of your update mode settings to protect your
+                  application from security vulnerabilities.
+                </p>
+              </div>
+
+              {selectedDependabotAlert.alert.url && (
+                <div>
+                  <a
+                    href={selectedDependabotAlert.alert.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-purple-400 hover:text-purple-300 flex items-center"
+                  >
+                    <ExternalLink className="mr-2 h-4 w-4" />
+                    View full advisory on GitHub
+                  </a>
+                </div>
+              )}
+
+              <div className="mt-4">
+                <Button
+                  onClick={() => {
+                    setSelectedDependabotAlert(null)
+                    applyChanges()
+                  }}
+                  className="bg-purple-600 hover:bg-purple-700"
+                >
+                  Update Now
+                </Button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
       )}
 
       <style jsx global>{`

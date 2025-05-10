@@ -76,6 +76,40 @@ async function getSecurityIssues() {
   }
 }
 
+// Helper function to check for Dependabot alerts from GitHub
+async function getDependabotAlerts() {
+  try {
+    // In a real implementation, this would call the GitHub API
+    // For now, we'll simulate some Dependabot alerts
+
+    // This is a simulation - in a real implementation, you would:
+    // 1. Use the GitHub API to fetch Dependabot alerts for the repository
+    // 2. Parse the response to get the affected packages and severity
+
+    // Simulate some Dependabot alerts for demonstration
+    const simulatedAlerts = {
+      react: {
+        severity: "high",
+        summary: "Prototype Pollution in React",
+        url: "https://github.com/advisories/GHSA-example-react",
+        createdAt: new Date().toISOString(),
+      },
+      lodash: {
+        severity: "critical",
+        summary: "Prototype Pollution in Lodash",
+        url: "https://github.com/advisories/GHSA-example-lodash",
+        createdAt: new Date().toISOString(),
+      },
+      // Add more simulated alerts as needed
+    }
+
+    return simulatedAlerts
+  } catch (error) {
+    console.error("Error fetching Dependabot alerts:", error)
+    return {}
+  }
+}
+
 // Get the global update mode from localStorage or default to "conservative"
 async function getGlobalUpdateMode() {
   try {
@@ -100,6 +134,9 @@ export async function GET() {
     // Get security issues
     const securityIssues = await getSecurityIssues()
 
+    // Get Dependabot alerts
+    const dependabotAlerts = await getDependabotAlerts()
+
     // Get global update mode
     const globalMode = await getGlobalUpdateMode()
 
@@ -107,6 +144,12 @@ export async function GET() {
     // For now, we'll simulate this since we don't have a database
     const packagesToUpdate = Object.entries(outdatedPackages).filter(([name, info]: [string, any]) => {
       const hasSecurityIssue = securityIssues?.vulnerabilities?.[name] !== undefined
+      const hasDependabotAlert = dependabotAlerts[name] !== undefined
+
+      // IMPORTANT: Always update if there's a Dependabot alert, regardless of update mode
+      if (hasDependabotAlert) {
+        return true
+      }
 
       // Apply the global mode logic
       // In a real implementation, each package would have its own mode
@@ -135,6 +178,8 @@ export async function GET() {
     // In a real implementation, this would run npm update commands
     const results = packagesToUpdate.map(([name, info]: [string, any]) => {
       const hasSecurityIssue = securityIssues?.vulnerabilities?.[name] !== undefined
+      const hasDependabotAlert = dependabotAlerts[name] !== undefined
+      const alertDetails = hasDependabotAlert ? dependabotAlerts[name] : null
 
       return {
         name,
@@ -142,6 +187,9 @@ export async function GET() {
         to: info.latest,
         success: true, // Simulate success
         securityFix: hasSecurityIssue,
+        dependabotAlert: hasDependabotAlert,
+        alertDetails: alertDetails,
+        forcedUpdate: hasDependabotAlert && globalMode === "off", // Flag if this was a forced update due to Dependabot alert
       }
     })
 

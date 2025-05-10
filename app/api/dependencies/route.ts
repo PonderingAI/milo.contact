@@ -76,6 +76,36 @@ async function getSecurityIssues() {
   }
 }
 
+// Helper function to check for Dependabot alerts from GitHub
+async function getDependabotAlerts() {
+  try {
+    // In a real implementation, this would call the GitHub API
+    // For now, we'll simulate some Dependabot alerts
+
+    // Simulate some Dependabot alerts for demonstration
+    const simulatedAlerts = {
+      react: {
+        severity: "high",
+        summary: "Prototype Pollution in React",
+        url: "https://github.com/advisories/GHSA-example-react",
+        createdAt: new Date().toISOString(),
+      },
+      lodash: {
+        severity: "critical",
+        summary: "Prototype Pollution in Lodash",
+        url: "https://github.com/advisories/GHSA-example-lodash",
+        createdAt: new Date().toISOString(),
+      },
+      // Add more simulated alerts as needed
+    }
+
+    return simulatedAlerts
+  } catch (error) {
+    console.error("Error fetching Dependabot alerts:", error)
+    return {}
+  }
+}
+
 // Helper function to fetch package info from npm
 async function fetchPackageInfo(packageName) {
   try {
@@ -154,6 +184,9 @@ export async function GET() {
     // Get security vulnerabilities
     const securityIssues = await getSecurityIssues()
 
+    // Get Dependabot alerts
+    const dependabotAlerts = await getDependabotAlerts()
+
     // Fetch package info for each dependency (in parallel)
     const packageInfoPromises = allDeps.map(async (dep) => {
       const info = await fetchPackageInfo(dep.name)
@@ -169,6 +202,8 @@ export async function GET() {
     const processedDeps = packageInfos.map((dep) => {
       const outdatedInfo = outdatedPackages[dep.name]
       const hasSecurityIssue = securityIssues?.vulnerabilities?.[dep.name] !== undefined
+      const hasDependabotAlert = dependabotAlerts[dep.name] !== undefined
+      const alertDetails = hasDependabotAlert ? dependabotAlerts[dep.name] : null
 
       return {
         id: dep.name,
@@ -179,6 +214,8 @@ export async function GET() {
         locked: false,
         has_security_issue: hasSecurityIssue,
         security_details: hasSecurityIssue ? securityIssues?.vulnerabilities?.[dep.name] : null,
+        has_dependabot_alert: hasDependabotAlert,
+        dependabot_alert_details: alertDetails,
         update_mode: "conservative", // Default to conservative
         is_dev: dep.is_dev,
         description: dep.description || "",
@@ -191,12 +228,14 @@ export async function GET() {
 
     // Calculate security stats
     const vulnerableDeps = processedDeps.filter((d) => d.has_security_issue).length
+    const dependabotAlertDeps = processedDeps.filter((d) => d.has_dependabot_alert).length
     const outdatedDeps = processedDeps.filter((d) => d.outdated).length
-    const securityScore = Math.max(0, 100 - vulnerableDeps * 10 - outdatedDeps * 5)
+    const securityScore = Math.max(0, 100 - vulnerableDeps * 10 - dependabotAlertDeps * 15 - outdatedDeps * 5)
 
     return NextResponse.json({
       dependencies: processedDeps,
       vulnerabilities: vulnerableDeps,
+      dependabotAlerts: dependabotAlertDeps,
       outdatedPackages: outdatedDeps,
       securityScore: securityScore,
       updateMode: "conservative",
@@ -221,6 +260,7 @@ export async function GET() {
             outdated: false,
             locked: false,
             has_security_issue: false,
+            has_dependabot_alert: false,
             is_dev: dep.is_dev,
             description: "Loaded from package.json",
             update_mode: "conservative",
