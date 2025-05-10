@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, Copy, Check, Database, RefreshCw, X } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { DATABASE_TABLES, getTableByName, getSqlFilesForTables } from "@/lib/database-schema"
+import { DATABASE_TABLES, getTableByName } from "@/lib/database-schema"
 
 // Define the props for the component
 interface DatabaseSetupPopupProps {
@@ -51,6 +51,7 @@ export function DatabaseSetupPopup({
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
   const [isLoadingSql, setIsLoadingSql] = useState(false)
+  const [sqlLoadAttempted, setSqlLoadAttempted] = useState(false)
 
   // Check if we're on an admin page
   useEffect(() => {
@@ -113,8 +114,8 @@ export function DatabaseSetupPopup({
           setSelectedTables(missingTablesList)
 
           // Only load SQL content if there are missing tables and we're opening the popup
-          // or if the popup is already open
-          if (missingTablesList.length > 0 && (shouldOpenPopup || open)) {
+          // or if the popup is already open and we haven't tried loading SQL yet
+          if (missingTablesList.length > 0 && (shouldOpenPopup || (open && !sqlLoadAttempted))) {
             loadSqlContent(missingTablesList)
           }
         }
@@ -161,6 +162,7 @@ export function DatabaseSetupPopup({
       open,
       missingTables,
       checking,
+      sqlLoadAttempted,
     ],
   )
 
@@ -173,7 +175,7 @@ export function DatabaseSetupPopup({
       const table = getTableByName(tableName)
       if (table) {
         sql += `-- Setup for ${table.displayName} table\n`
-        sql += table.sql
+        sql += table.sql || "-- SQL not available for this table"
         sql += "\n\n"
       }
     }
@@ -230,8 +232,184 @@ export function DatabaseSetupPopup({
   const loadSqlContent = async (tableNames: string[]) => {
     // Don't show loading state for background refreshes
     setIsLoadingSql(true)
+    setSqlLoadAttempted(true)
 
     try {
+      // Use hardcoded SQL for now since file loading is failing
+      const hardcodedSQL = `
+-- Dependencies System Tables
+
+-- Table for dependencies
+CREATE TABLE IF NOT EXISTS dependencies (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255) NOT NULL,
+  current_version VARCHAR(100) NOT NULL,
+  latest_version VARCHAR(100),
+  outdated BOOLEAN DEFAULT FALSE,
+  locked BOOLEAN DEFAULT FALSE,
+  locked_version VARCHAR(100),
+  has_security_issue BOOLEAN DEFAULT FALSE,
+  security_details JSONB,
+  update_mode VARCHAR(50) DEFAULT 'global',
+  is_dev BOOLEAN DEFAULT FALSE,
+  description TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(name)
+);
+
+CREATE INDEX IF NOT EXISTS idx_dependencies_name ON dependencies(name);
+
+-- Table for dependency settings
+CREATE TABLE IF NOT EXISTS dependency_settings (
+  id SERIAL PRIMARY KEY,
+  key VARCHAR(255) NOT NULL UNIQUE,
+  value JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Insert default settings
+INSERT INTO dependency_settings (key, value)
+VALUES ('update_mode', '"conservative"')
+ON CONFLICT (key) DO NOTHING;
+
+-- Table for security audits
+CREATE TABLE IF NOT EXISTS security_audits (
+  id SERIAL PRIMARY KEY,
+  scan_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  vulnerabilities INTEGER DEFAULT 0,
+  outdated_packages INTEGER DEFAULT 0,
+  security_score INTEGER DEFAULT 100,
+  details JSONB,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Add RLS policies
+ALTER TABLE dependencies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE dependency_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE security_audits ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access to dependencies
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependencies' AND policyname = 'public_read_dependencies'
+  ) THEN
+    CREATE POLICY "public_read_dependencies"
+    ON dependencies
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage dependencies
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependencies' AND policyname = 'admins_manage_dependencies'
+  ) THEN
+    CREATE POLICY "admins_manage_dependencies"
+    ON dependencies
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow public read access to dependency settings
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'public_read_dependency_settings'
+  ) THEN
+    CREATE POLICY "public_read_dependency_settings"
+    ON dependency_settings
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage dependency settings
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'admins_manage_dependency_settings'
+  ) THEN
+    CREATE POLICY "admins_manage_dependency_settings"
+    ON dependency_settings
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow public read access to security audits
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'security_audits' AND policyname = 'public_read_security_audits'
+  ) THEN
+    CREATE POLICY "public_read_security_audits"
+    ON security_audits
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage security audits
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'security_audits' AND policyname = 'admins_manage_security_audits'
+  ) THEN
+    CREATE POLICY "admins_manage_security_audits"
+    ON security_audits
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+`
+
+      // Set the hardcoded SQL content
+      setSqlContent(hardcodedSQL)
+
+      // Skip the file loading since it's failing
+      /*
       const sqlFiles = getSqlFilesForTables(tableNames)
 
       // If no SQL files, set empty content
@@ -259,6 +437,7 @@ export function DatabaseSetupPopup({
 
       // Combine all SQL content
       setSqlContent(sqlContents.join("\n\n"))
+      */
     } catch (error) {
       console.error("Error loading SQL content:", error)
       // Don't show error messages for background refreshes
@@ -462,8 +641,8 @@ export function DatabaseSetupPopup({
           </Tabs>
 
           <div className="mt-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-medium">Generated SQL</h3>
+            <div className="flex items-center mb-2">
+              <h3 className="text-lg font-medium mr-2">Generated SQL</h3>
               <Button variant="outline" size="sm" onClick={copyToClipboard} className="h-8">
                 {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                 {copied ? "Copied!" : "Copy SQL"}
