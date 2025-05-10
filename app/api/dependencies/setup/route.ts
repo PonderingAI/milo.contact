@@ -1,126 +1,126 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
-import { exec } from "child_process"
-import { promisify } from "util"
+import { createClient } from "@/lib/supabase-server"
+import { auth } from "@clerk/nextjs/server"
 
-const execAsync = promisify(exec)
-
-// Helper function to check if a table exists
-async function checkTableExists(supabase, tableName) {
+export async function POST(request: Request) {
   try {
-    const { data, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_schema", "public")
-      .eq("table_name", tableName)
-      .single()
-
-    if (error) {
-      console.error(`Error checking if ${tableName} exists:`, error)
-      return false
+    // Check authentication
+    const { userId } = auth()
+    if (!userId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    return !!data
-  } catch (error) {
-    console.error(`Error in checkTableExists for ${tableName}:`, error)
-    return false
-  }
-}
+    // Connect to Supabase
+    const supabase = createClient()
 
-export async function POST() {
-  try {
-    const supabase = createAdminClient()
+    // Create dependency_settings table
+    const { error: settingsError } = await supabase.rpc("execute_sql", {
+      sql_query: `
+        CREATE TABLE IF NOT EXISTS dependency_settings (
+          id SERIAL PRIMARY KEY,
+          update_mode VARCHAR(20) DEFAULT 'conservative',
+          auto_update BOOLEAN DEFAULT false,
+          last_scan TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          last_update TIMESTAMP WITH TIME ZONE,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `,
+    })
 
-    // Check if dependencies table already exists
-    const tableExists = await checkTableExists(supabase, "dependencies")
-
-    if (tableExists) {
-      return NextResponse.json({
-        message: "Dependencies table already exists. No setup needed.",
-        tableExists: true,
-      })
+    if (settingsError) {
+      console.error("Error creating dependency_settings table:", settingsError)
+      return NextResponse.json({ error: "Failed to create dependency_settings table" }, { status: 500 })
     }
 
     // Create dependencies table
-    const { error: createTableError } = await supabase.rpc("execute_sql", {
+    const { error: dependenciesError } = await supabase.rpc("execute_sql", {
       sql_query: `
         CREATE TABLE IF NOT EXISTS dependencies (
           id SERIAL PRIMARY KEY,
           name VARCHAR(255) NOT NULL,
-          current_version VARCHAR(100) NOT NULL,
+          current_version VARCHAR(100),
           latest_version VARCHAR(100),
-          outdated BOOLEAN DEFAULT FALSE,
-          locked BOOLEAN DEFAULT FALSE,
-          locked_version VARCHAR(100),
-          has_security_issue BOOLEAN DEFAULT FALSE,
-          security_details JSONB,
-          update_mode VARCHAR(50) DEFAULT 'global',
-          is_dev BOOLEAN DEFAULT FALSE,
           description TEXT,
+          is_dev BOOLEAN DEFAULT false,
+          outdated BOOLEAN DEFAULT false,
+          locked BOOLEAN DEFAULT false,
+          has_security_issue BOOLEAN DEFAULT false,
+          security_details JSONB,
+          update_mode VARCHAR(20) DEFAULT 'global',
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          UNIQUE(name)
         );
-        
-        CREATE INDEX IF NOT EXISTS idx_dependencies_name ON dependencies(name);
       `,
     })
 
-    if (createTableError) {
-      console.error("Error creating dependencies table:", createTableError)
-      return NextResponse.json(
-        {
-          error: "Failed to create dependencies table",
-          message: "There was an error creating the dependencies table.",
-          details: createTableError.message,
-        },
-        { status: 500 },
-      )
+    if (dependenciesError) {
+      console.error("Error creating dependencies table:", dependenciesError)
+      return NextResponse.json({ error: "Failed to create dependencies table" }, { status: 500 })
     }
 
-    // Create dependency settings table
-    const { error: createSettingsTableError } = await supabase.rpc("execute_sql", {
+    // Create security_audits table
+    const { error: auditsError } = await supabase.rpc("execute_sql", {
       sql_query: `
-        CREATE TABLE IF NOT EXISTS dependency_settings (
+        CREATE TABLE IF NOT EXISTS security_audits (
           id SERIAL PRIMARY KEY,
-          key VARCHAR(255) NOT NULL UNIQUE,
-          value JSONB,
-          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-          updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          scan_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          vulnerabilities INTEGER DEFAULT 0,
+          outdated_packages INTEGER DEFAULT 0,
+          security_score INTEGER DEFAULT 100,
+          details JSONB,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         );
-        
-        -- Insert default settings
-        INSERT INTO dependency_settings (key, value)
-        VALUES ('update_mode', '"conservative"')
-        ON CONFLICT (key) DO NOTHING;
       `,
     })
 
-    if (createSettingsTableError) {
-      console.error("Error creating dependency settings table:", createSettingsTableError)
-      return NextResponse.json(
-        {
-          error: "Failed to create dependency settings table",
-          message: "There was an error creating the dependency settings table.",
-          details: createSettingsTableError.message,
-        },
-        { status: 500 },
-      )
+    if (auditsError) {
+      console.error("Error creating security_audits table:", auditsError)
+      return NextResponse.json({ error: "Failed to create security_audits table" }, { status: 500 })
+    }
+
+    // Create dependency_updates table
+    const { error: updatesError } = await supabase.rpc("execute_sql", {
+      sql_query: `
+        CREATE TABLE IF NOT EXISTS dependency_updates (
+          id SERIAL PRIMARY KEY,
+          dependency_name VARCHAR(255) NOT NULL,
+          from_version VARCHAR(100),
+          to_version VARCHAR(100),
+          update_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+          success BOOLEAN DEFAULT true,
+          error_message TEXT,
+          created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+      `,
+    })
+
+    if (updatesError) {
+      console.error("Error creating dependency_updates table:", updatesError)
+      return NextResponse.json({ error: "Failed to create dependency_updates table" }, { status: 500 })
+    }
+
+    // Insert default settings if not exists
+    const { error: insertError } = await supabase.rpc("execute_sql", {
+      sql_query: `
+        INSERT INTO dependency_settings (update_mode, auto_update)
+        SELECT 'conservative', false
+        WHERE NOT EXISTS (SELECT 1 FROM dependency_settings);
+      `,
+    })
+
+    if (insertError) {
+      console.error("Error inserting default settings:", insertError)
+      return NextResponse.json({ error: "Failed to insert default settings" }, { status: 500 })
     }
 
     return NextResponse.json({
-      message: "Dependency system set up successfully. Please scan dependencies to populate the database.",
-      tableExists: true,
-      setupComplete: true,
+      success: true,
+      message: "Dependency system set up successfully",
     })
   } catch (error) {
     console.error("Error in setup API:", error)
-    return NextResponse.json(
-      {
-        error: "An unexpected error occurred",
-        message: "There was an unexpected error setting up the dependency system.",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

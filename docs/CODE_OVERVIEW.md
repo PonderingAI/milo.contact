@@ -58,6 +58,7 @@ These components are used in the admin dashboard and management interfaces.
 | `components/admin/dependency-setup-alert.tsx` | Dependency setup alert | Notification for dependency setup |
 | `components/admin/draggable-widget.tsx` | Draggable dashboard widget | Interactive dashboard components |
 | `components/admin/widget-selector.tsx` | Widget selection interface | Add widgets to dashboard |
+| `components/admin/dependency-system-setup-guide.tsx` | Dependency system setup guide | Guides users through setting up the dependency system |
 
 ## UI Components
 
@@ -153,6 +154,7 @@ Server endpoints that provide data and functionality.
 | `app/api/dependencies/scan/route.ts` | Scan dependencies | Analyze project for dependencies |
 | `app/api/dependencies/fallback-scan/route.ts` | Fallback dependency scan | Alternative scanning method |
 | `app/api/dependencies/setup/route.ts` | Setup dependency system | Initialize dependency management |
+| `app/api/dependencies/setup-system/route.ts` | Complete system setup | Sets up all required tables |
 | `app/api/dependencies/settings/route.ts` | Dependency settings | Manage dependency system config |
 | `app/api/dependencies/lock/route.ts` | Lock dependencies | Prevent dependency changes |
 | `app/api/dependencies/apply/route.ts` | Apply dependency updates | Update dependencies |
@@ -164,6 +166,7 @@ Server endpoints that provide data and functionality.
 | `app/api/dependencies/scheduled-update/route.ts` | Scheduled updates | Periodic update checks |
 | `app/api/dependencies/check-tables/route.ts` | Check dependency tables | Verify table existence |
 | `app/api/dependencies/system-status/route.ts` | Dependency system status | Check system health |
+| `app/api/dependencies/update-mode/route.ts` | Update dependency mode | Change update settings for a dependency |
 
 ## Authentication & Security
 
@@ -230,6 +233,7 @@ Documentation and guides for the application.
 | `docs/TODO.md` | Todo list | Pending tasks |
 | `CODE_OVERVIEW.md` | Code overview | This document |
 | `docs/DATABASE-SETUP.md` | Database setup guide | Documentation for the database setup system |
+| `docs/setup/dependency-system-setup.sql` | Dependency system SQL | SQL script to set up all dependency tables |
 
 ## Feature Relationships
 

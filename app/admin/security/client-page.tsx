@@ -29,6 +29,7 @@ import {
   Clock,
 } from "lucide-react"
 import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
+import { DependencySystemSetupGuide } from "@/components/admin/dependency-system-setup-guide"
 
 // Types
 interface Dependency {
@@ -1077,6 +1078,8 @@ export default function SecurityClientPage() {
                         Scan Dependencies
                       </Button>
                     </div>
+
+                    <DependencySystemSetupGuide />
 
                     <div className="mt-6 bg-gray-800 p-4 rounded-md text-left max-w-md mx-auto">
                       <h3 className="font-medium mb-2 flex items-center">
