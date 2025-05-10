@@ -1,32 +1,70 @@
 import { NextResponse } from "next/server"
+import { createClient } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
-    const { id, updateMode } = await request.json()
+    const { userId, mode } = await request.json()
 
-    if (!id || !updateMode) {
-      return NextResponse.json(
-        {
-          error: "Missing required fields",
-          message: "Both id and updateMode are required.",
-        },
-        { status: 400 },
-      )
+    if (!userId || !mode) {
+      return NextResponse.json({ error: "User ID and mode are required" }, { status: 400 })
     }
 
-    // In a database-backed system, this would update the dependency's update mode
-    // Since we're not using a database, we'll just return a success message
+    const validModes = ["manual", "prompt", "auto-minor", "auto-all"]
+    if (!validModes.includes(mode)) {
+      return NextResponse.json({ error: "Invalid mode" }, { status: 400 })
+    }
 
-    return NextResponse.json({
-      success: true,
-      message: `Update mode for ${id} has been set to ${updateMode}.`,
-    })
+    const supabase = createClient()
+
+    // Check if user_preferences table exists
+    const { data: tableExists, error: tableCheckError } = await supabase.from("user_preferences").select("id").limit(1)
+
+    if (tableCheckError && tableCheckError.code !== "PGRST116") {
+      // Create the table if it doesn't exist
+      await supabase.rpc("create_user_preferences_table")
+    }
+
+    // Check if preferences already exist for this user
+    const { data: existingPrefs, error: fetchError } = await supabase
+      .from("user_preferences")
+      .select("id")
+      .eq("user_id", userId)
+      .single()
+
+    if (fetchError && fetchError.code !== "PGRST116") {
+      console.error("Error fetching user preferences:", fetchError)
+      return NextResponse.json({ error: "Failed to fetch user preferences" }, { status: 500 })
+    }
+
+    if (existingPrefs) {
+      // Update existing preferences
+      const { error: updateError } = await supabase
+        .from("user_preferences")
+        .update({ update_mode: mode, updated_at: new Date().toISOString() })
+        .eq("id", existingPrefs.id)
+
+      if (updateError) {
+        console.error("Error updating user preferences:", updateError)
+        return NextResponse.json({ error: "Failed to update user preferences" }, { status: 500 })
+      }
+    } else {
+      // Insert new preferences
+      const { error: insertError } = await supabase.from("user_preferences").insert([
+        {
+          user_id: userId,
+          update_mode: mode,
+        },
+      ])
+
+      if (insertError) {
+        console.error("Error inserting user preferences:", insertError)
+        return NextResponse.json({ error: "Failed to insert user preferences" }, { status: 500 })
+      }
+    }
+
+    return NextResponse.json({ success: true, mode })
   } catch (error) {
-    console.error("Error updating dependency mode:", error)
-    return NextResponse.json({
-      error: "An unexpected error occurred",
-      message: "There was an unexpected error updating the dependency mode.",
-      details: error instanceof Error ? error.message : String(error),
-    })
+    console.error("Error updating update mode:", error)
+    return NextResponse.json({ error: "Failed to update update mode" }, { status: 500 })
   }
 }

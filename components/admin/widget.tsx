@@ -2,395 +2,335 @@
 
 import type React from "react"
 import { useState, useRef, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { X, GripVertical, Maximize2, Minimize2, ChevronUp, ChevronDown } from "lucide-react"
-import { motion } from "framer-motion"
+import { Card } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 interface WidgetProps {
   id: string
   title: string
   children: React.ReactNode
-  onRemove?: (id: string) => void
-  draggable?: boolean
-  onDragStart?: (e: React.DragEvent, id: string) => void
-  onDragOver?: (e: React.DragEvent) => void
-  onDrop?: (e: React.DragEvent, id: string) => void
-  onDragEnd?: () => void
-  draggingWidgetId?: string | null
   className?: string
-  fullWidth?: boolean
-  highlighted?: boolean
-  onResize?: (id: string, size: { width: number; height: number; gridWidth: number; gridHeight: number }) => void
-  onMove?: (id: string, position: { x: number; y: number; gridX: number; gridY: number }) => void
-  initialSize?: { width?: number; height?: number; gridWidth?: number; gridHeight?: number }
-  initialPosition?: { x?: number; y?: number; gridX?: number; gridY?: number }
+  onResize?: (id: string, width: number, height: number) => void
+  onMove?: (id: string, x: number, y: number) => void
+  initialWidth?: number
+  initialHeight?: number
+  initialX?: number
+  initialY?: number
   gridSize?: number
-  collapsed?: boolean
-  onCollapse?: (id: string, collapsed: boolean) => void
+  isCollapsed?: boolean
+  onToggleCollapse?: (id: string, isCollapsed: boolean) => void
 }
 
-export function WidgetComponent({
+export default function Widget({
   id,
   title,
   children,
-  onRemove,
-  draggable = true,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  draggingWidgetId,
-  className = "",
-  fullWidth = false,
-  highlighted = false,
+  className,
   onResize,
   onMove,
-  initialSize,
-  initialPosition,
-  gridSize = 20, // Default grid size for snapping
-  collapsed = false,
-  onCollapse,
+  initialWidth = 400,
+  initialHeight = 300,
+  initialX = 0,
+  initialY = 0,
+  gridSize = 20,
+  isCollapsed: propIsCollapsed,
+  onToggleCollapse,
 }: WidgetProps) {
+  const [width, setWidth] = useState(initialWidth)
+  const [height, setHeight] = useState(initialHeight)
+  const [x, setX] = useState(initialX)
+  const [y, setY] = useState(initialY)
   const [isResizing, setIsResizing] = useState(false)
+  const [isMoving, setIsMoving] = useState(false)
   const [resizeDirection, setResizeDirection] = useState<string | null>(null)
-  const [size, setSize] = useState({
-    width: initialSize?.width || 0,
-    height: initialSize?.height || 0,
-    gridWidth: initialSize?.gridWidth || 1,
-    gridHeight: initialSize?.gridHeight || 1,
-  })
-  const [position, setPosition] = useState({
-    x: initialPosition?.x || 0,
-    y: initialPosition?.y || 0,
-    gridX: initialPosition?.gridX || 0,
-    gridY: initialPosition?.gridY || 0,
-  })
-  const [startPos, setStartPos] = useState({ x: 0, y: 0 })
-  const [startSize, setStartSize] = useState({ width: 0, height: 0 })
-  const [startPosition, setStartPosition] = useState({ x: 0, y: 0 })
-  const [expanded, setExpanded] = useState(false)
-  const [isCollapsed, setIsCollapsed] = useState(collapsed)
+  const [isCollapsed, setIsCollapsed] = useState(propIsCollapsed || false)
   const widgetRef = useRef<HTMLDivElement>(null)
+  const startPosRef = useRef({ x: 0, y: 0, width: 0, height: 0, clientX: 0, clientY: 0 })
 
-  // Initialize size from the DOM after first render
+  // Handle controlled collapse state
   useEffect(() => {
-    if (widgetRef.current && !size.width && !size.height) {
-      const rect = widgetRef.current.getBoundingClientRect()
-      setSize({
-        width: rect.width,
-        height: rect.height,
-        gridWidth: Math.ceil(rect.width / gridSize),
-        gridHeight: Math.ceil(rect.height / gridSize),
-      })
+    if (propIsCollapsed !== undefined && propIsCollapsed !== isCollapsed) {
+      setIsCollapsed(propIsCollapsed)
     }
-  }, [size.width, size.height, gridSize])
+  }, [propIsCollapsed])
 
-  // Update collapsed state if prop changes
+  // Handle window resize for responsive scaling
   useEffect(() => {
-    setIsCollapsed(collapsed)
-  }, [collapsed])
+    const handleWindowResize = () => {
+      if (widgetRef.current) {
+        // Calculate new dimensions based on viewport width
+        const viewportWidth = window.innerWidth
+        const scaleFactor = viewportWidth / 1920 // Base scale on 1920px design
+
+        // Apply minimum scale to prevent widgets from becoming too small
+        const minScale = 0.5
+        const effectiveScale = Math.max(scaleFactor, minScale)
+
+        // Update widget dimensions while maintaining aspect ratio
+        const newWidth = Math.round(initialWidth * effectiveScale)
+        const newHeight = Math.round(initialHeight * effectiveScale)
+
+        setWidth(newWidth)
+        setHeight(newHeight)
+
+        // Notify parent of resize
+        if (onResize) {
+          onResize(id, newWidth, newHeight)
+        }
+      }
+    }
+
+    // Initial resize
+    handleWindowResize()
+
+    // Add event listener
+    window.addEventListener("resize", handleWindowResize)
+
+    // Cleanup
+    return () => {
+      window.removeEventListener("resize", handleWindowResize)
+    }
+  }, [id, initialWidth, initialHeight, onResize])
 
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     e.preventDefault()
     e.stopPropagation()
-
-    if (draggingWidgetId) return // Don't start resizing if we're dragging
-
     setIsResizing(true)
     setResizeDirection(direction)
-    setStartPos({ x: e.clientX, y: e.clientY })
-    setStartSize({ width: size.width, height: size.height })
-    setStartPosition({ x: position.x, y: position.y })
 
-    // Add event listeners for resize
-    document.addEventListener("mousemove", handleResize)
+    startPosRef.current = {
+      x,
+      y,
+      width,
+      height,
+      clientX: e.clientX,
+      clientY: e.clientY,
+    }
+
+    document.addEventListener("mousemove", handleResizeMove)
     document.addEventListener("mouseup", handleResizeEnd)
-
-    // Add a class to the body to indicate resizing (for cursor)
-    document.body.classList.add("resizing")
-    document.body.classList.add(`resizing-${direction}`)
   }
 
-  const handleResize = (e: MouseEvent) => {
-    if (!isResizing || !resizeDirection) return
+  const handleResizeMove = (e: MouseEvent) => {
+    if (!isResizing) return
 
-    const deltaX = e.clientX - startPos.x
-    const deltaY = e.clientY - startPos.y
+    const deltaX = e.clientX - startPosRef.current.clientX
+    const deltaY = e.clientY - startPosRef.current.clientY
 
-    let newWidth = startSize.width
-    let newHeight = startSize.height
-    let newX = startPosition.x
-    let newY = startPosition.y
+    let newWidth = startPosRef.current.width
+    let newHeight = startPosRef.current.height
+    let newX = startPosRef.current.x
+    let newY = startPosRef.current.y
 
     // Handle different resize directions
-    if (resizeDirection.includes("e")) {
-      newWidth = Math.max(gridSize, startSize.width + deltaX)
+    if (resizeDirection?.includes("e")) {
+      newWidth = Math.max(200, startPosRef.current.width + deltaX)
     }
-    if (resizeDirection.includes("w")) {
-      const widthChange = Math.min(startSize.width - gridSize, deltaX)
-      newWidth = Math.max(gridSize, startSize.width - widthChange)
-      newX = startPosition.x + widthChange
+    if (resizeDirection?.includes("w")) {
+      const widthChange = Math.min(deltaX, startPosRef.current.width - 200)
+      newWidth = startPosRef.current.width - widthChange
+      newX = startPosRef.current.x + widthChange
     }
-    if (resizeDirection.includes("s")) {
-      newHeight = Math.max(gridSize, startSize.height + deltaY)
+    if (resizeDirection?.includes("s")) {
+      newHeight = Math.max(100, startPosRef.current.height + deltaY)
     }
-    if (resizeDirection.includes("n")) {
-      const heightChange = Math.min(startSize.height - gridSize, deltaY)
-      newHeight = Math.max(gridSize, startSize.height - heightChange)
-      newY = startPosition.y + heightChange
+    if (resizeDirection?.includes("n")) {
+      const heightChange = Math.min(deltaY, startPosRef.current.height - 100)
+      newHeight = startPosRef.current.height - heightChange
+      newY = startPosRef.current.y + heightChange
     }
 
     // Snap to grid
-    const snappedWidth = Math.round(newWidth / gridSize) * gridSize
-    const snappedHeight = Math.round(newHeight / gridSize) * gridSize
-    const snappedX = Math.round(newX / gridSize) * gridSize
-    const snappedY = Math.round(newY / gridSize) * gridSize
+    newWidth = Math.round(newWidth / gridSize) * gridSize
+    newHeight = Math.round(newHeight / gridSize) * gridSize
+    newX = Math.round(newX / gridSize) * gridSize
+    newY = Math.round(newY / gridSize) * gridSize
 
-    // Calculate grid units
-    const gridWidth = Math.ceil(snappedWidth / gridSize)
-    const gridHeight = Math.ceil(snappedHeight / gridSize)
-
-    setSize({
-      width: snappedWidth,
-      height: snappedHeight,
-      gridWidth,
-      gridHeight,
-    })
-
-    setPosition({
-      x: snappedX,
-      y: snappedY,
-      gridX: Math.round(snappedX / gridSize),
-      gridY: Math.round(snappedY / gridSize),
-    })
+    setWidth(newWidth)
+    setHeight(newHeight)
+    setX(newX)
+    setY(newY)
 
     if (onResize) {
-      onResize(id, {
-        width: snappedWidth,
-        height: snappedHeight,
-        gridWidth,
-        gridHeight,
-      })
+      onResize(id, newWidth, newHeight)
     }
-
-    if (onMove && (resizeDirection.includes("w") || resizeDirection.includes("n"))) {
-      onMove(id, {
-        x: snappedX,
-        y: snappedY,
-        gridX: Math.round(snappedX / gridSize),
-        gridY: Math.round(snappedY / gridSize),
-      })
+    if (onMove && (newX !== x || newY !== y)) {
+      onMove(id, newX, newY)
     }
   }
 
   const handleResizeEnd = () => {
     setIsResizing(false)
     setResizeDirection(null)
-    document.removeEventListener("mousemove", handleResize)
+    document.removeEventListener("mousemove", handleResizeMove)
     document.removeEventListener("mouseup", handleResizeEnd)
-    document.body.classList.remove("resizing")
-    document.body.classList.remove(`resizing-${resizeDirection}`)
   }
 
-  const toggleExpand = () => {
-    setExpanded(!expanded)
-
-    if (!expanded) {
-      // Save current size before expanding
-      setStartSize({ width: size.width, height: size.height })
-
-      // Get container width
-      const containerWidth = widgetRef.current?.parentElement?.offsetWidth || 1200
-
-      setSize({
-        width: containerWidth,
-        height: size.height * 1.5,
-        gridWidth: Math.ceil(containerWidth / gridSize),
-        gridHeight: Math.ceil((size.height * 1.5) / gridSize),
-      })
-    } else {
-      // Restore previous size
-      setSize({
-        width: startSize.width,
-        height: startSize.height,
-        gridWidth: Math.ceil(startSize.width / gridSize),
-        gridHeight: Math.ceil(startSize.height / gridSize),
-      })
+  const handleMoveStart = (e: React.MouseEvent) => {
+    if (
+      e.target instanceof HTMLElement &&
+      (e.target.classList.contains("resize-handle") || e.target.closest(".widget-header-actions"))
+    ) {
+      return
     }
 
-    if (onResize) {
-      const newWidth = !expanded ? widgetRef.current?.parentElement?.offsetWidth || 1200 : startSize.width
+    e.preventDefault()
+    setIsMoving(true)
 
-      const newHeight = !expanded ? size.height * 1.5 : startSize.height
-
-      onResize(id, {
-        width: newWidth,
-        height: newHeight,
-        gridWidth: Math.ceil(newWidth / gridSize),
-        gridHeight: Math.ceil(newHeight / gridSize),
-      })
+    startPosRef.current = {
+      x,
+      y,
+      width,
+      height,
+      clientX: e.clientX,
+      clientY: e.clientY,
     }
+
+    document.addEventListener("mousemove", handleMoveMove)
+    document.addEventListener("mouseup", handleMoveEnd)
+  }
+
+  const handleMoveMove = (e: MouseEvent) => {
+    if (!isMoving) return
+
+    const deltaX = e.clientX - startPosRef.current.clientX
+    const deltaY = e.clientY - startPosRef.current.clientY
+
+    const newX = startPosRef.current.x + deltaX
+    const newY = startPosRef.current.y + deltaY
+
+    // Snap to grid
+    const snappedX = Math.round(newX / gridSize) * gridSize
+    const snappedY = Math.round(newY / gridSize) * gridSize
+
+    setX(snappedX)
+    setY(snappedY)
+
+    if (onMove) {
+      onMove(id, snappedX, snappedY)
+    }
+  }
+
+  const handleMoveEnd = () => {
+    setIsMoving(false)
+    document.removeEventListener("mousemove", handleMoveMove)
+    document.removeEventListener("mouseup", handleMoveEnd)
   }
 
   const toggleCollapse = () => {
     const newCollapsedState = !isCollapsed
     setIsCollapsed(newCollapsedState)
-
-    if (onCollapse) {
-      onCollapse(id, newCollapsedState)
+    if (onToggleCollapse) {
+      onToggleCollapse(id, newCollapsedState)
     }
   }
-
-  // Material 3 inspired colors
-  const getColors = () => {
-    if (highlighted) {
-      return {
-        bg: "bg-blue-900/10",
-        border: "border-blue-700/50",
-        header: "bg-blue-900/20",
-        headerBorder: "border-blue-700/30",
-        text: "text-blue-50",
-        shadow: "shadow-lg shadow-blue-900/10",
-      }
-    }
-
-    return {
-      bg: "bg-gray-900/90",
-      border: "border-gray-800/80",
-      header: "bg-gray-800/90",
-      headerBorder: "border-gray-700/80",
-      text: "text-gray-100",
-      shadow: "shadow-md shadow-black/20",
-    }
-  }
-
-  const colors = getColors()
 
   return (
-    <motion.div
+    <Card
       ref={widgetRef}
-      layout
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{
-        opacity: 1,
-        scale: 1,
-        zIndex: draggingWidgetId === id || isResizing ? 10 : 1,
-        boxShadow: draggingWidgetId === id || isResizing ? "0 10px 25px rgba(0, 0, 0, 0.5)" : "none",
-        gridColumn: expanded ? "span 3" : `span ${size.gridWidth}`,
-        gridRow: `span ${isCollapsed ? 1 : size.gridHeight}`,
-      }}
-      exit={{ opacity: 0, scale: 0.9 }}
-      transition={{ duration: 0.3 }}
-      className={`${className}`}
+      className={cn(
+        "absolute rounded-lg overflow-hidden shadow-lg transition-shadow hover:shadow-xl",
+        isMoving && "cursor-grabbing shadow-2xl z-50",
+        !isMoving && "cursor-grab",
+        className,
+      )}
       style={{
-        height: isCollapsed ? "auto" : size.height > 0 ? size.height + "px" : "auto",
-        width: "100%",
+        width: `${width}px`,
+        height: isCollapsed ? "auto" : `${height}px`,
+        transform: `translate(${x}px, ${y}px)`,
+        backgroundColor: "white",
+        border: "1px solid rgba(0, 0, 0, 0.1)",
       }}
     >
-      <Card
-        className={`${colors.bg} ${colors.border} ${colors.shadow} transition-all duration-200 h-full rounded-xl backdrop-blur-sm relative overflow-hidden`}
-        draggable={draggable && !isResizing}
-        onDragStart={onDragStart && !isResizing ? (e) => onDragStart(e, id) : undefined}
-        onDragEnd={onDragEnd}
-        onDragOver={onDragOver}
-        onDrop={onDrop && id ? (e) => onDrop(e, id) : undefined}
+      {/* Widget Header */}
+      <div
+        className="widget-header bg-gradient-to-r from-purple-500 to-indigo-600 text-white p-3 flex justify-between items-center"
+        onMouseDown={handleMoveStart}
       >
-        <CardHeader
-          className={`p-3 flex flex-row items-center justify-between space-y-0 ${colors.header} rounded-t-xl ${colors.headerBorder} border-b`}
-        >
-          <div className="flex items-center">
-            <GripVertical className="h-4 w-4 text-gray-400 mr-2 cursor-move" />
-            <CardTitle className={`text-sm font-medium ${colors.text}`}>{title}</CardTitle>
-          </div>
-          <div className="flex items-center space-x-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-gray-400 hover:text-white hover:bg-gray-700/50"
-              onClick={toggleCollapse}
-              title={isCollapsed ? "Expand" : "Collapse"}
-            >
-              {isCollapsed ? <ChevronDown className="h-4 w-4" /> : <ChevronUp className="h-4 w-4" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0 text-gray-400 hover:text-white hover:bg-gray-700/50"
-              onClick={toggleExpand}
-              title={expanded ? "Restore" : "Maximize"}
-            >
-              {expanded ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
-            </Button>
-            {onRemove && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0 text-gray-400 hover:text-white hover:bg-red-700/50"
-                onClick={() => onRemove(id)}
-                title="Remove widget"
+        <h3 className="font-medium text-sm truncate">{title}</h3>
+        <div className="widget-header-actions flex space-x-1">
+          <button
+            onClick={toggleCollapse}
+            className="p-1 hover:bg-white/20 rounded transition-colors"
+            aria-label={isCollapsed ? "Expand" : "Collapse"}
+          >
+            {isCollapsed ? (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
               >
-                <X className="h-4 w-4" />
-              </Button>
+                <polyline points="18 15 12 9 6 15"></polyline>
+              </svg>
+            ) : (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
             )}
-          </div>
-        </CardHeader>
+          </button>
+        </div>
+      </div>
 
-        {!isCollapsed && (
-          <CardContent className="p-4 overflow-auto" style={{ height: "calc(100% - 48px)" }}>
-            {children}
-          </CardContent>
-        )}
+      {/* Widget Content */}
+      {!isCollapsed && (
+        <div className="p-4 overflow-auto" style={{ height: "calc(100% - 48px)" }}>
+          {children}
+        </div>
+      )}
 
-        {/* Resize handles */}
-        {!isCollapsed && (
-          <>
-            {/* Corner resize handles */}
-            <div
-              className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "se")}
-              style={{
-                backgroundImage: "radial-gradient(circle, rgba(255,255,255,0.3) 1px, transparent 1px)",
-                backgroundSize: "3px 3px",
-                backgroundPosition: "bottom right",
-                backgroundRepeat: "no-repeat",
-                padding: "8px",
-                transform: "translate(4px, 4px)",
-              }}
-            />
-            <div
-              className="absolute bottom-0 left-0 w-6 h-6 cursor-sw-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "sw")}
-            />
-            <div
-              className="absolute top-0 right-0 w-6 h-6 cursor-ne-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "ne")}
-            />
-            <div
-              className="absolute top-0 left-0 w-6 h-6 cursor-nw-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "nw")}
-            />
-
-            {/* Edge resize handles */}
-            <div
-              className="absolute bottom-0 left-6 right-6 h-2 cursor-s-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "s")}
-            />
-            <div
-              className="absolute top-0 left-6 right-6 h-2 cursor-n-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "n")}
-            />
-            <div
-              className="absolute top-6 bottom-6 right-0 w-2 cursor-e-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "e")}
-            />
-            <div
-              className="absolute top-6 bottom-6 left-0 w-2 cursor-w-resize z-10"
-              onMouseDown={(e) => handleResizeStart(e, "w")}
-            />
-          </>
-        )}
-      </Card>
-    </motion.div>
+      {/* Resize Handles */}
+      {!isCollapsed && (
+        <>
+          <div
+            className="resize-handle resize-e absolute top-0 right-0 w-2 h-full cursor-e-resize"
+            onMouseDown={(e) => handleResizeStart(e, "e")}
+          />
+          <div
+            className="resize-handle resize-w absolute top-0 left-0 w-2 h-full cursor-w-resize"
+            onMouseDown={(e) => handleResizeStart(e, "w")}
+          />
+          <div
+            className="resize-handle resize-s absolute bottom-0 left-0 w-full h-2 cursor-s-resize"
+            onMouseDown={(e) => handleResizeStart(e, "s")}
+          />
+          <div
+            className="resize-handle resize-n absolute top-0 left-0 w-full h-2 cursor-n-resize"
+            onMouseDown={(e) => handleResizeStart(e, "n")}
+          />
+          <div
+            className="resize-handle resize-se absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
+            onMouseDown={(e) => handleResizeStart(e, "se")}
+          />
+          <div
+            className="resize-handle resize-sw absolute bottom-0 left-0 w-4 h-4 cursor-sw-resize"
+            onMouseDown={(e) => handleResizeStart(e, "sw")}
+          />
+          <div
+            className="resize-handle resize-ne absolute top-0 right-0 w-4 h-4 cursor-ne-resize"
+            onMouseDown={(e) => handleResizeStart(e, "ne")}
+          />
+          <div
+            className="resize-handle resize-nw absolute top-0 left-0 w-4 h-4 cursor-nw-resize"
+            onMouseDown={(e) => handleResizeStart(e, "nw")}
+          />
+        </>
+      )}
+    </Card>
   )
 }
