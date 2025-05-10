@@ -1,15 +1,8 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase-server"
-import { auth } from "@clerk/nextjs/server"
+import { createAdminClient } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
-    // Check authentication
-    const { userId } = auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
     // Parse request body
     const body = await request.json()
     const { id, updateMode } = body
@@ -24,8 +17,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid update mode" }, { status: 400 })
     }
 
-    // Connect to Supabase
-    const supabase = createClient()
+    // Connect to Supabase using admin client
+    const supabase = createAdminClient()
 
     // Update the dependency
     const { error } = await supabase.from("dependencies").update({ update_mode: updateMode }).eq("id", id)

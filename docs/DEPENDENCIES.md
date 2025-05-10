@@ -1,146 +1,92 @@
-# Dependency Management
+# Dependency Management System
 
-This document describes the dependency management system used in the Milo Presedo portfolio project.
+This document explains how the dependency management system works in the Milo Presedo Portfolio application.
 
 ## Overview
 
-The dependency management system provides a comprehensive dashboard for monitoring and managing your project's dependencies. It allows you to:
+The dependency management system allows you to:
 
-1. View all installed dependencies
-2. Check for outdated dependencies
+1. Track all project dependencies
+2. Monitor for outdated packages
 3. Detect security vulnerabilities
-4. Set update policies for each dependency
-5. Apply updates manually or automatically
+4. Apply updates selectively
+5. Configure update policies
 
-## Features
-
-### Real-time Dependency Monitoring
-
-The system uses `npm ls`, `npm outdated`, and `npm audit` to provide real-time information about your dependencies, including:
-
-- Current installed version
-- Latest available version
-- Security vulnerabilities
-- Update recommendations
-
-### Update Modes
-
-Each dependency can be configured with one of the following update modes:
-
-- **Global**: Follow the global update policy (default)
-- **Manual**: Never update automatically
-- **Automatic**: Always update to the latest version
-- **Security Only**: Only update when security vulnerabilities are found
-
-### Locking Dependencies
-
-You can lock specific dependencies to prevent them from being updated. This is useful for dependencies that:
-
-- Have breaking changes in newer versions
-- Are critical to your application's stability
-- Require extensive testing before updating
-
-### Security Auditing
-
-The system automatically runs security audits to detect vulnerabilities in your dependencies. It provides:
-
-- A security score based on the number and severity of vulnerabilities
-- Detailed information about each vulnerability
-- Recommendations for fixing security issues
-
-## Database Structure
+## Database Tables
 
 The system uses the following database tables:
 
-### Dependencies Table
+- `dependencies`: Stores information about each dependency
+- `dependency_settings`: Stores system-wide settings
+- `security_audits`: Stores results of security scans
 
-Stores information about each dependency:
+## Integration with Unified SQL Setup
 
-\`\`\`sql
-CREATE TABLE dependencies (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL UNIQUE,
-  current_version VARCHAR(100) NOT NULL,
-  latest_version VARCHAR(100),
-  locked BOOLEAN DEFAULT FALSE,
-  locked_version VARCHAR(100),
-  update_mode VARCHAR(50) DEFAULT 'global',
-  last_checked TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  last_updated TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  has_security_update BOOLEAN DEFAULT FALSE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-\`\`\`
+The dependency system is fully integrated with the unified modular SQL setup system. The required tables are defined in `docs/setup/dependency-tables.sql` and can be created through the admin database setup interface.
 
-### Dependency Settings Table
+### How It Works
 
-Stores global settings for dependency management:
+1. When you visit the Security Center, the system checks if the required tables exist
+2. If tables are missing, you'll see a setup button
+3. The setup process uses the unified SQL setup system to create the necessary tables
+4. After setup, you can scan for dependencies to populate the database
 
-\`\`\`sql
-CREATE TABLE dependency_settings (
-  id SERIAL PRIMARY KEY,
-  update_mode VARCHAR(50) DEFAULT 'conservative',
-  auto_update_enabled BOOLEAN DEFAULT FALSE,
-  update_schedule VARCHAR(100) DEFAULT 'daily',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-\`\`\`
+## Update Modes
 
-## API Endpoints
+Each dependency can have one of the following update modes:
 
-The system provides the following API endpoints:
+- **Off**: No automatic updates
+- **Conservative**: Only security patches
+- **Aggressive**: All updates
+- **Global**: Use the global setting
 
-- `GET /api/dependencies/list`: Lists all installed dependencies
-- `GET /api/dependencies/check-updates`: Checks for available updates
-- `GET /api/dependencies/audit`: Runs a security audit
-- `POST /api/dependencies/update`: Updates a specific dependency
-- `POST /api/dependencies/apply`: Applies all pending updates
+The global setting applies to all dependencies set to "Global" mode.
 
-## Usage
+## Security Audits
 
-### Viewing Dependencies
+The system can perform security audits to detect vulnerabilities in your dependencies. When a vulnerability is found:
 
-The dependencies page shows all installed dependencies with their current and latest versions. Dependencies with available updates are highlighted.
+1. The dependency is marked as having a security issue
+2. Details about the vulnerability are stored
+3. The security score is updated
+4. The dashboard shows an alert
 
-### Updating Dependencies
+## API Routes
 
-You can update dependencies in several ways:
+The system includes the following API routes:
 
-1. **Manual Update**: Click the "Update" button next to a specific dependency
-2. **Apply Updates**: Click the "Apply Updates Now" button to update all eligible dependencies
-3. **Scheduled Updates**: Configure the system to automatically apply updates on a schedule
+- `/api/dependencies`: Get all dependencies
+- `/api/dependencies/scan`: Scan for dependencies
+- `/api/dependencies/setup`: Set up the dependency system
+- `/api/dependencies/update-mode`: Update a dependency's update mode
+- `/api/dependencies/audit`: Run a security audit
+- `/api/dependencies/apply`: Apply pending updates
 
-### Setting Update Policies
+## Dashboard Widgets
 
-To set an update policy for a dependency:
+The Security Center dashboard includes customizable widgets:
 
-1. Select the desired update mode from the dropdown menu
-2. The change is saved automatically
+- Security Score
+- Vulnerabilities
+- Outdated Packages
+- Update Settings
+- Recent Activity
+- Security Audit
+- Update History
+- Security Recommendations
 
-### Locking Dependencies
-
-To lock a dependency:
-
-1. Check the "Locked" checkbox next to the dependency
-2. The dependency will not be updated automatically
-
-## Integration with Other Systems
-
-The dependency management system works alongside:
-
-1. **GitHub's Dependabot**: Complementary functionality for dependency updates
-2. **npm**: Uses npm commands for accurate dependency information
-3. **Supabase**: Stores dependency settings and update history
+You can add, remove, and rearrange these widgets to customize your dashboard.
 
 ## Troubleshooting
 
-If you encounter issues with the dependency management system:
+If you encounter issues with the dependency system:
 
-1. **Database Tables Missing**: Use the "Show Setup SQL" button to create the necessary tables
-2. **Dependencies Not Showing**: Click the "Refresh Dependencies" button to reload the data
-3. **Updates Not Working**: Check the console for error messages and ensure you have write access to the package.json file
+1. Check if the database tables are set up correctly
+2. Verify that your package.json file exists and is valid
+3. Make sure npm is installed and accessible on the server
+4. Check the server logs for more detailed error information
+
+For persistent issues, you can try resetting the system by dropping the tables and setting up again.
 \`\`\`
 
-Let's create a simple API endpoint to check if the database tables exist:
+Now, let's update the code overview file to reflect our changes:

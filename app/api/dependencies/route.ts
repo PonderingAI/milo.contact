@@ -1,39 +1,39 @@
 import { NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase-server"
 import fs from "fs"
 import path from "path"
-import { createClient } from "@/lib/supabase-server"
-import { auth } from "@clerk/nextjs/server"
 
-// Add this function at the top of the file, before the GET handler
-
-async function checkTablesExist(supabase: any) {
+// Helper function to check if tables exist
+async function checkTablesExist(supabase) {
   try {
     // Check if the dependencies table exists
-    const { data: dependenciesExists, error: dependenciesError } = await supabase
-      .from("dependencies")
-      .select("id")
-      .limit(1)
-      .maybeSingle()
+    const { data: dependenciesTable } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .eq("table_name", "dependencies")
+      .single()
 
     // Check if the dependency_settings table exists
-    const { data: settingsExists, error: settingsError } = await supabase
-      .from("dependency_settings")
-      .select("id")
-      .limit(1)
-      .maybeSingle()
-
-    // If we get a "relation does not exist" error, the table doesn't exist
-    const dependenciesTableMissing = dependenciesError?.message?.includes('relation "dependencies" does not exist')
-    const settingsTableMissing = settingsError?.message?.includes('relation "dependency_settings" does not exist')
+    const { data: settingsTable } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .eq("table_name", "dependency_settings")
+      .single()
 
     return {
-      tablesExist: !dependenciesTableMissing && !settingsTableMissing,
-      dependenciesTableExists: !dependenciesTableMissing,
-      settingsTableExists: !settingsTableMissing,
+      dependenciesTableExists: !!dependenciesTable,
+      settingsTableExists: !!settingsTable,
+      allTablesExist: !!dependenciesTable && !!settingsTable,
     }
   } catch (error) {
     console.error("Error checking tables:", error)
-    return { tablesExist: false, dependenciesTableExists: false, settingsTableExists: false }
+    return {
+      dependenciesTableExists: false,
+      settingsTableExists: false,
+      allTablesExist: false,
+    }
   }
 }
 
@@ -63,27 +63,19 @@ async function getDependenciesFromPackageJson() {
   }
 }
 
-// Then update the GET handler to check for tables first
-
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    // Check authentication
-    const { userId } = auth()
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-    }
-
-    // Connect to Supabase
-    const supabase = createClient()
+    const supabase = createAdminClient()
 
     // Check if tables exist
-    const { tablesExist } = await checkTablesExist(supabase)
+    const { allTablesExist } = await checkTablesExist(supabase)
 
-    if (!tablesExist) {
+    // If tables don't exist, try to set up the dependency system
+    if (!allTablesExist) {
       return NextResponse.json({
-        setupNeeded: true,
-        setupMessage: "The dependency system needs to be set up before it can be used.",
         dependencies: [],
+        setupNeeded: true,
+        setupMessage: "The dependency system needs to be set up.",
       })
     }
 
@@ -99,58 +91,18 @@ export async function GET(request: Request) {
       })
     }
 
-    // If no dependencies found, try to scan
+    // If no dependencies found, show a clear message
     if (!dependencies || dependencies.length === 0) {
-      try {
-        // Try to scan dependencies
-        const scanResponse = await fetch(
-          new URL("/api/dependencies/scan", new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000")),
-          {
-            method: "POST",
-          },
-        )
-
-        if (scanResponse.ok) {
-          // If scan was successful, fetch dependencies again
-          const { data: freshDependencies } = await supabase.from("dependencies").select("*").order("name")
-
-          if (freshDependencies && freshDependencies.length > 0) {
-            // Get global update mode from settings
-            const { data: settings } = await supabase
-              .from("dependency_settings")
-              .select("update_mode, last_scan")
-              .single()
-
-            // Calculate security stats
-            const vulnerableDeps = freshDependencies.filter((d) => d.has_security_issue).length
-            const outdatedDeps = freshDependencies.filter((d) => d.outdated).length
-
-            return NextResponse.json({
-              dependencies: freshDependencies,
-              vulnerabilities: vulnerableDeps,
-              outdatedPackages: outdatedDeps,
-              securityScore: Math.max(0, 100 - vulnerableDeps * 10 - outdatedDeps * 5),
-              lastScan: settings?.last_scan || new Date().toISOString(),
-              updateMode: settings?.update_mode || "conservative",
-              tableExists: true,
-            })
-          }
-        }
-      } catch (scanError) {
-        console.error("Error scanning dependencies:", scanError)
-      }
-
-      // If we still don't have dependencies, return empty array with message
       return NextResponse.json({
         dependencies: [],
         tableExists: true,
         scanNeeded: true,
-        message: "No dependencies found. Please run a dependency scan.",
+        message: "No dependencies found. Please run a dependency scan to populate the database.",
       })
     }
 
     // Get global update mode from settings
-    const { data: settings } = await supabase.from("dependency_settings").select("update_mode, last_scan").single()
+    const { data: settings } = await supabase.from("dependency_settings").select("*").eq("key", "update_mode").single()
 
     // Calculate security stats
     const vulnerableDeps = dependencies.filter((d) => d.has_security_issue).length
@@ -161,8 +113,7 @@ export async function GET(request: Request) {
       vulnerabilities: vulnerableDeps,
       outdatedPackages: outdatedDeps,
       securityScore: Math.max(0, 100 - vulnerableDeps * 10 - outdatedDeps * 5),
-      lastScan: settings?.last_scan || new Date().toISOString(),
-      updateMode: settings?.update_mode || "conservative",
+      updateMode: settings?.value ? JSON.parse(settings.value) : "conservative",
       tableExists: true,
     })
   } catch (error) {
