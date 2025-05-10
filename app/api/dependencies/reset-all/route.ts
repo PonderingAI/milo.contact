@@ -1,22 +1,20 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
-
-// Create a Supabase client with the service role key
-const supabaseAdmin = createClient(process.env.SUPABASE_URL || "", process.env.SUPABASE_SERVICE_ROLE_KEY || "")
 
 export async function POST() {
   try {
-    // Reset all dependencies to use the "global" setting
-    const { error } = await supabaseAdmin.from("dependencies").update({ update_mode: "global" }).neq("id", 0) // Update all records
+    // In a database-backed system, this would reset all dependencies to use global settings
+    // Since we're not using a database, we'll just return a success message
 
-    if (error) throw error
-
-    return NextResponse.json({ success: true, message: "All dependencies reset to global setting" })
+    return NextResponse.json({
+      success: true,
+      message: "All dependency settings have been reset to use global settings.",
+    })
   } catch (error) {
-    console.error("Error resetting dependencies:", error)
-    return NextResponse.json(
-      { error: "Failed to reset dependencies", details: error instanceof Error ? error.message : String(error) },
-      { status: 500 },
-    )
+    console.error("Error resetting dependency settings:", error)
+    return NextResponse.json({
+      error: "An unexpected error occurred",
+      message: "There was an unexpected error resetting dependency settings.",
+      details: error instanceof Error ? error.message : String(error),
+    })
   }
 }

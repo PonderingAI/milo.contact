@@ -1,33 +1,10 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
 import fs from "fs"
 import path from "path"
 import { exec } from "child_process"
 import { promisify } from "util"
 
 const execAsync = promisify(exec)
-
-// Helper function to check if a table exists
-async function checkTableExists(supabase, tableName) {
-  try {
-    const { data, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_schema", "public")
-      .eq("table_name", tableName)
-      .single()
-
-    if (error) {
-      console.error(`Error checking if ${tableName} exists:`, error)
-      return false
-    }
-
-    return !!data
-  } catch (error) {
-    console.error(`Error in checkTableExists for ${tableName}:`, error)
-    return false
-  }
-}
 
 // Helper function to get dependencies from package.json
 async function getDependenciesFromPackageJson() {
@@ -57,47 +34,6 @@ async function getDependenciesFromPackageJson() {
 
 export async function POST() {
   try {
-    const supabase = createAdminClient()
-
-    // Check if dependencies table exists
-    const tableExists = await checkTableExists(supabase, "dependencies")
-
-    if (!tableExists) {
-      // Try to create the table
-      try {
-        const setupResponse = await fetch(
-          new URL(
-            "/api/dependencies/setup-system",
-            new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
-          ),
-          {
-            method: "POST",
-          },
-        )
-
-        if (!setupResponse.ok) {
-          return NextResponse.json(
-            {
-              error: "Dependencies table does not exist",
-              message: "The dependencies table has not been set up. Please set up the table first.",
-              tableExists: false,
-            },
-            { status: 404 },
-          )
-        }
-      } catch (setupError) {
-        console.error("Error setting up dependency system:", setupError)
-        return NextResponse.json(
-          {
-            error: "Failed to set up dependency system",
-            message: "There was an error setting up the dependency system.",
-            details: setupError instanceof Error ? setupError.message : String(setupError),
-          },
-          { status: 500 },
-        )
-      }
-    }
-
     // Get dependencies from package.json
     const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
     const allDeps = [...dependencies, ...devDependencies]
@@ -153,75 +89,17 @@ export async function POST() {
       }
     }
 
-    // Clear existing dependencies
-    const { error: clearError } = await supabase.from("dependencies").delete().neq("id", 0)
-
-    if (clearError) {
-      console.error("Error clearing dependencies:", clearError)
-      return NextResponse.json(
-        {
-          error: "Failed to clear existing dependencies",
-          message: "There was an error clearing existing dependencies.",
-          details: clearError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    // Insert dependencies
-    const depsToInsert = allDeps.map((dep) => {
-      const outdatedInfo = outdatedPackages[dep.name]
-      const hasSecurityIssue = securityIssues?.vulnerabilities?.[dep.name] !== undefined
-
-      return {
-        name: dep.name,
-        current_version: dep.current_version,
-        latest_version: outdatedInfo?.latest || dep.current_version,
-        outdated: !!outdatedInfo,
-        locked: false,
-        has_security_issue: hasSecurityIssue,
-        security_details: hasSecurityIssue ? securityIssues?.vulnerabilities?.[dep.name] : null,
-        update_mode: "global",
-        is_dev: dep.is_dev,
-        description: "",
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }
-    })
-
-    const { error: insertError } = await supabase.from("dependencies").insert(depsToInsert)
-
-    if (insertError) {
-      console.error("Error inserting dependencies:", insertError)
-      return NextResponse.json(
-        {
-          error: "Failed to insert dependencies",
-          message: "There was an error inserting dependencies into the database.",
-          details: insertError.message,
-        },
-        { status: 500 },
-      )
-    }
-
-    // Update last scan time in dependency_settings
-    await supabase.from("dependency_settings").update({ last_scan: new Date().toISOString() }).eq("id", 1)
-
-    // Insert security audit record
+    // Count vulnerabilities
     const vulnerabilitiesCount = Object.keys(securityIssues?.vulnerabilities || {}).length
-    await supabase.from("security_audits").insert({
-      audit_date: new Date().toISOString(),
-      vulnerabilities_found: vulnerabilitiesCount,
-      packages_scanned: depsToInsert.length,
-      security_score: Math.max(0, 100 - (vulnerabilitiesCount / Math.max(1, depsToInsert.length)) * 50),
-      audit_summary: securityIssues,
-    })
+    const outdatedCount = Object.keys(outdatedPackages).length
 
     return NextResponse.json({
       success: true,
-      message: "Dependencies scanned and updated successfully.",
-      dependenciesCount: depsToInsert.length,
-      outdatedCount: Object.keys(outdatedPackages).length,
-      vulnerabilitiesCount,
+      message: "Dependencies scanned successfully.",
+      dependenciesCount: allDeps.length,
+      outdatedCount: outdatedCount,
+      vulnerabilitiesCount: vulnerabilitiesCount,
+      lastScan: new Date().toISOString(),
     })
   } catch (error) {
     console.error("Error in scan API:", error)

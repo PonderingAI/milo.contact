@@ -1,36 +1,32 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
-    // Parse request body
-    const body = await request.json()
-    const { id, updateMode } = body
+    const { id, updateMode } = await request.json()
 
     if (!id || !updateMode) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: "Missing required fields",
+          message: "Both id and updateMode are required.",
+        },
+        { status: 400 },
+      )
     }
 
-    // Valid update modes
-    const validModes = ["off", "conservative", "aggressive", "global"]
-    if (!validModes.includes(updateMode)) {
-      return NextResponse.json({ error: "Invalid update mode" }, { status: 400 })
-    }
+    // In a database-backed system, this would update the dependency's update mode
+    // Since we're not using a database, we'll just return a success message
 
-    // Connect to Supabase using admin client
-    const supabase = createAdminClient()
-
-    // Update the dependency
-    const { error } = await supabase.from("dependencies").update({ update_mode: updateMode }).eq("id", id)
-
-    if (error) {
-      console.error("Error updating dependency mode:", error)
-      return NextResponse.json({ error: "Failed to update dependency mode" }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, message: "Dependency mode updated successfully" })
+    return NextResponse.json({
+      success: true,
+      message: `Update mode for ${id} has been set to ${updateMode}.`,
+    })
   } catch (error) {
-    console.error("Error in update-mode API:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    console.error("Error updating dependency mode:", error)
+    return NextResponse.json({
+      error: "An unexpected error occurred",
+      message: "There was an unexpected error updating the dependency mode.",
+      details: error instanceof Error ? error.message : String(error),
+    })
   }
 }

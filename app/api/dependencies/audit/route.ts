@@ -1,116 +1,90 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
+import fs from "fs"
+import path from "path"
 import { exec } from "child_process"
 import { promisify } from "util"
 
 const execAsync = promisify(exec)
 
+// Helper function to get dependencies from package.json
+async function getDependenciesFromPackageJson() {
+  try {
+    // Try to read package.json directly from the file system
+    const packageJsonPath = path.join(process.cwd(), "package.json")
+    const packageJsonContent = fs.readFileSync(packageJsonPath, "utf8")
+    const packageJson = JSON.parse(packageJsonContent)
+
+    return {
+      dependencies: Object.entries(packageJson.dependencies || {}).map(([name, version]) => ({
+        name,
+        current_version: version.toString().replace(/^\^|~/, ""),
+        is_dev: false,
+      })),
+      devDependencies: Object.entries(packageJson.devDependencies || {}).map(([name, version]) => ({
+        name,
+        current_version: version.toString().replace(/^\^|~/, ""),
+        is_dev: true,
+      })),
+    }
+  } catch (error) {
+    console.error("Error reading package.json:", error)
+    return { dependencies: [], devDependencies: [] }
+  }
+}
+
 export async function POST() {
   try {
-    const supabase = createAdminClient()
+    // Get dependencies from package.json
+    const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
+    const allDeps = [...dependencies, ...devDependencies]
 
-    // Run npm audit --json to get security vulnerabilities
-    const { stdout } = await execAsync("npm audit --json", { timeout: 30000 })
-
-    // Parse the JSON output
-    const auditData = JSON.parse(stdout)
-
-    // Extract the vulnerabilities
-    const vulnerabilities = auditData.vulnerabilities || {}
-    const metadata = auditData.metadata || {}
-
-    // Calculate security score (100 - percentage of vulnerable dependencies)
-    const totalDependencies = metadata.totalDependencies || 1 // Avoid division by zero
-    const vulnerableCount = Object.keys(vulnerabilities).length
-    const securityScore = Math.max(0, Math.min(100, 100 - (vulnerableCount / totalDependencies) * 100))
-
-    // Update dependencies with security information
-    for (const [name, details] of Object.entries(vulnerabilities)) {
-      await supabase
-        .from("dependencies")
-        .update({
-          has_security_issue: true,
-          security_details: details,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("name", name)
+    if (allDeps.length === 0) {
+      return NextResponse.json({
+        error: "No dependencies found",
+        message: "No dependencies found in package.json.",
+      })
     }
 
-    // Insert audit record
-    await supabase.from("security_audits").insert({
-      audit_date: new Date().toISOString(),
-      vulnerabilities_found: vulnerableCount,
-      packages_scanned: totalDependencies,
-      security_score: Math.round(securityScore),
-      audit_summary: auditData,
-    })
-
-    // Update last scan time in dependency_settings
-    await supabase.from("dependency_settings").update({ last_scan: new Date().toISOString() }).eq("id", 1)
-
-    return NextResponse.json({
-      success: true,
-      vulnerabilities: vulnerableCount,
-      metadata,
-      securityScore: Math.round(securityScore),
-      vulnerableCount,
-    })
-  } catch (error) {
-    console.error("Error running security audit:", error)
-
-    // If the command fails but returns data about vulnerabilities
-    if (error instanceof Error && "stdout" in error) {
-      try {
-        const auditData = JSON.parse((error as any).stdout)
-        const vulnerabilities = auditData.vulnerabilities || {}
-        const metadata = auditData.metadata || {}
-        const totalDependencies = metadata.totalDependencies || 1
-        const vulnerableCount = Object.keys(vulnerabilities).length
-        const securityScore = Math.max(0, Math.min(100, 100 - (vulnerableCount / totalDependencies) * 100))
-
-        // Update dependencies with security information
-        const supabase = createAdminClient()
-        for (const [name, details] of Object.entries(vulnerabilities)) {
-          await supabase
-            .from("dependencies")
-            .update({
-              has_security_issue: true,
-              security_details: details,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("name", name)
+    // Run npm audit
+    let securityIssues = {}
+    try {
+      const { stdout } = await execAsync("npm audit --json", { timeout: 30000 })
+      if (stdout) {
+        securityIssues = JSON.parse(stdout)
+      }
+    } catch (error) {
+      // npm audit returns exit code 1 if there are vulnerabilities
+      if (error.stdout) {
+        try {
+          securityIssues = JSON.parse(error.stdout)
+        } catch (parseError) {
+          console.error("Error parsing npm audit output:", parseError)
         }
-
-        // Insert audit record
-        await supabase.from("security_audits").insert({
-          audit_date: new Date().toISOString(),
-          vulnerabilities_found: vulnerableCount,
-          packages_scanned: totalDependencies,
-          security_score: Math.round(securityScore),
-          audit_summary: auditData,
-        })
-
-        // Update last scan time in dependency_settings
-        await supabase.from("dependency_settings").update({ last_scan: new Date().toISOString() }).eq("id", 1)
-
-        return NextResponse.json({
-          success: true,
-          vulnerabilities,
-          metadata,
-          securityScore: Math.round(securityScore),
-          vulnerableCount,
-        })
-      } catch (parseError) {
-        // If parsing fails, continue to the error response
+      } else {
+        console.error("Error running npm audit:", error)
       }
     }
 
-    return NextResponse.json(
-      {
-        error: "Failed to run security audit",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
+    // Count vulnerabilities
+    const vulnerabilitiesCount = Object.keys(securityIssues?.vulnerabilities || {}).length
+
+    // Calculate security score
+    const securityScore = Math.max(0, 100 - (vulnerabilitiesCount / Math.max(1, allDeps.length)) * 50)
+
+    return NextResponse.json({
+      success: true,
+      message: "Security audit completed successfully.",
+      vulnerabilities: vulnerabilitiesCount,
+      securityScore: securityScore,
+      auditSummary: securityIssues,
+      lastScan: new Date().toISOString(),
+    })
+  } catch (error) {
+    console.error("Error in audit API:", error)
+    return NextResponse.json({
+      error: "An unexpected error occurred",
+      message: "There was an unexpected error running the security audit.",
+      details: error instanceof Error ? error.message : String(error),
+    })
   }
 }
