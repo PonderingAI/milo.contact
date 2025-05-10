@@ -1,24 +1,30 @@
 "use client"
 
-import { DatabaseSetupPopup } from "@/components/admin/database-setup-popup"
+import { useEffect, useState } from "react"
+import DatabaseSetupPopup from "@/components/admin/database-setup-popup"
 
-// This is a compatibility wrapper to maintain backward compatibility
-// with code that still references the old component
-export default function SetupTablesPopup({
-  tables,
-  onTablesCreated,
-}: {
-  tables?: string[]
-  onTablesCreated?: () => void
-}) {
-  return (
-    <DatabaseSetupPopup
-      requiredSections={tables ? ["custom"] : ["all"]}
-      customTables={tables}
-      onSetupComplete={onTablesCreated}
-    />
-  )
+interface SetupTablesPopupProps {
+  requiredTables?: string[]
+  onSetupComplete?: () => void
 }
 
-// Also export the component as a named export for imports that use { SetupTablesPopup }
-export { SetupTablesPopup }
+export function SetupTablesPopup({ requiredTables = [], onSetupComplete }: SetupTablesPopupProps) {
+  const [isAdminPage, setIsAdminPage] = useState(false)
+
+  // Check if we're on an admin page
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isAdmin = window.location.pathname.startsWith("/admin")
+      setIsAdminPage(isAdmin)
+    }
+  }, [])
+
+  // Only render in admin pages
+  if (!isAdminPage) {
+    return null
+  }
+
+  return <DatabaseSetupPopup customTables={requiredTables} adminOnly={true} onSetupComplete={onSetupComplete} />
+}
+
+export default SetupTablesPopup

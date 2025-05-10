@@ -58,6 +58,7 @@ export function DatabaseSetupPopup({
   const [activeTab, setActiveTab] = useState<string>("all")
   const [setupCompleted, setSetupCompleted] = useState(false)
   const [forceClose, setForceClose] = useState(false)
+  const [isAdminPage, setIsAdminPage] = useState(false)
 
   // Define all possible tables with their SQL
   const allTables: TableConfig[] = [
@@ -787,47 +788,65 @@ ON user_widgets(position);`,
     },
   ]
 
-  // Function to check if tables exist
+  // Check if we're on an admin page
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const isAdmin = window.location.pathname.startsWith("/admin")
+      setIsAdminPage(isAdmin)
+
+      // If we're not on an admin page and adminOnly is true, force close
+      if (!isAdmin && adminOnly) {
+        setForceClose(true)
+      }
+    }
+  }, [adminOnly])
+
+  // Function to check if tables exist - using a more reliable method
   const checkTables = useCallback(async () => {
-    if (forceClose || setupCompleted) {
+    if (forceClose || setupCompleted || (adminOnly && !isAdminPage)) {
       return
     }
 
     setChecking(true)
+    setError(null)
+
     try {
-      const missing: string[] = []
+      // First, try to directly query the information_schema to check tables
+      // This is more reliable than the API route
+      const response = await fetch("/api/direct-table-check", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          tables:
+            customTables.length > 0
+              ? customTables
+              : allTables
+                  .filter((table) => requiredSections.includes("all") || requiredSections.includes(table.category))
+                  .map((table) => table.name),
+        }),
+      })
 
-      const tablesToCheck = requiredSections.includes("all")
-        ? allTables
-        : allTables.filter((table) => requiredSections.includes(table.category))
-
-      // Add custom tables if provided
-      if (customTables.length > 0) {
-        for (const tableName of customTables) {
-          const res = await fetch(`/api/check-table-exists?table=${tableName}`)
-          const data = await res.json()
-
-          if (!data.exists) {
-            missing.push(tableName)
-          }
-        }
-      } else {
-        // Check regular tables
-        for (const table of tablesToCheck) {
-          const res = await fetch(`/api/check-table-exists?table=${table.name}`)
-          const data = await res.json()
-
-          if (!data.exists) {
-            missing.push(table.name)
-          }
-        }
+      if (!response.ok) {
+        throw new Error("Failed to check tables")
       }
 
-      setMissingTables(missing)
-      setSelectedTables(missing)
+      const data = await response.json()
 
-      // Only open the popup if there are missing required tables
-      if (missing.length > 0) {
+      if (data.error) {
+        console.error("Error checking tables:", data.error)
+        throw new Error(data.error)
+      }
+
+      // data.missingTables contains the list of tables that don't exist
+      const missingTablesList = data.missingTables || []
+
+      setMissingTables(missingTablesList)
+      setSelectedTables(missingTablesList)
+
+      // Only open the popup if there are missing tables and we're on an admin page
+      if (missingTablesList.length > 0 && isAdminPage) {
         setOpen(true)
       } else {
         setOpen(false)
@@ -838,11 +857,16 @@ ON user_widgets(position);`,
       }
     } catch (error) {
       console.error("Error checking tables:", error)
-      setError("Failed to check database tables. Please try again.")
+      setError("Failed to check database tables. Please try again or use the Skip Setup button.")
+
+      // If we can't check tables, don't show the popup on non-admin pages
+      if (!isAdminPage && adminOnly) {
+        setForceClose(true)
+      }
     } finally {
       setChecking(false)
     }
-  }, [requiredSections, customTables, forceClose, setupCompleted, onSetupComplete])
+  }, [requiredSections, customTables, forceClose, setupCompleted, onSetupComplete, adminOnly, isAdminPage, allTables])
 
   // Function to generate SQL for selected tables
   const generateSQL = () => {
@@ -920,6 +944,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         setOpen(false)
         setSetupCompleted(true)
 
+        // Save to localStorage to prevent popup from showing again
+        try {
+          localStorage.setItem("database_setup_completed", "true")
+        } catch (e) {
+          console.error("Could not save to localStorage", e)
+        }
+
         if (onSetupComplete) {
           onSetupComplete()
         }
@@ -969,9 +1000,21 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     setOpen(false)
     setSetupCompleted(true)
 
+    // Store in localStorage to prevent popup from showing again
+    try {
+      localStorage.setItem("database_setup_completed", "true")
+    } catch (e) {
+      console.error("Could not save to localStorage", e)
+    }
+
     if (onSetupComplete) {
       onSetupComplete()
     }
+  }
+
+  // Handle manual setup completion
+  const handleManualSetupComplete = () => {
+    setSuccess("Setup marked as complete. Refreshing page...")
 
     // Store in localStorage to prevent popup from showing again
     try {
@@ -979,6 +1022,19 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     } catch (e) {
       console.error("Could not save to localStorage", e)
     }
+
+    // Wait a moment before closing to show success message
+    setTimeout(() => {
+      setOpen(false)
+      setSetupCompleted(true)
+
+      if (onSetupComplete) {
+        onSetupComplete()
+      }
+
+      // Refresh the page to ensure everything is loaded correctly
+      window.location.reload()
+    }, 1500)
   }
 
   // Check for missing tables on component mount
@@ -995,11 +1051,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       console.error("Could not read from localStorage", e)
     }
 
-    checkTables()
-  }, [checkTables])
+    // Only run the check if we're on an admin page and adminOnly is true
+    if (!adminOnly || (adminOnly && isAdminPage)) {
+      checkTables()
+    }
+  }, [checkTables, adminOnly, isAdminPage])
 
-  // If force closed or setup completed, don't render
-  if (forceClose || (setupCompleted && !open)) {
+  // If force closed, setup completed, or not on admin page when adminOnly is true, don't render
+  if (forceClose || (setupCompleted && !open) || (adminOnly && !isAdminPage)) {
     return null
   }
 
@@ -1118,6 +1177,18 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             <Textarea value={generateSQL()} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
           </div>
 
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 mt-4">
+            <h3 className="font-medium mb-2">Instructions:</h3>
+            <ol className="list-decimal list-inside space-y-2">
+              <li>Copy the SQL code above using the "Copy SQL" button</li>
+              <li>Go to your Supabase project dashboard</li>
+              <li>Click on "SQL Editor" in the left sidebar</li>
+              <li>Paste the SQL code into the editor</li>
+              <li>Click "Run" to execute the SQL and create all required tables</li>
+              <li>Return here and click "I've Run the SQL Manually"</li>
+            </ol>
+          </div>
+
           <DialogFooter className="flex flex-col sm:flex-row gap-3">
             <Button variant="outline" onClick={copyToClipboard}>
               {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
@@ -1126,17 +1197,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             <Button variant="outline" onClick={handleForceClose}>
               Skip Setup
             </Button>
+            <Button variant="outline" onClick={handleManualSetupComplete}>
+              I've Run the SQL Manually
+            </Button>
             <Button onClick={executeSQL} disabled={loading}>
               {loading ? "Creating tables..." : "Create Tables Automatically"}
             </Button>
           </DialogFooter>
-
-          <div className="text-sm text-gray-500 mt-2">
-            <p>
-              You can either copy the SQL and run it manually in your database management tool, or click "Create Tables
-              Automatically" to have the system create the tables for you.
-            </p>
-          </div>
         </div>
       </DialogContent>
     </Dialog>
