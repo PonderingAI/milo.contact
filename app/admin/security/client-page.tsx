@@ -60,6 +60,7 @@ interface SecurityStats {
   lastScan: string
 }
 
+// Update the Widget interface to include size information
 interface Widget {
   id: string
   type: string
@@ -67,6 +68,8 @@ interface Widget {
   order: number
   column?: number
   height?: number
+  width?: number
+  cols?: number
 }
 
 interface DashboardState {
@@ -356,7 +359,7 @@ export default function SecurityClientPage() {
         name: dep.name,
         currentVersion: dep.current_version || dep.currentVersion,
         latestVersion: dep.latest_version || dep.latestVersion,
-        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latest_version),
+        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latestVersion),
         locked: dep.locked || false,
         description: dep.description || "",
         hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
@@ -729,6 +732,23 @@ export default function SecurityClientPage() {
   // Count dependencies using global settings
   const globalDependenciesCount = dependencies.filter((dep) => dep.updateMode === "global").length
   const dependabotAlertCount = dependencies.filter((dep) => dep.hasDependabotAlert).length
+
+  // Add this function to handle widget resizing
+  const handleWidgetResize = (id: string, newSize: { width: number; height: number }) => {
+    setWidgets((prevWidgets) =>
+      prevWidgets.map((widget) =>
+        widget.id === id
+          ? {
+              ...widget,
+              width: newSize.width,
+              height: newSize.height,
+              // Calculate columns based on width
+              cols: Math.min(3, Math.max(1, Math.round(newSize.width / (window.innerWidth / 3)))),
+            }
+          : widget,
+      ),
+    )
+  }
 
   // Render widget content based on type
   const renderWidgetContent = (type: string) => {
@@ -1260,7 +1280,7 @@ export default function SecurityClientPage() {
           </div>
 
           {/* Grid layout for widgets */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-min">
             {widgets
               .sort((a, b) => a.order - b.order)
               .map((widget) => {
@@ -1279,9 +1299,14 @@ export default function SecurityClientPage() {
                     onDrop={handleDrop}
                     onDragEnd={handleDragEnd}
                     draggingWidgetId={draggingWidgetId}
-                    fullWidth={false}
+                    fullWidth={isUpdateSettings}
                     highlighted={isUpdateSettings}
-                    className={isUpdateSettings ? "col-span-1 md:col-span-2 lg:col-span-3" : ""}
+                    onResize={handleWidgetResize}
+                    initialSize={{
+                      width: widget.width,
+                      height: widget.height,
+                      cols: widget.cols || (isUpdateSettings ? 3 : 1),
+                    }}
                   >
                     {renderWidgetContent(widget.type)}
                   </WidgetComponent>
@@ -1507,6 +1532,15 @@ export default function SecurityClientPage() {
           transform: scale(1.05);
           z-index: 100;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+        
+        .resizing {
+          cursor: nwse-resize !important;
+          user-select: none;
+        }
+        
+        .resizing * {
+          user-select: none;
         }
       `}</style>
     </div>
