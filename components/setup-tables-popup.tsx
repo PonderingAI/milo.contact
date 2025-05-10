@@ -52,6 +52,7 @@ export function DatabaseSetupPopup({
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
   const [isLoadingSql, setIsLoadingSql] = useState(false)
   const [sqlLoadAttempted, setSqlLoadAttempted] = useState(false)
+  const [manualSetupComplete, setManualSetupComplete] = useState(false)
 
   // Check if we're on an admin page
   useEffect(() => {
@@ -120,6 +121,16 @@ export function DatabaseSetupPopup({
           }
         }
 
+        // If manual setup was marked as complete, close the popup regardless of missing tables
+        if (manualSetupComplete) {
+          setOpen(false)
+          setManualSetupComplete(false)
+          if (onSetupComplete) {
+            onSetupComplete()
+          }
+          return
+        }
+
         // Only open the popup if there are missing tables, we're on an admin page, and we should open it
         if (missingTablesList.length > 0 && isAdminPage && shouldOpenPopup) {
           setOpen(true)
@@ -148,6 +159,15 @@ export function DatabaseSetupPopup({
         if (!isAdminPage && adminOnly) {
           setForceClose(true)
         }
+
+        // If manual setup was marked as complete, close the popup anyway
+        if (manualSetupComplete) {
+          setOpen(false)
+          setManualSetupComplete(false)
+          if (onSetupComplete) {
+            onSetupComplete()
+          }
+        }
       } finally {
         setChecking(false)
       }
@@ -163,6 +183,7 @@ export function DatabaseSetupPopup({
       missingTables,
       checking,
       sqlLoadAttempted,
+      manualSetupComplete,
     ],
   )
 
@@ -530,12 +551,16 @@ END $$;
 
   // Handle manual setup completion
   const handleManualSetupComplete = () => {
-    setSuccess("Setup marked as complete. Checking tables...")
+    setSuccess("Setup marked as complete")
+    setManualSetupComplete(true)
 
-    // Check tables again to verify
+    // Close the popup immediately
     setTimeout(() => {
-      checkTables(false) // Check tables but don't reopen popup
-    }, 1500)
+      setOpen(false)
+      if (onSetupComplete) {
+        onSetupComplete()
+      }
+    }, 1000)
   }
 
   // Handle force close
@@ -700,10 +725,10 @@ END $$;
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button variant="outline" onClick={handleManualSetupComplete}>
-              I've Run the SQL Manually
+            <Button variant="outline" onClick={handleManualSetupComplete} disabled={manualSetupComplete}>
+              {manualSetupComplete ? "Processing..." : "I've Run the SQL Manually"}
             </Button>
-            <Button onClick={executeSQL} disabled={loading}>
+            <Button onClick={executeSQL} disabled={loading || manualSetupComplete}>
               {loading ? "Creating tables..." : "Create Tables Automatically"}
             </Button>
           </DialogFooter>
