@@ -29,8 +29,6 @@ import {
   Clock,
 } from "lucide-react"
 import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
-import { DependencySystemSetupGuide } from "@/components/admin/dependency-system-setup-guide"
-import { DependencySystemSetup } from "@/components/admin/dependency-system-setup"
 
 // Types
 interface Dependency {
@@ -120,7 +118,6 @@ export default function SecurityClientPage() {
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [setupMessage, setSetupMessage] = useState<string | null>(null)
   const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("conservative")
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all")
@@ -144,7 +141,6 @@ export default function SecurityClientPage() {
   const [showUpdateResults, setShowUpdateResults] = useState(false)
   const [diagnosticInfo, setDiagnosticInfo] = useState<any>(null)
   const [showDiagnostics, setShowDiagnostics] = useState(false)
-  const [setupAttempted, setSetupAttempted] = useState(false)
 
   // Load widgets from localStorage on initial render
   useEffect(() => {
@@ -221,40 +217,10 @@ export default function SecurityClientPage() {
     }
   }
 
-  const setupDependencySystem = async () => {
-    try {
-      setSetupAttempted(true)
-      setLoading(true)
-      setError(null)
-      setSetupMessage("Setting up dependency management system...")
-
-      const response = await fetch("/api/dependencies/setup", {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || errorData.error || "Failed to set up dependency system")
-      }
-
-      const data = await response.json()
-      setSetupMessage(data.message || "Dependency system set up successfully. Scanning dependencies...")
-
-      // After setup, scan for dependencies
-      await scanDependencies()
-    } catch (err: any) {
-      setError(`Error setting up dependency system: ${err.message}`)
-      console.error("Error setting up dependency system:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   const scanDependencies = async () => {
     try {
       setLoading(true)
       setError(null)
-      setSetupMessage("Scanning dependencies...")
 
       const response = await fetch("/api/dependencies/scan", {
         method: "POST",
@@ -267,11 +233,10 @@ export default function SecurityClientPage() {
 
       // Refresh dependencies after scan
       await fetchDependencies()
-      setSetupMessage("Dependency scan completed successfully.")
 
       // Clear setup message after a delay
       setTimeout(() => {
-        setSetupMessage(null)
+        // Success message could be shown here if needed
       }, 3000)
     } catch (err: any) {
       setError(`Error scanning dependencies: ${err.message}`)
@@ -324,13 +289,6 @@ export default function SecurityClientPage() {
 
       // Store the full response for diagnostics
       setDiagnosticInfo(data)
-
-      // Check for setup needed
-      if (data.setupNeeded) {
-        setSetupMessage(data.setupMessage || "The dependency system needs to be set up.")
-        setDependencies([])
-        return
-      }
 
       // Check for error
       if (data.error) {
@@ -889,8 +847,6 @@ export default function SecurityClientPage() {
         </div>
       )}
 
-      {setupMessage && !setupAttempted && <DependencySystemSetup />}
-
       {showUpdateResults && updateResults.length > 0 && (
         <div className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6">
           <div className="flex items-center mb-2">
@@ -1039,21 +995,15 @@ export default function SecurityClientPage() {
                   <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
                   <p className="text-xl font-semibold mb-2">No dependencies found</p>
                   <p className="text-gray-400 mb-4 max-w-md mx-auto">
-                    This could be because the dependency system is still setting up or there was an error fetching the
-                    data.
+                    Run a dependency scan to populate the system with your project dependencies.
                   </p>
                   <div className="space-y-4">
                     <div className="flex justify-center gap-4">
-                      <Button onClick={setupDependencySystem} disabled={setupAttempted}>
-                        {setupAttempted ? "Setup Attempted" : "Setup System"}
-                      </Button>
                       <Button onClick={scanDependencies}>
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Scan Dependencies
                       </Button>
                     </div>
-
-                    <DependencySystemSetupGuide />
 
                     <div className="mt-6 bg-gray-800 p-4 rounded-md text-left max-w-md mx-auto">
                       <h3 className="font-medium mb-2 flex items-center">
@@ -1061,7 +1011,6 @@ export default function SecurityClientPage() {
                         Troubleshooting Steps
                       </h3>
                       <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
-                        <li>Check if the database tables are set up correctly</li>
                         <li>Verify that your package.json file exists and is valid</li>
                         <li>Make sure npm is installed and accessible on the server</li>
                         <li>Check the server logs for more detailed error information</li>

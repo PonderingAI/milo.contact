@@ -55,7 +55,6 @@ These components are used in the admin dashboard and management interfaces.
 | `components/admin/manual-dependency-entry.tsx` | Manual dependency management | Add dependencies manually |
 | `components/admin/package-json-manager.tsx` | Package.json management | Edit and update package.json |
 | `components/admin/vulnerability-details.tsx` | Security vulnerability details | Shows detailed security info |
-| `components/admin/dependency-setup-alert.tsx` | Dependency setup alert | Notification for dependency setup |
 | `components/admin/draggable-widget.tsx` | Draggable dashboard widget | Interactive dashboard components |
 | `components/admin/widget-selector.tsx` | Widget selection interface | Add widgets to dashboard |
 
@@ -98,7 +97,7 @@ Page components that represent routes in the application.
 | `app/admin/settings/client-page.tsx` | Client-side settings | Client components for settings |
 | `app/admin/media/page.tsx` | Media management | Browse and manage media |
 | `app/admin/security/page.tsx` | Security center | Security monitoring and controls |
-| `app/admin/security/client-page.tsx` | Client-side security | Client components for security |
+| `app/admin/security/client-page.tsx` | Client-side security | Dependency management and security monitoring |
 | `app/admin/dependencies/page.tsx` | Dependency management | Manage package dependencies |
 | `app/admin/dependencies/client-page.tsx` | Client-side dependencies | Client components for dependencies |
 | `app/admin/not-found.tsx` | Admin 404 page | Admin-specific not found page |
@@ -107,6 +106,7 @@ Page components that represent routes in the application.
 | `app/admin/bootstrap/page.tsx` | Admin bootstrap | Initial admin setup |
 | `app/admin/seed-projects/page.tsx` | Project seeding | Seed sample projects |
 | `app/admin/debug/debug-client.tsx` | Debug client | Client-side debugging tools |
+| `app/admin/debug-database/page.tsx` | Database debugging | Tools for diagnosing database issues |
 | `app/admin/layout.tsx` | Admin layout | Layout for all admin pages |
 | `app/admin/admin-database-check.tsx` | Database check component | Checks for required tables in admin section |
 | `app/debug/page.tsx` | Debug page | General debugging tools |
@@ -116,7 +116,7 @@ Page components that represent routes in the application.
 | `app/sign-up/[[...sign-up]]/page.tsx` | Sign up page | User registration |
 | `app/setup/page.tsx` | Setup page | General setup instructions |
 | `app/setup-database/page.tsx` | Database setup | Database setup guide |
-| `app/layout.tsx` | Root layout | Main app layout wrapper |
+| `app/layout.tsx` | Root layout | Main app layout wrapper with Analytics |
 
 ## API Routes
 
@@ -146,13 +146,14 @@ Server endpoints that provide data and functionality.
 | `app/api/upload-app-icons/route.ts` | Upload app icons | Process app icon uploads |
 | `app/api/favicon/route.ts` | Manage favicon | Get/set site favicon |
 | `app/api/contact/route.ts` | Contact form submission | Process contact form data |
-| `app/api/check-table-exists/route.ts` | Check if table exists | Verify table existence |
+| `app/api/check-table/route.ts` | Check single table | Verify if a specific table exists |
+| `app/api/direct-table-check/route.ts` | Check multiple tables | Verify if multiple tables exist |
+| `app/api/list-all-tables/route.ts` | List all tables | Get all tables in the database |
 | `app/api/execute-sql/route.ts` | Execute SQL statements | Direct SQL execution |
 | `app/api/dependencies/route.ts` | Main dependencies API | Dependency system entry point |
 | `app/api/dependencies/list/route.ts` | List dependencies | Get all dependencies |
 | `app/api/dependencies/scan/route.ts` | Scan dependencies | Analyze project for dependencies |
 | `app/api/dependencies/fallback-scan/route.ts` | Fallback dependency scan | Alternative scanning method |
-| `app/api/dependencies/setup/route.ts` | Setup dependency system | Initialize dependency management |
 | `app/api/dependencies/settings/route.ts` | Dependency settings | Manage dependency system config |
 | `app/api/dependencies/lock/route.ts` | Lock dependencies | Prevent dependency changes |
 | `app/api/dependencies/apply/route.ts` | Apply dependency updates | Update dependencies |
@@ -162,7 +163,6 @@ Server endpoints that provide data and functionality.
 | `app/api/dependencies/check-updates/route.ts` | Check for updates | Look for new versions |
 | `app/api/dependencies/generate-package-json/route.ts` | Generate package.json | Create package.json file |
 | `app/api/dependencies/scheduled-update/route.ts` | Scheduled updates | Periodic update checks |
-| `app/api/dependencies/check-tables/route.ts` | Check dependency tables | Verify table existence |
 | `app/api/dependencies/system-status/route.ts` | Dependency system status | Check system health |
 | `app/api/dependencies/update-mode/route.ts` | Update dependency mode | Change update settings for a dependency |
 
@@ -187,6 +187,7 @@ Files that handle database operations and storage.
 | `lib/supabase-browser.ts` | Browser-side Supabase client | Client-side database access |
 | `lib/supabase-server.ts` | Server-side Supabase client | Server-side database access |
 | `lib/project-data.ts` | Project data utilities | Project data processing helpers |
+| `lib/database-schema.ts` | Database schema definition | Central registry of all database tables |
 
 ## Configuration Files
 
@@ -201,6 +202,7 @@ Files that configure the application and its dependencies.
 | `tsconfig.json` | TypeScript configuration | Type checking settings |
 | `.env.example` | Environment variables example | Template for environment setup |
 | `.env.local` | Local environment variables | Local configuration |
+| `.npmrc` | NPM configuration | NPM settings for CI/CD |
 
 ## Utilities & Helpers
 
@@ -231,7 +233,8 @@ Documentation and guides for the application.
 | `docs/TODO.md` | Todo list | Pending tasks |
 | `docs/CODE_OVERVIEW.md` | Code overview | This document |
 | `docs/DATABASE-SETUP.md` | Database setup guide | Documentation for the database setup system |
-| `docs/setup/dependency-tables.sql` | Dependency tables SQL | SQL script for setting up dependency tables |
+| `docs/DATABASE-MANAGEMENT.md` | Database management | Guide for managing database tables |
+| `docs/DEPLOYMENT.md` | Deployment guide | Instructions for deploying the application |
 
 ## Feature Relationships
 
@@ -250,11 +253,6 @@ Documentation and guides for the application.
 - **Security Center**: `admin/security/page.tsx` → `admin/security/client-page.tsx` → `dependency-scanner.tsx` → `vulnerability-details.tsx`
 - **Dependency Management**: `admin/dependencies/page.tsx` → `admin/dependencies/client-page.tsx` → `dependency-scanner.tsx` → `manual-dependency-entry.tsx`
 
-### Database Setup Flow
-
-- **Unified Setup**: `admin/layout.tsx` → `admin-database-check.tsx` → `database-setup-popup.tsx` → `check-table-exists/route.ts` → `execute-sql/route.ts`
-- **Dependency System**: `admin/security/client-page.tsx` → `app/api/dependencies/setup/route.ts` → `docs/setup/dependency-tables.sql`
-
 ### Authentication Flow
 
 - **Sign In**: `sign-in/page.tsx` → Auth callback → `auth/callback/page.tsx` → Redirect to admin
@@ -262,81 +260,45 @@ Documentation and guides for the application.
 
 ## Recent Improvements
 
-### Database Setup System Consolidation
+### Security Center Simplification
 
-We've recently consolidated multiple database setup components and files into a single, unified system:
+We've simplified the Security Center to work without SQL checking and setup:
 
-1. **Unified Setup Component**: `components/admin/database-setup-popup.tsx` now handles all database table setup needs
-2. **Context-Aware Requirements**: The system only shows tables needed for the current admin section
-3. **Automatic Dependency Resolution**: Tables are created in the correct order based on their dependencies
-4. **Simplified User Experience**: Non-technical users can set up their database with a single click
-5. **Reduced Code Duplication**: Eliminated multiple redundant setup files and SQL scripts
+1. **Removed Setup Dependencies**: The Security Center no longer requires database setup checks
+2. **Streamlined Interface**: Simplified the security client page to focus on dependency management
+3. **Improved Error Handling**: Better error messages and diagnostic information
+4. **Direct Dependency Scanning**: The system now directly scans dependencies without requiring table setup first
+5. **Simplified Troubleshooting**: Added clearer troubleshooting steps for common issues
 
-### Dependency Management System Integration
+### Database Debugging Tools
 
-The dependency management system has been integrated with the unified modular SQL setup system:
+We've added new tools to help diagnose database issues:
 
-1. **SQL Definition**: Dependency tables are defined in `docs/setup/dependency-tables.sql`
-2. **Automatic Setup**: Tables can be created through the admin database setup interface
-3. **API Integration**: API routes use the admin client for proper authentication
-4. **Fallback Mechanism**: System can fall back to package.json if database tables don't exist
-5. **Documentation**: Added comprehensive documentation in `docs/DEPENDENCIES.md`
+1. **Table Checking API**: Improved API for checking if tables exist
+2. **Database Debug Page**: Added a debug page to view all tables and test table existence
+3. **Direct Table Queries**: Added ability to check individual tables directly
+
+### Analytics Integration
+
+We've integrated Vercel Web Analytics to track site usage:
+
+1. **Analytics Component**: Added the Analytics component to the root layout
+2. **Automatic Page Tracking**: All page views are now automatically tracked
+3. **Performance Monitoring**: Site performance metrics are now collected
 
 ## Dependency Management System
 
 The dependency management system provides tools for tracking, updating, and securing project dependencies.
 
 ### Key Files:
-- `/docs/setup/dependency-tables.sql` - SQL setup for dependency system tables
-- `/app/api/dependencies/list/route.ts` - API for listing dependencies
-- `/app/api/dependencies/check-tables/route.ts` - API for checking if dependency tables exist
-- `/app/api/setup-dependencies-tables/route.ts` - API for setting up dependency tables
-- `/components/admin/dependency-system-setup.tsx` - Component for setting up the dependency system
+- `/app/api/dependencies/route.ts` - Main API for dependency management
+- `/app/api/dependencies/scan/route.ts` - API for scanning dependencies
 - `/app/admin/security/client-page.tsx` - Security center UI with dependency management
 
-### Database Tables:
-- `dependencies` - Stores information about project dependencies
-- `dependency_settings` - Stores settings for the dependency management system
-- `security_audits` - Stores results of security audits
+### Features:
+- **Dependency Scanning**: Automatically scan package.json for dependencies
+- **Security Audits**: Check dependencies for known vulnerabilities
+- **Update Management**: Control how dependencies are updated
+- **Dashboard Widgets**: Customizable widgets for security monitoring
 
-The dependency system integrates with the universal SQL setup system to ensure all required tables are created properly.
-
-## Database Management System
-
-The application uses a centralized database management system defined in `lib/database-schema.ts`. This system:
-
-1. Defines all database tables in a single configuration file
-2. Organizes tables by category
-3. Manages dependencies between tables
-4. Provides SQL files for table creation
-5. Integrates with the universal SQL setup popup
-
-Key components:
-
-- `lib/database-schema.ts`: Central registry of all database tables
-- `components/setup-tables-popup.tsx`: Universal popup for setting up database tables
-- `app/api/direct-table-check/route.ts`: API for checking if tables exist
-- `app/api/execute-sql/route.ts`: API for executing SQL statements
-
-When adding new features that require database tables, refer to the `DATABASE-MANAGEMENT.md` guide.
-
-## Existing Database Categories
-
-The system organizes tables into the following categories:
-
-- **core**: Essential tables required for basic functionality (user_roles, site_settings)
-- **content**: Tables for storing content (projects, bts_images, contact_messages)
-- **media**: Tables for media files and assets (media)
-- **security**: Tables for security features (security_audits)
-- **dependencies**: Tables for dependency management (dependencies, dependency_settings)
-- **other**: Miscellaneous tables (widget_types, user_widgets)
-
-## How It Works
-
-1. When a feature needs database tables, it checks if they exist using the central configuration
-2. If tables are missing, it shows the universal setup popup
-3. The popup loads SQL from the appropriate files
-4. The user can execute the SQL automatically or manually
-5. After setup, the feature continues loading
-
-This system ensures a consistent approach to database management across the application.
+The dependency system now works without requiring explicit database setup, making it more reliable and user-friendly.
