@@ -32,6 +32,65 @@ async function getDependenciesFromPackageJson() {
   }
 }
 
+// Helper function to fetch package info from npm
+async function fetchPackageInfo(packageName) {
+  try {
+    const response = await fetch(`https://registry.npmjs.org/${packageName}`, {
+      headers: {
+        Accept: "application/vnd.npm.install-v1+json", // Lightweight metadata
+      },
+      next: { revalidate: 3600 }, // Cache for 1 hour
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch package info: ${response.status}`)
+    }
+
+    const data = await response.json()
+
+    // Extract the latest version
+    const latestVersion = data["dist-tags"]?.latest
+
+    // Get description and repository info
+    const description = data.description || ""
+    const repository =
+      typeof data.repository === "object"
+        ? data.repository.url
+        : typeof data.repository === "string"
+          ? data.repository
+          : ""
+
+    // Clean up repository URL
+    let repoUrl = ""
+    if (repository) {
+      repoUrl = repository
+        .replace(/^git\+/, "")
+        .replace(/\.git$/, "")
+        .replace(/^git:\/\//, "https://")
+        .replace(/^ssh:\/\/git@/, "https://")
+    }
+
+    return {
+      description,
+      repository: repoUrl,
+      latestVersion,
+      homepage: data.homepage || "",
+      license: data.license || "Unknown",
+      author: data.author ? (typeof data.author === "object" ? data.author.name : data.author) : "Unknown",
+    }
+  } catch (error) {
+    console.error(`Error fetching info for ${packageName}:`, error)
+    return {
+      description: "",
+      repository: "",
+      latestVersion: "",
+      homepage: "",
+      license: "Unknown",
+      author: "Unknown",
+    }
+  }
+}
+
 export async function POST() {
   try {
     // Get dependencies from package.json
@@ -89,6 +148,22 @@ export async function POST() {
       }
     }
 
+    // Fetch package info for each dependency (limit to 5 concurrent requests to avoid rate limiting)
+    const packageInfos = []
+    const batchSize = 5
+
+    for (let i = 0; i < allDeps.length; i += batchSize) {
+      const batch = allDeps.slice(i, i + batchSize)
+      const batchResults = await Promise.all(batch.map((dep) => fetchPackageInfo(dep.name)))
+
+      for (let j = 0; j < batch.length; j++) {
+        packageInfos.push({
+          ...batch[j],
+          ...batchResults[j],
+        })
+      }
+    }
+
     // Count vulnerabilities
     const vulnerabilitiesCount = Object.keys(securityIssues?.vulnerabilities || {}).length
     const outdatedCount = Object.keys(outdatedPackages).length
@@ -100,6 +175,7 @@ export async function POST() {
       outdatedCount: outdatedCount,
       vulnerabilitiesCount: vulnerabilitiesCount,
       lastScan: new Date().toISOString(),
+      packageInfos: packageInfos.length,
     })
   } catch (error) {
     console.error("Error in scan API:", error)

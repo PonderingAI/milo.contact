@@ -76,6 +76,65 @@ async function getSecurityIssues() {
   }
 }
 
+// Helper function to fetch package info from npm
+async function fetchPackageInfo(packageName) {
+  try {
+    const response = await fetch(`https://registry.npmjs.org/${packageName}`, {
+      headers: {
+        Accept: "application/vnd.npm.install-v1+json", // Lightweight metadata
+      },
+      next: { revalidate: 3600 }, // Cache for 1 hour
+    })
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch package info: ${response.status}`)
+    }
+
+    const data = await response.json()
+
+    // Extract the latest version
+    const latestVersion = data["dist-tags"]?.latest
+
+    // Get description and repository info
+    const description = data.description || ""
+    const repository =
+      typeof data.repository === "object"
+        ? data.repository.url
+        : typeof data.repository === "string"
+          ? data.repository
+          : ""
+
+    // Clean up repository URL
+    let repoUrl = ""
+    if (repository) {
+      repoUrl = repository
+        .replace(/^git\+/, "")
+        .replace(/\.git$/, "")
+        .replace(/^git:\/\//, "https://")
+        .replace(/^ssh:\/\/git@/, "https://")
+    }
+
+    return {
+      description,
+      repository: repoUrl,
+      latestVersion,
+      homepage: data.homepage || "",
+      license: data.license || "Unknown",
+      author: data.author ? (typeof data.author === "object" ? data.author.name : data.author) : "Unknown",
+    }
+  } catch (error) {
+    console.error(`Error fetching info for ${packageName}:`, error)
+    return {
+      description: "",
+      repository: "",
+      latestVersion: "",
+      homepage: "",
+      license: "Unknown",
+      author: "Unknown",
+    }
+  }
+}
+
 export async function GET() {
   try {
     // Get dependencies directly from package.json
@@ -95,8 +154,19 @@ export async function GET() {
     // Get security vulnerabilities
     const securityIssues = await getSecurityIssues()
 
-    // Process dependencies with outdated and security information
-    const processedDeps = allDeps.map((dep) => {
+    // Fetch package info for each dependency (in parallel)
+    const packageInfoPromises = allDeps.map(async (dep) => {
+      const info = await fetchPackageInfo(dep.name)
+      return {
+        ...dep,
+        ...info,
+      }
+    })
+
+    const packageInfos = await Promise.all(packageInfoPromises)
+
+    // Process dependencies with outdated, security, and npm info
+    const processedDeps = packageInfos.map((dep) => {
       const outdatedInfo = outdatedPackages[dep.name]
       const hasSecurityIssue = securityIssues?.vulnerabilities?.[dep.name] !== undefined
 
@@ -104,14 +174,18 @@ export async function GET() {
         id: dep.name,
         name: dep.name,
         current_version: dep.current_version,
-        latest_version: outdatedInfo?.latest || dep.current_version,
+        latest_version: dep.latestVersion || outdatedInfo?.latest || dep.current_version,
         outdated: !!outdatedInfo,
         locked: false,
         has_security_issue: hasSecurityIssue,
         security_details: hasSecurityIssue ? securityIssues?.vulnerabilities?.[dep.name] : null,
         update_mode: "conservative", // Default to conservative
         is_dev: dep.is_dev,
-        description: "",
+        description: dep.description || "",
+        repository: dep.repository || "",
+        homepage: dep.homepage || "",
+        license: dep.license || "Unknown",
+        author: dep.author || "Unknown",
       }
     })
 
