@@ -50,6 +50,7 @@ export function DatabaseSetupPopup({
   const [isAdminPage, setIsAdminPage] = useState(false)
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const [isLoadingSql, setIsLoadingSql] = useState(false)
 
   // Check if we're on an admin page
   useEffect(() => {
@@ -70,7 +71,10 @@ export function DatabaseSetupPopup({
       if (checking) return // Prevent multiple simultaneous checks
 
       setChecking(true)
-      setError(null)
+      // Don't show error during background checks
+      if (shouldOpenPopup) {
+        setError(null)
+      }
       setLastRefreshTime(new Date())
 
       try {
@@ -107,13 +111,17 @@ export function DatabaseSetupPopup({
         if (JSON.stringify(missingTablesList) !== JSON.stringify(missingTables)) {
           setMissingTables(missingTablesList)
           setSelectedTables(missingTablesList)
+
+          // Only load SQL content if there are missing tables and we're opening the popup
+          // or if the popup is already open
+          if (missingTablesList.length > 0 && (shouldOpenPopup || open)) {
+            loadSqlContent(missingTablesList)
+          }
         }
 
         // Only open the popup if there are missing tables, we're on an admin page, and we should open it
         if (missingTablesList.length > 0 && isAdminPage && shouldOpenPopup) {
           setOpen(true)
-          // Load SQL content for missing tables
-          loadSqlContent(missingTablesList)
         } else if (missingTablesList.length === 0) {
           // If no missing tables, close the popup and call onSetupComplete
           if (open) {
@@ -127,13 +135,13 @@ export function DatabaseSetupPopup({
           } else if (onSetupComplete) {
             onSetupComplete()
           }
-        } else if (open) {
-          // If popup is already open, just update the SQL content
-          loadSqlContent(missingTablesList)
         }
       } catch (error) {
         console.error("Error checking tables:", error)
-        setError("Failed to check database tables. Please try again.")
+        // Only show errors for user-initiated checks
+        if (shouldOpenPopup) {
+          setError("Failed to check database tables. Please try again.")
+        }
 
         // If we can't check tables, don't show the popup on non-admin pages
         if (!isAdminPage && adminOnly) {
@@ -220,17 +228,32 @@ export function DatabaseSetupPopup({
 
   // Load SQL content from files
   const loadSqlContent = async (tableNames: string[]) => {
+    // Don't show loading state for background refreshes
+    setIsLoadingSql(true)
+
     try {
       const sqlFiles = getSqlFilesForTables(tableNames)
+
+      // If no SQL files, set empty content
+      if (sqlFiles.length === 0) {
+        setSqlContent("")
+        return
+      }
 
       // For each SQL file, fetch its content
       const sqlContents = await Promise.all(
         sqlFiles.map(async (file) => {
-          const response = await fetch(file)
-          if (!response.ok) {
-            throw new Error(`Failed to load SQL file: ${file}`)
+          try {
+            const response = await fetch(file)
+            if (!response.ok) {
+              console.warn(`Failed to load SQL file: ${file}`)
+              return `-- Failed to load SQL for ${file}\n`
+            }
+            return await response.text()
+          } catch (err) {
+            console.warn(`Error fetching SQL file: ${file}`, err)
+            return `-- Error loading SQL for ${file}\n`
           }
-          return response.text()
         }),
       )
 
@@ -238,7 +261,10 @@ export function DatabaseSetupPopup({
       setSqlContent(sqlContents.join("\n\n"))
     } catch (error) {
       console.error("Error loading SQL content:", error)
-      setError("Failed to load SQL content. Please try again.")
+      // Don't show error messages for background refreshes
+      // setError("Failed to load SQL content. Please try again.")
+    } finally {
+      setIsLoadingSql(false)
     }
   }
 
@@ -325,21 +351,15 @@ export function DatabaseSetupPopup({
               <Database className="h-5 w-5 mr-2" />
               {title}
             </div>
-            <div className="flex items-center space-x-2">
-              <Button variant="outline" size="sm" onClick={copyToClipboard} className="h-8 px-2">
-                {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-                {copied ? "Copied" : "Copy SQL"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleForceClose}
-                title="Skip setup (not recommended)"
-                className="h-8 w-8"
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleForceClose}
+              title="Skip setup (not recommended)"
+              className="h-8 w-8"
+            >
+              <X className="h-4 w-4" />
+            </Button>
           </DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
@@ -442,8 +462,21 @@ export function DatabaseSetupPopup({
           </Tabs>
 
           <div className="mt-6">
-            <h3 className="text-lg font-medium mb-2">Generated SQL</h3>
-            <Textarea value={sqlContent} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-medium">Generated SQL</h3>
+              <Button variant="outline" size="sm" onClick={copyToClipboard} className="h-8">
+                {copied ? <Check className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                {copied ? "Copied!" : "Copy SQL"}
+              </Button>
+            </div>
+            <div className="relative">
+              <Textarea value={sqlContent} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
+              {isLoadingSql && (
+                <div className="absolute inset-0 bg-gray-50/50 dark:bg-gray-900/50 flex items-center justify-center">
+                  <RefreshCw className="h-6 w-6 animate-spin text-gray-400" />
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 mt-4">
@@ -459,10 +492,6 @@ export function DatabaseSetupPopup({
           </div>
 
           <DialogFooter className="flex flex-col sm:flex-row gap-3">
-            <Button variant="outline" onClick={copyToClipboard}>
-              {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-              {copied ? "Copied!" : "Copy SQL"}
-            </Button>
             <Button variant="outline" onClick={() => setOpen(false)}>
               Cancel
             </Button>
