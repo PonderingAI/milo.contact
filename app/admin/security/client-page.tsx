@@ -1,1836 +1,632 @@
 "use client"
 
-import type React from "react"
-
-import { useState, useEffect, useCallback, useRef } from "react"
-import { useUser } from "@clerk/nextjs"
-import { useRouter } from "next/navigation"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Label } from "@/components/ui/label"
-import { Input } from "@/components/ui/input"
-import { Progress } from "@/components/ui/progress"
-import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
-import { WidgetSelector, type WidgetOption } from "@/components/admin/widget-selector"
-import {
-  AlertCircle,
-  CheckCircle,
-  Package,
-  Shield,
-  RefreshCw,
-  AlertTriangle,
-  Info,
-  Activity,
-  Search,
-  Clock,
-  Globe,
-  GripVertical,
-  X,
-  GitPullRequest,
-  ExternalLink,
-  RotateCcw,
-} from "lucide-react"
+import { useState, useEffect, useCallback } from "react"
+import { toast } from "@/components/ui/use-toast"
+import { DraggableWidget } from "@/components/admin/draggable-widget"
 import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
-import { motion, AnimatePresence } from "framer-motion"
+import { UpdatePolicyWidget } from "@/components/admin/update-policy-widget"
+import { SecurityDashboardHeader } from "@/components/admin/security-dashboard-header"
+import { DependencyList } from "@/components/admin/dependency-list"
 
-// Types
-interface Dependency {
-  id: string
-  name: string
-  currentVersion: string
-  latestVersion: string
-  outdated: boolean
-  locked: boolean
-  description: string
-  hasSecurityIssue: boolean
-  securityDetails?: any
-  hasDependabotAlert?: boolean
-  dependabotAlertDetails?: any
-  updateMode: ToggleState
-  isDev?: boolean
-}
-
-interface SecurityStats {
-  vulnerabilities: number
-  dependabotAlerts: number
-  outdatedPackages: number
-  securityScore: number
-  lastScan: string
-}
-
-interface Widget {
-  id: string
-  type: string
-  visible: boolean
-  order: number
-  column?: number
-  height?: number
-}
-
-interface DashboardState {
-  widgets: Widget[]
-  activeTab: string
-  filter: string
-  globalUpdateMode: ToggleState
-}
-
-// Available widgets
-const availableWidgets: WidgetOption[] = [
-  {
-    id: "security-score",
-    title: "Security Score",
-    description: "Overall security rating of your application",
-    icon: <Shield className="h-4 w-4" />,
-  },
-  {
-    id: "vulnerabilities",
-    title: "Vulnerabilities",
-    description: "Known security issues in your dependencies",
-    icon: <AlertTriangle className="h-4 w-4" />,
-  },
-  {
-    id: "dependabot-alerts",
-    title: "Dependabot Alerts",
-    description: "Security alerts from GitHub Dependabot",
-    icon: <GitPullRequest className="h-4 w-4" />,
-  },
-  {
-    id: "outdated-packages",
-    title: "Outdated Packages",
-    description: "Dependencies that need updates",
-    icon: <Package className="h-4 w-4" />,
-  },
-  {
-    id: "update-settings",
-    title: "Global Update Settings",
-    description: "Configure automatic update behavior",
-    icon: <Globe className="h-4 w-4" />,
-  },
-  {
-    id: "recent-activity",
-    title: "Recent Activity",
-    description: "Latest security events and actions",
-    icon: <Activity className="h-4 w-4" />,
-  },
-  {
-    id: "security-audit",
-    title: "Security Audit",
-    description: "Run a security scan of your application",
-    icon: <Search className="h-4 w-4" />,
-  },
-  {
-    id: "update-history",
-    title: "Update History",
-    description: "Recent package updates",
-    icon: <Clock className="h-4 w-4" />,
-  },
-  {
-    id: "security-recommendations",
-    title: "Security Recommendations",
-    description: "Suggested actions to improve security",
-    icon: <AlertCircle className="h-4 w-4" />,
-  },
-]
-
-export default function SecurityClientPage() {
-  const { isLoaded, isSignedIn, user } = useUser()
-  const router = useRouter()
+export default function SecurityDashboardClient() {
+  const [dependencies, setDependencies] = useState<any[]>([])
+  const [audits, setAudits] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("overview")
-  const [dependencies, setDependencies] = useState<Dependency[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("conservative")
-  const [searchTerm, setSearchTerm] = useState("")
-  const [filter, setFilter] = useState("all")
-  const [widgets, setWidgets] = useState<Widget[]>([])
-  const [availableWidgetsForAdd, setAvailableWidgetsForAdd] = useState<WidgetOption[]>([])
-  const [securityStats, setSecurityStats] = useState<SecurityStats>({
-    vulnerabilities: 0,
-    dependabotAlerts: 0,
-    outdatedPackages: 0,
-    securityScore: 100,
-    lastScan: new Date().toLocaleDateString(),
+  const [updateMode, setUpdateMode] = useState("minor")
+  const [selectedVulnerability, setSelectedVulnerability] = useState<any>(null)
+  const [showVulnerabilityDetails, setShowVulnerabilityDetails] = useState(false)
+  const [filters, setFilters] = useState({
+    showDev: true,
+    showPeer: true,
+    showOptional: true,
   })
-  const [auditRunning, setAuditRunning] = useState(false)
-  const [applyingChanges, setApplyingChanges] = useState(false)
-  const [selectedVulnerability, setSelectedVulnerability] = useState<{
-    vulnerability: any
-    packageName: string
-    currentVersion: string
-    latestVersion: string
-  } | null>(null)
-  const [selectedDependabotAlert, setSelectedDependabotAlert] = useState<{
-    alert: any
-    packageName: string
-    currentVersion: string
-    latestVersion: string
-  } | null>(null)
-  const [updateResults, setUpdateResults] = useState<any[]>([])
-  const [showUpdateResults, setShowUpdateResults] = useState(false)
-  const [diagnosticInfo, setDiagnosticInfo] = useState<any>(null)
-  const [showDiagnostics, setShowDiagnostics] = useState(false)
-  const [hasMounted, setHasMounted] = useState(false)
-  const [draggingWidgetId, setDraggingWidgetId] = useState<string | null>(null)
-  const widgetRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
-  // Load dashboard state from localStorage on initial render
+  // Widget layout state
+  const [widgetLayout, setWidgetLayout] = useState<{ [key: string]: { order: number; span: number } }>({
+    "update-policy": { order: 1, span: 1 },
+    "dependency-stats": { order: 2, span: 1 },
+    "vulnerability-summary": { order: 3, span: 1 },
+    "recent-audits": { order: 4, span: 1 },
+    "update-actions": { order: 5, span: 1 },
+    "outdated-packages": { order: 6, span: 1 },
+  })
+
+  // Load saved state from localStorage
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const savedState = localStorage.getItem("securityDashboardState")
-        if (savedState) {
-          const parsedState: DashboardState = JSON.parse(savedState)
-
-          // Set widgets
-          if (parsedState.widgets && parsedState.widgets.length > 0) {
-            setWidgets(parsedState.widgets)
-          } else {
-            // Default widgets if none saved
-            setDefaultWidgets()
-          }
-
-          // Set active tab
-          if (parsedState.activeTab) {
-            setActiveTab(parsedState.activeTab)
-          }
-
-          // Set filter
-          if (parsedState.filter) {
-            setFilter(parsedState.filter)
-          }
-
-          // Set global update mode
-          if (parsedState.globalUpdateMode) {
-            setGlobalUpdateMode(parsedState.globalUpdateMode)
-          }
-        } else {
-          // No saved state, set defaults
-          setDefaultWidgets()
-        }
-      } catch (error) {
-        console.error("Error loading dashboard state:", error)
-        setDefaultWidgets()
-      }
-    }
-  }, [])
-
-  // Set default widgets
-  const setDefaultWidgets = () => {
-    const defaultWidgets: Widget[] = [
-      { id: "update-settings", type: "update-settings", visible: true, order: 0 },
-      { id: "security-score", type: "security-score", visible: true, order: 1 },
-      { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 2 },
-      { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 3 },
-      { id: "outdated-packages", type: "outdated-packages", visible: true, order: 4 },
-      { id: "security-recommendations", type: "security-recommendations", visible: true, order: 5 },
-      { id: "recent-activity", type: "recent-activity", visible: true, order: 6 },
-    ]
-    setWidgets(defaultWidgets)
-  }
-
-  // Save dashboard state to localStorage
-  const saveDashboardState = useCallback(() => {
-    if (typeof window !== "undefined") {
-      const state: DashboardState = {
-        widgets,
-        activeTab,
-        filter,
-        globalUpdateMode,
-      }
-      localStorage.setItem("securityDashboardState", JSON.stringify(state))
-    }
-  }, [widgets, activeTab, filter, globalUpdateMode])
-
-  // Save state when relevant state changes
-  useEffect(() => {
-    if (hasMounted) {
-      saveDashboardState()
-    }
-  }, [widgets, activeTab, filter, globalUpdateMode, hasMounted, saveDashboardState])
-
-  // Update available widgets for adding
-  useEffect(() => {
-    const currentWidgetTypes = widgets.map((w) => w.type)
-    const filtered = availableWidgets.filter((w) => !currentWidgetTypes.includes(w.id))
-    setAvailableWidgetsForAdd(filtered)
-  }, [widgets])
-
-  useEffect(() => {
-    if (isLoaded && !isSignedIn) {
-      router.push("/sign-in?redirect_url=/admin/security")
-    }
-  }, [isLoaded, isSignedIn, router])
-
-  // Measure widget heights after render
-  useEffect(() => {
-    if (hasMounted && widgets.length > 0) {
-      // Use requestAnimationFrame to ensure DOM is fully rendered
-      requestAnimationFrame(() => {
-        const updatedWidgets = [...widgets]
-        let changed = false
-
-        updatedWidgets.forEach((widget, index) => {
-          const element = widgetRefs.current[widget.id]
-          if (element) {
-            const height = element.offsetHeight
-            if (widget.height !== height) {
-              updatedWidgets[index] = { ...widget, height }
-              changed = true
-            }
-          }
-        })
-
-        if (changed) {
-          setWidgets(updatedWidgets)
-        }
-      })
-    }
-  }, [widgets, hasMounted])
-
-  // Organize widgets into columns (masonry layout)
-  const organizeWidgetsIntoColumns = useCallback(
-    (columnCount = 3) => {
-      if (widgets.length === 0) return []
-
-      // Create empty columns
-      const columns: Widget[][] = Array.from({ length: columnCount }, () => [])
-
-      // Sort widgets by order
-      const sortedWidgets = [...widgets].sort((a, b) => a.order - b.order)
-
-      // Special case: update-settings widget should span all columns
-      const updateSettingsIndex = sortedWidgets.findIndex((w) => w.type === "update-settings")
-      if (updateSettingsIndex !== -1) {
-        const updateSettingsWidget = sortedWidgets.splice(updateSettingsIndex, 1)[0]
-        return [[updateSettingsWidget], ...organizeWidgetsIntoColumns(columnCount)]
-      }
-
-      // Calculate column heights
-      const columnHeights = Array(columnCount).fill(0)
-
-      // Place each widget in the shortest column
-      sortedWidgets.forEach((widget) => {
-        const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights))
-        columns[shortestColumnIndex].push(widget)
-        columnHeights[shortestColumnIndex] += widget.height || 200 // Use default height if not measured
-      })
-
-      return columns
-    },
-    [widgets],
-  )
-
-  const fetchDependencies = useCallback(async () => {
     try {
-      setLoading(true)
-      setError(null)
-      setDiagnosticInfo(null)
-
-      const response = await fetch("/api/dependencies")
-      const data = await response.json()
-
-      // Store the full response for diagnostics
-      setDiagnosticInfo(data)
-
-      // Check for error
-      if (data.error) {
-        setError(`Error: ${data.message || data.error}`)
-        setDependencies([])
-        return
-      }
-
-      // If no dependencies found, show a clear message
-      if (!data.dependencies || data.dependencies.length === 0) {
-        setDependencies([])
-        setError("No dependencies found. Please run a dependency scan to populate the database.")
-        return
-      }
-
-      // Map the data to our internal format
-      const mappedDependencies = data.dependencies.map((dep) => ({
-        id: dep.id || dep.name,
-        name: dep.name,
-        currentVersion: dep.current_version || dep.currentVersion,
-        latestVersion: dep.latest_version || dep.latestVersion,
-        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latest_version),
-        locked: dep.locked || false,
-        description: dep.description || "",
-        hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
-        securityDetails: dep.security_details || dep.securityDetails,
-        hasDependabotAlert: dep.has_dependabot_alert || dep.hasDependabotAlert || false,
-        dependabotAlertDetails: dep.dependabot_alert_details || dep.dependabotAlertDetails,
-        updateMode: dep.update_mode || dep.updateMode || "global",
-        isDev: dep.is_dev || dep.isDev || false,
-      }))
-
-      setDependencies(mappedDependencies)
-
-      // Update security stats
-      setSecurityStats({
-        vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
-        dependabotAlerts: data.dependabotAlerts || mappedDependencies.filter((d) => d.hasDependabotAlert).length,
-        outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
-        securityScore: data.securityScore || calculateSecurityScore(mappedDependencies),
-        lastScan: data.lastScan || new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
-      })
-
-      // Get global update mode - default to conservative (security only)
-      setGlobalUpdateMode(data.updateMode || "conservative")
-    } catch (err) {
-      console.error("Error fetching dependencies:", err)
-      setError(`Error fetching dependencies: ${err instanceof Error ? err.message : String(err)}`)
-      setDependencies([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (isSignedIn) {
-      fetchDependencies()
-    }
-  }, [isSignedIn, fetchDependencies])
-
-  // Set up hourly check for updates
-  useEffect(() => {
-    // Initial check
-    checkForUpdates()
-
-    // Set up interval for hourly checks
-    const intervalId = setInterval(checkForUpdates, 60 * 60 * 1000) // 1 hour in milliseconds
-
-    // Clean up interval on component unmount
-    return () => clearInterval(intervalId)
-  }, [])
-
-  const checkForUpdates = async () => {
-    try {
-      const response = await fetch("/api/dependencies/scheduled-update")
-
-      // Handle non-OK responses
-      if (!response.ok) {
-        const errorData = await response.json()
-        console.error("Scheduled update check failed:", errorData.error || (await response.text()))
-        return
-      }
-
-      const data = await response.json()
-
-      // If any dependencies were updated, refresh the list
-      if (data.updated > 0) {
-        fetchDependencies()
+      const savedState = localStorage.getItem("securityDashboardState")
+      if (savedState) {
+        const parsedState = JSON.parse(savedState)
+        if (parsedState.activeTab) setActiveTab(parsedState.activeTab)
+        if (parsedState.filters) setFilters(parsedState.filters)
+        if (parsedState.widgetLayout) setWidgetLayout(parsedState.widgetLayout)
+        if (parsedState.updateMode) setUpdateMode(parsedState.updateMode)
       }
     } catch (error) {
-      console.error("Error checking for updates:", error)
+      console.error("Error loading saved state:", error)
     }
-  }
+  }, [])
 
-  const scanDependencies = async () => {
+  // Save state to localStorage
+  useEffect(() => {
     try {
-      setLoading(true)
-      setError(null)
+      localStorage.setItem(
+        "securityDashboardState",
+        JSON.stringify({
+          activeTab,
+          filters,
+          widgetLayout,
+          updateMode,
+        }),
+      )
+    } catch (error) {
+      console.error("Error saving state:", error)
+    }
+  }, [activeTab, filters, widgetLayout, updateMode])
 
-      const response = await fetch("/api/dependencies/scan", {
-        method: "POST",
-      })
+  const fetchData = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      // Fetch dependencies
+      const depsResponse = await fetch("/api/dependencies/list")
+      if (!depsResponse.ok) throw new Error("Failed to fetch dependencies")
+      const depsData = await depsResponse.json()
+      setDependencies(depsData.dependencies || [])
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || errorData.error || "Failed to scan dependencies")
+      // Fetch audits
+      const auditsResponse = await fetch("/api/dependencies/audit")
+      if (!auditsResponse.ok) throw new Error("Failed to fetch audits")
+      const auditsData = await auditsResponse.json()
+      setAudits(auditsData.audits || [])
+
+      // Fetch update mode
+      const modeResponse = await fetch("/api/dependencies/settings")
+      if (modeResponse.ok) {
+        const modeData = await modeResponse.json()
+        if (modeData.settings?.updateMode) {
+          setUpdateMode(modeData.settings.updateMode)
+        }
       }
-
-      // Refresh dependencies after scan
-      await fetchDependencies()
-
-      // Clear setup message after a delay
-      setTimeout(() => {
-        // Success message could be shown here if needed
-      }, 3000)
-    } catch (err: any) {
-      setError(`Error scanning dependencies: ${err.message}`)
-      console.error("Error scanning dependencies:", err)
+    } catch (error) {
+      console.error("Error fetching data:", error)
+      toast({
+        title: "Error",
+        description: "Failed to fetch security data",
+        variant: "destructive",
+      })
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
-  }
+  }, [])
 
-  const applyChanges = async () => {
-    try {
-      setApplyingChanges(true)
-      setError(null)
-      setShowUpdateResults(false)
-
-      // Call the API to apply changes
-      const response = await fetch("/api/dependencies/apply", {
-        method: "POST",
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || errorData.error || "Failed to apply changes")
-      }
-
-      const data = await response.json()
-
-      // Store the results
-      setUpdateResults(data.results || [])
-      setShowUpdateResults(true)
-
-      // Show a message if no updates were needed
-      if (data.results.length === 0) {
-        setError("No updates were needed. All packages are up to date.")
-      }
-
-      // Refresh dependencies
-      fetchDependencies()
-    } catch (err: any) {
-      setError(`Error applying changes: ${err.message}`)
-      console.error("Error applying changes:", err)
-    } finally {
-      setApplyingChanges(false)
-    }
-  }
-
-  // Calculate a security score based on vulnerabilities
-  const calculateSecurityScore = (deps: Dependency[]) => {
-    const totalDeps = deps.length
-    if (totalDeps === 0) return 100
-
-    const vulnerableDeps = deps.filter((d) => d.hasSecurityIssue).length
-    const dependabotAlertDeps = deps.filter((d) => d.hasDependabotAlert).length
-    const outdatedDeps = deps.filter((d) => d.outdated).length
-
-    // Calculate score: start with 100 and deduct points
-    let score = 100
-
-    // Deduct more for Dependabot alerts (highest priority)
-    score -= (dependabotAlertDeps / totalDeps) * 60
-
-    // Deduct for vulnerable dependencies
-    score -= (vulnerableDeps / totalDeps) * 40
-
-    // Deduct less for outdated dependencies
-    score -= (outdatedDeps / totalDeps) * 20
-
-    // Ensure score is between 0 and 100
-    return Math.max(0, Math.min(100, Math.round(score)))
-  }
-
-  const updateGlobalMode = async (value: ToggleState) => {
-    try {
-      // Don't allow setting global mode to "global" (that would be recursive)
-      if (value === "global") return
-
-      setGlobalUpdateMode(value)
-      const response = await fetch("/api/dependencies/settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ updateMode: value }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || errorData.error || "Failed to update settings")
-      }
-    } catch (err: any) {
-      setError(`Error updating settings: ${err.message}`)
-      console.error("Error updating settings:", err)
-    }
-  }
-
-  const updateDependencyMode = async (id: string, value: ToggleState) => {
-    try {
-      // Update local state
-      setDependencies((prev) => prev.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep)))
-
-      // Send to API
-      const response = await fetch("/api/dependencies/update-mode", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id, updateMode: value }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || errorData.error || "Failed to update dependency mode")
-      }
-    } catch (err: any) {
-      setError(`Error updating dependency mode: ${err.message}`)
-      console.error("Error updating dependency mode:", err)
-      // Revert on error
-      fetchDependencies()
-    }
-  }
+  useEffect(() => {
+    fetchData()
+  }, [fetchData])
 
   const resetAllSettings = async () => {
-    try {
-      // Update local state
-      setDependencies((prev) => prev.map((dep) => ({ ...dep, updateMode: "global" })))
+    if (!confirm("Are you sure you want to reset all dependency settings?")) return
 
-      // Send to API
+    setIsLoading(true)
+    try {
       const response = await fetch("/api/dependencies/reset-all", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ updateMode: "global" }),
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || errorData.error || "Failed to reset settings")
-      }
-    } catch (err: any) {
-      setError(`Error resetting settings: ${err.message}`)
-      console.error("Error resetting settings:", err)
-      // Revert on error
-      fetchDependencies()
-    }
-  }
+      if (!response.ok) throw new Error("Failed to reset settings")
 
-  const runSecurityAudit = async () => {
-    try {
-      setAuditRunning(true)
-      setError(null)
-
-      // Call the actual audit API
-      const response = await fetch("/api/dependencies/audit", {
-        method: "POST",
+      toast({
+        title: "Settings Reset",
+        description: "All dependency settings have been reset to defaults",
       })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.message || errorData.error || "Failed to run security audit")
-      }
-
-      const data = await response.json()
-
-      // Update security stats with new data
-      setSecurityStats({
-        vulnerabilities: data.vulnerabilities || 0,
-        dependabotAlerts: data.dependabotAlerts || 0,
-        outdatedPackages: data.outdatedPackages || dependencies.filter((d) => d.outdated).length,
-        securityScore: data.securityScore || 100,
-        lastScan: new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
-      })
-
-      // Refresh dependencies to get updated vulnerability info
-      fetchDependencies()
-    } catch (err: any) {
-      setError(`Error running security audit: ${err.message}`)
-      console.error("Error running security audit:", err)
-    } finally {
-      setAuditRunning(false)
-    }
-  }
-
-  // Widget management functions
-  const handleAddWidget = (widgetId: string) => {
-    const newWidget: Widget = {
-      id: `${widgetId}-${Date.now()}`,
-      type: widgetId,
-      visible: true,
-      order: widgets.length,
-    }
-
-    const updatedWidgets = [...widgets, newWidget]
-    setWidgets(updatedWidgets)
-  }
-
-  const handleRemoveWidget = (id: string) => {
-    const updatedWidgets = widgets.filter((w) => w.id !== id)
-    setWidgets(updatedWidgets)
-  }
-
-  const handleDragStart = (e: React.DragEvent, id: string) => {
-    e.dataTransfer.setData("widgetId", id)
-    setDraggingWidgetId(id)
-
-    // Add a dragging class to the element
-    const element = document.getElementById(id)
-    if (element) {
-      element.classList.add("dragging")
-    }
-  }
-
-  const handleDragEnd = () => {
-    setDraggingWidgetId(null)
-
-    // Remove dragging class from all elements
-    document.querySelectorAll(".dragging").forEach((el) => {
-      el.classList.remove("dragging")
-    })
-  }
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault()
-  }
-
-  const handleDrop = (e: React.DragEvent, targetId: string) => {
-    e.preventDefault()
-    const draggedId = e.dataTransfer.getData("widgetId")
-
-    if (draggedId === targetId) return
-
-    const updatedWidgets = [...widgets]
-    const draggedIndex = updatedWidgets.findIndex((w) => w.id === draggedId)
-    const targetIndex = updatedWidgets.findIndex((w) => w.id === targetId)
-
-    if (draggedIndex === -1 || targetIndex === -1) return
-
-    // Reorder
-    const [draggedWidget] = updatedWidgets.splice(draggedIndex, 1)
-    updatedWidgets.splice(targetIndex, 0, draggedWidget)
-
-    // Update order property
-    const reorderedWidgets = updatedWidgets.map((w, i) => ({ ...w, order: i }))
-
-    setWidgets(reorderedWidgets)
-
-    // Remove dragging class
-    handleDragEnd()
-  }
-
-  const viewVulnerabilityDetails = (dependency: Dependency) => {
-    if (dependency.hasSecurityIssue && dependency.securityDetails) {
-      setSelectedVulnerability({
-        vulnerability: dependency.securityDetails,
-        packageName: dependency.name,
-        currentVersion: dependency.currentVersion,
-        latestVersion: dependency.latestVersion,
-      })
-    }
-  }
-
-  const viewDependabotAlertDetails = (dependency: Dependency) => {
-    if (dependency.hasDependabotAlert && dependency.dependabotAlertDetails) {
-      setSelectedDependabotAlert({
-        alert: dependency.dependabotAlertDetails,
-        packageName: dependency.name,
-        currentVersion: dependency.currentVersion,
-        latestVersion: dependency.latestVersion,
-      })
-    }
-  }
-
-  const filteredDependencies = dependencies
-    .filter((dep) => {
-      if (filter === "outdated") return dep.outdated
-      if (filter === "locked") return dep.locked
-      if (filter === "security") return dep.hasSecurityIssue
-      if (filter === "dependabot") return dep.hasDependabotAlert
-      if (filter === "dev") return dep.isDev
-      return true
-    })
-    .filter(
-      (dep) =>
-        dep.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        dep.description?.toLowerCase().includes(searchTerm.toLowerCase()),
-    )
-
-  // Get severity badge for a dependency
-  const getSeverityBadge = (dependency: Dependency) => {
-    if (dependency.hasDependabotAlert && dependency.dependabotAlertDetails) {
-      const severity = dependency.dependabotAlertDetails.severity?.toLowerCase()
-
-      switch (severity) {
-        case "critical":
-          return <Badge className="bg-red-900/20 text-red-400 border-red-800">Dependabot: Critical</Badge>
-        case "high":
-          return <Badge className="bg-orange-900/20 text-orange-400 border-orange-800">Dependabot: High</Badge>
-        case "moderate":
-        case "medium":
-          return <Badge className="bg-yellow-900/20 text-yellow-400 border-yellow-800">Dependabot: Medium</Badge>
-        case "low":
-          return <Badge className="bg-blue-900/20 text-blue-400 border-blue-800">Dependabot: Low</Badge>
-        default:
-          return <Badge className="bg-purple-900/20 text-purple-400 border-purple-800">Dependabot Alert</Badge>
-      }
-    }
-
-    if (dependency.hasSecurityIssue && dependency.securityDetails) {
-      const severity = dependency.securityDetails.severity?.toLowerCase()
-
-      switch (severity) {
-        case "critical":
-          return <Badge className="bg-red-900/20 text-red-400 border-red-800">Critical</Badge>
-        case "high":
-          return <Badge className="bg-orange-900/20 text-orange-400 border-orange-800">High</Badge>
-        case "moderate":
-        case "medium":
-          return <Badge className="bg-yellow-900/20 text-yellow-400 border-yellow-800">Medium</Badge>
-        case "low":
-          return <Badge className="bg-blue-900/20 text-blue-400 border-blue-800">Low</Badge>
-        default:
-          return <Badge className="bg-red-900/20 text-red-400 border-red-800">Security Issue</Badge>
-      }
-    }
-
-    return null
-  }
-
-  // Count dependencies using global settings
-  const globalDependenciesCount = dependencies.filter((dep) => dep.updateMode === "global").length
-  const dependabotAlertCount = dependencies.filter((dep) => dep.hasDependabotAlert).length
-
-  // Render widget content based on type
-  const renderWidgetContent = (type: string) => {
-    switch (type) {
-      case "security-score":
-        return (
-          <div className="flex flex-col h-full justify-between">
-            <div className="text-3xl font-bold">{securityStats.securityScore}%</div>
-            <div className="mt-2">
-              <Progress value={securityStats.securityScore} className="h-2" />
-            </div>
-            <p className="text-sm text-gray-400 mt-2">Last scan: {securityStats.lastScan}</p>
-          </div>
-        )
-
-      case "vulnerabilities":
-        return (
-          <div className="flex flex-col h-full justify-between">
-            <div className="flex items-center">
-              <div className="text-3xl font-bold">{securityStats.vulnerabilities}</div>
-              <Badge
-                variant="outline"
-                className={`ml-2 ${securityStats.vulnerabilities > 0 ? "bg-red-900/20 text-red-400 border-red-800" : "bg-green-900/20 text-green-400 border-green-800"}`}
-              >
-                {securityStats.vulnerabilities > 0 ? "Action needed" : "All clear"}
-              </Badge>
-            </div>
-            <p className="text-sm text-gray-400 mt-2">Detected security issues</p>
-            {securityStats.vulnerabilities > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  setActiveTab("dependencies")
-                  setFilter("security")
-                }}
-              >
-                View Issues
-              </Button>
-            )}
-          </div>
-        )
-
-      case "dependabot-alerts":
-        return (
-          <div className="flex flex-col h-full justify-between">
-            <div className="flex items-center">
-              <div className="text-3xl font-bold">{securityStats.dependabotAlerts}</div>
-              <Badge
-                variant="outline"
-                className={`ml-2 ${securityStats.dependabotAlerts > 0 ? "bg-purple-900/20 text-purple-400 border-purple-800" : "bg-green-900/20 text-green-400 border-green-800"}`}
-              >
-                {securityStats.dependabotAlerts > 0 ? "Critical updates" : "All clear"}
-              </Badge>
-            </div>
-            <p className="text-sm text-gray-400 mt-2">GitHub Dependabot alerts</p>
-            {securityStats.dependabotAlerts > 0 && (
-              <div className="mt-3 space-y-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="w-full"
-                  onClick={() => {
-                    setActiveTab("dependencies")
-                    setFilter("dependabot")
-                  }}
-                >
-                  View Alerts
-                </Button>
-                <div className="bg-gray-800 p-2 rounded-md border border-gray-700">
-                  <p className="text-xs text-gray-300">
-                    <AlertTriangle className="h-3 w-3 inline-block mr-1" />
-                    Dependabot alerts will be updated automatically regardless of update settings
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        )
-
-      case "outdated-packages":
-        return (
-          <div className="flex flex-col h-full justify-between">
-            <div className="text-3xl font-bold">{securityStats.outdatedPackages}</div>
-            <p className="text-sm text-gray-400 mt-2">Packages need updates</p>
-            {securityStats.outdatedPackages > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                onClick={() => {
-                  setActiveTab("dependencies")
-                  setFilter("outdated")
-                }}
-              >
-                View Outdated
-              </Button>
-            )}
-          </div>
-        )
-
-      case "update-settings":
-        return (
-          <div className="space-y-4">
-            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700 shadow-md">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold text-white flex items-center">
-                  <Globe className="mr-2 h-5 w-5 text-gray-300" />
-                  Global Update Policy
-                </h3>
-                <Badge variant="outline" className="bg-gray-700 text-gray-300 border-gray-600">
-                  {globalDependenciesCount} packages using this policy
-                </Badge>
-              </div>
-
-              <div className="mb-4">
-                <Label className="text-sm mb-2 block text-gray-300">Update Mode</Label>
-                <div className="flex items-center space-x-2">
-                  <FourStateToggle
-                    value={globalUpdateMode}
-                    onValueChange={updateGlobalMode}
-                    labels={{
-                      off: "Off",
-                      conservative: "Security Only",
-                      aggressive: "All Updates",
-                      global: "N/A",
-                    }}
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="border-gray-600 bg-gray-700/50 hover:bg-gray-600"
-                    onClick={resetAllSettings}
-                  >
-                    <RotateCcw className="h-4 w-4 mr-1" />
-                    Reset All
-                  </Button>
-                </div>
-              </div>
-
-              <div className="text-sm text-gray-300 space-y-2 mt-4 bg-gray-900/60 p-3 rounded-md">
-                <p className="flex items-center">
-                  <span
-                    className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "off" ? "bg-gray-400" : "bg-gray-700"}`}
-                  ></span>
-                  <strong>Off:</strong> No automatic updates
-                </p>
-                <p className="flex items-center">
-                  <span
-                    className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "conservative" ? "bg-blue-400" : "bg-blue-900"}`}
-                  ></span>
-                  <strong>Security Only:</strong> Only security patches
-                </p>
-                <p className="flex items-center">
-                  <span
-                    className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "aggressive" ? "bg-green-400" : "bg-green-900"}`}
-                  ></span>
-                  <strong>All Updates:</strong> All package updates
-                </p>
-              </div>
-
-              {dependabotAlertCount > 0 && (
-                <div className="mt-4 bg-gray-900/60 p-3 rounded-md border border-gray-700">
-                  <p className="text-sm text-gray-300 flex items-start">
-                    <GitPullRequest className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
-                    <span>
-                      <strong>Important:</strong> Packages with Dependabot alerts will be updated automatically
-                      regardless of update mode settings to protect your application from security vulnerabilities.
-                    </span>
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        )
-
-      case "recent-activity":
-        return (
-          <div className="space-y-3 flex flex-col h-full justify-between">
-            <div className="space-y-3 flex-grow">
-              {updateResults.length > 0 ? (
-                updateResults.slice(0, 3).map((result, index) => (
-                  <div key={index} className="flex items-start">
-                    {result.success ? (
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
-                    )}
-                    <div>
-                      <p className="text-sm font-medium">
-                        {result.name} {result.success ? `updated to ${result.to}` : "update failed"}
-                        {result.dependabotAlert && (
-                          <Badge className="ml-2 bg-gray-700 text-gray-300 border-gray-600">Dependabot</Badge>
-                        )}
-                        {result.forcedUpdate && (
-                          <Badge className="ml-2 bg-gray-700 text-gray-300 border-gray-600">Forced</Badge>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <>
-                  <div className="flex items-start">
-                    <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Security scan completed</p>
-                      <p className="text-xs text-gray-500">{securityStats.lastScan}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start">
-                    <Package className="h-4 w-4 text-blue-500 mr-2 mt-0.5" />
-                    <div>
-                      <p className="text-sm font-medium">Package updates available</p>
-                      <p className="text-xs text-gray-500">{securityStats.outdatedPackages} packages can be updated</p>
-                    </div>
-                  </div>
-                </>
-              )}
-            </div>
-            {updateResults.length > 0 && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="mt-2"
-                onClick={() => {
-                  const historyWidget = widgets.find((w) => w.type === "update-history")
-                  if (!historyWidget) {
-                    handleAddWidget("update-history")
-                  }
-                }}
-              >
-                View All Updates
-              </Button>
-            )}
-          </div>
-        )
-
-      case "security-audit":
-        return (
-          <div className="flex flex-col h-full justify-between">
-            <p className="text-sm text-gray-400 mb-3">Scan your dependencies for known security vulnerabilities</p>
-            <Button onClick={runSecurityAudit} disabled={auditRunning} className="w-full">
-              {auditRunning ? (
-                <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                  Running Audit...
-                </>
-              ) : (
-                "Run Security Audit"
-              )}
-            </Button>
-          </div>
-        )
-
-      case "update-history":
-        return (
-          <div className="space-y-3 flex flex-col h-full justify-between">
-            <div className="space-y-3 flex-grow overflow-y-auto max-h-[200px] pr-1">
-              {updateResults.length > 0 ? (
-                updateResults.map((result, index) => (
-                  <div key={index} className="flex items-start">
-                    {result.success ? (
-                      <CheckCircle className="h-4 w-4 text-green-500 mr-2 mt-0.5" />
-                    ) : (
-                      <AlertCircle className="h-4 w-4 text-red-500 mr-2 mt-0.5" />
-                    )}
-                    <div>
-                      <p className="text-sm font-medium">
-                        {result.name} {result.success ? `updated to ${result.to}` : "update failed"}
-                        {result.dependabotAlert && (
-                          <Badge className="ml-2 bg-gray-700 text-gray-300 border-gray-600">Dependabot</Badge>
-                        )}
-                        {result.forcedUpdate && (
-                          <Badge className="ml-2 bg-gray-700 text-gray-300 border-gray-600">Forced</Badge>
-                        )}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        {new Date().toLocaleDateString()} at {new Date().toLocaleTimeString()}
-                      </p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-gray-400">No recent updates</p>
-              )}
-            </div>
-            {updateResults.length > 0 && (
-              <Button variant="outline" size="sm" className="mt-2" onClick={applyChanges}>
-                Apply More Updates
-              </Button>
-            )}
-          </div>
-        )
-
-      case "security-recommendations":
-        return (
-          <div className="space-y-4 flex flex-col h-full justify-between">
-            <div className="space-y-4 flex-grow">
-              {securityStats.dependabotAlerts > 0 && (
-                <div className="flex items-start">
-                  <GitPullRequest className="h-4 w-4 text-purple-500 mr-2 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Update Dependabot alerts</p>
-                    <p className="text-xs text-gray-500">
-                      {securityStats.dependabotAlerts} packages have Dependabot alerts
-                    </p>
-                  </div>
-                </div>
-              )}
-              {securityStats.vulnerabilities > 0 && (
-                <div className="flex items-start">
-                  <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2 mt-0.5" />
-                  <div>
-                    <p className="text-sm font-medium">Update vulnerable packages</p>
-                    <p className="text-xs text-gray-500">
-                      {securityStats.vulnerabilities} packages have known security vulnerabilities
-                    </p>
-                  </div>
-                </div>
-              )}
-              <div className="flex items-start">
-                <AlertTriangle className="h-4 w-4 text-yellow-500 mr-2 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium">Enable security updates</p>
-                  <p className="text-xs text-gray-500">Set update mode to at least "Security Only"</p>
-                </div>
-              </div>
-            </div>
-            {(securityStats.dependabotAlerts > 0 || securityStats.vulnerabilities > 0) && (
-              <Button variant="outline" size="sm" className="mt-2" onClick={applyChanges}>
-                Apply Recommended Updates
-              </Button>
-            )}
-          </div>
-        )
-
-      default:
-        return <div>Unknown widget type</div>
-    }
-  }
-
-  if (!isLoaded || !isSignedIn) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-950">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
-      </div>
-    )
-  }
-
-  const checkForScheduledUpdates = useCallback(async () => {
-    console.log("Checking for scheduled updates based on preferences...")
-    try {
-      const response = await fetch("/api/dependencies/scheduled-update")
-      if (response.ok) {
-        const data = await response.json()
-        if (data.updated > 0) {
-          console.log(`Applied ${data.updated} updates based on preferences`)
-          fetchDependencies()
-          setUpdateResults(data.results || [])
-          setShowUpdateResults(true)
-        }
-      }
+      // Refresh data after reset
+      fetchData()
     } catch (error) {
-      console.error("Error in scheduled update:", error)
+      console.error("Error resetting settings:", error)
+      toast({
+        title: "Error",
+        description: "Failed to reset settings",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
     }
-  }, [fetchDependencies])
+  }
 
-  useEffect(() => {
-    setHasMounted(true)
-  }, [])
+  const updateWidgetLayout = (id: string, newLayout: { order?: number; span?: number }) => {
+    setWidgetLayout((prev) => {
+      const updated = {
+        ...prev,
+        [id]: {
+          ...prev[id],
+          ...(newLayout.order !== undefined ? { order: newLayout.order } : {}),
+          ...(newLayout.span !== undefined ? { span: newLayout.span } : {}),
+        },
+      }
+      return updated
+    })
+  }
 
-  useEffect(() => {
-    if (!hasMounted) {
-      return
-    }
+  const filteredDependencies = dependencies.filter((dep) => {
+    if (dep.type === "dev" && !filters.showDev) return false
+    if (dep.type === "peer" && !filters.showPeer) return false
+    if (dep.type === "optional" && !filters.showOptional) return false
+    return true
+  })
 
-    // Run immediately
-    checkForScheduledUpdates()
+  const outdatedDependencies = filteredDependencies.filter((dep) => dep.currentVersion !== dep.latestVersion)
 
-    // Set up interval (3 hours = 3 * 60 * 60 * 1000 ms)
-    const intervalId = setInterval(checkForScheduledUpdates, 3 * 60 * 60 * 1000)
+  const vulnerableDependencies = filteredDependencies.filter(
+    (dep) => dep.vulnerabilities && dep.vulnerabilities.length > 0,
+  )
 
-    // Clean up interval on component unmount
-    return () => clearInterval(intervalId)
-  }, [hasMounted, checkForScheduledUpdates])
-
-  // Organize widgets into columns for masonry layout
-  const widgetColumns = organizeWidgetsIntoColumns(3)
+  const sortedWidgets = Object.entries(widgetLayout)
+    .sort(([, a], [, b]) => a.order - b.order)
+    .map(([id]) => id)
 
   return (
-    <div className="container mx-auto p-6 bg-gray-950 text-gray-100">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Security Center</h1>
-        <div className="flex space-x-2">
-          <Button onClick={fetchDependencies} variant="outline" size="sm" className="border-gray-700">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          <Button onClick={applyChanges} variant="destructive" size="sm" disabled={applyingChanges}>
-            {applyingChanges ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                Applying...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Apply Updates
-              </>
-            )}
-          </Button>
-        </div>
-      </div>
+    <div className="container mx-auto p-4">
+      <SecurityDashboardHeader
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        refreshData={fetchData}
+        isLoading={isLoading}
+        filters={filters}
+        setFilters={setFilters}
+      />
 
-      <AnimatePresence>
-        {error && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="bg-red-900/30 border border-red-800 text-white p-4 rounded-md mb-6 flex items-center"
-          >
-            <AlertCircle className="mr-2 h-5 w-5" />
-            <div className="flex-1">
-              <span>{error}</span>
+      {activeTab === "overview" && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-min">
+          {sortedWidgets.map((widgetId) => {
+            const layout = widgetLayout[widgetId]
 
-              {/* Add diagnostic information toggle */}
-              {diagnosticInfo && (
-                <div className="mt-2">
-                  <button
-                    onClick={() => setShowDiagnostics(!showDiagnostics)}
-                    className="text-xs flex items-center text-red-300 hover:text-white"
-                  >
-                    <Info className="h-3 w-3 mr-1" />
-                    {showDiagnostics ? "Hide" : "Show"} Diagnostic Information
-                  </button>
-
-                  <AnimatePresence>
-                    {showDiagnostics && (
-                      <motion.pre
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.3 }}
-                        className="mt-2 text-xs bg-red-950/50 p-2 rounded overflow-auto max-h-40"
-                      >
-                        {JSON.stringify(diagnosticInfo, null, 2)}
-                      </motion.pre>
-                    )}
-                  </AnimatePresence>
-                </div>
-              )}
-            </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setError(null)}
-              className="ml-auto text-white hover:bg-red-800/50"
-            >
-              Dismiss
-            </Button>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showUpdateResults && updateResults.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6"
-          >
-            <div className="flex items-center mb-2">
-              <CheckCircle className="mr-2 h-5 w-5" />
-              <span className="font-medium">Updates applied successfully</span>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowUpdateResults(false)}
-                className="ml-auto text-white hover:bg-green-800/50"
-              >
-                Dismiss
-              </Button>
-            </div>
-            <div className="mt-2 space-y-1">
-              {updateResults.map((result, index) => (
-                <motion.div
-                  key={index}
-                  initial={{ opacity: 0, x: -10 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ duration: 0.2, delay: index * 0.05 }}
-                  className="text-sm flex items-center"
+            if (widgetId === "update-policy") {
+              return (
+                <DraggableWidget
+                  key={widgetId}
+                  id={widgetId}
+                  title="Update Policy"
+                  onLayoutChange={(newLayout) => updateWidgetLayout(widgetId, newLayout)}
+                  currentLayout={layout}
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4"
                 >
-                  {result.success ? (
-                    <CheckCircle className="h-3 w-3 text-green-400 mr-2" />
-                  ) : (
-                    <AlertCircle className="h-3 w-3 text-red-400 mr-2" />
-                  )}
-                  <span>
-                    {result.name}: {result.success ? `${result.from} → ${result.to}` : result.error}
-                    {result.dependabotAlert && (
-                      <Badge className="ml-2 bg-gray-700 text-gray-300 border-gray-600 text-xs">Dependabot</Badge>
-                    )}
-                    {result.forcedUpdate && (
-                      <Badge className="ml-2 bg-gray-700 text-gray-300 border-gray-600 text-xs">Forced</Badge>
-                    )}
-                  </span>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6 bg-gray-900 border-gray-800">
-          <TabsTrigger value="overview">Dashboard</TabsTrigger>
-          <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="overview">
-          <div className="mb-4 flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Security Dashboard</h2>
-            <WidgetSelector availableWidgets={availableWidgetsForAdd} onAddWidget={handleAddWidget} />
-          </div>
-
-          {/* Masonry layout for widgets */}
-          <div className="flex flex-wrap -mx-2">
-            {/* Special case for update-settings widget - always full width */}
-            {widgets.find((w) => w.type === "update-settings") && (
-              <div className="w-full px-2 mb-4">
-                <AnimatePresence>
-                  {widgets
-                    .filter((w) => w.type === "update-settings")
-                    .map((widget) => {
-                      const widgetDef = availableWidgets.find((w) => w.id === widget.type)
-
-                      return (
-                        <motion.div
-                          key={widget.id}
-                          id={widget.id}
-                          ref={(el) => (widgetRefs.current[widget.id] = el)}
-                          layout
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{
-                            opacity: 1,
-                            scale: 1,
-                            zIndex: draggingWidgetId === widget.id ? 10 : 1,
-                            boxShadow: draggingWidgetId === widget.id ? "0 10px 25px rgba(0, 0, 0, 0.5)" : "none",
-                          }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          transition={{ duration: 0.3 }}
-                        >
-                          <Card
-                            className={`bg-gray-800 border-gray-700 transition-all duration-200 h-full ${
-                              draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""
-                            }`}
-                            draggable
-                            onDragStart={(e) => handleDragStart(e, widget.id)}
-                            onDragEnd={handleDragEnd}
-                            onDragOver={handleDragOver}
-                            onDrop={(e) => handleDrop(e, widget.id)}
-                          >
-                            <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 bg-gray-800 rounded-t-lg border-b border-gray-700">
-                              <div className="flex items-center">
-                                <GripVertical className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
-                                <CardTitle className="text-sm font-medium text-gray-200">
-                                  {widgetDef?.title || widget.type}
-                                </CardTitle>
-                              </div>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-8 w-8 p-0"
-                                onClick={() => handleRemoveWidget(widget.id)}
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </CardHeader>
-                            <CardContent className="p-4">{renderWidgetContent(widget.type)}</CardContent>
-                          </Card>
-                        </motion.div>
-                      )
-                    })}
-                </AnimatePresence>
-              </div>
-            )}
-
-            {/* Regular widgets in masonry layout */}
-            <div className="flex flex-wrap w-full">
-              {Array.from({ length: 3 }).map((_, colIndex) => (
-                <div key={colIndex} className="w-full sm:w-1/2 lg:w-1/3 px-2">
-                  <AnimatePresence>
-                    {widgets
-                      .filter((w) => w.type !== "update-settings")
-                      .filter((_, i) => i % 3 === colIndex)
-                      .sort((a, b) => a.order - b.order)
-                      .map((widget) => {
-                        const widgetDef = availableWidgets.find((w) => w.id === widget.type)
-
-                        return (
-                          <motion.div
-                            key={widget.id}
-                            id={widget.id}
-                            ref={(el) => (widgetRefs.current[widget.id] = el)}
-                            layout
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{
-                              opacity: 1,
-                              scale: 1,
-                              zIndex: draggingWidgetId === widget.id ? 10 : 1,
-                              boxShadow: draggingWidgetId === widget.id ? "0 10px 25px rgba(0, 0, 0, 0.5)" : "none",
-                            }}
-                            exit={{ opacity: 0, scale: 0.9 }}
-                            transition={{ duration: 0.3 }}
-                            className="mb-4"
-                          >
-                            <Card
-                              className={`bg-gray-800 border-gray-700 transition-all duration-200 h-full ${
-                                draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""
-                              }`}
-                              draggable
-                              onDragStart={(e) => handleDragStart(e, widget.id)}
-                              onDragEnd={handleDragEnd}
-                              onDragOver={handleDragOver}
-                              onDrop={(e) => handleDrop(e, widget.id)}
-                            >
-                              <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 bg-gray-800 rounded-t-lg border-b border-gray-700">
-                                <div className="flex items-center">
-                                  <GripVertical className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
-                                  <CardTitle className="text-sm font-medium text-gray-200">
-                                    {widgetDef?.title || widget.type}
-                                  </CardTitle>
-                                </div>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => handleRemoveWidget(widget.id)}
-                                >
-                                  <X className="h-4 w-4" />
-                                </Button>
-                              </CardHeader>
-                              <CardContent className="p-4">{renderWidgetContent(widget.type)}</CardContent>
-                            </Card>
-                          </motion.div>
-                        )
-                      })}
-                  </AnimatePresence>
-                </div>
-              ))}
-            </div>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="dependencies">
-          <Card className="bg-gray-900 border-gray-800">
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle>Dependency Management</CardTitle>
-                  <CardDescription>Manage your project dependencies and updates</CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" size="sm" onClick={scanDependencies} className="border-gray-700">
-                    Scan Dependencies
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={resetAllSettings} className="border-gray-700">
-                    Reset Settings
-                  </Button>
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row gap-4 mt-4">
-                <div className="flex-1">
-                  <Input
-                    placeholder="Search dependencies..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full bg-gray-800 border-gray-700"
+                  <UpdatePolicyWidget
+                    updateMode={updateMode}
+                    setUpdateMode={setUpdateMode}
+                    resetAllSettings={resetAllSettings}
+                    isLoading={isLoading}
                   />
-                </div>
+                </DraggableWidget>
+              )
+            }
 
-                <div className="flex gap-2 flex-wrap">
-                  <Button
-                    variant={filter === "all" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter("all")}
-                    className={filter !== "all" ? "border-gray-700" : ""}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant={filter === "dependabot" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter("dependabot")}
-                    className={filter !== "dependabot" ? "border-gray-700 bg-gray-800" : ""}
-                  >
-                    Dependabot
-                  </Button>
-                  <Button
-                    variant={filter === "security" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter("security")}
-                    className={filter !== "security" ? "border-gray-700" : ""}
-                  >
-                    Security
-                  </Button>
-                  <Button
-                    variant={filter === "outdated" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter("outdated")}
-                    className={filter !== "outdated" ? "border-gray-700" : ""}
-                  >
-                    Outdated
-                  </Button>
-                  <Button
-                    variant={filter === "locked" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter("locked")}
-                    className={filter !== "locked" ? "border-gray-700" : ""}
-                  >
-                    Locked
-                  </Button>
-                  <Button
-                    variant={filter === "dev" ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => setFilter("dev")}
-                    className={filter !== "dev" ? "border-gray-700" : ""}
-                  >
-                    Dev
-                  </Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white mx-auto"></div>
-                  <p className="mt-4">Loading dependencies...</p>
-                </div>
-              ) : dependencies.length === 0 ? (
-                <div className="text-center py-8">
-                  <AlertCircle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
-                  <p className="text-xl font-semibold mb-2">No dependencies found</p>
-                  <p className="text-gray-400 mb-4 max-w-md mx-auto">
-                    Run a dependency scan to populate the system with your project dependencies.
-                  </p>
-                  <div className="space-y-4">
-                    <div className="flex justify-center gap-4">
-                      <Button onClick={scanDependencies}>
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Scan Dependencies
-                      </Button>
+            if (widgetId === "dependency-stats") {
+              return (
+                <DraggableWidget
+                  key={widgetId}
+                  id={widgetId}
+                  title="Dependency Statistics"
+                  onLayoutChange={(newLayout) => updateWidgetLayout(widgetId, newLayout)}
+                  currentLayout={layout}
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4"
+                >
+                  <div className="grid grid-cols-2 gap-4 mt-2">
+                    <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold">{filteredDependencies.length}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Total Dependencies</div>
                     </div>
-
-                    <div className="mt-6 bg-gray-800 p-4 rounded-md text-left max-w-md mx-auto">
-                      <h3 className="font-medium mb-2 flex items-center">
-                        <Info className="h-4 w-4 mr-2" />
-                        Troubleshooting Steps
-                      </h3>
-                      <ol className="list-decimal list-inside space-y-2 text-sm text-gray-300">
-                        <li>Verify that your package.json file exists and is valid</li>
-                        <li>Make sure npm is installed and accessible on the server</li>
-                        <li>Check the server logs for more detailed error information</li>
-                      </ol>
+                    <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold">{outdatedDependencies.length}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Outdated</div>
+                    </div>
+                    <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold">{vulnerableDependencies.length}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Vulnerable</div>
+                    </div>
+                    <div className="bg-gray-100 dark:bg-gray-700 p-3 rounded-lg text-center">
+                      <div className="text-2xl font-bold">{audits.length}</div>
+                      <div className="text-sm text-gray-500 dark:text-gray-400">Recent Audits</div>
                     </div>
                   </div>
-                </div>
-              ) : filteredDependencies.length === 0 ? (
-                <div className="text-center py-8">
-                  <p>No dependencies match your search or filter criteria.</p>
-                  <Button
-                    variant="outline"
-                    className="mt-4 border-gray-700"
-                    onClick={() => {
-                      setSearchTerm("")
-                      setFilter("all")
-                    }}
-                  >
-                    Clear Filters
-                  </Button>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b border-gray-800">
-                        <th className="text-left py-3 px-4">Package</th>
-                        <th className="text-left py-3 px-4">Current</th>
-                        <th className="text-left py-3 px-4">Latest</th>
-                        <th className="text-left py-3 px-4">Status</th>
-                        <th className="text-left py-3 px-4 font-medium text-base">
-                          <div className="flex items-center">
-                            Update Mode
-                            <div className="relative ml-1 group">
-                              <Info className="h-4 w-4 text-gray-400 cursor-help" />
-                              <div className="absolute left-0 bottom-full mb-2 w-80 p-3 bg-gray-800 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                                <p className="mb-2">
-                                  <strong>Off:</strong> No automatic updates
-                                </p>
-                                <p className="mb-2">
-                                  <strong>Security Only:</strong> Only apply security patches
-                                </p>
-                                <p className="mb-2">
-                                  <strong>All Updates:</strong> Apply all package updates
-                                </p>
-                                <p className="mb-2">
-                                  <strong>Global:</strong> Use the global setting
-                                </p>
-                                <div className="mt-2 pt-2 border-t border-gray-700">
-                                  <p className="text-gray-300">
-                                    <strong>Note:</strong> Packages with Dependabot alerts will be updated regardless of
-                                    update mode to protect your application from security vulnerabilities.
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        </th>
-                        <th className="text-left py-3 px-4">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <AnimatePresence>
-                        {filteredDependencies.map((dep, index) => (
-                          <motion.tr
-                            key={dep.id}
-                            initial={{ opacity: 0, y: 10 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 10 }}
-                            transition={{ duration: 0.2, delay: index * 0.02 }}
-                            className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${
-                              dep.hasDependabotAlert ? "bg-gray-700/30" : dep.hasSecurityIssue ? "bg-gray-700/20" : ""
-                            } ${dep.updateMode === "global" ? "border-l-2 border-gray-600" : ""} ${
-                              dep.hasDependabotAlert && dep.updateMode === "off" ? "border-l-2 border-gray-500" : ""
-                            }`}
-                          >
-                            <td className="py-3 px-4">
-                              <div className="font-medium flex items-center">
-                                {dep.name}
-                                {dep.isDev && (
-                                  <Badge variant="outline" className="ml-2 border-gray-700 text-gray-400">
-                                    Dev
-                                  </Badge>
-                                )}
-                                {dep.updateMode === "global" && (
-                                  <Badge
-                                    variant="outline"
-                                    className="ml-2 border-gray-600 text-gray-300 bg-gray-700/50"
-                                  >
-                                    Global
-                                  </Badge>
-                                )}
-                                {dep.hasDependabotAlert && dep.updateMode === "off" && (
-                                  <Badge
-                                    variant="outline"
-                                    className="ml-2 border-gray-500 text-gray-300 bg-gray-700/50"
-                                  >
-                                    Force Update
-                                  </Badge>
-                                )}
-                              </div>
-                              <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
-                              {dep.hasDependabotAlert && dep.dependabotAlertDetails?.url && (
-                                <a
-                                  href={dep.dependabotAlertDetails.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-xs text-gray-400 hover:text-gray-300 flex items-center mt-1"
-                                >
-                                  View Dependabot Alert
-                                  <ExternalLink className="h-3 w-3 ml-1" />
-                                </a>
-                              )}
-                            </td>
-                            <td className="py-3 px-4">{dep.currentVersion}</td>
-                            <td className="py-3 px-4">{dep.latestVersion}</td>
-                            <td className="py-3 px-4">
-                              {dep.hasDependabotAlert ? (
-                                <div className="flex items-center gap-1">
-                                  {getSeverityBadge(dep)}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => viewDependabotAlertDetails(dep)}
-                                  >
-                                    <Info className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ) : dep.hasSecurityIssue ? (
-                                <div className="flex items-center gap-1">
-                                  {getSeverityBadge(dep)}
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-6 w-6"
-                                    onClick={() => viewVulnerabilityDetails(dep)}
-                                  >
-                                    <Info className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              ) : dep.outdated ? (
-                                <Badge variant="outline" className="border-gray-600 text-gray-300">
-                                  Outdated
-                                </Badge>
-                              ) : (
-                                <Badge variant="outline" className="bg-gray-700/50 text-gray-300 border-gray-600">
-                                  Up to date
-                                </Badge>
-                              )}
-                            </td>
-                            <td className="py-3 px-4">
-                              <div className="relative">
-                                <FourStateToggle
-                                  value={dep.updateMode}
-                                  onValueChange={(value) => updateDependencyMode(dep.id, value)}
-                                  showLabels={false}
-                                  className="w-[300px] max-w-full"
-                                />
-                                {dep.hasDependabotAlert && dep.updateMode === "off" && (
-                                  <div className="absolute -top-2 -right-2 bg-gray-600 text-white text-xs px-1 rounded-full">
-                                    !
-                                  </div>
-                                )}
-                              </div>
-                              {dep.hasDependabotAlert && dep.updateMode === "off" && (
-                                <div className="text-xs text-gray-400 mt-1">
-                                  Will be updated despite "Off" setting due to Dependabot alert
-                                </div>
-                              )}
-                            </td>
-                            <td className="py-3 px-4">
-                              <Button
-                                size="sm"
-                                disabled={!dep.outdated && !dep.hasSecurityIssue && !dep.hasDependabotAlert}
-                                className={
-                                  dep.hasDependabotAlert || dep.hasSecurityIssue ? "bg-gray-700 hover:bg-gray-600" : ""
-                                }
-                              >
-                                Update
-                              </Button>
-                            </td>
-                          </motion.tr>
-                        ))}
-                      </AnimatePresence>
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                </DraggableWidget>
+              )
+            }
 
-      {selectedVulnerability && (
-        <VulnerabilityDetails
-          isOpen={!!selectedVulnerability}
-          onClose={() => setSelectedVulnerability(null)}
-          vulnerability={selectedVulnerability.vulnerability}
-          packageName={selectedVulnerability.packageName}
-          currentVersion={selectedVulnerability.currentVersion}
-          latestVersion={selectedVulnerability.latestVersion}
+            if (widgetId === "vulnerability-summary") {
+              const highSeverity = vulnerableDependencies.filter((dep) =>
+                dep.vulnerabilities.some((v) => v.severity === "high" || v.severity === "critical"),
+              ).length
+
+              const mediumSeverity = vulnerableDependencies.filter((dep) =>
+                dep.vulnerabilities.some((v) => v.severity === "moderate" || v.severity === "medium"),
+              ).length
+
+              const lowSeverity = vulnerableDependencies.filter((dep) =>
+                dep.vulnerabilities.some((v) => v.severity === "low"),
+              ).length
+
+              return (
+                <DraggableWidget
+                  key={widgetId}
+                  id={widgetId}
+                  title="Vulnerability Summary"
+                  onLayoutChange={(newLayout) => updateWidgetLayout(widgetId, newLayout)}
+                  currentLayout={layout}
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4"
+                >
+                  <div className="space-y-4 mt-2">
+                    <div className="flex items-center">
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                        {highSeverity > 0 && (
+                          <div
+                            className="bg-red-500 h-4 rounded-full"
+                            style={{ width: `${(highSeverity / filteredDependencies.length) * 100}%` }}
+                          ></div>
+                        )}
+                      </div>
+                      <span className="ml-2 text-sm font-medium">{highSeverity} High</span>
+                    </div>
+
+                    <div className="flex items-center">
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                        {mediumSeverity > 0 && (
+                          <div
+                            className="bg-orange-500 h-4 rounded-full"
+                            style={{ width: `${(mediumSeverity / filteredDependencies.length) * 100}%` }}
+                          ></div>
+                        )}
+                      </div>
+                      <span className="ml-2 text-sm font-medium">{mediumSeverity} Medium</span>
+                    </div>
+
+                    <div className="flex items-center">
+                      <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4">
+                        {lowSeverity > 0 && (
+                          <div
+                            className="bg-yellow-500 h-4 rounded-full"
+                            style={{ width: `${(lowSeverity / filteredDependencies.length) * 100}%` }}
+                          ></div>
+                        )}
+                      </div>
+                      <span className="ml-2 text-sm font-medium">{lowSeverity} Low</span>
+                    </div>
+
+                    {vulnerableDependencies.length > 0 ? (
+                      <button
+                        onClick={() => setActiveTab("dependencies")}
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline mt-2"
+                      >
+                        View vulnerable dependencies
+                      </button>
+                    ) : (
+                      <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">No vulnerabilities detected</div>
+                    )}
+                  </div>
+                </DraggableWidget>
+              )
+            }
+
+            if (widgetId === "recent-audits") {
+              const recentAudits = [...audits]
+                .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                .slice(0, 5)
+
+              return (
+                <DraggableWidget
+                  key={widgetId}
+                  id={widgetId}
+                  title="Recent Audits"
+                  onLayoutChange={(newLayout) => updateWidgetLayout(widgetId, newLayout)}
+                  currentLayout={layout}
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4"
+                >
+                  {recentAudits.length > 0 ? (
+                    <div className="space-y-2 mt-2">
+                      {recentAudits.map((audit, index) => (
+                        <div key={index} className="bg-gray-100 dark:bg-gray-700 p-2 rounded text-sm">
+                          <div className="flex justify-between">
+                            <span className="font-medium">{new Date(audit.created_at).toLocaleDateString()}</span>
+                            <span
+                              className={`px-2 py-0.5 rounded text-xs ${
+                                audit.status === "success"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                  : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                              }`}
+                            >
+                              {audit.status}
+                            </span>
+                          </div>
+                          <div className="text-gray-600 dark:text-gray-300 mt-1">
+                            {audit.findings > 0
+                              ? `Found ${audit.findings} vulnerabilities`
+                              : "No vulnerabilities found"}
+                          </div>
+                        </div>
+                      ))}
+
+                      <button
+                        onClick={() => setActiveTab("audits")}
+                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                      >
+                        View all audits
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">No recent audits</div>
+                  )}
+                </DraggableWidget>
+              )
+            }
+
+            if (widgetId === "update-actions") {
+              return (
+                <DraggableWidget
+                  key={widgetId}
+                  id={widgetId}
+                  title="Actions"
+                  onLayoutChange={(newLayout) => updateWidgetLayout(widgetId, newLayout)}
+                  currentLayout={layout}
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4"
+                >
+                  <div className="space-y-3 mt-2">
+                    <button
+                      onClick={() => {
+                        if (confirm("Run security audit now?")) {
+                          setIsLoading(true)
+                          fetch("/api/dependencies/audit", { method: "POST" })
+                            .then((res) => res.json())
+                            .then((data) => {
+                              toast({
+                                title: "Audit Complete",
+                                description: data.message || "Security audit completed",
+                              })
+                              fetchData()
+                            })
+                            .catch((err) => {
+                              console.error(err)
+                              toast({
+                                title: "Error",
+                                description: "Failed to run security audit",
+                                variant: "destructive",
+                              })
+                            })
+                            .finally(() => setIsLoading(false))
+                        }
+                      }}
+                      disabled={isLoading}
+                      className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Run Security Audit
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (confirm("Update all eligible dependencies based on your update policy?")) {
+                          setIsLoading(true)
+                          fetch("/api/dependencies/auto-update", { method: "POST" })
+                            .then((res) => res.json())
+                            .then((data) => {
+                              toast({
+                                title: "Update Complete",
+                                description: data.message || "Dependencies updated",
+                              })
+                              fetchData()
+                            })
+                            .catch((err) => {
+                              console.error(err)
+                              toast({
+                                title: "Error",
+                                description: "Failed to update dependencies",
+                                variant: "destructive",
+                              })
+                            })
+                            .finally(() => setIsLoading(false))
+                        }
+                      }}
+                      disabled={isLoading}
+                      className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Update All Eligible
+                    </button>
+
+                    <button
+                      onClick={() => {
+                        if (confirm("Scan for new dependencies?")) {
+                          setIsLoading(true)
+                          fetch("/api/dependencies/scan", { method: "POST" })
+                            .then((res) => res.json())
+                            .then((data) => {
+                              toast({
+                                title: "Scan Complete",
+                                description: data.message || "Dependencies scanned",
+                              })
+                              fetchData()
+                            })
+                            .catch((err) => {
+                              console.error(err)
+                              toast({
+                                title: "Error",
+                                description: "Failed to scan dependencies",
+                                variant: "destructive",
+                              })
+                            })
+                            .finally(() => setIsLoading(false))
+                        }
+                      }}
+                      disabled={isLoading}
+                      className="w-full py-2 px-4 bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 rounded-lg text-sm font-medium transition-colors"
+                    >
+                      Scan Dependencies
+                    </button>
+                  </div>
+                </DraggableWidget>
+              )
+            }
+
+            if (widgetId === "outdated-packages") {
+              const topOutdated = [...outdatedDependencies]
+                .sort((a, b) => {
+                  const aVersionDiff =
+                    Number.parseInt(a.latestVersion.split(".")[0]) - Number.parseInt(a.currentVersion.split(".")[0])
+                  const bVersionDiff =
+                    Number.parseInt(b.latestVersion.split(".")[0]) - Number.parseInt(b.currentVersion.split(".")[0])
+                  return bVersionDiff - aVersionDiff
+                })
+                .slice(0, 5)
+
+              return (
+                <DraggableWidget
+                  key={widgetId}
+                  id={widgetId}
+                  title="Outdated Packages"
+                  onLayoutChange={(newLayout) => updateWidgetLayout(widgetId, newLayout)}
+                  currentLayout={layout}
+                  className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4"
+                >
+                  {topOutdated.length > 0 ? (
+                    <div className="space-y-2 mt-2">
+                      {topOutdated.map((dep, index) => (
+                        <div key={index} className="bg-gray-100 dark:bg-gray-700 p-2 rounded text-sm">
+                          <div className="flex justify-between">
+                            <span className="font-medium">{dep.name}</span>
+                            <span className="text-gray-500 dark:text-gray-400">
+                              {dep.currentVersion} → {dep.latestVersion}
+                            </span>
+                          </div>
+                          <div className="text-gray-600 dark:text-gray-300 mt-1 text-xs">
+                            {dep.type === "dev"
+                              ? "Development"
+                              : dep.type === "peer"
+                                ? "Peer"
+                                : dep.type === "optional"
+                                  ? "Optional"
+                                  : "Production"}
+                          </div>
+                        </div>
+                      ))}
+
+                      {outdatedDependencies.length > 5 && (
+                        <button
+                          onClick={() => setActiveTab("dependencies")}
+                          className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                          View all outdated ({outdatedDependencies.length})
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="text-sm text-gray-500 dark:text-gray-400 mt-2">No outdated packages</div>
+                  )}
+                </DraggableWidget>
+              )
+            }
+
+            return null
+          })}
+        </div>
+      )}
+
+      {activeTab === "dependencies" && (
+        <DependencyList
+          dependencies={filteredDependencies}
+          isLoading={isLoading}
+          onViewVulnerability={(vulnerability) => {
+            setSelectedVulnerability(vulnerability)
+            setShowVulnerabilityDetails(true)
+          }}
+          fetchData={fetchData}
         />
       )}
 
-      {selectedDependabotAlert && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.9 }}
-            className="bg-gray-900 rounded-lg p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto"
-          >
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-xl font-bold flex items-center">
-                <GitPullRequest className="mr-2 h-5 w-5 text-gray-300" />
-                Dependabot Alert: {selectedDependabotAlert.packageName}
-              </h2>
-              <Button variant="ghost" size="sm" onClick={() => setSelectedDependabotAlert(null)}>
-                <X className="h-5 w-5" />
-              </Button>
+      {activeTab === "audits" && (
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
+          <h2 className="text-xl font-semibold mb-4">Security Audits</h2>
+
+          {audits.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-700">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      Date
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      Status
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      Findings
+                    </th>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                    >
+                      Details
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {[...audits]
+                    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+                    .map((audit, index) => (
+                      <tr key={index}>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {new Date(audit.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              audit.status === "success"
+                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                : "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                            }`}
+                          >
+                            {audit.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {audit.findings} vulnerabilities
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm">
+                          <button
+                            onClick={() => {
+                              // Show audit details
+                              alert(`Audit details: ${JSON.stringify(audit.details || {}, null, 2)}`)
+                            }}
+                            className="text-blue-600 dark:text-blue-400 hover:underline"
+                          >
+                            View Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
             </div>
-
-            <div className="space-y-4">
-              <div className="bg-gray-800 p-4 rounded-md border border-gray-700">
-                <h3 className="font-medium text-gray-300 mb-2">
-                  {selectedDependabotAlert.alert.summary || "Security Vulnerability"}
-                </h3>
-                <div className="flex items-center gap-2 mb-2">
-                  <Badge className="bg-gray-700 text-gray-300 border-gray-600">
-                    Severity: {selectedDependabotAlert.alert.severity || "Unknown"}
-                  </Badge>
-                  <Badge className="bg-gray-700 text-gray-300 border-gray-600">
-                    Current: {selectedDependabotAlert.currentVersion}
-                  </Badge>
-                  <Badge className="bg-gray-700 text-gray-300 border-gray-600">
-                    Latest: {selectedDependabotAlert.latestVersion}
-                  </Badge>
-                </div>
-                <p className="text-sm text-gray-300">
-                  This package will be automatically updated regardless of your update mode settings to protect your
-                  application from security vulnerabilities.
-                </p>
-              </div>
-
-              {selectedDependabotAlert.alert.url && (
-                <div>
-                  <a
-                    href={selectedDependabotAlert.alert.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-gray-300 hover:text-gray-100 flex items-center"
-                  >
-                    <ExternalLink className="mr-2 h-4 w-4" />
-                    View full advisory on GitHub
-                  </a>
-                </div>
-              )}
-
-              <div className="mt-4">
-                <Button
-                  onClick={() => {
-                    setSelectedDependabotAlert(null)
-                    applyChanges()
-                  }}
-                  className="bg-gray-700 hover:bg-gray-600"
-                >
-                  Update Now
-                </Button>
-              </div>
-            </div>
-          </motion.div>
+          ) : (
+            <div className="text-center py-8 text-gray-500 dark:text-gray-400">No audit records found</div>
+          )}
         </div>
       )}
 
-      <style jsx global>{`
-        .dragging {
-          opacity: 0.7;
-          transform: scale(1.05);
-          z-index: 100;
-          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-        }
-      `}</style>
+      {showVulnerabilityDetails && selectedVulnerability && (
+        <VulnerabilityDetails
+          vulnerability={selectedVulnerability}
+          onClose={() => {
+            setShowVulnerabilityDetails(false)
+            setSelectedVulnerability(null)
+          }}
+        />
+      )}
     </div>
   )
 }

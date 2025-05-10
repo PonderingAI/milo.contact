@@ -1,111 +1,63 @@
 "use client"
 
-import type * as React from "react"
+import { useState, useEffect } from "react"
 import { cn } from "@/lib/utils"
 
-export type ToggleState = "global" | "off" | "conservative" | "aggressive"
-
-interface FourStateToggleProps extends React.HTMLAttributes<HTMLDivElement> {
-  value: ToggleState
-  onValueChange: (value: ToggleState) => void
-  disabled?: boolean
-  labels?: {
-    global?: string
-    off?: string
-    conservative?: string
-    aggressive?: string
-  }
-  showLabels?: boolean
+interface ToggleOption {
+  value: string
+  label: string
 }
 
-export function FourStateToggle({
-  value,
-  onValueChange,
-  disabled = false,
-  labels = {
-    global: "Global",
-    off: "Off",
-    conservative: "Security",
-    aggressive: "All",
-  },
-  showLabels = true,
-  className,
-  ...props
-}: FourStateToggleProps) {
-  const handleClick = (newValue: ToggleState) => {
-    if (!disabled) {
-      onValueChange(newValue)
-    }
+export type ToggleState = "off" | "conservative" | "aggressive"
+
+interface FourStateToggleProps {
+  value: ToggleState
+  onChange: (value: ToggleState) => void
+  options: ToggleOption[]
+  className?: string
+}
+
+export function FourStateToggle({ value, onChange, options, className }: FourStateToggleProps) {
+  const [selectedValue, setSelectedValue] = useState(value)
+
+  useEffect(() => {
+    setSelectedValue(value)
+  }, [value])
+
+  const handleChange = (newValue: string) => {
+    setSelectedValue(newValue)
+    onChange(newValue)
   }
 
   return (
     <div
-      className={cn("flex flex-col space-y-2 w-full", disabled && "opacity-50 cursor-not-allowed", className)}
-      {...props}
-    >
-      {showLabels && (
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-400">{labels.off}</span>
-          <span className="text-xs font-medium text-gray-400">{labels.conservative}</span>
-          <span className="text-xs font-medium text-gray-400">{labels.aggressive}</span>
-          <span className="text-xs font-medium text-gray-400">{labels.global}</span>
-        </div>
+      className={cn(
+        "relative flex items-center justify-between rounded-lg bg-gray-100 p-1 dark:bg-gray-800",
+        className,
       )}
-      <div className="relative h-10 bg-gray-800 rounded-full p-1 flex items-center min-w-[300px]">
-        <div
-          className={cn(
-            "absolute h-8 w-1/4 rounded-full transition-all duration-200 ease-in-out",
-            value === "off" && "left-1 bg-gray-600",
-            value === "conservative" && "left-[calc(25%+1px)] bg-blue-600",
-            value === "aggressive" && "left-[calc(50%+1px)] bg-green-600",
-            value === "global" && "left-[calc(75%+1px)] bg-purple-600",
-          )}
-        />
+    >
+      {options.map((option) => (
         <button
-          type="button"
+          key={option.value}
+          onClick={() => handleChange(option.value)}
           className={cn(
-            "relative z-10 flex-1 h-full rounded-full flex items-center justify-center text-xs font-medium",
-            value === "off" ? "text-white" : "text-gray-400",
+            "relative z-10 flex-1 px-3 py-1.5 text-sm font-medium transition-all",
+            "focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-1 dark:focus:ring-gray-600",
+            selectedValue === option.value
+              ? "text-white"
+              : "text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300",
           )}
-          onClick={() => handleClick("off")}
-          disabled={disabled}
         >
-          {!showLabels && labels.off}
+          {option.label}
         </button>
-        <button
-          type="button"
-          className={cn(
-            "relative z-10 flex-1 h-full rounded-full flex items-center justify-center text-xs font-medium",
-            value === "conservative" ? "text-white" : "text-gray-400",
-          )}
-          onClick={() => handleClick("conservative")}
-          disabled={disabled}
-        >
-          {!showLabels && labels.conservative}
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "relative z-10 flex-1 h-full rounded-full flex items-center justify-center text-xs font-medium",
-            value === "aggressive" ? "text-white" : "text-gray-400",
-          )}
-          onClick={() => handleClick("aggressive")}
-          disabled={disabled}
-        >
-          {!showLabels && labels.aggressive}
-        </button>
-        <button
-          type="button"
-          className={cn(
-            "relative z-10 flex-1 h-full rounded-full flex items-center justify-center text-xs font-medium",
-            value === "global" ? "text-white" : "text-gray-400",
-          )}
-          onClick={() => handleClick("global")}
-          disabled={disabled}
-        >
-          {!showLabels && labels.global}
-        </button>
-      </div>
+      ))}
+      <div
+        className="absolute inset-y-1 rounded-md bg-gray-900 dark:bg-gray-600 transition-all duration-200"
+        style={{
+          width: `${100 / options.length}%`,
+          transform: `translateX(${options.findIndex((o) => o.value === selectedValue) * 100}%)`,
+        }}
+      />
     </div>
   )
 }
