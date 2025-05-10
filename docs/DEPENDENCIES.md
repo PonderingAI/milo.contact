@@ -9,8 +9,9 @@ The dependency management system allows you to:
 1. Track all project dependencies
 2. Monitor for outdated packages
 3. Detect security vulnerabilities
-4. Apply updates selectively
-5. Configure update policies
+4. Integrate with GitHub Dependabot alerts
+5. Apply updates selectively
+6. Configure update policies
 
 ## Database Tables
 
@@ -35,12 +36,21 @@ The dependency system is fully integrated with the unified modular SQL setup sys
 
 Each dependency can have one of the following update modes:
 
-- **Off**: No automatic updates
+- **Off**: No automatic updates (except for Dependabot alerts)
 - **Conservative**: Only security patches
 - **Aggressive**: All updates
 - **Global**: Use the global setting
 
 The global setting applies to all dependencies set to "Global" mode.
+
+## Dependabot Integration
+
+The system integrates with GitHub Dependabot alerts:
+
+1. Packages with Dependabot alerts are automatically updated regardless of their update mode setting
+2. This ensures critical security vulnerabilities are patched even if automatic updates are disabled
+3. Dependabot alerts are displayed prominently in the dashboard
+4. The system tracks which updates were triggered by Dependabot alerts
 
 ## Security Audits
 
@@ -68,6 +78,7 @@ The Security Center dashboard includes customizable widgets:
 
 - Security Score
 - Vulnerabilities
+- Dependabot Alerts
 - Outdated Packages
 - Update Settings
 - Recent Activity
@@ -87,6 +98,3 @@ If you encounter issues with the dependency system:
 4. Check the server logs for more detailed error information
 
 For persistent issues, you can try resetting the system by dropping the tables and setting up again.
-\`\`\`
-
-Now, let's update the code overview file to reflect our changes:
