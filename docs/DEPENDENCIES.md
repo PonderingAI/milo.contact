@@ -1,100 +1,104 @@
 # Dependency Management System
 
-This document explains how the dependency management system works in the Milo Presedo Portfolio application.
+This document outlines the dependency management system implemented in the portfolio application.
 
 ## Overview
 
-The dependency management system allows you to:
+The dependency management system provides tools for:
 
-1. Track all project dependencies
-2. Monitor for outdated packages
-3. Detect security vulnerabilities
-4. Integrate with GitHub Dependabot alerts
-5. Apply updates selectively
-6. Configure update policies
+1. **Tracking Dependencies**: Automatically scans and tracks all project dependencies
+2. **Vulnerability Detection**: Identifies security vulnerabilities in dependencies
+3. **Update Management**: Configurable update policies to keep dependencies secure
+4. **Visualization**: Dashboard for monitoring dependency health and security
 
-## Database Tables
+## Features
 
-The system uses the following database tables:
+### Dependency Scanning
 
-- `dependencies`: Stores information about each dependency
-- `dependency_settings`: Stores system-wide settings
-- `security_audits`: Stores results of security scans
+The system automatically scans your project's dependencies and provides:
 
-## Integration with Unified SQL Setup
+- Current and latest versions
+- Outdated package detection
+- Security vulnerability identification
+- Dependabot alert integration
 
-The dependency system is fully integrated with the unified modular SQL setup system. The required tables are defined in `docs/setup/dependency-tables.sql` and can be created through the admin database setup interface.
+### Update Management
 
-### How It Works
+The system supports three update modes:
 
-1. When you visit the Security Center, the system checks if the required tables exist
-2. If tables are missing, you'll see a setup button
-3. The setup process uses the unified SQL setup system to create the necessary tables
-4. After setup, you can scan for dependencies to populate the database
+1. **Off**: No automatic updates will be applied
+2. **Security Only**: Only security-related updates will be applied
+3. **All Updates**: All available updates will be applied
 
-## Update Modes
+These modes can be set globally or per-package.
 
-Each dependency can have one of the following update modes:
+**Important**: Packages with Dependabot alerts will be updated automatically regardless of update mode settings to protect your application from security vulnerabilities.
 
-- **Off**: No automatic updates (except for Dependabot alerts)
-- **Conservative**: Only security patches
-- **Aggressive**: All updates
-- **Global**: Use the global setting
+### Security Dashboard
 
-The global setting applies to all dependencies set to "Global" mode.
+The Security Dashboard provides a visual interface for monitoring and managing dependencies with:
 
-## Dependabot Integration
+- **Customizable Layout**: Add, remove, and rearrange widgets
+- **Masonry Layout**: Widgets automatically arrange to fill available space efficiently
+- **Persistent State**: Dashboard layout and settings are saved between sessions
+- **Real-time Updates**: Dashboard updates as dependencies change
 
-The system integrates with GitHub Dependabot alerts:
+### Widgets
 
-1. Packages with Dependabot alerts are automatically updated regardless of their update mode setting
-2. This ensures critical security vulnerabilities are patched even if automatic updates are disabled
-3. Dependabot alerts are displayed prominently in the dashboard
-4. The system tracks which updates were triggered by Dependabot alerts
+Available widgets include:
 
-## Security Audits
+- **Security Score**: Overall security rating
+- **Vulnerabilities**: Known security issues
+- **Dependabot Alerts**: GitHub Dependabot security alerts
+- **Outdated Packages**: Dependencies needing updates
+- **Global Update Settings**: Configure automatic update behavior
+- **Recent Activity**: Latest security events and actions
+- **Security Audit**: Run security scans
+- **Update History**: Recent package updates
+- **Security Recommendations**: Suggested security improvements
 
-The system can perform security audits to detect vulnerabilities in your dependencies. When a vulnerability is found:
+## Implementation
 
-1. The dependency is marked as having a security issue
-2. Details about the vulnerability are stored
-3. The security score is updated
-4. The dashboard shows an alert
+The dependency management system is implemented using:
 
-## API Routes
+- **API Routes**: Server-side API routes for scanning and updating dependencies
+- **React Components**: Client-side components for visualizing dependency information
+- **Local Storage**: Persists dashboard layout and settings between sessions
+- **Masonry Layout**: Efficiently organizes widgets to fill available space
 
-The system includes the following API routes:
+## Usage
 
-- `/api/dependencies`: Get all dependencies
-- `/api/dependencies/scan`: Scan for dependencies
-- `/api/dependencies/setup`: Set up the dependency system
-- `/api/dependencies/update-mode`: Update a dependency's update mode
-- `/api/dependencies/audit`: Run a security audit
-- `/api/dependencies/apply`: Apply pending updates
+### Scanning Dependencies
 
-## Dashboard Widgets
+To scan dependencies:
 
-The Security Center dashboard includes customizable widgets:
+1. Navigate to the Security Dashboard
+2. Click "Scan Dependencies" button
 
-- Security Score
-- Vulnerabilities
-- Dependabot Alerts
-- Outdated Packages
-- Update Settings
-- Recent Activity
-- Security Audit
-- Update History
-- Security Recommendations
+### Applying Updates
 
-You can add, remove, and rearrange these widgets to customize your dashboard.
+To apply updates:
 
-## Troubleshooting
+1. Navigate to the Security Dashboard
+2. Click "Apply Updates" button
 
-If you encounter issues with the dependency system:
+### Configuring Update Mode
 
-1. Check if the database tables are set up correctly
-2. Verify that your package.json file exists and is valid
-3. Make sure npm is installed and accessible on the server
-4. Check the server logs for more detailed error information
+To configure the global update mode:
 
-For persistent issues, you can try resetting the system by dropping the tables and setting up again.
+1. Navigate to the Security Dashboard
+2. Find the "Global Update Settings" widget
+3. Select desired update mode
+
+To configure per-package update mode:
+
+1. Navigate to the Dependencies tab
+2. Find the package in the list
+3. Set the update mode using the toggle
+
+## Best Practices
+
+1. **Regular Scans**: Run dependency scans regularly
+2. **Prompt Updates**: Apply security updates promptly
+3. **Review Dependencies**: Regularly audit dependencies to remove unused packages
+4. **Monitor Alerts**: Pay special attention to Dependabot alerts

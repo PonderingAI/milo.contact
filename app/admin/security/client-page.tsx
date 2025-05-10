@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -65,6 +65,15 @@ interface Widget {
   type: string
   visible: boolean
   order: number
+  column?: number
+  height?: number
+}
+
+interface DashboardState {
+  widgets: Widget[]
+  activeTab: string
+  filter: string
+  globalUpdateMode: ToggleState
 }
 
 // Available widgets
@@ -164,29 +173,82 @@ export default function SecurityClientPage() {
   const [showDiagnostics, setShowDiagnostics] = useState(false)
   const [hasMounted, setHasMounted] = useState(false)
   const [draggingWidgetId, setDraggingWidgetId] = useState<string | null>(null)
+  const widgetRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
 
-  // Load widgets from localStorage on initial render
+  // Load dashboard state from localStorage on initial render
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const savedWidgets = localStorage.getItem("securityWidgets")
-      if (savedWidgets) {
-        setWidgets(JSON.parse(savedWidgets))
-      } else {
-        // Default widgets - make sure update-settings is first
-        const defaultWidgets: Widget[] = [
-          { id: "update-settings", type: "update-settings", visible: true, order: 0 },
-          { id: "security-score", type: "security-score", visible: true, order: 1 },
-          { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 2 },
-          { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 3 },
-          { id: "outdated-packages", type: "outdated-packages", visible: true, order: 4 },
-          { id: "security-recommendations", type: "security-recommendations", visible: true, order: 5 },
-          { id: "recent-activity", type: "recent-activity", visible: true, order: 6 },
-        ]
-        setWidgets(defaultWidgets)
-        localStorage.setItem("securityWidgets", JSON.stringify(defaultWidgets))
+      try {
+        const savedState = localStorage.getItem("securityDashboardState")
+        if (savedState) {
+          const parsedState: DashboardState = JSON.parse(savedState)
+
+          // Set widgets
+          if (parsedState.widgets && parsedState.widgets.length > 0) {
+            setWidgets(parsedState.widgets)
+          } else {
+            // Default widgets if none saved
+            setDefaultWidgets()
+          }
+
+          // Set active tab
+          if (parsedState.activeTab) {
+            setActiveTab(parsedState.activeTab)
+          }
+
+          // Set filter
+          if (parsedState.filter) {
+            setFilter(parsedState.filter)
+          }
+
+          // Set global update mode
+          if (parsedState.globalUpdateMode) {
+            setGlobalUpdateMode(parsedState.globalUpdateMode)
+          }
+        } else {
+          // No saved state, set defaults
+          setDefaultWidgets()
+        }
+      } catch (error) {
+        console.error("Error loading dashboard state:", error)
+        setDefaultWidgets()
       }
     }
   }, [])
+
+  // Set default widgets
+  const setDefaultWidgets = () => {
+    const defaultWidgets: Widget[] = [
+      { id: "update-settings", type: "update-settings", visible: true, order: 0 },
+      { id: "security-score", type: "security-score", visible: true, order: 1 },
+      { id: "dependabot-alerts", type: "dependabot-alerts", visible: true, order: 2 },
+      { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 3 },
+      { id: "outdated-packages", type: "outdated-packages", visible: true, order: 4 },
+      { id: "security-recommendations", type: "security-recommendations", visible: true, order: 5 },
+      { id: "recent-activity", type: "recent-activity", visible: true, order: 6 },
+    ]
+    setWidgets(defaultWidgets)
+  }
+
+  // Save dashboard state to localStorage
+  const saveDashboardState = useCallback(() => {
+    if (typeof window !== "undefined") {
+      const state: DashboardState = {
+        widgets,
+        activeTab,
+        filter,
+        globalUpdateMode,
+      }
+      localStorage.setItem("securityDashboardState", JSON.stringify(state))
+    }
+  }, [widgets, activeTab, filter, globalUpdateMode])
+
+  // Save state when relevant state changes
+  useEffect(() => {
+    if (hasMounted) {
+      saveDashboardState()
+    }
+  }, [widgets, activeTab, filter, globalUpdateMode, hasMounted, saveDashboardState])
 
   // Update available widgets for adding
   useEffect(() => {
@@ -200,6 +262,65 @@ export default function SecurityClientPage() {
       router.push("/sign-in?redirect_url=/admin/security")
     }
   }, [isLoaded, isSignedIn, router])
+
+  // Measure widget heights after render
+  useEffect(() => {
+    if (hasMounted && widgets.length > 0) {
+      // Use requestAnimationFrame to ensure DOM is fully rendered
+      requestAnimationFrame(() => {
+        const updatedWidgets = [...widgets]
+        let changed = false
+
+        updatedWidgets.forEach((widget, index) => {
+          const element = widgetRefs.current[widget.id]
+          if (element) {
+            const height = element.offsetHeight
+            if (widget.height !== height) {
+              updatedWidgets[index] = { ...widget, height }
+              changed = true
+            }
+          }
+        })
+
+        if (changed) {
+          setWidgets(updatedWidgets)
+        }
+      })
+    }
+  }, [widgets, hasMounted])
+
+  // Organize widgets into columns (masonry layout)
+  const organizeWidgetsIntoColumns = useCallback(
+    (columnCount = 3) => {
+      if (widgets.length === 0) return []
+
+      // Create empty columns
+      const columns: Widget[][] = Array.from({ length: columnCount }, () => [])
+
+      // Sort widgets by order
+      const sortedWidgets = [...widgets].sort((a, b) => a.order - b.order)
+
+      // Special case: update-settings widget should span all columns
+      const updateSettingsIndex = sortedWidgets.findIndex((w) => w.type === "update-settings")
+      if (updateSettingsIndex !== -1) {
+        const updateSettingsWidget = sortedWidgets.splice(updateSettingsIndex, 1)[0]
+        return [[updateSettingsWidget], ...organizeWidgetsIntoColumns(columnCount)]
+      }
+
+      // Calculate column heights
+      const columnHeights = Array(columnCount).fill(0)
+
+      // Place each widget in the shortest column
+      sortedWidgets.forEach((widget) => {
+        const shortestColumnIndex = columnHeights.indexOf(Math.min(...columnHeights))
+        columns[shortestColumnIndex].push(widget)
+        columnHeights[shortestColumnIndex] += widget.height || 200 // Use default height if not measured
+      })
+
+      return columns
+    },
+    [widgets],
+  )
 
   const fetchDependencies = useCallback(async () => {
     try {
@@ -520,13 +641,11 @@ export default function SecurityClientPage() {
 
     const updatedWidgets = [...widgets, newWidget]
     setWidgets(updatedWidgets)
-    localStorage.setItem("securityWidgets", JSON.stringify(updatedWidgets))
   }
 
   const handleRemoveWidget = (id: string) => {
     const updatedWidgets = widgets.filter((w) => w.id !== id)
     setWidgets(updatedWidgets)
-    localStorage.setItem("securityWidgets", JSON.stringify(updatedWidgets))
   }
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -573,7 +692,6 @@ export default function SecurityClientPage() {
     const reorderedWidgets = updatedWidgets.map((w, i) => ({ ...w, order: i }))
 
     setWidgets(reorderedWidgets)
-    localStorage.setItem("securityWidgets", JSON.stringify(reorderedWidgets))
 
     // Remove dragging class
     handleDragEnd()
@@ -1049,7 +1167,10 @@ export default function SecurityClientPage() {
 
     // Clean up interval on component unmount
     return () => clearInterval(intervalId)
-  }, [checkForScheduledUpdates, hasMounted])
+  }, [hasMounted, checkForScheduledUpdates])
+
+  // Organize widgets into columns for masonry layout
+  const widgetColumns = organizeWidgetsIntoColumns(3)
 
   return (
     <div className="container mx-auto p-6 bg-gray-950 text-gray-100">
@@ -1191,64 +1312,132 @@ export default function SecurityClientPage() {
             <WidgetSelector availableWidgets={availableWidgetsForAdd} onAddWidget={handleAddWidget} />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <AnimatePresence>
-              {widgets
-                .sort((a, b) => a.order - b.order)
-                .map((widget) => {
-                  const widgetDef = availableWidgets.find((w) => w.id === widget.type)
-                  const isUpdateSettings = widget.type === "update-settings"
+          {/* Masonry layout for widgets */}
+          <div className="flex flex-wrap -mx-2">
+            {/* Special case for update-settings widget - always full width */}
+            {widgets.find((w) => w.type === "update-settings") && (
+              <div className="w-full px-2 mb-4">
+                <AnimatePresence>
+                  {widgets
+                    .filter((w) => w.type === "update-settings")
+                    .map((widget) => {
+                      const widgetDef = availableWidgets.find((w) => w.id === widget.type)
 
-                  return (
-                    <motion.div
-                      key={widget.id}
-                      id={widget.id}
-                      layout
-                      initial={{ opacity: 0, scale: 0.9 }}
-                      animate={{
-                        opacity: 1,
-                        scale: 1,
-                        zIndex: draggingWidgetId === widget.id ? 10 : 1,
-                        boxShadow: draggingWidgetId === widget.id ? "0 10px 25px rgba(0, 0, 0, 0.5)" : "none",
-                      }}
-                      exit={{ opacity: 0, scale: 0.9 }}
-                      transition={{ duration: 0.3 }}
-                      className={`${isUpdateSettings ? "col-span-1 md:col-span-2 lg:col-span-3" : ""}`}
-                    >
-                      <Card
-                        className={`bg-gray-800 border-gray-700 transition-all duration-200 h-full ${
-                          draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""
-                        }`}
-                        draggable
-                        onDragStart={(e) => handleDragStart(e, widget.id)}
-                        onDragEnd={handleDragEnd}
-                        onDragOver={handleDragOver}
-                        onDrop={(e) => handleDrop(e, widget.id)}
-                      >
-                        <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 bg-gray-800 rounded-t-lg border-b border-gray-700">
-                          <div className="flex items-center">
-                            <GripVertical className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
-                            <CardTitle className="text-sm font-medium text-gray-200">
-                              {widgetDef?.title || widget.type}
-                            </CardTitle>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => handleRemoveWidget(widget.id)}
+                      return (
+                        <motion.div
+                          key={widget.id}
+                          id={widget.id}
+                          ref={(el) => (widgetRefs.current[widget.id] = el)}
+                          layout
+                          initial={{ opacity: 0, scale: 0.9 }}
+                          animate={{
+                            opacity: 1,
+                            scale: 1,
+                            zIndex: draggingWidgetId === widget.id ? 10 : 1,
+                            boxShadow: draggingWidgetId === widget.id ? "0 10px 25px rgba(0, 0, 0, 0.5)" : "none",
+                          }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          transition={{ duration: 0.3 }}
+                        >
+                          <Card
+                            className={`bg-gray-800 border-gray-700 transition-all duration-200 h-full ${
+                              draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""
+                            }`}
+                            draggable
+                            onDragStart={(e) => handleDragStart(e, widget.id)}
+                            onDragEnd={handleDragEnd}
+                            onDragOver={handleDragOver}
+                            onDrop={(e) => handleDrop(e, widget.id)}
                           >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </CardHeader>
-                        <CardContent className="p-4 h-[calc(100%-60px)]">
-                          {renderWidgetContent(widget.type)}
-                        </CardContent>
-                      </Card>
-                    </motion.div>
-                  )
-                })}
-            </AnimatePresence>
+                            <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 bg-gray-800 rounded-t-lg border-b border-gray-700">
+                              <div className="flex items-center">
+                                <GripVertical className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
+                                <CardTitle className="text-sm font-medium text-gray-200">
+                                  {widgetDef?.title || widget.type}
+                                </CardTitle>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
+                                onClick={() => handleRemoveWidget(widget.id)}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            </CardHeader>
+                            <CardContent className="p-4">{renderWidgetContent(widget.type)}</CardContent>
+                          </Card>
+                        </motion.div>
+                      )
+                    })}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Regular widgets in masonry layout */}
+            <div className="flex flex-wrap w-full">
+              {Array.from({ length: 3 }).map((_, colIndex) => (
+                <div key={colIndex} className="w-full sm:w-1/2 lg:w-1/3 px-2">
+                  <AnimatePresence>
+                    {widgets
+                      .filter((w) => w.type !== "update-settings")
+                      .filter((_, i) => i % 3 === colIndex)
+                      .sort((a, b) => a.order - b.order)
+                      .map((widget) => {
+                        const widgetDef = availableWidgets.find((w) => w.id === widget.type)
+
+                        return (
+                          <motion.div
+                            key={widget.id}
+                            id={widget.id}
+                            ref={(el) => (widgetRefs.current[widget.id] = el)}
+                            layout
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{
+                              opacity: 1,
+                              scale: 1,
+                              zIndex: draggingWidgetId === widget.id ? 10 : 1,
+                              boxShadow: draggingWidgetId === widget.id ? "0 10px 25px rgba(0, 0, 0, 0.5)" : "none",
+                            }}
+                            exit={{ opacity: 0, scale: 0.9 }}
+                            transition={{ duration: 0.3 }}
+                            className="mb-4"
+                          >
+                            <Card
+                              className={`bg-gray-800 border-gray-700 transition-all duration-200 h-full ${
+                                draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""
+                              }`}
+                              draggable
+                              onDragStart={(e) => handleDragStart(e, widget.id)}
+                              onDragEnd={handleDragEnd}
+                              onDragOver={handleDragOver}
+                              onDrop={(e) => handleDrop(e, widget.id)}
+                            >
+                              <CardHeader className="p-4 flex flex-row items-center justify-between space-y-0 bg-gray-800 rounded-t-lg border-b border-gray-700">
+                                <div className="flex items-center">
+                                  <GripVertical className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
+                                  <CardTitle className="text-sm font-medium text-gray-200">
+                                    {widgetDef?.title || widget.type}
+                                  </CardTitle>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleRemoveWidget(widget.id)}
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </CardHeader>
+                              <CardContent className="p-4">{renderWidgetContent(widget.type)}</CardContent>
+                            </Card>
+                          </motion.div>
+                        )
+                      })}
+                  </AnimatePresence>
+                </div>
+              ))}
+            </div>
           </div>
         </TabsContent>
 
