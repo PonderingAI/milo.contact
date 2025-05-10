@@ -63,14 +63,39 @@ export async function POST() {
     const tableExists = await checkTableExists(supabase, "dependencies")
 
     if (!tableExists) {
-      return NextResponse.json(
-        {
-          error: "Dependencies table does not exist",
-          message: "The dependencies table has not been set up. Please set up the table first.",
-          tableExists: false,
-        },
-        { status: 404 },
-      )
+      // Try to create the table
+      try {
+        const setupResponse = await fetch(
+          new URL(
+            "/api/dependencies/setup-system",
+            new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+          ),
+          {
+            method: "POST",
+          },
+        )
+
+        if (!setupResponse.ok) {
+          return NextResponse.json(
+            {
+              error: "Dependencies table does not exist",
+              message: "The dependencies table has not been set up. Please set up the table first.",
+              tableExists: false,
+            },
+            { status: 404 },
+          )
+        }
+      } catch (setupError) {
+        console.error("Error setting up dependency system:", setupError)
+        return NextResponse.json(
+          {
+            error: "Failed to set up dependency system",
+            message: "There was an error setting up the dependency system.",
+            details: setupError instanceof Error ? setupError.message : String(setupError),
+          },
+          { status: 500 },
+        )
+      }
     }
 
     // Get dependencies from package.json
@@ -91,7 +116,7 @@ export async function POST() {
     // Try to get outdated packages using npm
     let outdatedPackages = {}
     try {
-      const { stdout } = await execAsync("npm outdated --json")
+      const { stdout } = await execAsync("npm outdated --json", { timeout: 30000 })
       if (stdout) {
         outdatedPackages = JSON.parse(stdout)
       }
@@ -111,7 +136,7 @@ export async function POST() {
     // Try to get security vulnerabilities using npm audit
     let securityIssues = {}
     try {
-      const { stdout } = await execAsync("npm audit --json")
+      const { stdout } = await execAsync("npm audit --json", { timeout: 30000 })
       if (stdout) {
         securityIssues = JSON.parse(stdout)
       }
@@ -178,11 +203,25 @@ export async function POST() {
       )
     }
 
+    // Update last scan time in dependency_settings
+    await supabase.from("dependency_settings").update({ last_scan: new Date().toISOString() }).eq("id", 1)
+
+    // Insert security audit record
+    const vulnerabilitiesCount = Object.keys(securityIssues?.vulnerabilities || {}).length
+    await supabase.from("security_audits").insert({
+      audit_date: new Date().toISOString(),
+      vulnerabilities_found: vulnerabilitiesCount,
+      packages_scanned: depsToInsert.length,
+      security_score: Math.max(0, 100 - (vulnerabilitiesCount / Math.max(1, depsToInsert.length)) * 50),
+      audit_summary: securityIssues,
+    })
+
     return NextResponse.json({
+      success: true,
       message: "Dependencies scanned and updated successfully.",
       dependenciesCount: depsToInsert.length,
       outdatedCount: Object.keys(outdatedPackages).length,
-      vulnerabilitiesCount: Object.keys(securityIssues?.vulnerabilities || {}).length,
+      vulnerabilitiesCount,
     })
   } catch (error) {
     console.error("Error in scan API:", error)

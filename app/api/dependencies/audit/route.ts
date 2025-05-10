@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase-server"
 import { exec } from "child_process"
 import { promisify } from "util"
 
 const execAsync = promisify(exec)
 
-export async function GET() {
+export async function POST() {
   try {
+    const supabase = createAdminClient()
+
     // Run npm audit --json to get security vulnerabilities
     const { stdout } = await execAsync("npm audit --json", { timeout: 30000 })
 
@@ -21,9 +24,33 @@ export async function GET() {
     const vulnerableCount = Object.keys(vulnerabilities).length
     const securityScore = Math.max(0, Math.min(100, 100 - (vulnerableCount / totalDependencies) * 100))
 
+    // Update dependencies with security information
+    for (const [name, details] of Object.entries(vulnerabilities)) {
+      await supabase
+        .from("dependencies")
+        .update({
+          has_security_issue: true,
+          security_details: details,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("name", name)
+    }
+
+    // Insert audit record
+    await supabase.from("security_audits").insert({
+      audit_date: new Date().toISOString(),
+      vulnerabilities_found: vulnerableCount,
+      packages_scanned: totalDependencies,
+      security_score: Math.round(securityScore),
+      audit_summary: auditData,
+    })
+
+    // Update last scan time in dependency_settings
+    await supabase.from("dependency_settings").update({ last_scan: new Date().toISOString() }).eq("id", 1)
+
     return NextResponse.json({
       success: true,
-      vulnerabilities,
+      vulnerabilities: vulnerableCount,
       metadata,
       securityScore: Math.round(securityScore),
       vulnerableCount,
@@ -40,6 +67,31 @@ export async function GET() {
         const totalDependencies = metadata.totalDependencies || 1
         const vulnerableCount = Object.keys(vulnerabilities).length
         const securityScore = Math.max(0, Math.min(100, 100 - (vulnerableCount / totalDependencies) * 100))
+
+        // Update dependencies with security information
+        const supabase = createAdminClient()
+        for (const [name, details] of Object.entries(vulnerabilities)) {
+          await supabase
+            .from("dependencies")
+            .update({
+              has_security_issue: true,
+              security_details: details,
+              updated_at: new Date().toISOString(),
+            })
+            .eq("name", name)
+        }
+
+        // Insert audit record
+        await supabase.from("security_audits").insert({
+          audit_date: new Date().toISOString(),
+          vulnerabilities_found: vulnerableCount,
+          packages_scanned: totalDependencies,
+          security_score: Math.round(securityScore),
+          audit_summary: auditData,
+        })
+
+        // Update last scan time in dependency_settings
+        await supabase.from("dependency_settings").update({ last_scan: new Date().toISOString() }).eq("id", 1)
 
         return NextResponse.json({
           success: true,
