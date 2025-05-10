@@ -78,12 +78,20 @@ async function getSecurityIssues() {
 
 export async function POST() {
   try {
-    // This is a simulated update since we can't actually update packages in the production environment
-    // In a real environment, this would run npm update commands
-
     // Get outdated packages
     const outdatedPackages = await getOutdatedPackages()
     const securityIssues = await getSecurityIssues()
+
+    // If no outdated packages, return early
+    if (Object.keys(outdatedPackages).length === 0) {
+      return NextResponse.json({
+        success: true,
+        message: "No updates needed. All packages are up to date.",
+        results: [],
+        updated: 0,
+        failed: 0,
+      })
+    }
 
     // Simulate update results
     const results = Object.entries(outdatedPackages).map(([name, info]: [string, any]) => {

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -13,7 +13,6 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
-import { DraggableWidget } from "@/components/admin/draggable-widget"
 import { WidgetSelector, type WidgetOption } from "@/components/admin/widget-selector"
 import {
   AlertCircle,
@@ -22,13 +21,16 @@ import {
   Shield,
   RefreshCw,
   AlertTriangle,
-  Settings,
   Info,
   Activity,
   Search,
   Clock,
+  Globe,
+  GripVertical,
+  X,
 } from "lucide-react"
 import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
+import { motion, AnimatePresence } from "framer-motion"
 
 // Types
 interface Dependency {
@@ -81,9 +83,9 @@ const availableWidgets: WidgetOption[] = [
   },
   {
     id: "update-settings",
-    title: "Update Settings",
+    title: "Global Update Settings",
     description: "Configure automatic update behavior",
-    icon: <Settings className="h-4 w-4" />,
+    icon: <Globe className="h-4 w-4" />,
   },
   {
     id: "recent-activity",
@@ -141,6 +143,8 @@ export default function SecurityClientPage() {
   const [showUpdateResults, setShowUpdateResults] = useState(false)
   const [diagnosticInfo, setDiagnosticInfo] = useState<any>(null)
   const [showDiagnostics, setShowDiagnostics] = useState(false)
+  const [hasMounted, setHasMounted] = useState(false)
+  const [draggingWidgetId, setDraggingWidgetId] = useState<string | null>(null)
 
   // Load widgets from localStorage on initial render
   useEffect(() => {
@@ -149,12 +153,12 @@ export default function SecurityClientPage() {
       if (savedWidgets) {
         setWidgets(JSON.parse(savedWidgets))
       } else {
-        // Default widgets
+        // Default widgets - make sure update-settings is first
         const defaultWidgets: Widget[] = [
-          { id: "security-score", type: "security-score", visible: true, order: 0 },
-          { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 1 },
-          { id: "outdated-packages", type: "outdated-packages", visible: true, order: 2 },
-          { id: "update-settings", type: "update-settings", visible: true, order: 3 },
+          { id: "update-settings", type: "update-settings", visible: true, order: 0 },
+          { id: "security-score", type: "security-score", visible: true, order: 1 },
+          { id: "vulnerabilities", type: "vulnerabilities", visible: true, order: 2 },
+          { id: "outdated-packages", type: "outdated-packages", visible: true, order: 3 },
           { id: "security-recommendations", type: "security-recommendations", visible: true, order: 4 },
           { id: "recent-activity", type: "recent-activity", visible: true, order: 5 },
         ]
@@ -177,11 +181,73 @@ export default function SecurityClientPage() {
     }
   }, [isLoaded, isSignedIn, router])
 
+  const fetchDependencies = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      setDiagnosticInfo(null)
+
+      const response = await fetch("/api/dependencies")
+      const data = await response.json()
+
+      // Store the full response for diagnostics
+      setDiagnosticInfo(data)
+
+      // Check for error
+      if (data.error) {
+        setError(`Error: ${data.message || data.error}`)
+        setDependencies([])
+        return
+      }
+
+      // If no dependencies found, show a clear message
+      if (!data.dependencies || data.dependencies.length === 0) {
+        setDependencies([])
+        setError("No dependencies found. Please run a dependency scan to populate the database.")
+        return
+      }
+
+      // Map the data to our internal format
+      const mappedDependencies = data.dependencies.map((dep) => ({
+        id: dep.id || dep.name,
+        name: dep.name,
+        currentVersion: dep.current_version || dep.currentVersion,
+        latestVersion: dep.latest_version || dep.latestVersion,
+        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latest_version),
+        locked: dep.locked || false,
+        description: dep.description || "",
+        hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
+        securityDetails: dep.security_details || dep.securityDetails,
+        updateMode: dep.update_mode || dep.updateMode || "global",
+        isDev: dep.is_dev || dep.isDev || false,
+      }))
+
+      setDependencies(mappedDependencies)
+
+      // Update security stats
+      setSecurityStats({
+        vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
+        outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
+        securityScore: data.securityScore || calculateSecurityScore(mappedDependencies),
+        lastScan: data.lastScan || new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
+      })
+
+      // Get global update mode - default to conservative (security only)
+      setGlobalUpdateMode(data.updateMode || "conservative")
+    } catch (err) {
+      console.error("Error fetching dependencies:", err)
+      setError(`Error fetching dependencies: ${err instanceof Error ? err.message : String(err)}`)
+      setDependencies([])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (isSignedIn) {
       fetchDependencies()
     }
-  }, [isSignedIn])
+  }, [isSignedIn, fetchDependencies])
 
   // Set up hourly check for updates
   useEffect(() => {
@@ -268,6 +334,11 @@ export default function SecurityClientPage() {
       setUpdateResults(data.results || [])
       setShowUpdateResults(true)
 
+      // Show a message if no updates were needed
+      if (data.results.length === 0) {
+        setError("No updates were needed. All packages are up to date.")
+      }
+
       // Refresh dependencies
       fetchDependencies()
     } catch (err: any) {
@@ -275,68 +346,6 @@ export default function SecurityClientPage() {
       console.error("Error applying changes:", err)
     } finally {
       setApplyingChanges(false)
-    }
-  }
-
-  const fetchDependencies = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      setDiagnosticInfo(null)
-
-      const response = await fetch("/api/dependencies")
-      const data = await response.json()
-
-      // Store the full response for diagnostics
-      setDiagnosticInfo(data)
-
-      // Check for error
-      if (data.error) {
-        setError(`Error: ${data.message || data.error}`)
-        setDependencies([])
-        return
-      }
-
-      // If no dependencies found, show a clear message
-      if (!data.dependencies || data.dependencies.length === 0) {
-        setDependencies([])
-        setError("No dependencies found. Please run a dependency scan to populate the database.")
-        return
-      }
-
-      // Map the data to our internal format
-      const mappedDependencies = data.dependencies.map((dep) => ({
-        id: dep.id || dep.name,
-        name: dep.name,
-        currentVersion: dep.current_version || dep.currentVersion,
-        latestVersion: dep.latest_version || dep.latestVersion,
-        outdated: dep.outdated || (dep.current_version !== dep.latest_version && dep.latest_version),
-        locked: dep.locked || false,
-        description: dep.description || "",
-        hasSecurityIssue: dep.has_security_issue || dep.hasSecurityIssue || false,
-        securityDetails: dep.security_details || dep.securityDetails,
-        updateMode: dep.update_mode || dep.updateMode || "global",
-        isDev: dep.is_dev || dep.isDev || false,
-      }))
-
-      setDependencies(mappedDependencies)
-
-      // Update security stats
-      setSecurityStats({
-        vulnerabilities: data.vulnerabilities || mappedDependencies.filter((d) => d.hasSecurityIssue).length,
-        outdatedPackages: data.outdatedPackages || mappedDependencies.filter((d) => d.outdated).length,
-        securityScore: data.securityScore || calculateSecurityScore(mappedDependencies),
-        lastScan: data.lastScan || new Date().toLocaleDateString() + " " + new Date().toLocaleTimeString(),
-      })
-
-      // Get global update mode - default to conservative (security only)
-      setGlobalUpdateMode(data.updateMode || "conservative")
-    } catch (err) {
-      console.error("Error fetching dependencies:", err)
-      setError(`Error fetching dependencies: ${err instanceof Error ? err.message : String(err)}`)
-      setDependencies([])
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -494,6 +503,22 @@ export default function SecurityClientPage() {
 
   const handleDragStart = (e: React.DragEvent, id: string) => {
     e.dataTransfer.setData("widgetId", id)
+    setDraggingWidgetId(id)
+
+    // Add a dragging class to the element
+    const element = document.getElementById(id)
+    if (element) {
+      element.classList.add("dragging")
+    }
+  }
+
+  const handleDragEnd = () => {
+    setDraggingWidgetId(null)
+
+    // Remove dragging class from all elements
+    document.querySelectorAll(".dragging").forEach((el) => {
+      el.classList.remove("dragging")
+    })
   }
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -521,6 +546,9 @@ export default function SecurityClientPage() {
 
     setWidgets(reorderedWidgets)
     localStorage.setItem("securityWidgets", JSON.stringify(reorderedWidgets))
+
+    // Remove dragging class
+    handleDragEnd()
   }
 
   const viewVulnerabilityDetails = (dependency: Dependency) => {
@@ -570,6 +598,9 @@ export default function SecurityClientPage() {
         return <Badge className="bg-red-900/20 text-red-400 border-red-800">Security Issue</Badge>
     }
   }
+
+  // Count dependencies using global settings
+  const globalDependenciesCount = dependencies.filter((dep) => dep.updateMode === "global").length
 
   // Render widget content based on type
   const renderWidgetContent = (type: string) => {
@@ -638,29 +669,62 @@ export default function SecurityClientPage() {
       case "update-settings":
         return (
           <div className="space-y-4">
-            <div>
-              <Label className="text-sm mb-2 block">Global Update Mode</Label>
-              <FourStateToggle
-                value={globalUpdateMode}
-                onValueChange={updateGlobalMode}
-                labels={{
-                  off: "Off",
-                  conservative: "Security Only",
-                  aggressive: "All Updates",
-                  global: "N/A",
-                }}
-              />
-            </div>
-            <div className="text-sm text-gray-400 mt-2">
-              <p>
-                <strong>Off:</strong> No automatic updates
-              </p>
-              <p>
-                <strong>Security Only:</strong> Only security patches
-              </p>
-              <p>
-                <strong>All Updates:</strong> All package updates
-              </p>
+            <div className="bg-gradient-to-r from-blue-900/30 to-purple-900/30 p-4 rounded-lg border border-blue-800/50">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-lg font-semibold text-white flex items-center">
+                  <Globe className="mr-2 h-5 w-5 text-blue-400" />
+                  Global Update Policy
+                </h3>
+                <Badge variant="outline" className="bg-blue-900/40 text-blue-300 border-blue-700">
+                  {globalDependenciesCount} packages using this policy
+                </Badge>
+              </div>
+
+              <div className="mb-4">
+                <Label className="text-sm mb-2 block text-blue-200">Update Mode</Label>
+                <FourStateToggle
+                  value={globalUpdateMode}
+                  onValueChange={updateGlobalMode}
+                  labels={{
+                    off: "Off",
+                    conservative: "Security Only",
+                    aggressive: "All Updates",
+                    global: "N/A",
+                  }}
+                />
+              </div>
+
+              <div className="text-sm text-blue-200 space-y-2 mt-4 bg-blue-950/40 p-3 rounded-md">
+                <p className="flex items-center">
+                  <span
+                    className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "off" ? "bg-gray-400" : "bg-gray-700"}`}
+                  ></span>
+                  <strong>Off:</strong> No automatic updates
+                </p>
+                <p className="flex items-center">
+                  <span
+                    className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "conservative" ? "bg-blue-400" : "bg-blue-900"}`}
+                  ></span>
+                  <strong>Security Only:</strong> Only security patches
+                </p>
+                <p className="flex items-center">
+                  <span
+                    className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "aggressive" ? "bg-green-400" : "bg-green-900"}`}
+                  ></span>
+                  <strong>All Updates:</strong> All package updates
+                </p>
+              </div>
+
+              <div className="mt-4">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full border-blue-700 bg-blue-900/30 hover:bg-blue-800/50"
+                  onClick={resetAllSettings}
+                >
+                  Reset All Packages to Global
+                </Button>
+              </div>
             </div>
           </div>
         )
@@ -786,11 +850,52 @@ export default function SecurityClientPage() {
     )
   }
 
+  const checkForScheduledUpdates = useCallback(async () => {
+    console.log("Checking for scheduled updates based on preferences...")
+    try {
+      const response = await fetch("/api/dependencies/scheduled-update")
+      if (response.ok) {
+        const data = await response.json()
+        if (data.updated > 0) {
+          console.log(`Applied ${data.updated} updates based on preferences`)
+          fetchDependencies()
+          setUpdateResults(data.results || [])
+          setShowUpdateResults(true)
+        }
+      }
+    } catch (error) {
+      console.error("Error in scheduled update:", error)
+    }
+  }, [fetchDependencies])
+
+  useEffect(() => {
+    setHasMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (!hasMounted) {
+      return
+    }
+
+    // Run immediately
+    checkForScheduledUpdates()
+
+    // Set up interval (3 hours = 3 * 60 * 60 * 1000 ms)
+    const intervalId = setInterval(checkForScheduledUpdates, 3 * 60 * 60 * 1000)
+
+    // Clean up interval on component unmount
+    return () => clearInterval(intervalId)
+  }, [checkForScheduledUpdates, hasMounted])
+
   return (
     <div className="container mx-auto p-6 bg-gray-950 text-gray-100">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Security Center</h1>
         <div className="flex space-x-2">
+          <Button onClick={resetAllSettings} variant="outline" size="sm" className="border-gray-700">
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Reset All
+          </Button>
           <Button onClick={applyChanges} variant="destructive" size="sm" disabled={applyingChanges}>
             {applyingChanges ? (
               <>
@@ -811,72 +916,102 @@ export default function SecurityClientPage() {
         </div>
       </div>
 
-      {error && (
-        <div className="bg-red-900/30 border border-red-800 text-white p-4 rounded-md mb-6 flex items-center">
-          <AlertCircle className="mr-2 h-5 w-5" />
-          <div className="flex-1">
-            <span>{error}</span>
-
-            {/* Add diagnostic information toggle */}
-            {diagnosticInfo && (
-              <div className="mt-2">
-                <button
-                  onClick={() => setShowDiagnostics(!showDiagnostics)}
-                  className="text-xs flex items-center text-red-300 hover:text-white"
-                >
-                  <Info className="h-3 w-3 mr-1" />
-                  {showDiagnostics ? "Hide" : "Show"} Diagnostic Information
-                </button>
-
-                {showDiagnostics && (
-                  <pre className="mt-2 text-xs bg-red-950/50 p-2 rounded overflow-auto max-h-40">
-                    {JSON.stringify(diagnosticInfo, null, 2)}
-                  </pre>
-                )}
-              </div>
-            )}
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => setError(null)}
-            className="ml-auto text-white hover:bg-red-800/50"
+      <AnimatePresence>
+        {error && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="bg-red-900/30 border border-red-800 text-white p-4 rounded-md mb-6 flex items-center"
           >
-            Dismiss
-          </Button>
-        </div>
-      )}
+            <AlertCircle className="mr-2 h-5 w-5" />
+            <div className="flex-1">
+              <span>{error}</span>
 
-      {showUpdateResults && updateResults.length > 0 && (
-        <div className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6">
-          <div className="flex items-center mb-2">
-            <CheckCircle className="mr-2 h-5 w-5" />
-            <span className="font-medium">Updates applied successfully</span>
+              {/* Add diagnostic information toggle */}
+              {diagnosticInfo && (
+                <div className="mt-2">
+                  <button
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className="text-xs flex items-center text-red-300 hover:text-white"
+                  >
+                    <Info className="h-3 w-3 mr-1" />
+                    {showDiagnostics ? "Hide" : "Show"} Diagnostic Information
+                  </button>
+
+                  <AnimatePresence>
+                    {showDiagnostics && (
+                      <motion.pre
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        exit={{ opacity: 0, height: 0 }}
+                        transition={{ duration: 0.3 }}
+                        className="mt-2 text-xs bg-red-950/50 p-2 rounded overflow-auto max-h-40"
+                      >
+                        {JSON.stringify(diagnosticInfo, null, 2)}
+                      </motion.pre>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+            </div>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setShowUpdateResults(false)}
-              className="ml-auto text-white hover:bg-green-800/50"
+              onClick={() => setError(null)}
+              className="ml-auto text-white hover:bg-red-800/50"
             >
               Dismiss
             </Button>
-          </div>
-          <div className="mt-2 space-y-1">
-            {updateResults.map((result, index) => (
-              <div key={index} className="text-sm flex items-center">
-                {result.success ? (
-                  <CheckCircle className="h-3 w-3 text-green-400 mr-2" />
-                ) : (
-                  <AlertCircle className="h-3 w-3 text-red-400 mr-2" />
-                )}
-                <span>
-                  {result.name}: {result.success ? `${result.from} → ${result.to}` : result.error}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showUpdateResults && updateResults.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6"
+          >
+            <div className="flex items-center mb-2">
+              <CheckCircle className="mr-2 h-5 w-5" />
+              <span className="font-medium">Updates applied successfully</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowUpdateResults(false)}
+                className="ml-auto text-white hover:bg-green-800/50"
+              >
+                Dismiss
+              </Button>
+            </div>
+            <div className="mt-2 space-y-1">
+              {updateResults.map((result, index) => (
+                <motion.div
+                  key={index}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ duration: 0.2, delay: index * 0.05 }}
+                  className="text-sm flex items-center"
+                >
+                  {result.success ? (
+                    <CheckCircle className="h-3 w-3 text-green-400 mr-2" />
+                  ) : (
+                    <AlertCircle className="h-3 w-3 text-red-400 mr-2" />
+                  )}
+                  <span>
+                    {result.name}: {result.success ? `${result.from} → ${result.to}` : result.error}
+                  </span>
+                </motion.div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="mb-6 bg-gray-900 border-gray-800">
@@ -891,24 +1026,65 @@ export default function SecurityClientPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {widgets
-              .sort((a, b) => a.order - b.order)
-              .map((widget) => {
-                const widgetDef = availableWidgets.find((w) => w.id === widget.type)
-                return (
-                  <DraggableWidget
-                    key={widget.id}
-                    id={widget.id}
-                    title={widgetDef?.title || widget.type}
-                    onRemove={handleRemoveWidget}
-                    onDragStart={handleDragStart}
-                    onDragOver={handleDragOver}
-                    onDrop={handleDrop}
-                  >
-                    {renderWidgetContent(widget.type)}
-                  </DraggableWidget>
-                )
-              })}
+            <AnimatePresence>
+              {widgets
+                .sort((a, b) => a.order - b.order)
+                .map((widget) => {
+                  const widgetDef = availableWidgets.find((w) => w.id === widget.type)
+                  const isUpdateSettings = widget.type === "update-settings"
+
+                  return (
+                    <motion.div
+                      key={widget.id}
+                      id={widget.id}
+                      layout
+                      initial={{ opacity: 0, scale: 0.9 }}
+                      animate={{
+                        opacity: 1,
+                        scale: 1,
+                        zIndex: draggingWidgetId === widget.id ? 10 : 1,
+                        boxShadow: draggingWidgetId === widget.id ? "0 10px 25px rgba(0, 0, 0, 0.5)" : "none",
+                      }}
+                      exit={{ opacity: 0, scale: 0.9 }}
+                      transition={{ duration: 0.3 }}
+                      className={`${isUpdateSettings ? "col-span-1 md:col-span-2 lg:col-span-3" : ""}`}
+                    >
+                      <Card
+                        className={`bg-gray-800 border-gray-700 transition-all duration-200 ${
+                          isUpdateSettings ? "border-blue-700 shadow-lg shadow-blue-900/20" : ""
+                        } ${draggingWidgetId === widget.id ? "opacity-70 scale-105" : ""}`}
+                        draggable
+                        onDragStart={(e) => handleDragStart(e, widget.id)}
+                        onDragEnd={handleDragEnd}
+                        onDragOver={handleDragOver}
+                        onDrop={(e) => handleDrop(e, widget.id)}
+                      >
+                        <CardHeader
+                          className={`p-4 flex flex-row items-center justify-between space-y-0 ${
+                            isUpdateSettings ? "bg-gradient-to-r from-blue-900/40 to-purple-900/40 rounded-t-lg" : ""
+                          }`}
+                        >
+                          <div className="flex items-center">
+                            <GripVertical className="h-4 w-4 text-gray-500 mr-2 cursor-move" />
+                            <CardTitle className={`text-sm font-medium ${isUpdateSettings ? "text-blue-200" : ""}`}>
+                              {widgetDef?.title || widget.type}
+                            </CardTitle>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => handleRemoveWidget(widget.id)}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </CardHeader>
+                        <CardContent className="p-4 pt-0">{renderWidgetContent(widget.type)}</CardContent>
+                      </Card>
+                    </motion.div>
+                  )
+                })}
+            </AnimatePresence>
           </div>
         </TabsContent>
 
@@ -1041,71 +1217,106 @@ export default function SecurityClientPage() {
                         <th className="text-left py-3 px-4">Current</th>
                         <th className="text-left py-3 px-4">Latest</th>
                         <th className="text-left py-3 px-4">Status</th>
-                        <th className="text-left py-3 px-4 font-medium text-base">Update Mode</th>
+                        <th className="text-left py-3 px-4 font-medium text-base">
+                          <div className="flex items-center">
+                            Update Mode
+                            <div className="relative ml-1 group">
+                              <Info className="h-4 w-4 text-gray-400 cursor-help" />
+                              <div className="absolute left-0 bottom-full mb-2 w-64 p-2 bg-gray-800 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
+                                <p className="mb-1">
+                                  <strong>Off:</strong> No automatic updates
+                                </p>
+                                <p className="mb-1">
+                                  <strong>Security Only:</strong> Only apply security patches
+                                </p>
+                                <p className="mb-1">
+                                  <strong>All Updates:</strong> Apply all package updates
+                                </p>
+                                <p>
+                                  <strong>Global:</strong> Use the global setting
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </th>
                         <th className="text-left py-3 px-4">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredDependencies.map((dep, index) => (
-                        <tr
-                          key={dep.id}
-                          className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${dep.hasSecurityIssue ? "bg-red-900/10" : ""}`}
-                        >
-                          <td className="py-3 px-4">
-                            <div className="font-medium flex items-center">
-                              {dep.name}
-                              {dep.isDev && (
-                                <Badge variant="outline" className="ml-2 border-gray-700 text-gray-400">
-                                  Dev
+                      <AnimatePresence>
+                        {filteredDependencies.map((dep, index) => (
+                          <motion.tr
+                            key={dep.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: 10 }}
+                            transition={{ duration: 0.2, delay: index * 0.02 }}
+                            className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${dep.hasSecurityIssue ? "bg-red-900/10" : ""} ${dep.updateMode === "global" ? "border-l-2 border-blue-700" : ""}`}
+                          >
+                            <td className="py-3 px-4">
+                              <div className="font-medium flex items-center">
+                                {dep.name}
+                                {dep.isDev && (
+                                  <Badge variant="outline" className="ml-2 border-gray-700 text-gray-400">
+                                    Dev
+                                  </Badge>
+                                )}
+                                {dep.updateMode === "global" && (
+                                  <Badge
+                                    variant="outline"
+                                    className="ml-2 border-blue-700 text-blue-400 bg-blue-900/20"
+                                  >
+                                    Global
+                                  </Badge>
+                                )}
+                              </div>
+                              <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
+                            </td>
+                            <td className="py-3 px-4">{dep.currentVersion}</td>
+                            <td className="py-3 px-4">{dep.latestVersion}</td>
+                            <td className="py-3 px-4">
+                              {dep.hasSecurityIssue ? (
+                                <div className="flex items-center gap-1">
+                                  {getSeverityBadge(dep)}
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-6 w-6"
+                                    onClick={() => viewVulnerabilityDetails(dep)}
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ) : dep.outdated ? (
+                                <Badge variant="outline" className="border-yellow-800 text-yellow-400">
+                                  Outdated
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-green-900/20 text-green-400 border-green-800">
+                                  Up to date
                                 </Badge>
                               )}
-                            </div>
-                            <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
-                          </td>
-                          <td className="py-3 px-4">{dep.currentVersion}</td>
-                          <td className="py-3 px-4">{dep.latestVersion}</td>
-                          <td className="py-3 px-4">
-                            {dep.hasSecurityIssue ? (
-                              <div className="flex items-center gap-1">
-                                {getSeverityBadge(dep)}
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-6 w-6"
-                                  onClick={() => viewVulnerabilityDetails(dep)}
-                                >
-                                  <Info className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            ) : dep.outdated ? (
-                              <Badge variant="outline" className="border-yellow-800 text-yellow-400">
-                                Outdated
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-green-900/20 text-green-400 border-green-800">
-                                Up to date
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="py-3 px-4">
-                            <FourStateToggle
-                              value={dep.updateMode}
-                              onValueChange={(value) => updateDependencyMode(dep.id, value)}
-                              showLabels={false}
-                              className="w-[300px] max-w-full"
-                            />
-                          </td>
-                          <td className="py-3 px-4">
-                            <Button
-                              size="sm"
-                              disabled={!dep.outdated && !dep.hasSecurityIssue}
-                              className={dep.hasSecurityIssue ? "bg-red-600 hover:bg-red-700" : ""}
-                            >
-                              Update
-                            </Button>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="py-3 px-4">
+                              <FourStateToggle
+                                value={dep.updateMode}
+                                onValueChange={(value) => updateDependencyMode(dep.id, value)}
+                                showLabels={false}
+                                className="w-[300px] max-w-full"
+                              />
+                            </td>
+                            <td className="py-3 px-4">
+                              <Button
+                                size="sm"
+                                disabled={!dep.outdated && !dep.hasSecurityIssue}
+                                className={dep.hasSecurityIssue ? "bg-red-600 hover:bg-red-700" : ""}
+                              >
+                                Update
+                              </Button>
+                            </td>
+                          </motion.tr>
+                        ))}
+                      </AnimatePresence>
                     </tbody>
                   </table>
                 </div>
@@ -1125,6 +1336,15 @@ export default function SecurityClientPage() {
           latestVersion={selectedVulnerability.latestVersion}
         />
       )}
+
+      <style jsx global>{`
+        .dragging {
+          opacity: 0.7;
+          transform: scale(1.05);
+          z-index: 100;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+        }
+      `}</style>
     </div>
   )
 }
