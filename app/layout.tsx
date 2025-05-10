@@ -6,6 +6,8 @@ import { ThemeProvider } from "@/components/theme-provider"
 import CustomCursor from "@/components/custom-cursor"
 import DynamicFavicons from "@/components/dynamic-favicons"
 import SetupTablesPopup from "@/components/setup-tables-popup"
+import { Analytics } from "@vercel/analytics/react"
+import { Suspense } from "react"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -30,7 +32,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
             <CustomCursor />
             <DynamicFavicons />
-            {children}
+            <Suspense>{children}</Suspense>
+            <Analytics />
           </ThemeProvider>
           {/* Database setup popup */}
           <SetupTablesPopup />

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Database, Check } from "lucide-react"
+import { AlertCircle, Database } from "lucide-react"
 import { SetupTablesPopup } from "@/components/setup-tables-popup"
 import { getTablesForSection } from "@/lib/database-schema"
 
@@ -13,21 +13,12 @@ export function DependencySystemSetup() {
   const [showSetup, setShowSetup] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [setupComplete, setSetupComplete] = useState(false)
-  const [manualOverride, setManualOverride] = useState(false)
   const [setupAttempted, setSetupAttempted] = useState(false)
 
   // Get required tables for the security section
   const requiredTables = getTablesForSection("security").map((table) => table.name)
 
   useEffect(() => {
-    // Check if we have a manual override in localStorage
-    const override = localStorage.getItem("dependency_setup_override")
-    if (override === "true") {
-      setManualOverride(true)
-      setSetupComplete(true)
-      return
-    }
-
     checkTables()
   }, [])
 
@@ -36,6 +27,18 @@ export function DependencySystemSetup() {
       setLoading(true)
       setError(null)
 
+      // First, try to initialize the system
+      const initResponse = await fetch("/api/dependencies/setup-system", {
+        method: "POST",
+      })
+
+      if (initResponse.ok) {
+        setSetupComplete(true)
+        setLoading(false)
+        return
+      }
+
+      // If initialization failed, check which tables are missing
       const response = await fetch("/api/direct-table-check", {
         method: "POST",
         headers: {
@@ -51,7 +54,16 @@ export function DependencySystemSetup() {
       const data = await response.json()
 
       if (data.allExist) {
-        setSetupComplete(true)
+        // Tables exist, try to scan dependencies
+        const scanResponse = await fetch("/api/dependencies/scan", {
+          method: "POST",
+        })
+
+        if (scanResponse.ok) {
+          setSetupComplete(true)
+        } else {
+          setShowSetup(true)
+        }
       } else {
         setMissingTables(data.missingTables || [])
         setShowSetup(true)
@@ -59,6 +71,7 @@ export function DependencySystemSetup() {
     } catch (err) {
       console.error("Error checking tables:", err)
       setError(err instanceof Error ? err.message : "Failed to check tables")
+      setShowSetup(true)
     } finally {
       setLoading(false)
     }
@@ -68,15 +81,6 @@ export function DependencySystemSetup() {
     setSetupComplete(true)
     setShowSetup(false)
     // Refresh the page to show the dependency system
-    window.location.reload()
-  }
-
-  const handleManualOverride = () => {
-    // Set the override in localStorage
-    localStorage.setItem("dependency_setup_override", "true")
-    setManualOverride(true)
-    setSetupComplete(true)
-    // Refresh the page
     window.location.reload()
   }
 
@@ -93,7 +97,7 @@ export function DependencySystemSetup() {
     )
   }
 
-  if (setupComplete || manualOverride) {
+  if (setupComplete) {
     return null
   }
 
@@ -133,10 +137,6 @@ export function DependencySystemSetup() {
                 <Button onClick={() => setShowSetup(true)}>Set Up Tables</Button>
                 <Button variant="outline" onClick={handleRetry}>
                   Retry Check
-                </Button>
-                <Button variant="ghost" onClick={handleManualOverride} className="text-gray-400">
-                  <Check className="h-4 w-4 mr-2" />
-                  Skip Setup (Override)
                 </Button>
               </div>
             </div>
