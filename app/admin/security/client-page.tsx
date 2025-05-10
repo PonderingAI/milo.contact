@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 import { VulnerabilityDetails } from "@/components/admin/vulnerability-details"
 import { DependencySystemSetupGuide } from "@/components/admin/dependency-system-setup-guide"
+import { DependencySystemSetup } from "@/components/admin/dependency-system-setup"
 
 // Types
 interface Dependency {
@@ -888,34 +889,7 @@ export default function SecurityClientPage() {
         </div>
       )}
 
-      {setupMessage && (
-        <div className="bg-blue-900/30 border border-blue-800 text-white p-4 rounded-md mb-6 flex items-center">
-          <Info className="mr-2 h-5 w-5" />
-          <div className="flex-1">
-            <span>{setupMessage}</span>
-            {!setupAttempted && (
-              <div className="mt-2">
-                <Button size="sm" onClick={setupDependencySystem} className="mr-2">
-                  Set Up Dependency System
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => setSetupMessage(null)}>
-                  Dismiss
-                </Button>
-              </div>
-            )}
-          </div>
-          {setupAttempted && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSetupMessage(null)}
-              className="ml-auto text-white hover:bg-blue-800/50"
-            >
-              Dismiss
-            </Button>
-          )}
-        </div>
-      )}
+      {setupMessage && !setupAttempted && <DependencySystemSetup />}
 
       {showUpdateResults && updateResults.length > 0 && (
         <div className="bg-green-900/30 border border-green-800 text-white p-4 rounded-md mb-6">

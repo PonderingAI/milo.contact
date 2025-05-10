@@ -281,3 +281,22 @@ The dependency management system has been integrated with the unified modular SQ
 3. **API Integration**: API routes use the admin client for proper authentication
 4. **Fallback Mechanism**: System can fall back to package.json if database tables don't exist
 5. **Documentation**: Added comprehensive documentation in `docs/DEPENDENCIES.md`
+
+## Dependency Management System
+
+The dependency management system provides tools for tracking, updating, and securing project dependencies.
+
+### Key Files:
+- `/docs/setup/dependency-tables.sql` - SQL setup for dependency system tables
+- `/app/api/dependencies/list/route.ts` - API for listing dependencies
+- `/app/api/dependencies/check-tables/route.ts` - API for checking if dependency tables exist
+- `/app/api/setup-dependencies-tables/route.ts` - API for setting up dependency tables
+- `/components/admin/dependency-system-setup.tsx` - Component for setting up the dependency system
+- `/app/admin/security/client-page.tsx` - Security center UI with dependency management
+
+### Database Tables:
+- `dependencies` - Stores information about project dependencies
+- `dependency_settings` - Stores settings for the dependency management system
+- `security_audits` - Stores results of security audits
+
+The dependency system integrates with the universal SQL setup system to ensure all required tables are created properly.

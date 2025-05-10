@@ -85,17 +85,28 @@ export async function GET() {
     }
 
     // Check if dependencies table exists
-    const tableExists = await checkTableExists(supabase, "dependencies")
+    const dependenciesTableExists = await checkTableExists(supabase, "dependencies")
+    const settingsTableExists = await checkTableExists(supabase, "dependency_settings")
+    const auditsTableExists = await checkTableExists(supabase, "security_audits")
 
-    // If table doesn't exist, return appropriate error
-    if (!tableExists) {
+    const allTablesExist = dependenciesTableExists && settingsTableExists && auditsTableExists
+
+    // If tables don't exist, return appropriate error with SQL file path
+    if (!allTablesExist) {
+      const missingTables = []
+      if (!dependenciesTableExists) missingTables.push("dependencies")
+      if (!settingsTableExists) missingTables.push("dependency_settings")
+      if (!auditsTableExists) missingTables.push("security_audits")
+
       return NextResponse.json(
         {
-          error: "Dependencies table does not exist",
-          message: "The dependencies table has not been set up. Please set up the table first.",
+          error: "Dependency tables do not exist",
+          message: "The dependency system tables have not been set up. Please set up the tables first.",
           tableExists: false,
           setupNeeded: true,
           setupMessage: "The dependency management system needs to be set up. Please run the setup process.",
+          sqlFilePath: "/docs/setup/dependency-tables.sql",
+          missingTables,
         },
         { status: 404 },
       )
