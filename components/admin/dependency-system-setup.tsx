@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Database } from "lucide-react"
+import { AlertCircle, Database, Check } from "lucide-react"
 import { SetupTablesPopup } from "@/components/setup-tables-popup"
 import { getTablesForSection } from "@/lib/database-schema"
 
@@ -13,11 +13,21 @@ export function DependencySystemSetup() {
   const [showSetup, setShowSetup] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [setupComplete, setSetupComplete] = useState(false)
+  const [manualOverride, setManualOverride] = useState(false)
+  const [setupAttempted, setSetupAttempted] = useState(false)
 
   // Get required tables for the security section
   const requiredTables = getTablesForSection("security").map((table) => table.name)
 
   useEffect(() => {
+    // Check if we have a manual override in localStorage
+    const override = localStorage.getItem("dependency_setup_override")
+    if (override === "true") {
+      setManualOverride(true)
+      setSetupComplete(true)
+      return
+    }
+
     checkTables()
   }, [])
 
@@ -61,7 +71,21 @@ export function DependencySystemSetup() {
     window.location.reload()
   }
 
-  if (loading) {
+  const handleManualOverride = () => {
+    // Set the override in localStorage
+    localStorage.setItem("dependency_setup_override", "true")
+    setManualOverride(true)
+    setSetupComplete(true)
+    // Refresh the page
+    window.location.reload()
+  }
+
+  const handleRetry = () => {
+    setSetupAttempted(true)
+    checkTables()
+  }
+
+  if (loading && !setupAttempted) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-white"></div>
@@ -69,7 +93,7 @@ export function DependencySystemSetup() {
     )
   }
 
-  if (setupComplete) {
+  if (setupComplete || manualOverride) {
     return null
   }
 
@@ -105,8 +129,15 @@ export function DependencySystemSetup() {
                 </div>
               )}
 
-              <div className="flex gap-3">
+              <div className="flex flex-wrap gap-3">
                 <Button onClick={() => setShowSetup(true)}>Set Up Tables</Button>
+                <Button variant="outline" onClick={handleRetry}>
+                  Retry Check
+                </Button>
+                <Button variant="ghost" onClick={handleManualOverride} className="text-gray-400">
+                  <Check className="h-4 w-4 mr-2" />
+                  Skip Setup (Override)
+                </Button>
               </div>
             </div>
           </div>
