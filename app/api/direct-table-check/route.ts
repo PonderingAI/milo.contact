@@ -1,66 +1,28 @@
 import { NextResponse } from "next/server"
-import { createServerClient } from "@/lib/supabase-server"
+import { createClient } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
-    const { tables } = await request.json()
+    const supabase = createClient()
+    const body = await request.json()
+    const { tableName } = body
 
-    if (!Array.isArray(tables) || tables.length === 0) {
-      return NextResponse.json(
-        {
-          error: "Invalid request: tables must be a non-empty array",
-        },
-        { status: 400 },
-      )
+    if (!tableName) {
+      return NextResponse.json({ error: "Table name is required" }, { status: 400 })
     }
 
-    const supabase = createServerClient()
-    const missingTables = []
+    // Check if the table exists
+    const { data, error } = await supabase.from(tableName).select("*").limit(1).maybeSingle()
 
-    // Use a more direct approach to check if tables exist
-    const { data: existingTables, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_schema", "public")
-      .in("table_name", tables)
-
-    if (error) {
-      console.error("Error querying information_schema:", error)
-      return NextResponse.json(
-        {
-          error: `Database error: ${error.message}`,
-        },
-        { status: 500 },
-      )
+    if (error && error.code !== "PGRST116") {
+      // PGRST116 means no rows found, which is fine - the table exists
+      console.error("Error checking table:", error)
+      return NextResponse.json({ exists: false, error: error.message }, { status: 200 })
     }
 
-    // Create a set of existing table names for faster lookup
-    const existingTableSet = new Set(existingTables?.map((t) => t.table_name) || [])
-
-    // Find which tables are missing
-    for (const tableName of tables) {
-      if (!existingTableSet.has(tableName)) {
-        missingTables.push(tableName)
-      }
-    }
-
-    // Log the results for debugging
-    console.log(`Checked ${tables.length} tables, found ${missingTables.length} missing tables`)
-    console.log("Missing tables:", missingTables)
-
-    return NextResponse.json({
-      missingTables,
-      allExist: missingTables.length === 0,
-      checkedTables: tables,
-      existingTables: Array.from(existingTableSet),
-    })
+    return NextResponse.json({ exists: true }, { status: 200 })
   } catch (error) {
-    console.error("Error checking tables:", error)
-    return NextResponse.json(
-      {
-        error: error instanceof Error ? error.message : "Unknown error",
-      },
-      { status: 500 },
-    )
+    console.error("Error in direct-table-check:", error)
+    return NextResponse.json({ error: "Failed to check table" }, { status: 500 })
   }
 }
