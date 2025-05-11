@@ -1,76 +1,62 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@/lib/supabase-server"
+import { createClient } from "@supabase/supabase-js"
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const supabase = createClient()
-    const url = new URL(request.url)
-    const key = url.searchParams.get("key")
+    // Create Supabase client
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-    if (!key) {
-      return NextResponse.json({ error: "Key parameter is required" }, { status: 400 })
+    if (!supabaseUrl || !supabaseKey) {
+      return NextResponse.json({ error: "Missing Supabase credentials" }, { status: 500 })
     }
 
-    // Check if settings table exists
-    const { error: tableError } = await supabase.from("dependency_settings").select("*").limit(1)
+    const supabase = createClient(supabaseUrl, supabaseKey)
 
-    if (tableError) {
-      console.error("Error checking dependency_settings table:", tableError)
-      return NextResponse.json({ error: "Settings table does not exist" }, { status: 500 })
+    // Check if the dependency_settings table exists
+    const { data: tableExists, error: tableCheckError } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .eq("table_name", "dependency_settings")
+      .single()
+
+    if (tableCheckError && !tableCheckError.message.includes("No rows found")) {
+      console.error("Error checking table:", tableCheckError)
+      return NextResponse.json({ error: "Failed to check table", details: tableCheckError.message }, { status: 500 })
     }
 
-    // Get setting by key
-    const { data, error } = await supabase.from("dependency_settings").select("value").eq("key", key).single()
-
-    if (error && error.code !== "PGRST116") {
-      console.error(`Error fetching setting ${key}:`, error)
-      return NextResponse.json({ error: "Failed to fetch setting" }, { status: 500 })
+    // If table doesn't exist, return default settings
+    if (!tableExists) {
+      return NextResponse.json({
+        updateMode: "manual",
+        autoUpdateSchedule: "weekly",
+        notifyOnUpdates: true,
+      })
     }
 
-    return NextResponse.json(data || { value: null })
+    // Get all settings
+    const { data: settings, error: settingsError } = await supabase.from("dependency_settings").select("*")
+
+    if (settingsError) {
+      console.error("Error fetching settings:", settingsError)
+      return NextResponse.json({ error: "Failed to fetch settings", details: settingsError.message }, { status: 500 })
+    }
+
+    // Convert settings array to object
+    const settingsObject: Record<string, string> = {}
+    settings?.forEach((setting) => {
+      settingsObject[setting.key] = setting.value
+    })
+
+    // Return settings with defaults for missing values
+    return NextResponse.json({
+      updateMode: settingsObject.update_mode || "manual",
+      autoUpdateSchedule: settingsObject.auto_update_schedule || "weekly",
+      notifyOnUpdates: settingsObject.notify_on_updates === "true",
+    })
   } catch (error) {
-    console.error("Error in settings route:", error)
-    return NextResponse.json({ error: "Failed to fetch setting" }, { status: 500 })
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const supabase = createClient()
-    const body = await request.json()
-    const { key, value } = body
-
-    if (!key || value === undefined) {
-      return NextResponse.json({ error: "Key and value are required" }, { status: 400 })
-    }
-
-    // Check if settings table exists
-    const { error: tableError } = await supabase.from("dependency_settings").select("*").limit(1)
-
-    if (tableError) {
-      console.error("Error checking dependency_settings table:", tableError)
-      return NextResponse.json({ error: "Settings table does not exist" }, { status: 500 })
-    }
-
-    // Save setting
-    const { error } = await supabase.from("dependency_settings").upsert(
-      {
-        key,
-        value,
-      },
-      {
-        onConflict: "key",
-      },
-    )
-
-    if (error) {
-      console.error("Error saving setting:", error)
-      return NextResponse.json({ error: "Failed to save setting" }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, key, value })
-  } catch (error) {
-    console.error("Error in settings route:", error)
-    return NextResponse.json({ error: "Failed to save setting" }, { status: 500 })
+    console.error("Error in settings:", error)
+    return NextResponse.json({ error: "Internal server error", details: (error as Error).message }, { status: 500 })
   }
 }

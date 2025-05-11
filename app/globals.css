@@ -2,8 +2,72 @@
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  @apply bg-black text-white;
+  cursor: none;
+}
+
+.font-serif {
+  font-family: var(--font-serif);
+}
+
+/* Custom cursor styles */
+.cursor-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+}
+
+.custom-cursor {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transition: transform 0.1s ease;
+  z-index: 10000;
+}
+
+.custom-cursor.clicking {
+  transform: translate(-50%, -50%) scale(0.8);
+}
+
+.cursor-trail {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  transition: opacity 0.2s ease;
+}
+
+/* Hide default cursor on all elements */
+html,
+body,
+* {
+  cursor: none !important;
+}
+
+/* But show default cursor on mobile devices */
+@media (max-width: 768px) {
+  html,
+  body,
+  * {
+    cursor: auto !important;
+  }
+
+  .cursor-container {
+    display: none;
+  }
 }
 
 @layer utilities {
@@ -91,4 +155,141 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Project grid styles */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.project-card {
+  position: relative;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  transition: transform 0.3s ease;
+}
+
+.project-card:hover {
+  transform: translateY(-5px);
+}
+
+.project-role {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  z-index: 20;
+}
+
+/* BTS Gallery Cluster */
+.bts-gallery-cluster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-auto-rows: 150px;
+  grid-auto-flow: dense;
+  gap: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.bts-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.bts-item:hover {
+  transform: scale(1.03);
+}
+
+.bts-item.small {
+  grid-column: span 1;
+  grid-row: span 1;
+}
+
+.bts-item.medium {
+  grid-column: span 2;
+  grid-row: span 1;
+}
+
+.bts-item.large {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.bts-item.square {
+  aspect-ratio: 1;
+}
+
+.bts-item.portrait {
+  aspect-ratio: 2 / 3;
+}
+
+.bts-item.landscape {
+  aspect-ratio: 16 / 9;
+}
+
+/* Category tabs */
+.category-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.category-tab {
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.category-tab.active {
+  background: white;
+  color: black;
+}
+
+/* Backend setup guide */
+.backend-guide {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.step-container {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  background-color: #111;
+  border: 1px solid #333;
+}
+
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: white;
+  color: black;
+  font-weight: bold;
+  margin-right: 0.75rem;
+}
+
+.code-block {
+  background-color: #1a1a1a;
+  padding: 1rem;
+  border-radius: 0.25rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-family: monospace;
 }
