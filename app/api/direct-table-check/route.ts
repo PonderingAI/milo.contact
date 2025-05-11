@@ -1,88 +1,64 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
-    // Get the request body
-    let body
-    try {
-      body = await request.json()
-    } catch (error) {
-      console.error("Error parsing request body:", error)
-      return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
-    }
+    const { tables } = await request.json()
 
-    // Validate the request body
-    if (!body || (!body.tableName && !body.tables)) {
+    if (!Array.isArray(tables) || tables.length === 0) {
       return NextResponse.json(
         {
-          error: "Missing required parameter: either 'tableName' or 'tables' array is required",
+          error: "Invalid request: tables must be a non-empty array",
         },
         { status: 400 },
       )
     }
 
-    // Create Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabase = createAdminClient()
+    const missingTables = []
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json({ error: "Missing Supabase credentials" }, { status: 500 })
+    // Use a more direct approach to check if tables exist
+    const { data: existingTables, error } = await supabase
+      .from("information_schema.tables")
+      .select("table_name")
+      .eq("table_schema", "public")
+      .in("table_name", tables)
+
+    if (error) {
+      console.error("Error querying information_schema:", error)
+      return NextResponse.json(
+        {
+          error: `Database error: ${error.message}`,
+        },
+        { status: 500 },
+      )
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
+    // Create a set of existing table names for faster lookup
+    const existingTableSet = new Set(existingTables?.map((t) => t.table_name) || [])
 
-    // Handle single table check
-    if (body.tableName) {
-      const { data, error } = await supabase
-        .from("information_schema.tables")
-        .select("table_name")
-        .eq("table_schema", "public")
-        .eq("table_name", body.tableName)
-        .single()
-
-      if (error && !error.message.includes("No rows found")) {
-        console.error("Error checking table:", error)
-        return NextResponse.json({ error: "Failed to check table", details: error.message }, { status: 500 })
+    // Find which tables are missing
+    for (const tableName of tables) {
+      if (!existingTableSet.has(tableName)) {
+        missingTables.push(tableName)
       }
-
-      return NextResponse.json({
-        exists: !!data,
-        tableName: body.tableName,
-      })
     }
 
-    // Handle multiple tables check
-    if (Array.isArray(body.tables)) {
-      const { data, error } = await supabase
-        .from("information_schema.tables")
-        .select("table_name")
-        .eq("table_schema", "public")
-        .in("table_name", body.tables)
+    // Log the results for debugging
+    console.log(`Checked ${tables.length} tables, found ${missingTables.length} missing tables`)
+    console.log("Missing tables:", missingTables)
 
-      if (error) {
-        console.error("Error checking tables:", error)
-        return NextResponse.json({ error: "Failed to check tables", details: error.message }, { status: 500 })
-      }
-
-      const existingTables = data?.map((row) => row.table_name) || []
-      const missingTables = body.tables.filter((table) => !existingTables.includes(table))
-
-      return NextResponse.json({
-        existingTables,
-        missingTables,
-        allExist: missingTables.length === 0,
-        checkedTables: body.tables,
-      })
-    }
-
-    return NextResponse.json({ error: "Invalid request format" }, { status: 400 })
+    return NextResponse.json({
+      missingTables,
+      allExist: missingTables.length === 0,
+      checkedTables: tables,
+      existingTables: Array.from(existingTableSet),
+    })
   } catch (error) {
-    console.error("Error in direct-table-check:", error)
+    console.error("Error checking tables:", error)
     return NextResponse.json(
       {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 },
     )

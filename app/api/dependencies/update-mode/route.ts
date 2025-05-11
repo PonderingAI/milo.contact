@@ -2,45 +2,31 @@ import { NextResponse } from "next/server"
 
 export async function POST(request: Request) {
   try {
-    // Get the request body
-    let body
-    try {
-      body = await request.json()
-    } catch (error) {
-      console.error("Error parsing request body:", error)
-      return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
-    }
+    const { id, updateMode } = await request.json()
 
-    // Validate the request body
-    if (!body || !body.mode) {
-      return NextResponse.json({ error: "Missing required parameter: mode" }, { status: 400 })
-    }
-
-    const { mode } = body
-
-    // Validate the mode value
-    const validModes = ["manual", "prompt", "auto-minor", "auto-all"]
-    if (!validModes.includes(mode)) {
+    if (!id || !updateMode) {
       return NextResponse.json(
-        { error: "Invalid mode value. Must be one of: " + validModes.join(", ") },
+        {
+          error: "Missing required fields",
+          message: "Both id and updateMode are required.",
+        },
         { status: 400 },
       )
     }
 
-    // For now, just return success
-    // In a real implementation, this would save to a database
+    // In a database-backed system, this would update the dependency's update mode
+    // Since we're not using a database, we'll just return a success message
+
     return NextResponse.json({
       success: true,
-      updateMode: mode,
+      message: `Update mode for ${id} has been set to ${updateMode}.`,
     })
   } catch (error) {
-    console.error("Error in update-mode:", error)
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
+    console.error("Error updating dependency mode:", error)
+    return NextResponse.json({
+      error: "An unexpected error occurred",
+      message: "There was an unexpected error updating the dependency mode.",
+      details: error instanceof Error ? error.message : String(error),
+    })
   }
 }

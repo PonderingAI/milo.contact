@@ -1,79 +1,104 @@
 "use client"
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
+import { useState, useEffect } from "react"
 import { FourStateToggle } from "@/components/ui/four-state-toggle"
+import { Button } from "@/components/ui/button"
+import { AlertCircle, RefreshCw } from "lucide-react"
+import { toast } from "@/components/ui/use-toast"
 
 interface UpdatePolicyWidgetProps {
   updateMode: string
-  onUpdateModeChange: (mode: string) => void
+  setUpdateMode: (mode: string) => void
+  resetAllSettings: () => void
+  isLoading: boolean
 }
 
-export function UpdatePolicyWidget({ updateMode, onUpdateModeChange }: UpdatePolicyWidgetProps) {
-  const [isLoading, setIsLoading] = useState(false)
-  const [selectedMode, setSelectedMode] = useState(updateMode)
+export function UpdatePolicyWidget({
+  updateMode,
+  setUpdateMode,
+  resetAllSettings,
+  isLoading,
+}: UpdatePolicyWidgetProps) {
+  const [localUpdateMode, setLocalUpdateMode] = useState(updateMode)
 
-  const handleModeChange = (mode: string) => {
-    setSelectedMode(mode)
-  }
+  useEffect(() => {
+    setLocalUpdateMode(updateMode)
+  }, [updateMode])
 
-  const handleSave = async () => {
-    setIsLoading(true)
-    await onUpdateModeChange(selectedMode)
-    setIsLoading(false)
+  const handleUpdateModeChange = async (newMode: string) => {
+    setLocalUpdateMode(newMode)
+    setUpdateMode(newMode)
+
+    try {
+      const response = await fetch("/api/dependencies/update-mode", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ mode: newMode }),
+      })
+
+      if (!response.ok) {
+        throw new Error("Failed to update mode")
+      }
+
+      toast({
+        title: "Update Mode Changed",
+        description: `Update mode set to ${newMode}`,
+      })
+    } catch (error) {
+      console.error("Error updating mode:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update mode",
+        variant: "destructive",
+      })
+    }
   }
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="flex-1">
-        <div className="mb-6">
-          <h3 className="text-lg font-medium mb-2">Update Policy</h3>
-          <p className="text-sm text-gray-500 dark:text-gray-400">Choose how you want to handle dependency updates</p>
-        </div>
-
-        <div className="space-y-6">
-          <div className="space-y-2">
-            <FourStateToggle
-              options={[
-                { value: "manual", label: "Manual" },
-                { value: "prompt", label: "Prompt" },
-                { value: "auto-minor", label: "Auto Minor" },
-                { value: "auto-all", label: "Auto All" },
-              ]}
-              value={selectedMode}
-              onChange={handleModeChange}
-            />
-          </div>
-
-          <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-            <h4 className="font-medium mb-2">
-              {selectedMode === "manual" && "Manual Updates"}
-              {selectedMode === "prompt" && "Prompt for Updates"}
-              {selectedMode === "auto-minor" && "Automatic Minor Updates"}
-              {selectedMode === "auto-all" && "Automatic All Updates"}
-            </h4>
-            <p className="text-sm text-gray-600 dark:text-gray-300">
-              {selectedMode === "manual" &&
-                "You will need to manually check and apply all updates. No automatic updates will be performed."}
-              {selectedMode === "prompt" &&
-                "You will be prompted when updates are available, but must approve them before they are applied."}
-              {selectedMode === "auto-minor" &&
-                "Minor and patch updates will be applied automatically. Major updates will require your approval."}
-              {selectedMode === "auto-all" &&
-                "All updates including major version changes will be applied automatically without prompting."}
-            </p>
-          </div>
+    <div className="flex flex-col h-full">
+      <div className="mb-2 flex items-center justify-between">
+        <h3 className="text-lg font-semibold">Update Policy</h3>
+        <div className="flex items-center space-x-1">
+          <AlertCircle className="h-4 w-4 text-gray-500" />
+          <span className="text-xs text-gray-500">Global Setting</span>
         </div>
       </div>
 
-      <div className="mt-4 flex justify-end">
-        <Button
-          onClick={handleSave}
-          disabled={isLoading || selectedMode === updateMode}
-          className="bg-primary hover:bg-primary/90"
-        >
-          {isLoading ? "Saving..." : "Save Policy"}
-        </Button>
+      <div className="flex-grow flex flex-col justify-center">
+        <div className="bg-gray-200 dark:bg-gray-800 p-3 rounded-lg mb-4 relative">
+          <div className="absolute inset-0 bg-gray-300 dark:bg-gray-700 rounded-lg m-1.5 z-0"></div>
+          <FourStateToggle
+            value={localUpdateMode}
+            onChange={handleUpdateModeChange}
+            options={[
+              { value: "none", label: "None" },
+              { value: "minor", label: "Minor" },
+              { value: "all", label: "All" },
+            ]}
+            className="relative z-10"
+          />
+        </div>
+
+        <div className="flex justify-between items-center mt-2">
+          <div className="text-sm text-gray-600 dark:text-gray-400">
+            {localUpdateMode === "none" && "No automatic updates"}
+            {localUpdateMode === "minor" && "Minor version updates only"}
+            {localUpdateMode === "all" && "All updates including major versions"}
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={resetAllSettings}
+            disabled={isLoading}
+            className="ml-2 text-xs h-8"
+          >
+            <RefreshCw className="h-3 w-3 mr-1" />
+            Reset All
+          </Button>
+        </div>
       </div>
     </div>
   )
