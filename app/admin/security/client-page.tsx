@@ -17,9 +17,11 @@ import VulnerabilityDetails from "@/components/admin/vulnerability-details"
 export default function SecurityClientPage() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(true)
+  const [isRefreshing, setIsRefreshing] = useState(false)
   const [userId, setUserId] = useState<string | null>(null)
   const [updateMode, setUpdateMode] = useState<string>("manual")
   const [widgets, setWidgets] = useState<WidgetData[]>([])
+  const [isLayoutChanged, setIsLayoutChanged] = useState(false)
 
   // Initialize dashboard
   useEffect(() => {
@@ -144,8 +146,27 @@ export default function SecurityClientPage() {
 
   // Handle layout change
   const handleLayoutChange = (updatedWidgets: WidgetData[]) => {
+    setIsLayoutChanged(true)
+
     // Save widget state without content (which can't be serialized)
     const widgetsToSave = updatedWidgets.map(({ id, title, width, height, x, y, isCollapsed }) => ({
+      id,
+      title,
+      width,
+      height,
+      x,
+      y,
+      isCollapsed,
+    }))
+
+    // Update widgets state
+    setWidgets(updatedWidgets)
+  }
+
+  // Handle save layout
+  const handleSaveLayout = () => {
+    // Save widget state without content (which can't be serialized)
+    const widgetsToSave = widgets.map(({ id, title, width, height, x, y, isCollapsed }) => ({
       id,
       title,
       width,
@@ -160,6 +181,20 @@ export default function SecurityClientPage() {
       widgets: widgetsToSave,
       updateMode,
     })
+
+    setIsLayoutChanged(false)
+  }
+
+  // Handle refresh
+  const handleRefresh = async () => {
+    setIsRefreshing(true)
+
+    // Simulate refresh
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+
+    // In a real app, you would fetch fresh data here
+
+    setIsRefreshing(false)
   }
 
   if (isLoading) {
@@ -172,7 +207,12 @@ export default function SecurityClientPage() {
 
   return (
     <div className="container mx-auto px-4 py-8">
-      <SecurityDashboardHeader />
+      <SecurityDashboardHeader
+        onRefresh={handleRefresh}
+        onSaveLayout={handleSaveLayout}
+        isLayoutChanged={isLayoutChanged}
+        isLoading={isRefreshing}
+      />
 
       <div className="mt-8 bg-gray-50 rounded-lg p-4 border border-gray-200 min-h-[800px]">
         <GridLayoutSystem

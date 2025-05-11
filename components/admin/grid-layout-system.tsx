@@ -1,8 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
-import Widget from "./widget"
+import { useState, useEffect, useRef } from "react"
+import { motion } from "framer-motion"
 
 export interface WidgetData {
   id: string
@@ -23,173 +23,291 @@ interface GridLayoutSystemProps {
 }
 
 export default function GridLayoutSystem({
-  widgets: initialWidgets,
+  widgets,
   gridSize = 20,
   onLayoutChange,
-  className,
+  className = "",
 }: GridLayoutSystemProps) {
-  const [widgets, setWidgets] = useState<WidgetData[]>(initialWidgets)
-  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 })
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerWidth, setContainerWidth] = useState(0)
+  const [containerHeight, setContainerHeight] = useState(0)
+  const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const [isResizing, setIsResizing] = useState(false)
+  const [resizeDirection, setResizeDirection] = useState<string | null>(null)
+  const [startPos, setStartPos] = useState({ x: 0, y: 0 })
+  const [startSize, setStartSize] = useState({ width: 0, height: 0 })
+  const [startWidgetPos, setStartWidgetPos] = useState({ x: 0, y: 0 })
+  const [localWidgets, setLocalWidgets] = useState<WidgetData[]>(widgets)
 
-  // Update container dimensions on window resize
+  // Update local widgets when props change
   useEffect(() => {
-    const updateDimensions = () => {
-      setContainerDimensions({
-        width: window.innerWidth,
-        height: window.innerHeight,
-      })
+    setLocalWidgets(widgets)
+  }, [widgets])
+
+  // Update container dimensions on resize
+  useEffect(() => {
+    const updateContainerSize = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.offsetWidth)
+        setContainerHeight(containerRef.current.offsetHeight)
+      }
     }
 
-    updateDimensions()
-    window.addEventListener("resize", updateDimensions)
+    updateContainerSize()
+    window.addEventListener("resize", updateContainerSize)
 
     return () => {
-      window.removeEventListener("resize", updateDimensions)
+      window.removeEventListener("resize", updateContainerSize)
     }
   }, [])
 
-  // Handle widget resize
-  const handleWidgetResize = (id: string, width: number, height: number) => {
-    const updatedWidgets = widgets.map((widget) => {
-      if (widget.id === id) {
-        return { ...widget, width, height }
-      }
-      return widget
-    })
+  // Handle widget drag start
+  const handleDragStart = (e: React.MouseEvent, id: string) => {
+    e.preventDefault()
 
-    setWidgets(updatedWidgets)
+    const widget = localWidgets.find((w) => w.id === id)
+    if (!widget) return
+
+    setActiveWidgetId(id)
+    setIsDragging(true)
+    setStartPos({ x: e.clientX, y: e.clientY })
+    setStartWidgetPos({ x: widget.x, y: widget.y })
+
+    // Add event listeners for drag
+    document.addEventListener("mousemove", handleDragMove)
+    document.addEventListener("mouseup", handleDragEnd)
+  }
+
+  // Handle widget drag move
+  const handleDragMove = (e: MouseEvent) => {
+    if (!isDragging || !activeWidgetId) return
+
+    const deltaX = e.clientX - startPos.x
+    const deltaY = e.clientY - startPos.y
+
+    // Calculate new position
+    let newX = startWidgetPos.x + deltaX
+    let newY = startWidgetPos.y + deltaY
+
+    // Snap to grid
+    newX = Math.round(newX / gridSize) * gridSize
+    newY = Math.round(newY / gridSize) * gridSize
+
+    // Update widget position
+    setLocalWidgets((prev) =>
+      prev.map((widget) => (widget.id === activeWidgetId ? { ...widget, x: newX, y: newY } : widget)),
+    )
+  }
+
+  // Handle widget drag end
+  const handleDragEnd = () => {
+    setIsDragging(false)
+    setActiveWidgetId(null)
+
+    // Remove event listeners
+    document.removeEventListener("mousemove", handleDragMove)
+    document.removeEventListener("mouseup", handleDragEnd)
+
+    // Notify parent of layout change
     if (onLayoutChange) {
-      onLayoutChange(updatedWidgets)
+      onLayoutChange(localWidgets)
     }
   }
 
-  // Handle widget move
-  const handleWidgetMove = (id: string, x: number, y: number) => {
-    const updatedWidgets = widgets.map((widget) => {
-      if (widget.id === id) {
-        return { ...widget, x, y }
-      }
-      return widget
-    })
+  // Handle widget resize start
+  const handleResizeStart = (e: React.MouseEvent, id: string, direction: string) => {
+    e.preventDefault()
+    e.stopPropagation()
 
-    // Rearrange widgets to fill space efficiently
-    const rearrangedWidgets = rearrangeWidgets(updatedWidgets, id)
+    const widget = localWidgets.find((w) => w.id === id)
+    if (!widget) return
 
-    setWidgets(rearrangedWidgets)
+    setActiveWidgetId(id)
+    setIsResizing(true)
+    setResizeDirection(direction)
+    setStartPos({ x: e.clientX, y: e.clientY })
+    setStartSize({ width: widget.width, height: widget.height })
+    setStartWidgetPos({ x: widget.x, y: widget.y })
+
+    // Add event listeners for resize
+    document.addEventListener("mousemove", handleResizeMove)
+    document.addEventListener("mouseup", handleResizeEnd)
+  }
+
+  // Handle widget resize move
+  const handleResizeMove = (e: MouseEvent) => {
+    if (!isResizing || !activeWidgetId || !resizeDirection) return
+
+    const deltaX = e.clientX - startPos.x
+    const deltaY = e.clientY - startPos.y
+
+    const widget = localWidgets.find((w) => w.id === activeWidgetId)
+    if (!widget) return
+
+    let newWidth = startSize.width
+    let newHeight = startSize.height
+    let newX = startWidgetPos.x
+    let newY = startWidgetPos.y
+
+    // Handle resize based on direction
+    if (resizeDirection.includes("e")) {
+      newWidth = Math.max(100, startSize.width + deltaX)
+    }
+    if (resizeDirection.includes("w")) {
+      const widthChange = Math.min(startSize.width - 100, deltaX)
+      newWidth = startSize.width - widthChange
+      newX = startWidgetPos.x + widthChange
+    }
+    if (resizeDirection.includes("s")) {
+      newHeight = Math.max(100, startSize.height + deltaY)
+    }
+    if (resizeDirection.includes("n")) {
+      const heightChange = Math.min(startSize.height - 100, deltaY)
+      newHeight = startSize.height - heightChange
+      newY = startWidgetPos.y + heightChange
+    }
+
+    // Snap to grid
+    newWidth = Math.round(newWidth / gridSize) * gridSize
+    newHeight = Math.round(newHeight / gridSize) * gridSize
+    newX = Math.round(newX / gridSize) * gridSize
+    newY = Math.round(newY / gridSize) * gridSize
+
+    // Update widget size and position
+    setLocalWidgets((prev) =>
+      prev.map((w) => (w.id === activeWidgetId ? { ...w, width: newWidth, height: newHeight, x: newX, y: newY } : w)),
+    )
+  }
+
+  // Handle widget resize end
+  const handleResizeEnd = () => {
+    setIsResizing(false)
+    setActiveWidgetId(null)
+    setResizeDirection(null)
+
+    // Remove event listeners
+    document.removeEventListener("mousemove", handleResizeMove)
+    document.removeEventListener("mouseup", handleResizeEnd)
+
+    // Notify parent of layout change
     if (onLayoutChange) {
-      onLayoutChange(rearrangedWidgets)
+      onLayoutChange(localWidgets)
     }
   }
 
   // Handle widget collapse toggle
-  const handleToggleCollapse = (id: string, isCollapsed: boolean) => {
-    const updatedWidgets = widgets.map((widget) => {
-      if (widget.id === id) {
-        return { ...widget, isCollapsed }
-      }
-      return widget
-    })
+  const handleCollapseToggle = (id: string) => {
+    setLocalWidgets((prev) =>
+      prev.map((widget) => (widget.id === id ? { ...widget, isCollapsed: !widget.isCollapsed } : widget)),
+    )
 
-    setWidgets(updatedWidgets)
+    // Notify parent of layout change
     if (onLayoutChange) {
-      onLayoutChange(updatedWidgets)
+      onLayoutChange(
+        localWidgets.map((widget) => (widget.id === id ? { ...widget, isCollapsed: !widget.isCollapsed } : widget)),
+      )
     }
-  }
-
-  // Rearrange widgets to fill space efficiently
-  const rearrangeWidgets = (currentWidgets: WidgetData[], movedWidgetId: string): WidgetData[] => {
-    // Create a copy of widgets to work with
-    const widgetsCopy = [...currentWidgets]
-
-    // Find the moved widget
-    const movedWidgetIndex = widgetsCopy.findIndex((w) => w.id === movedWidgetId)
-    if (movedWidgetIndex === -1) return widgetsCopy
-
-    const movedWidget = widgetsCopy[movedWidgetIndex]
-
-    // Create a grid representation
-    const grid: boolean[][] = []
-    const maxX = Math.max(...widgetsCopy.map((w) => w.x + w.width)) + gridSize * 10
-    const maxY = Math.max(...widgetsCopy.map((w) => w.y + w.height)) + gridSize * 10
-
-    // Initialize grid
-    for (let y = 0; y < maxY; y += gridSize) {
-      grid[y / gridSize] = []
-      for (let x = 0; x < maxX; x += gridSize) {
-        grid[y / gridSize][x / gridSize] = false
-      }
-    }
-
-    // Mark occupied cells (excluding the moved widget)
-    widgetsCopy.forEach((widget, index) => {
-      if (index === movedWidgetIndex) return
-
-      const startX = Math.floor(widget.x / gridSize)
-      const startY = Math.floor(widget.y / gridSize)
-      const endX = Math.ceil((widget.x + widget.width) / gridSize)
-      const endY = Math.ceil((widget.y + widget.height) / gridSize)
-
-      for (let y = startY; y < endY; y++) {
-        for (let x = startX; x < endX; x++) {
-          if (grid[y] && grid[y][x] !== undefined) {
-            grid[y][x] = true
-          }
-        }
-      }
-    })
-
-    // Check if the moved widget's position conflicts with any other widget
-    const startX = Math.floor(movedWidget.x / gridSize)
-    const startY = Math.floor(movedWidget.y / gridSize)
-    const endX = Math.ceil((movedWidget.x + movedWidget.width) / gridSize)
-    const endY = Math.ceil((movedWidget.y + movedWidget.height) / gridSize)
-
-    let hasConflict = false
-    for (let y = startY; y < endY; y++) {
-      for (let x = startX; x < endX; x++) {
-        if (grid[y] && grid[y][x]) {
-          hasConflict = true
-          break
-        }
-      }
-      if (hasConflict) break
-    }
-
-    // If no conflict, return the widgets as is
-    if (!hasConflict) return widgetsCopy
-
-    // If there's a conflict, find the nearest available position
-    // This is a simplified approach - in a real implementation, you might want a more sophisticated algorithm
-
-    return widgetsCopy
   }
 
   return (
     <div
-      className={`relative w-full h-full min-h-[600px] ${className || ""}`}
+      ref={containerRef}
+      className={`relative ${className}`}
       style={{
-        backgroundSize: `${gridSize}px ${gridSize}px`,
-        backgroundImage: "radial-gradient(circle, #00000005 1px, transparent 1px)",
+        width: "100%",
+        height: "100%",
+        minHeight: "600px",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
-      {widgets.map((widget) => (
-        <Widget
+      {/* Grid background */}
+      <div
+        className="absolute inset-0 grid opacity-10"
+        style={{
+          backgroundSize: `${gridSize}px ${gridSize}px`,
+          backgroundImage:
+            "linear-gradient(to right, #ccc 1px, transparent 1px), linear-gradient(to bottom, #ccc 1px, transparent 1px)",
+        }}
+      />
+
+      {/* Widgets */}
+      {localWidgets.map((widget) => (
+        <motion.div
           key={widget.id}
-          id={widget.id}
-          title={widget.title}
-          initialWidth={widget.width}
-          initialHeight={widget.height}
-          initialX={widget.x}
-          initialY={widget.y}
-          gridSize={gridSize}
-          onResize={handleWidgetResize}
-          onMove={handleWidgetMove}
-          isCollapsed={widget.isCollapsed}
-          onToggleCollapse={handleToggleCollapse}
-          className="material-widget"
+          className={`absolute bg-white rounded-lg shadow-lg overflow-hidden border border-gray-200 ${
+            activeWidgetId === widget.id ? "z-10 shadow-xl" : "z-0"
+          }`}
+          style={{
+            width: widget.width,
+            height: widget.isCollapsed ? 40 : widget.height,
+            left: widget.x,
+            top: widget.y,
+            transition: isDragging || isResizing ? "none" : "box-shadow 0.2s ease",
+          }}
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.3 }}
         >
-          {widget.content}
-        </Widget>
+          {/* Widget header */}
+          <div
+            className="bg-gray-800 text-white px-4 py-2 flex justify-between items-center cursor-move"
+            onMouseDown={(e) => handleDragStart(e, widget.id)}
+          >
+            <h3 className="font-medium truncate">{widget.title}</h3>
+            <div className="flex items-center space-x-2">
+              <button className="text-gray-300 hover:text-white" onClick={() => handleCollapseToggle(widget.id)}>
+                {widget.isCollapsed ? "▼" : "▲"}
+              </button>
+            </div>
+          </div>
+
+          {/* Widget content */}
+          {!widget.isCollapsed && (
+            <div className="p-4 overflow-auto" style={{ height: "calc(100% - 40px)" }}>
+              {widget.content}
+            </div>
+          )}
+
+          {/* Resize handles */}
+          {!widget.isCollapsed && (
+            <>
+              <div
+                className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "se")}
+              />
+              <div
+                className="absolute bottom-0 left-0 w-4 h-4 cursor-sw-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "sw")}
+              />
+              <div
+                className="absolute top-0 right-0 w-4 h-4 cursor-ne-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "ne")}
+              />
+              <div
+                className="absolute top-0 left-0 w-4 h-4 cursor-nw-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "nw")}
+              />
+              <div
+                className="absolute top-0 w-full h-2 cursor-n-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "n")}
+              />
+              <div
+                className="absolute bottom-0 w-full h-2 cursor-s-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "s")}
+              />
+              <div
+                className="absolute left-0 h-full w-2 cursor-w-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "w")}
+              />
+              <div
+                className="absolute right-0 h-full w-2 cursor-e-resize"
+                onMouseDown={(e) => handleResizeStart(e, widget.id, "e")}
+              />
+            </>
+          )}
+        </motion.div>
       ))}
     </div>
   )

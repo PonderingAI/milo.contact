@@ -1,5 +1,8 @@
 "use client"
-import { FourStateToggle } from "@/components/ui/four-state-toggle"
+import { Globe } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 
 interface UpdatePolicyWidgetProps {
   updateMode: string
@@ -7,41 +10,59 @@ interface UpdatePolicyWidgetProps {
 }
 
 export default function UpdatePolicyWidget({ updateMode, onUpdateModeChange }: UpdatePolicyWidgetProps) {
-  const handleModeChange = (value: string) => {
-    onUpdateModeChange(value)
-  }
-
   return (
-    <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-medium text-gray-900 mb-2">Update Policy</h3>
-        <p className="text-sm text-gray-500 mb-4">Choose how you want to handle dependency updates</p>
-
-        <FourStateToggle
-          value={updateMode}
-          onValueChange={handleModeChange}
-          options={[
-            { value: "manual", label: "Manual" },
-            { value: "prompt", label: "Prompt" },
-            { value: "auto-minor", label: "Auto Minor" },
-            { value: "auto-all", label: "Auto All" },
-          ]}
-        />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center">
+          <Globe className="h-5 w-5 mr-2 text-blue-500" />
+          <h3 className="font-medium">Global Update Policy</h3>
+        </div>
+        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+          System-wide setting
+        </Badge>
       </div>
 
       <div className="bg-gray-50 p-4 rounded-md border border-gray-200">
-        <h4 className="font-medium text-sm mb-2">Current Setting: {updateMode}</h4>
-        <p className="text-xs text-gray-600">
-          {updateMode === "manual" && "You will need to manually check and apply all updates."}
-          {updateMode === "prompt" && "You will be prompted when updates are available."}
-          {updateMode === "auto-minor" && "Minor and patch updates will be applied automatically."}
-          {updateMode === "auto-all" && "All updates including major versions will be applied automatically."}
-        </p>
+        <RadioGroup value={updateMode} onValueChange={onUpdateModeChange} className="space-y-3">
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="manual" id="manual" />
+            <Label htmlFor="manual" className="font-medium">
+              Manual Updates
+            </Label>
+          </div>
+          <div className="text-sm text-gray-500 ml-6 mb-2">Only update packages when explicitly requested</div>
+
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="security" id="security" />
+            <Label htmlFor="security" className="font-medium">
+              Security Updates Only
+            </Label>
+          </div>
+          <div className="text-sm text-gray-500 ml-6 mb-2">Automatically apply security patches</div>
+
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="minor" id="minor" />
+            <Label htmlFor="minor" className="font-medium">
+              Minor Version Updates
+            </Label>
+          </div>
+          <div className="text-sm text-gray-500 ml-6 mb-2">Apply security patches and minor version updates</div>
+
+          <div className="flex items-center space-x-2">
+            <RadioGroupItem value="major" id="major" />
+            <Label htmlFor="major" className="font-medium">
+              All Updates
+            </Label>
+          </div>
+          <div className="text-sm text-gray-500 ml-6">Apply all updates including major version changes</div>
+        </RadioGroup>
       </div>
 
-      <div className="flex items-center space-x-2 text-sm">
-        <div className="w-3 h-3 rounded-full bg-green-500"></div>
-        <span>Last checked: Today</span>
+      <div className="bg-blue-50 p-3 rounded-md border border-blue-100 text-sm text-blue-700">
+        <p>
+          <strong>Note:</strong> Critical security vulnerabilities will always be patched regardless of your update
+          policy.
+        </p>
       </div>
     </div>
   )
