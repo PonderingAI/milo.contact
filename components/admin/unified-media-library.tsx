@@ -95,6 +95,7 @@ export default function UnifiedMediaLibrary() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [newTag, setNewTag] = useState("")
   const [editingTags, setEditingTags] = useState<string[]>([])
+  const [imageLoadError, setImageLoadError] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
     fetchMedia()
@@ -153,7 +154,9 @@ export default function UnifiedMediaLibrary() {
 
     try {
       console.log("Fetching media from database...")
-      const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
+
+      // Use a direct RPC call to ensure we get fresh data
+      const { data, error } = await supabase.rpc("get_all_media")
 
       if (error) {
         if (error.code === "42P01") {
@@ -163,18 +166,35 @@ export default function UnifiedMediaLibrary() {
         throw error
       }
 
-      console.log("Media items fetched:", data?.length || 0)
-      setMediaItems(data || [])
+      // If RPC fails, fall back to regular query
+      if (!data) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from("media")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        if (fallbackError) throw fallbackError
+
+        console.log("Media items fetched (fallback):", fallbackData?.length || 0)
+        setMediaItems(fallbackData || [])
+      } else {
+        console.log("Media items fetched (RPC):", data?.length || 0)
+        setMediaItems(data || [])
+      }
 
       // Extract all unique tags
       const tags = new Set<string>()
-      data?.forEach((item) => {
+      const items = data || []
+      items.forEach((item) => {
         if (item.tags) {
           item.tags.forEach((tag: string) => tags.add(tag))
         }
       })
 
       setAllTags(Array.from(tags))
+
+      // Reset image load errors
+      setImageLoadError({})
     } catch (error) {
       console.error("Error fetching media:", error)
       setError("Failed to load media library. Please check console for details.")
@@ -664,32 +684,26 @@ export default function UnifiedMediaLibrary() {
         tags: editingTags,
       })
 
-      // Update the media item in the database
-      const { error } = await supabase
-        .from("media")
-        .update({
+      // Use a direct API call instead of Supabase client
+      const response = await fetch("/api/media/update", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id: editingItem.id,
           filename: newFilename,
           tags: editingTags,
-        })
-        .eq("id", editingItem.id)
+        }),
+      })
 
-      if (error) {
-        console.error("Database update error:", error)
-        throw new Error(`Failed to update media: ${error.message}`)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to update media")
       }
 
-      // Verify the update was successful
-      const { data: updatedItem, error: fetchError } = await supabase
-        .from("media")
-        .select("*")
-        .eq("id", editingItem.id)
-        .single()
-
-      if (fetchError) {
-        console.error("Error verifying update:", fetchError)
-      } else {
-        console.log("Updated item in database:", updatedItem)
-      }
+      const result = await response.json()
+      console.log("Update result:", result)
 
       // Update local state
       setMediaItems(
@@ -744,24 +758,26 @@ export default function UnifiedMediaLibrary() {
     if (!confirm("Are you sure you want to delete this media item?")) return
 
     try {
-      // First delete from database to ensure we don't have orphaned records
-      const { error: dbError } = await supabase.from("media").delete().eq("id", id)
+      // Use a direct API call instead of Supabase client
+      const response = await fetch("/api/media/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          id,
+          filepath,
+          filetype,
+        }),
+      })
 
-      if (dbError) {
-        console.error("Database deletion error:", dbError)
-        throw new Error(`Failed to delete from database: ${dbError.message}`)
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete media")
       }
 
-      // Then try to delete from storage if it's not an external URL
-      // Only attempt storage deletion for items that are actually in storage
-      if (!filepath.startsWith("http") && filetype !== "vimeo" && filetype !== "youtube" && filetype !== "linkedin") {
-        const { error: storageError } = await supabase.storage.from("media").remove([filepath])
-
-        // Log but don't throw on storage error - the DB record is already gone
-        if (storageError) {
-          console.warn("Storage deletion error:", storageError)
-        }
-      }
+      const result = await response.json()
+      console.log("Delete result:", result)
 
       toast({
         title: "Success",
@@ -780,17 +796,32 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
+  const handleImageError = (id: string) => {
+    setImageLoadError((prev) => ({
+      ...prev,
+      [id]: true,
+    }))
+  }
+
   function renderMediaItem(item: MediaItem) {
     const isVimeo = item.filetype === "vimeo"
     const isYoutube = item.filetype === "youtube"
     const isLinkedin = item.filetype === "linkedin"
     const isImage = item.filetype === "image"
+    const hasImageError = imageLoadError[item.id]
 
     return (
       <div key={item.id} className="bg-gray-900 rounded-lg overflow-hidden">
         <div className="relative h-40 cursor-pointer" onClick={() => (isImage ? setSelectedImage(item) : null)}>
-          {item.thumbnail_url ? (
-            <Image src={item.thumbnail_url || "/placeholder.svg"} alt={item.filename} fill className="object-cover" />
+          {item.thumbnail_url && !hasImageError ? (
+            <Image
+              src={item.thumbnail_url || "/placeholder.svg"}
+              alt={item.filename}
+              fill
+              className="object-cover"
+              onError={() => handleImageError(item.id)}
+              unoptimized // Skip Next.js image optimization to avoid CORS issues
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gray-800">
               <span className="text-gray-400">{item.filetype}</span>
@@ -1115,6 +1146,7 @@ export default function UnifiedMediaLibrary() {
                 alt={selectedImage.filename}
                 fill
                 className="object-contain"
+                unoptimized
               />
             )}
           </div>
@@ -1269,7 +1301,7 @@ export default function UnifiedMediaLibrary() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-2 mt-4">
+          <div className="flex justify-between gap-2 mt-4">
             <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
               Cancel
             </Button>
@@ -1277,6 +1309,11 @@ export default function UnifiedMediaLibrary() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <Button onClick={fetchMedia} className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700">
+        <RefreshCw className="h-4 w-4 mr-2" />
+        Refresh Media
+      </Button>
     </div>
   )
 
