@@ -959,6 +959,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
       console.log("Checking tables:", finalTablesToCheck)
 
+      // First, test the Supabase connection
+      const testResponse = await fetch("/api/test-supabase-connection")
+      if (!testResponse.ok) {
+        const testData = await testResponse.json()
+        console.error("Supabase connection test failed:", testData)
+        throw new Error(`Database connection failed: ${testData.error || "Unknown error"}`)
+      }
+
       // Try to check tables using our API
       const response = await fetch("/api/direct-table-check", {
         method: "POST",
@@ -971,7 +979,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       })
 
       if (!response.ok) {
-        throw new Error("Failed to check tables")
+        const errorData = await response.json()
+        console.error("API response not OK:", errorData)
+        throw new Error(`Failed to check tables: ${errorData.error || response.statusText}`)
       }
 
       const data = await response.json()
@@ -1006,7 +1016,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       }
     } catch (error) {
       console.error("Error checking tables:", error)
-      setError("Failed to check database tables. Please try again or use the Skip Setup button.")
+      setError(
+        `Failed to check database tables: ${error instanceof Error ? error.message : "Unknown error"}. Please try again or use the Skip Setup button.`,
+      )
 
       // If we can't check tables, don't show the popup on non-admin pages
       if (!isAdminPage && adminOnly) {
