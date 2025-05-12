@@ -152,6 +152,7 @@ export default function UnifiedMediaLibrary() {
     setError(null)
 
     try {
+      console.log("Fetching media from database...")
       const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
 
       if (error) {
@@ -162,6 +163,7 @@ export default function UnifiedMediaLibrary() {
         throw error
       }
 
+      console.log("Media items fetched:", data?.length || 0)
       setMediaItems(data || [])
 
       // Extract all unique tags
@@ -647,6 +649,21 @@ export default function UnifiedMediaLibrary() {
     if (!editingItem) return
 
     try {
+      // Validate input
+      if (!newFilename.trim()) {
+        toast({
+          title: "Error",
+          description: "Filename cannot be empty",
+          variant: "destructive",
+        })
+        return
+      }
+
+      console.log("Updating media item:", editingItem.id, {
+        filename: newFilename,
+        tags: editingTags,
+      })
+
       // Update the media item in the database
       const { error } = await supabase
         .from("media")
@@ -656,7 +673,23 @@ export default function UnifiedMediaLibrary() {
         })
         .eq("id", editingItem.id)
 
-      if (error) throw error
+      if (error) {
+        console.error("Database update error:", error)
+        throw new Error(`Failed to update media: ${error.message}`)
+      }
+
+      // Verify the update was successful
+      const { data: updatedItem, error: fetchError } = await supabase
+        .from("media")
+        .select("*")
+        .eq("id", editingItem.id)
+        .single()
+
+      if (fetchError) {
+        console.error("Error verifying update:", fetchError)
+      } else {
+        console.log("Updated item in database:", updatedItem)
+      }
 
       // Update local state
       setMediaItems(
@@ -687,7 +720,7 @@ export default function UnifiedMediaLibrary() {
       console.error("Error updating media:", error)
       toast({
         title: "Error",
-        description: "Failed to update media",
+        description: error instanceof Error ? error.message : "Failed to update media",
         variant: "destructive",
       })
     }
@@ -714,7 +747,10 @@ export default function UnifiedMediaLibrary() {
       // First delete from database to ensure we don't have orphaned records
       const { error: dbError } = await supabase.from("media").delete().eq("id", id)
 
-      if (dbError) throw dbError
+      if (dbError) {
+        console.error("Database deletion error:", dbError)
+        throw new Error(`Failed to delete from database: ${dbError.message}`)
+      }
 
       // Then try to delete from storage if it's not an external URL
       // Only attempt storage deletion for items that are actually in storage
@@ -738,7 +774,7 @@ export default function UnifiedMediaLibrary() {
       console.error("Error deleting media:", error)
       toast({
         title: "Error",
-        description: "Failed to delete media",
+        description: error instanceof Error ? error.message : "Failed to delete media",
         variant: "destructive",
       })
     }
