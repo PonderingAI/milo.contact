@@ -99,6 +99,15 @@ export const DATABASE_TABLES: TableDefinition[] = [
     sqlFile: "docs/setup/dependency-tables.sql",
   },
   {
+    name: "dependency_compatibility",
+    displayName: "Dependency Compatibility",
+    description: "Stores compatibility information for dependencies",
+    category: "dependencies",
+    required: false,
+    dependencies: ["user_roles", "dependencies"],
+    sqlFile: "docs/setup/dependency-tables.sql",
+  },
+  {
     name: "security_audits",
     displayName: "Security Audits",
     description: "Stores security audit results",
