@@ -38,6 +38,11 @@ export default function AdminSidebar() {
               Security
             </Link>
           </li>
+          <li>
+            <Link href="/admin/database-debug" className="block py-2 px-4 rounded hover:bg-gray-800">
+              Database Debug
+            </Link>
+          </li>
           <li className="mt-8">
             <form action="/api/auth/signout" method="post">
               <button type="submit" className="w-full text-left py-2 px-4 rounded hover:bg-gray-800 text-red-400">

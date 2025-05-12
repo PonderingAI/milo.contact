@@ -62,7 +62,6 @@ export function DatabaseSetupPopup({
   const [setupCompleted, setSetupCompleted] = useState(false)
   const [forceClose, setForceClose] = useState(false)
   const [isAdminPage, setIsAdminPage] = useState(false)
-  const [functionSetup, setFunctionSetup] = useState(false)
   const [generatedSQL, setGeneratedSQL] = useState<string>("")
 
   // Define all possible tables with their SQL
@@ -857,23 +856,23 @@ ON user_widgets(position);`,
   ]
 
   // Setup the check_tables_exist function
-  const setupCheckTablesFunction = useCallback(async () => {
-    if (functionSetup) return
+  // const setupCheckTablesFunction = useCallback(async () => {
+  //   if (functionSetup) return
 
-    try {
-      const response = await fetch("/api/setup-check-tables-function", {
-        method: "POST",
-      })
+  //   try {
+  //     const response = await fetch("/api/setup-check-tables-function", {
+  //       method: "POST",
+  //     })
 
-      if (!response.ok) {
-        console.warn("Failed to setup check_tables_exist function, will use fallback methods")
-      } else {
-        setFunctionSetup(true)
-      }
-    } catch (error) {
-      console.warn("Error setting up check_tables_exist function:", error)
-    }
-  }, [functionSetup])
+  //     if (!response.ok) {
+  //       console.warn("Failed to setup check_tables_exist function, will use fallback methods")
+  //     } else {
+  //       setFunctionSetup(true)
+  //     }
+  //   } catch (error) {
+  //     console.warn("Error setting up check_tables_exist function:", error)
+  //   }
+  // }, [functionSetup])
 
   // Check if we're on an admin page
   useEffect(() => {
@@ -888,8 +887,8 @@ ON user_widgets(position);`,
     }
 
     // Setup the check_tables_exist function
-    setupCheckTablesFunction()
-  }, [adminOnly, setupCheckTablesFunction])
+    // setupCheckTablesFunction()
+  }, [adminOnly])
 
   // Function to generate SQL for selected tables
   const generateSQL = useCallback(() => {
@@ -936,7 +935,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     setGeneratedSQL(sql)
   }, [selectedTables, generateSQL])
 
-  // Function to check if tables exist - using a more reliable method
+  // Function to check if tables exist - using our new direct-table-check API
   const checkTables = useCallback(async () => {
     if (forceClose || setupCompleted || (adminOnly && !isAdminPage)) {
       return
@@ -959,14 +958,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
       console.log("Checking tables:", finalTablesToCheck)
 
-      // First, test the Supabase connection
-      const testResponse = await fetch("/api/test-supabase-connection")
-      if (!testResponse.ok) {
-        const testData = await testResponse.json()
-        console.error("Supabase connection test failed:", testData)
-        throw new Error(`Database connection failed: ${testData.error || "Unknown error"}`)
-      }
-
       // Try to check tables using our API
       const response = await fetch("/api/direct-table-check", {
         method: "POST",
@@ -980,15 +971,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
       if (!response.ok) {
         const errorData = await response.json()
-        console.error("API response not OK:", errorData)
-        throw new Error(`Failed to check tables: ${errorData.error || response.statusText}`)
+        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
       }
 
       const data = await response.json()
 
-      if (data.error) {
-        console.error("Error checking tables:", data.error)
-        throw new Error(data.error)
+      if (!data.success) {
+        throw new Error(data.error || "Unknown error checking tables")
       }
 
       // data.missingTables contains the list of tables that don't exist
