@@ -63,6 +63,7 @@ export function DatabaseSetupPopup({
   const [forceClose, setForceClose] = useState(false)
   const [isAdminPage, setIsAdminPage] = useState(false)
   const [functionSetup, setFunctionSetup] = useState(false)
+  const [generatedSQL, setGeneratedSQL] = useState<string>("")
 
   // Define all possible tables with their SQL
   const allTables: TableConfig[] = [
@@ -890,6 +891,51 @@ ON user_widgets(position);`,
     setupCheckTablesFunction()
   }, [adminOnly, setupCheckTablesFunction])
 
+  // Function to generate SQL for selected tables
+  const generateSQL = useCallback(() => {
+    // Start with UUID extension
+    let sql = `-- Enable UUID extension if not already enabled
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+`
+
+    // Add SQL for each selected table, respecting dependencies
+    const processedTables = new Set<string>()
+    const processTable = (tableName: string) => {
+      if (processedTables.has(tableName)) return
+
+      // Process dependencies first
+      const table = allTables.find((t) => t.name === tableName)
+      if (table) {
+        for (const dep of table.dependencies) {
+          if (selectedTables.includes(dep)) {
+            processTable(dep)
+          }
+        }
+
+        // Add this table's SQL
+        sql += `-- Setup for ${table.displayName} table\n`
+        sql += table.sql
+        sql += "\n\n"
+
+        processedTables.add(tableName)
+      }
+    }
+
+    // Process all selected tables
+    for (const tableName of selectedTables) {
+      processTable(tableName)
+    }
+
+    return sql.trim()
+  }, [selectedTables, allTables])
+
+  // Update generated SQL whenever selected tables change
+  useEffect(() => {
+    const sql = generateSQL()
+    setGeneratedSQL(sql)
+  }, [selectedTables, generateSQL])
+
   // Function to check if tables exist - using a more reliable method
   const checkTables = useCallback(async () => {
     if (forceClose || setupCompleted || (adminOnly && !isAdminPage)) {
@@ -991,49 +1037,9 @@ ON user_widgets(position);`,
     isStationary,
   ])
 
-  // Function to generate SQL for selected tables
-  const generateSQL = () => {
-    // Start with UUID extension
-    let sql = `-- Enable UUID extension if not already enabled
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
-`
-
-    // Add SQL for each selected table, respecting dependencies
-    const processedTables = new Set<string>()
-    const processTable = (tableName: string) => {
-      if (processedTables.has(tableName)) return
-
-      // Process dependencies first
-      const table = allTables.find((t) => t.name === tableName)
-      if (table) {
-        for (const dep of table.dependencies) {
-          if (selectedTables.includes(dep)) {
-            processTable(dep)
-          }
-        }
-
-        // Add this table's SQL
-        sql += `-- Setup for ${table.displayName} table\n`
-        sql += table.sql
-        sql += "\n\n"
-
-        processedTables.add(tableName)
-      }
-    }
-
-    // Process all selected tables
-    for (const tableName of selectedTables) {
-      processTable(tableName)
-    }
-
-    return sql.trim()
-  }
-
   // Function to copy SQL to clipboard
   const copyToClipboard = () => {
-    const sql = generateSQL()
-    navigator.clipboard.writeText(sql)
+    navigator.clipboard.writeText(generatedSQL)
     setCopied(true)
     setTimeout(() => setCopied(false), 3000)
   }
@@ -1045,13 +1051,12 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     setSuccess(null)
 
     try {
-      const sql = generateSQL()
       const response = await fetch("/api/execute-sql", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ sql }),
+        body: JSON.stringify({ sql: generatedSQL }),
       })
 
       const data = await response.json()
@@ -1300,8 +1305,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
           </Tabs>
 
           <div className="mt-6">
-            <h3 className="text-lg font-medium mb-2">Generated SQL</h3>
-            <Textarea value={generateSQL()} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-medium">Generated SQL</h3>
+              <Button variant="outline" size="sm" onClick={copyToClipboard}>
+                {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                {copied ? "Copied!" : "Copy SQL"}
+              </Button>
+            </div>
+            <Textarea value={generatedSQL} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
           </div>
 
           <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 mt-4">
@@ -1317,10 +1328,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3 justify-end">
-            <Button variant="outline" onClick={copyToClipboard}>
-              {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-              {copied ? "Copied!" : "Copy SQL"}
-            </Button>
             <Button variant="outline" onClick={handleManualSetupComplete}>
               I've Run the SQL Manually
             </Button>
@@ -1445,8 +1452,14 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
           </Tabs>
 
           <div className="mt-6">
-            <h3 className="text-lg font-medium mb-2">Generated SQL</h3>
-            <Textarea value={generateSQL()} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-lg font-medium">Generated SQL</h3>
+              <Button variant="outline" size="sm" onClick={copyToClipboard}>
+                {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                {copied ? "Copied!" : "Copy SQL"}
+              </Button>
+            </div>
+            <Textarea value={generatedSQL} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
           </div>
 
           <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 mt-4">
@@ -1462,10 +1475,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
           </div>
 
           <DialogFooter className="flex flex-col sm:flex-row gap-3">
-            <Button variant="outline" onClick={copyToClipboard}>
-              {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-              {copied ? "Copied!" : "Copy SQL"}
-            </Button>
             <Button variant="outline" onClick={handleForceClose}>
               Skip Setup
             </Button>
