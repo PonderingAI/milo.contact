@@ -61,11 +61,27 @@ export async function GET() {
       tables.dependency_compatibility = true
     }
 
-    return NextResponse.json({ tables })
+    // Calculate missing tables
+    const missingTables = Object.entries(tables)
+      .filter(([_, exists]) => !exists)
+      .map(([name]) => name)
+
+    // Check if all tables exist
+    const allTablesExist = Object.values(tables).every((exists) => exists)
+
+    return NextResponse.json({
+      success: true,
+      tables,
+      allTablesExist,
+      missingTables,
+    })
   } catch (error) {
     console.error("Error checking tables:", error)
     return NextResponse.json(
-      { error: "Failed to check tables: " + (error instanceof Error ? error.message : String(error)) },
+      {
+        success: false,
+        message: "Failed to check tables: " + (error instanceof Error ? error.message : String(error)),
+      },
       { status: 500 },
     )
   }

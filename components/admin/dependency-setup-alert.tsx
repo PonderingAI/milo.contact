@@ -13,7 +13,19 @@ export default function DependencySetupAlert() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    checkTables()
+    let isMounted = true
+
+    const runCheck = async () => {
+      if (isMounted) {
+        await checkTables()
+      }
+    }
+
+    runCheck()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const checkTables = async () => {
@@ -21,23 +33,44 @@ export default function DependencySetupAlert() {
       setLoading(true)
       setError(null)
 
-      const response = await fetch("/api/dependencies/check-tables")
+      // Add a timeout to the fetch request
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+
+      const response = await fetch("/api/dependencies/check-tables", {
+        signal: controller.signal,
+      }).catch((err) => {
+        // Handle network errors explicitly
+        console.warn("Network error checking tables:", err)
+        // Return a fake response to continue execution
+        return {
+          ok: false,
+          json: async () => ({ success: false, message: "Network error" }),
+        }
+      })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
-        throw new Error("Failed to check tables")
+        const errorData = await response.json().catch(() => ({ message: "Failed to parse error response" }))
+        throw new Error(errorData.message || "Failed to check tables")
       }
 
-      const data = await response.json()
+      const data = await response.json().catch(() => ({ success: false, message: "Failed to parse response" }))
 
       if (data.success) {
         setTablesExist(data.allTablesExist)
         setMissingTables(data.missingTables || [])
       } else {
-        throw new Error(data.message || "Unknown error checking tables")
+        // Don't throw here, just set the error state
+        setError(data.message || "Unknown error checking tables")
       }
     } catch (err) {
-      console.error("Error checking tables:", err)
+      console.warn("Error checking tables:", err)
       setError(err instanceof Error ? err.message : "Failed to check tables")
+      // Set default values to prevent UI issues
+      setTablesExist(false)
+      setMissingTables([])
     } finally {
       setLoading(false)
     }
