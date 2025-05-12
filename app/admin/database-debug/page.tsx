@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, CheckCircle, Database, RefreshCw } from "lucide-react"
+import { AlertCircle, CheckCircle, Database, RefreshCw, Copy, Check } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { toast } from "@/components/ui/use-toast"
 
 export default function DatabaseDebugPage() {
   const [activeTab, setActiveTab] = useState("diagnostic")
@@ -16,6 +17,11 @@ export default function DatabaseDebugPage() {
   const [tablesResult, setTablesResult] = useState<any>(null)
   const [customTables, setCustomTables] = useState<string>("user_roles,site_settings,projects")
   const [loading, setLoading] = useState<Record<string, boolean>>({
+    diagnostic: false,
+    directCheck: false,
+    listTables: false,
+  })
+  const [copying, setCopying] = useState<Record<string, boolean>>({
     diagnostic: false,
     directCheck: false,
     listTables: false,
@@ -103,6 +109,44 @@ export default function DatabaseDebugPage() {
     }
   }
 
+  const copyToClipboard = async (type: string, data: any) => {
+    setCopying((prev) => ({ ...prev, [type]: true }))
+
+    try {
+      let textToCopy = ""
+
+      switch (type) {
+        case "diagnostic":
+          textToCopy = `Supabase Connection Diagnostic:\n\n${JSON.stringify(data, null, 2)}`
+          break
+        case "directCheck":
+          textToCopy = `Direct Table Check:\n\n${JSON.stringify(data, null, 2)}`
+          break
+        case "listTables":
+          textToCopy = `Database Tables List:\n\n${JSON.stringify(data, null, 2)}`
+          break
+      }
+
+      await navigator.clipboard.writeText(textToCopy)
+
+      toast({
+        title: "Copied to clipboard",
+        description: `${type.charAt(0).toUpperCase() + type.slice(1)} results copied successfully`,
+      })
+    } catch (err) {
+      toast({
+        title: "Copy failed",
+        description: "Could not copy to clipboard",
+        variant: "destructive",
+      })
+    } finally {
+      // Reset the copying state after a short delay for UI feedback
+      setTimeout(() => {
+        setCopying((prev) => ({ ...prev, [type]: false }))
+      }, 1000)
+    }
+  }
+
   // Run diagnostic on page load
   useEffect(() => {
     runDiagnostic()
@@ -148,7 +192,26 @@ export default function DatabaseDebugPage() {
               )}
 
               {diagnosticResult && (
-                <div className="rounded-md overflow-auto max-h-96 border">
+                <div className="rounded-md overflow-auto max-h-96 border relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="absolute top-2 right-2 z-10"
+                    onClick={() => copyToClipboard("diagnostic", diagnosticResult)}
+                    disabled={copying.diagnostic}
+                  >
+                    {copying.diagnostic ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy Results
+                      </>
+                    )}
+                  </Button>
                   <pre className="p-4 text-xs">{JSON.stringify(diagnosticResult, null, 2)}</pre>
                 </div>
               )}
@@ -203,7 +266,26 @@ export default function DatabaseDebugPage() {
                       <AlertDescription>Table check failed</AlertDescription>
                     </Alert>
                   )}
-                  <div className="rounded-md overflow-auto max-h-96 border">
+                  <div className="rounded-md overflow-auto max-h-96 border relative">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="absolute top-2 right-2 z-10"
+                      onClick={() => copyToClipboard("directCheck", directCheckResult)}
+                      disabled={copying.directCheck}
+                    >
+                      {copying.directCheck ? (
+                        <>
+                          <Check className="h-4 w-4 mr-1" />
+                          Copied
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="h-4 w-4 mr-1" />
+                          Copy Results
+                        </>
+                      )}
+                    </Button>
                     <pre className="p-4 text-xs">{JSON.stringify(directCheckResult, null, 2)}</pre>
                   </div>
                 </>
@@ -238,7 +320,26 @@ export default function DatabaseDebugPage() {
               )}
 
               {tablesResult && (
-                <div className="rounded-md overflow-auto max-h-96 border">
+                <div className="rounded-md overflow-auto max-h-96 border relative">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="absolute top-2 right-2 z-10"
+                    onClick={() => copyToClipboard("listTables", tablesResult)}
+                    disabled={copying.listTables}
+                  >
+                    {copying.listTables ? (
+                      <>
+                        <Check className="h-4 w-4 mr-1" />
+                        Copied
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy Results
+                      </>
+                    )}
+                  </Button>
                   <pre className="p-4 text-xs">{JSON.stringify(tablesResult, null, 2)}</pre>
                 </div>
               )}
