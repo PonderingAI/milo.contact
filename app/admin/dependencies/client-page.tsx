@@ -300,6 +300,7 @@ export default function ClientDependenciesPage() {
                 viewVulnerabilityDetails={viewVulnerabilityDetails}
                 viewDependabotAlertDetails={viewDependabotAlertDetails}
                 clearFilters={clearFilters}
+                onRefresh={fetchDependencies}
               />
             ) : (
               <div className="text-center py-8 text-gray-400">
