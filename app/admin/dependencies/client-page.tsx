@@ -170,6 +170,26 @@ export default function ClientDependenciesPage() {
     setSearchTerm("")
   }
 
+  const resetAllToGlobal = async () => {
+    try {
+      // Update locally first for immediate feedback
+      setDependencies((deps) => deps.map((dep) => ({ ...dep, updateMode: "global" })))
+
+      // Then update on the server
+      await fetch(`/api/dependencies/reset-all`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ updateMode: "global" }),
+      })
+    } catch (error) {
+      console.error("Failed to reset all dependencies to global mode:", error)
+      // Revert on failure
+      fetchDependencies()
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -241,10 +261,15 @@ export default function ClientDependenciesPage() {
           <div className="bg-gray-800 p-6 rounded-lg">
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">Project Dependencies</h2>
-              <Button onClick={scanDependencies} className="ml-auto">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh Dependencies
-              </Button>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={resetAllToGlobal} className="border-gray-600">
+                  Reset All to Global
+                </Button>
+                <Button onClick={scanDependencies}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Refresh Dependencies
+                </Button>
+              </div>
             </div>
 
             {/* Search and filter controls */}

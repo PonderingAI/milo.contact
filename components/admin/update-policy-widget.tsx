@@ -25,6 +25,14 @@ export function UpdatePolicyWidget({
     setLocalUpdateMode(updateMode)
   }, [updateMode])
 
+  // Set default to aggressive if not already set
+  useEffect(() => {
+    if (!updateMode && !localUpdateMode) {
+      setLocalUpdateMode("aggressive")
+      setUpdateMode("aggressive")
+    }
+  }, [updateMode, localUpdateMode, setUpdateMode])
+
   const handleUpdateModeChange = async (newMode: string) => {
     setLocalUpdateMode(newMode)
     setUpdateMode(newMode)
@@ -73,9 +81,9 @@ export function UpdatePolicyWidget({
             value={localUpdateMode}
             onChange={handleUpdateModeChange}
             options={[
-              { value: "none", label: "None" },
-              { value: "minor", label: "Minor" },
-              { value: "all", label: "All" },
+              { value: "off", label: "Off" },
+              { value: "conservative", label: "Security" },
+              { value: "aggressive", label: "Aggressive" },
             ]}
             className="relative z-10"
           />
@@ -83,9 +91,9 @@ export function UpdatePolicyWidget({
 
         <div className="flex justify-between items-center mt-2">
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            {localUpdateMode === "none" && "No automatic updates"}
-            {localUpdateMode === "minor" && "Minor version updates only"}
-            {localUpdateMode === "all" && "All updates including major versions"}
+            {localUpdateMode === "off" && "No automatic updates"}
+            {localUpdateMode === "conservative" && "Security patches and minor updates only"}
+            {localUpdateMode === "aggressive" && "Updates to latest compatible versions with testing"}
           </div>
 
           <Button

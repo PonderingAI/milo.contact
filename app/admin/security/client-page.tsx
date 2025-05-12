@@ -152,7 +152,7 @@ export default function SecurityClientPage() {
   const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("conservative")
+  const [globalUpdateMode, setGlobalUpdateMode] = useState<ToggleState>("aggressive")
   const [searchTerm, setSearchTerm] = useState("")
   const [filter, setFilter] = useState("all")
   const [widgets, setWidgets] = useState<Widget[]>([])
@@ -878,13 +878,13 @@ export default function SecurityClientPage() {
                   <span
                     className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "conservative" ? "bg-blue-400" : "bg-blue-900"}`}
                   ></span>
-                  <strong>Security Only:</strong> Only security patches
+                  <strong>Security Only:</strong> Security patches and minor updates
                 </p>
                 <p className="flex items-center">
                   <span
                     className={`w-3 h-3 rounded-full mr-2 ${globalUpdateMode === "aggressive" ? "bg-green-400" : "bg-green-900"}`}
                   ></span>
-                  <strong>All Updates:</strong> All package updates
+                  <strong>Aggressive:</strong> Updates to latest compatible versions with testing
                 </p>
               </div>
 

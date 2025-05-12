@@ -2,10 +2,11 @@
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
-import { Info, ExternalLink, ShieldCheck } from "lucide-react"
+import { Info, ExternalLink, ShieldCheck, BookOpen } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useState } from "react"
-import { SafeUpdateModal } from "./safe-update-modal"
+import { EnhancedSafeUpdateModal } from "./enhanced-safe-update-modal"
+import Link from "next/link"
 
 interface Dependency {
   id: string
@@ -118,7 +119,13 @@ export function DependencyList({
   return (
     <>
       {/* Safe Update Button */}
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-between">
+        <Link href="/admin/dependencies/compatibility">
+          <Button variant="outline" className="border-gray-700">
+            <BookOpen className="h-4 w-4 mr-2" />
+            View Compatibility Database
+          </Button>
+        </Link>
         <Button onClick={() => setShowSafeUpdateModal(true)} className="bg-green-700 hover:bg-green-600 text-white">
           <ShieldCheck className="h-4 w-4 mr-2" />
           Safe Update {outdatedCount > 0 && `(${outdatedCount} outdated)`}
@@ -288,7 +295,7 @@ export function DependencyList({
 
       {/* Safe Update Modal */}
       {showSafeUpdateModal && (
-        <SafeUpdateModal
+        <EnhancedSafeUpdateModal
           dependencies={dependencies}
           onClose={() => setShowSafeUpdateModal(false)}
           onUpdateComplete={() => {

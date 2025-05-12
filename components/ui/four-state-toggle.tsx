@@ -27,7 +27,7 @@ export function FourStateToggle({
     global: "Global",
     off: "Off",
     conservative: "Security",
-    aggressive: "All",
+    aggressive: "Aggressive",
   },
   showLabels = true,
   hideGlobal = false,

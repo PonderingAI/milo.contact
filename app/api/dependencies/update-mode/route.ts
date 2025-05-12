@@ -14,6 +14,18 @@ export async function POST(request: Request) {
       )
     }
 
+    // Validate update mode
+    const validModes = ["global", "off", "conservative", "aggressive"]
+    if (!validModes.includes(updateMode)) {
+      return NextResponse.json(
+        {
+          error: "Invalid update mode",
+          message: `Update mode must be one of: ${validModes.join(", ")}`,
+        },
+        { status: 400 },
+      )
+    }
+
     // In a database-backed system, this would update the dependency's update mode
     // Since we're not using a database, we'll just return a success message
 
