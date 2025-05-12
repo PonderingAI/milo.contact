@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, ArrowRight } from "lucide-react"
@@ -15,7 +15,7 @@ import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import MediaSelector from "@/components/admin/media-selector"
+import UnifiedMediaLibrary from "@/components/admin/unified-media-library"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -25,8 +25,10 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null)
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
-  const [showMediaSelector, setShowMediaSelector] = useState(false)
+  const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [currentMediaTarget, setCurrentMediaTarget] = useState<"main" | "bts">("main")
+  const fileInputMainRef = useRef<HTMLInputElement>(null)
+  const fileInputBtsRef = useRef<HTMLInputElement>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -111,18 +113,18 @@ export default function NewProjectPage() {
     }
   }
 
-  const openMediaSelector = (target: "main" | "bts") => {
+  const openMediaLibrary = (target: "main" | "bts") => {
     setCurrentMediaTarget(target)
-    setShowMediaSelector(true)
+    setShowMediaLibrary(true)
   }
 
-  const handleMediaSelectorSelect = (url: string) => {
+  const handleMediaSelected = (url: string) => {
     if (currentMediaTarget === "main") {
       handleMainMediaSelect(url)
     } else {
       handleBtsMediaSelect(url)
     }
-    setShowMediaSelector(false)
+    setShowMediaLibrary(false)
   }
 
   const removeMainImage = (index: number) => {
@@ -340,6 +342,78 @@ export default function NewProjectPage() {
     }
   }
 
+  const handleFileUpload = async (files: FileList, target: "main" | "bts") => {
+    if (!files || files.length === 0) return
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+
+        // Create a FormData object
+        const formData = new FormData()
+        formData.append("file", file)
+
+        // Upload the file using the bulk-upload endpoint which handles WebP conversion
+        const response = await fetch("/api/bulk-upload", {
+          method: "POST",
+          body: formData,
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to upload file")
+        }
+
+        const result = await response.json()
+
+        if (result.success) {
+          // Add the uploaded file to the appropriate target
+          if (target === "main") {
+            if (file.type.startsWith("image/")) {
+              if (!mainImages.includes(result.publicUrl)) {
+                setMainImages((prev) => [...prev, result.publicUrl])
+                // Set as cover image if none is set
+                if (!formData.image) {
+                  setFormData((prev) => ({ ...prev, image: result.publicUrl }))
+                }
+              }
+            } else if (file.type.startsWith("video/")) {
+              if (!mainVideos.includes(result.publicUrl)) {
+                setMainVideos((prev) => [...prev, result.publicUrl])
+                setFormData((prev) => ({ ...prev, video_url: result.publicUrl }))
+              }
+            }
+          } else {
+            // BTS
+            if (file.type.startsWith("image/")) {
+              if (!btsImages.includes(result.publicUrl)) {
+                setBtsImages((prev) => [...prev, result.publicUrl])
+              }
+            } else if (file.type.startsWith("video/")) {
+              if (!btsVideos.includes(result.publicUrl)) {
+                setBtsVideos((prev) => [...prev, result.publicUrl])
+              }
+            }
+          }
+
+          toast({
+            title: "Upload successful",
+            description: `${file.name} uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
+          })
+        } else {
+          throw new Error(result.error || "Unknown error during upload")
+        }
+      }
+    } catch (error) {
+      console.error("Error uploading file:", error)
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload file",
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleSave = async () => {
     try {
       setSaving(true)
@@ -448,7 +522,7 @@ export default function NewProjectPage() {
                 <div className="space-y-2">
                   {/* Browse Media button */}
                   <button
-                    onClick={() => openMediaSelector("main")}
+                    onClick={() => openMediaLibrary("main")}
                     className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm`}
                   >
                     Browse Media
@@ -491,68 +565,13 @@ export default function NewProjectPage() {
                     Browse Device
                     <input
                       type="file"
+                      ref={fileInputMainRef}
                       className="hidden"
                       accept="image/*,video/*"
-                      onChange={async (e) => {
-                        const files = e.target.files
-                        if (files && files.length > 0) {
-                          // Upload to Supabase storage and add to media pool
-                          try {
-                            for (let i = 0; i < files.length; i++) {
-                              const file = files[i]
-                              const fileExt = file.name.split(".").pop()
-                              const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
-                              const filePath = `projects/${fileName}`
-
-                              // Upload to storage
-                              const { data, error } = await supabase.storage.from("media").upload(filePath, file)
-
-                              if (error) {
-                                throw error
-                              }
-
-                              // Get public URL
-                              const { data: urlData } = supabase.storage.from("media").getPublicUrl(filePath)
-
-                              const publicUrl = urlData.publicUrl
-
-                              // Add to media table
-                              const {
-                                data: { session },
-                              } = await supabase.auth.getSession()
-                              const userId = session?.user?.id || "anonymous"
-
-                              await supabase.from("media").insert({
-                                filename: file.name,
-                                filepath: filePath,
-                                filesize: file.size,
-                                filetype: file.type,
-                                public_url: publicUrl,
-                                tags: ["projects", file.type.split("/")[0]],
-                                metadata: {
-                                  uploadedBy: userId,
-                                },
-                              })
-
-                              // Notify parent component
-                              handleMainMediaSelect(publicUrl)
-                            }
-
-                            toast({
-                              title: "Upload successful",
-                              description: `${files.length} file(s) uploaded successfully`,
-                            })
-                          } catch (error: any) {
-                            console.error("Error uploading file:", error)
-                            toast({
-                              title: "Upload failed",
-                              description: error.message || "Failed to upload file",
-                              variant: "destructive",
-                            })
-                          }
-
-                          // Reset the input to allow selecting the same file again
-                          e.target.value = ""
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleFileUpload(e.target.files, "main")
+                          e.target.value = "" // Reset input
                         }
                       }}
                     />
@@ -568,7 +587,7 @@ export default function NewProjectPage() {
                 <div className="space-y-2">
                   {/* Browse Media button */}
                   <button
-                    onClick={() => openMediaSelector("bts")}
+                    onClick={() => openMediaLibrary("bts")}
                     className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm`}
                   >
                     Browse Media
@@ -611,69 +630,14 @@ export default function NewProjectPage() {
                     Browse Device
                     <input
                       type="file"
+                      ref={fileInputBtsRef}
                       className="hidden"
                       accept="image/*,video/*"
                       multiple
-                      onChange={async (e) => {
-                        const files = e.target.files
-                        if (files && files.length > 0) {
-                          // Upload to Supabase storage and add to media pool
-                          try {
-                            for (let i = 0; i < files.length; i++) {
-                              const file = files[i]
-                              const fileExt = file.name.split(".").pop()
-                              const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
-                              const filePath = `bts/${fileName}`
-
-                              // Upload to storage
-                              const { data, error } = await supabase.storage.from("media").upload(filePath, file)
-
-                              if (error) {
-                                throw error
-                              }
-
-                              // Get public URL
-                              const { data: urlData } = supabase.storage.from("media").getPublicUrl(filePath)
-
-                              const publicUrl = urlData.publicUrl
-
-                              // Add to media table
-                              const {
-                                data: { session },
-                              } = await supabase.auth.getSession()
-                              const userId = session?.user?.id || "anonymous"
-
-                              await supabase.from("media").insert({
-                                filename: file.name,
-                                filepath: filePath,
-                                filesize: file.size,
-                                filetype: file.type,
-                                public_url: publicUrl,
-                                tags: ["bts", file.type.split("/")[0]],
-                                metadata: {
-                                  uploadedBy: userId,
-                                },
-                              })
-
-                              // Notify parent component
-                              handleBtsMediaSelect(publicUrl)
-                            }
-
-                            toast({
-                              title: "Upload successful",
-                              description: `${files.length} file(s) uploaded successfully`,
-                            })
-                          } catch (error: any) {
-                            console.error("Error uploading file:", error)
-                            toast({
-                              title: "Upload failed",
-                              description: error.message || "Failed to upload file",
-                              variant: "destructive",
-                            })
-                          }
-
-                          // Reset the input to allow selecting the same file again
-                          e.target.value = ""
+                      onChange={(e) => {
+                        if (e.target.files && e.target.files.length > 0) {
+                          handleFileUpload(e.target.files, "bts")
+                          e.target.value = "" // Reset input
                         }
                       }}
                     />
@@ -1024,18 +988,18 @@ export default function NewProjectPage() {
         </div>
       </div>
 
-      {/* Media Selector Modal */}
-      {showMediaSelector && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-[#070a10] rounded-xl w-full max-w-4xl max-h-[90vh] overflow-auto border border-gray-800">
-            <div className="p-4 border-b border-gray-800 flex justify-between items-center">
-              <h2 className="text-xl font-medium text-gray-200">Select Media</h2>
-              <button onClick={() => setShowMediaSelector(false)} className="text-gray-400 hover:text-gray-200">
+      {/* Media Library Modal */}
+      {showMediaLibrary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-black/80 p-4">
+          <div className="relative w-full max-w-6xl max-h-[90vh] overflow-auto bg-[#070a10] rounded-lg border border-gray-800">
+            <div className="sticky top-0 z-10 flex justify-between items-center p-4 border-b border-gray-800 bg-[#070a10]">
+              <h2 className="text-xl font-medium">Select Media</h2>
+              <button onClick={() => setShowMediaLibrary(false)} className="text-gray-400 hover:text-white">
                 Close
               </button>
             </div>
             <div className="p-4">
-              <MediaSelector onSelect={handleMediaSelectorSelect} mediaType="all" buttonLabel="" />
+              <UnifiedMediaLibrary onSelect={handleMediaSelected} />
             </div>
           </div>
         </div>
