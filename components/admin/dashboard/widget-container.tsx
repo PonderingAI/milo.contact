@@ -1,7 +1,6 @@
 "use client"
 
-import React from "react"
-
+import type React from "react"
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
 import { WidgetSelector } from "./widget-selector"
@@ -9,7 +8,8 @@ import { DashboardWidget } from "./dashboard-widget"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { toast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
-import { Plus, Undo, Save } from "lucide-react"
+import { Plus, Undo, Save, AlertCircle } from "lucide-react"
+import { ErrorBoundaryWidget } from "./error-boundary-widget"
 
 export interface Widget {
   id: string
@@ -306,6 +306,28 @@ export function WidgetContainer({
     })
   }
 
+  // Safely render widget component
+  const renderWidgetComponent = (widget: Widget) => {
+    try {
+      const widgetDef = availableWidgets.find((w) => w.type === widget.type)
+      if (!widgetDef || typeof widgetDef.component !== "function") {
+        return <div>Invalid widget type</div>
+      }
+
+      // Use a simple approach - just render the component directly with its props
+      const Component = widgetDef.component
+      return <Component {...(widget.props || {})} />
+    } catch (error) {
+      console.error("Error rendering widget:", error)
+      return (
+        <div className="flex flex-col items-center justify-center h-full">
+          <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
+          <p className="text-sm">Failed to render widget</p>
+        </div>
+      )
+    }
+  }
+
   return (
     <div className="flex flex-col w-full h-full">
       <div className="flex justify-between items-center mb-6">
@@ -341,34 +363,27 @@ export function WidgetContainer({
         }}
       >
         <AnimatePresence>
-          {widgets.map((widget) => {
-            const widgetDef = availableWidgets.find((w) => w.type === widget.type)
-            if (!widgetDef) return null
-
-            const WidgetComponent = widgetDef.component
-
-            return (
-              <DashboardWidget
-                key={widget.id}
-                widget={widget}
-                gridColumns={gridColumns}
-                cellWidth={cellWidth}
-                cellHeight={cellHeight}
-                gap={gap}
-                onRemove={removeWidget}
-                onPositionChange={updateWidgetPosition}
-                onSizeChange={updateWidgetSize}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                onResizeStart={handleResizeStart}
-                onResizeEnd={handleResizeEnd}
-                isDragging={isDragging}
-                isResizing={isResizing}
-              >
-                {React.createElement(WidgetComponent, widget.props || {})}
-              </DashboardWidget>
-            )
-          })}
+          {widgets.map((widget) => (
+            <DashboardWidget
+              key={widget.id}
+              widget={widget}
+              gridColumns={gridColumns}
+              cellWidth={cellWidth}
+              cellHeight={cellHeight}
+              gap={gap}
+              onRemove={removeWidget}
+              onPositionChange={updateWidgetPosition}
+              onSizeChange={updateWidgetSize}
+              onDragStart={handleDragStart}
+              onDragEnd={handleDragEnd}
+              onResizeStart={handleResizeStart}
+              onResizeEnd={handleResizeEnd}
+              isDragging={isDragging}
+              isResizing={isResizing}
+            >
+              <ErrorBoundaryWidget>{renderWidgetComponent(widget)}</ErrorBoundaryWidget>
+            </DashboardWidget>
+          ))}
         </AnimatePresence>
       </div>
 

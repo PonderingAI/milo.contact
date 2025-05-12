@@ -1,393 +1,151 @@
-import { StatsWidget } from "./widgets/stats-widget"
 import { ChartWidget } from "./widgets/chart-widget"
-import { TableWidget } from "./widgets/table-widget"
-import { Users, FileText, HardDrive, Shield } from "lucide-react"
-import type { Widget, WidgetDefinition } from "./widget-container"
+import type { WidgetDefinition } from "./widget-container"
 
-// Define all available widgets
-export const widgetRegistry: WidgetDefinition[] = [
+// Sample data for widgets
+const sampleChartData = [
+  { name: "Jan", value: 400, secondValue: 240 },
+  { name: "Feb", value: 300, secondValue: 139 },
+  { name: "Mar", value: 200, secondValue: 980 },
+  { name: "Apr", value: 278, secondValue: 390 },
+  { name: "May", value: 189, secondValue: 480 },
+  { name: "Jun", value: 239, secondValue: 380 },
+  { name: "Jul", value: 349, secondValue: 430 },
+]
+
+const sampleTableData = [
+  { id: 1, name: "John Doe", email: "john@example.com", status: "Active" },
+  { id: 2, name: "Jane Smith", email: "jane@example.com", status: "Inactive" },
+  { id: 3, name: "Bob Johnson", email: "bob@example.com", status: "Active" },
+]
+
+// Define available widgets
+export const availableWidgets: WidgetDefinition[] = [
   {
-    type: "stats-users",
-    title: "Total Users",
-    description: "Display the total number of users in the system",
-    category: "statistics",
-    component: StatsWidget,
-    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
+    type: "chart",
+    title: "Chart",
+    description: "Display data in a chart format",
+    category: "Data Visualization",
+    component: (props: any) => (
+      <ChartWidget
+        title={props.title || "Data Chart"}
+        data={props.data || sampleChartData}
+        type={props.type || "line"}
+        colors={props.colors || ["#3b82f6", "#10b981"]}
+      />
+    ),
+    defaultSize: { w: 6, h: 4, minW: 3, minH: 3 },
     defaultProps: {
-      title: "Total Users",
-      value: 1248,
-      previousValue: 1156,
-      icon: <Users className="h-4 w-4" />,
-    },
-  },
-  {
-    type: "stats-projects",
-    title: "Total Projects",
-    description: "Display the total number of projects",
-    category: "statistics",
-    component: StatsWidget,
-    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
-    defaultProps: {
-      title: "Total Projects",
-      value: 87,
-      previousValue: 72,
-      icon: <FileText className="h-4 w-4" />,
-    },
-  },
-  {
-    type: "stats-storage",
-    title: "Storage Used",
-    description: "Display the total storage used",
-    category: "statistics",
-    component: StatsWidget,
-    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
-    defaultProps: {
-      title: "Storage Used",
-      value: 128,
-      previousValue: 96,
-      suffix: " GB",
-      icon: <HardDrive className="h-4 w-4" />,
-    },
-  },
-  {
-    type: "stats-security",
-    title: "Security Score",
-    description: "Display the current security score",
-    category: "security",
-    component: StatsWidget,
-    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
-    defaultProps: {
-      title: "Security Score",
-      value: 92,
-      previousValue: 85,
-      suffix: "%",
-      icon: <Shield className="h-4 w-4" />,
-    },
-  },
-  {
-    type: "chart-user-growth",
-    title: "User Growth",
-    description: "Chart showing user growth over time",
-    category: "charts",
-    component: ChartWidget,
-    defaultSize: { w: 6, h: 4, minW: 4, minH: 3 },
-    defaultProps: {
-      title: "User Growth",
-      data: [
-        { name: "Jan", value: 400, target: 300 },
-        { name: "Feb", value: 300, target: 400 },
-        { name: "Mar", value: 500, target: 500 },
-        { name: "Apr", value: 280, target: 600 },
-        { name: "May", value: 590, target: 700 },
-        { name: "Jun", value: 390, target: 800 },
-        { name: "Jul", value: 490, target: 900 },
-        { name: "Aug", value: 600, target: 1000 },
-        { name: "Sep", value: 700, target: 1100 },
-        { name: "Oct", value: 800, target: 1200 },
-        { name: "Nov", value: 900, target: 1300 },
-        { name: "Dec", value: 1100, target: 1400 },
-      ],
+      title: "Data Chart",
+      data: sampleChartData,
       type: "line",
-      colors: ["#10b981", "#3b82f6"],
     },
   },
   {
-    type: "chart-projects-by-month",
-    title: "Projects by Month",
-    description: "Chart showing projects created by month",
-    category: "charts",
-    component: ChartWidget,
-    defaultSize: { w: 6, h: 4, minW: 4, minH: 3 },
+    type: "bar-chart",
+    title: "Bar Chart",
+    description: "Display data in a bar chart format",
+    category: "Data Visualization",
+    component: (props: any) => (
+      <ChartWidget
+        title={props.title || "Bar Chart"}
+        data={props.data || sampleChartData}
+        type="bar"
+        colors={props.colors || ["#f59e0b", "#ef4444"]}
+      />
+    ),
+    defaultSize: { w: 6, h: 4, minW: 3, minH: 3 },
     defaultProps: {
-      title: "Projects by Month",
-      data: [
-        { name: "Jan", value: 12 },
-        { name: "Feb", value: 8 },
-        { name: "Mar", value: 15 },
-        { name: "Apr", value: 7 },
-        { name: "May", value: 10 },
-        { name: "Jun", value: 12 },
-        { name: "Jul", value: 5 },
-        { name: "Aug", value: 8 },
-        { name: "Sep", value: 16 },
-        { name: "Oct", value: 9 },
-        { name: "Nov", value: 14 },
-        { name: "Dec", value: 19 },
-      ],
-      type: "bar",
-      colors: ["#10b981"],
+      title: "Bar Chart",
+      data: sampleChartData,
     },
   },
   {
-    type: "table-recent-users",
-    title: "Recent Users",
-    description: "Table showing recently registered users",
-    category: "tables",
-    component: TableWidget,
-    defaultSize: { w: 6, h: 4, minW: 4, minH: 3 },
+    type: "area-chart",
+    title: "Area Chart",
+    description: "Display data in an area chart format",
+    category: "Data Visualization",
+    component: (props: any) => (
+      <ChartWidget
+        title={props.title || "Area Chart"}
+        data={props.data || sampleChartData}
+        type="area"
+        colors={props.colors || ["#8b5cf6", "#ec4899"]}
+      />
+    ),
+    defaultSize: { w: 6, h: 4, minW: 3, minH: 3 },
     defaultProps: {
-      title: "Recent Users",
-      data: [
-        { id: 1, name: "John Doe", email: "john@example.com", role: "Admin", createdAt: "2023-05-12" },
-        { id: 2, name: "Jane Smith", email: "jane@example.com", role: "Editor", createdAt: "2023-05-11" },
-        { id: 3, name: "Bob Johnson", email: "bob@example.com", role: "Viewer", createdAt: "2023-05-10" },
-        { id: 4, name: "Alice Brown", email: "alice@example.com", role: "Editor", createdAt: "2023-05-09" },
-        { id: 5, name: "Charlie Davis", email: "charlie@example.com", role: "Viewer", createdAt: "2023-05-08" },
-        { id: 6, name: "Eva Wilson", email: "eva@example.com", role: "Admin", createdAt: "2023-05-07" },
-        { id: 7, name: "Frank Miller", email: "frank@example.com", role: "Editor", createdAt: "2023-05-06" },
-      ],
-      columns: [
-        { key: "name", title: "Name" },
-        { key: "email", title: "Email" },
-        { key: "role", title: "Role" },
-        { key: "createdAt", title: "Created At" },
-      ],
-      searchable: true,
-      pagination: true,
-      pageSize: 5,
+      title: "Area Chart",
+      data: sampleChartData,
     },
   },
   {
-    type: "table-security-issues",
-    title: "Security Issues",
-    description: "Table showing security issues",
-    category: "security",
-    component: TableWidget,
-    defaultSize: { w: 6, h: 4, minW: 4, minH: 3 },
+    type: "stats",
+    title: "Stats",
+    description: "Display key statistics",
+    category: "Data",
+    component: (props: any) => (
+      <div className="flex flex-col h-full justify-center items-center">
+        <h3 className="text-lg font-medium mb-2">{props.title || "Statistics"}</h3>
+        <div className="text-4xl font-bold">{props.value || "1,234"}</div>
+        <p className="text-sm text-gray-500 mt-2">{props.description || "Total users"}</p>
+      </div>
+    ),
+    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
     defaultProps: {
-      title: "Security Issues",
-      data: [
-        { id: 1, issue: "Outdated dependency", severity: "High", status: "Open", createdAt: "2023-05-12" },
-        { id: 2, issue: "Weak password policy", severity: "Medium", status: "In Progress", createdAt: "2023-05-11" },
-        { id: 3, issue: "Missing SSL certificate", severity: "High", status: "Resolved", createdAt: "2023-05-10" },
-        { id: 4, issue: "Insecure API endpoint", severity: "Critical", status: "Open", createdAt: "2023-05-09" },
-        {
-          id: 5,
-          issue: "Exposed environment variables",
-          severity: "Medium",
-          status: "In Progress",
-          createdAt: "2023-05-08",
-        },
-      ],
-      columns: [
-        { key: "issue", title: "Issue" },
-        { key: "severity", title: "Severity" },
-        { key: "status", title: "Status" },
-        { key: "createdAt", title: "Created At" },
-      ],
-      searchable: true,
-      pagination: true,
-      pageSize: 5,
-    },
-  },
-  {
-    type: "chart-monthly-activity",
-    title: "Monthly Activity",
-    description: "Chart showing monthly activity metrics",
-    category: "charts",
-    component: ChartWidget,
-    defaultSize: { w: 6, h: 4, minW: 4, minH: 3 },
-    defaultProps: {
-      title: "Monthly Activity",
-      data: [
-        { name: "Jan", logins: 120, uploads: 45, downloads: 80 },
-        { name: "Feb", logins: 132, uploads: 62, downloads: 91 },
-        { name: "Mar", logins: 101, uploads: 55, downloads: 76 },
-        { name: "Apr", logins: 134, uploads: 70, downloads: 92 },
-        { name: "May", logins: 162, uploads: 75, downloads: 108 },
-        { name: "Jun", logins: 176, uploads: 82, downloads: 120 },
-      ],
-      type: "line",
-      colors: ["#3b82f6", "#10b981", "#f59e0b"],
-    },
-  },
-  {
-    type: "chart-storage-usage",
-    title: "Storage Usage",
-    description: "Chart showing storage usage by category",
-    category: "charts",
-    component: ChartWidget,
-    defaultSize: { w: 6, h: 4, minW: 4, minH: 3 },
-    defaultProps: {
-      title: "Storage Usage",
-      data: [
-        { name: "Images", value: 42 },
-        { name: "Videos", value: 28 },
-        { name: "Documents", value: 15 },
-        { name: "Other", value: 15 },
-      ],
-      type: "bar",
-      colors: ["#3b82f6", "#10b981", "#f59e0b", "#ef4444"],
+      title: "Statistics",
+      value: "1,234",
+      description: "Total users",
     },
   },
 ]
 
-// Define default dashboard widgets
-export const defaultDashboardWidgets: Widget[] = [
+// Default widgets for the dashboard
+export const defaultWidgets = [
   {
     id: "widget-1",
-    type: "stats-users",
-    title: "Total Users",
-    size: { w: 3, h: 2 },
+    type: "chart",
+    title: "User Growth",
+    size: { w: 6, h: 4 },
     position: { x: 0, y: 0 },
     props: {
-      title: "Total Users",
-      value: 1248,
-      previousValue: 1156,
-      icon: <Users className="h-4 w-4" />,
+      title: "User Growth",
+      data: sampleChartData,
+      type: "line",
     },
   },
   {
     id: "widget-2",
-    type: "stats-projects",
-    title: "Total Projects",
-    size: { w: 3, h: 2 },
-    position: { x: 3, y: 0 },
+    type: "bar-chart",
+    title: "Monthly Revenue",
+    size: { w: 6, h: 4 },
+    position: { x: 6, y: 0 },
     props: {
-      title: "Total Projects",
-      value: 87,
-      previousValue: 72,
-      icon: <FileText className="h-4 w-4" />,
+      title: "Monthly Revenue",
+      data: sampleChartData,
     },
   },
   {
     id: "widget-3",
-    type: "stats-storage",
-    title: "Storage Used",
+    type: "stats",
+    title: "Total Users",
     size: { w: 3, h: 2 },
-    position: { x: 6, y: 0 },
+    position: { x: 0, y: 4 },
     props: {
-      title: "Storage Used",
-      value: 128,
-      previousValue: 96,
-      suffix: " GB",
-      icon: <HardDrive className="h-4 w-4" />,
+      title: "Total Users",
+      value: "1,234",
+      description: "Active accounts",
     },
   },
   {
     id: "widget-4",
-    type: "stats-security",
-    title: "Security Score",
+    type: "stats",
+    title: "Revenue",
     size: { w: 3, h: 2 },
-    position: { x: 9, y: 0 },
+    position: { x: 3, y: 4 },
     props: {
-      title: "Security Score",
-      value: 92,
-      previousValue: 85,
-      suffix: "%",
-      icon: <Shield className="h-4 w-4" />,
-    },
-  },
-  {
-    id: "widget-5",
-    type: "chart-user-growth",
-    title: "User Growth",
-    size: { w: 6, h: 4 },
-    position: { x: 0, y: 2 },
-    props: {
-      title: "User Growth",
-      data: [
-        { name: "Jan", value: 400, target: 300 },
-        { name: "Feb", value: 300, target: 400 },
-        { name: "Mar", value: 500, target: 500 },
-        { name: "Apr", value: 280, target: 600 },
-        { name: "May", value: 590, target: 700 },
-        { name: "Jun", value: 390, target: 800 },
-        { name: "Jul", value: 490, target: 900 },
-        { name: "Aug", value: 600, target: 1000 },
-        { name: "Sep", value: 700, target: 1100 },
-        { name: "Oct", value: 800, target: 1200 },
-        { name: "Nov", value: 900, target: 1300 },
-        { name: "Dec", value: 1100, target: 1400 },
-      ],
-      type: "line",
-      colors: ["#10b981", "#3b82f6"],
-    },
-  },
-  {
-    id: "widget-6",
-    type: "chart-projects-by-month",
-    title: "Projects by Month",
-    size: { w: 6, h: 4 },
-    position: { x: 6, y: 2 },
-    props: {
-      title: "Projects by Month",
-      data: [
-        { name: "Jan", value: 12 },
-        { name: "Feb", value: 8 },
-        { name: "Mar", value: 15 },
-        { name: "Apr", value: 7 },
-        { name: "May", value: 10 },
-        { name: "Jun", value: 12 },
-        { name: "Jul", value: 5 },
-        { name: "Aug", value: 8 },
-        { name: "Sep", value: 16 },
-        { name: "Oct", value: 9 },
-        { name: "Nov", value: 14 },
-        { name: "Dec", value: 19 },
-      ],
-      type: "bar",
-      colors: ["#10b981"],
-    },
-  },
-  {
-    id: "widget-7",
-    type: "table-recent-users",
-    title: "Recent Users",
-    size: { w: 6, h: 4 },
-    position: { x: 0, y: 6 },
-    props: {
-      title: "Recent Users",
-      data: [
-        { id: 1, name: "John Doe", email: "john@example.com", role: "Admin", createdAt: "2023-05-12" },
-        { id: 2, name: "Jane Smith", email: "jane@example.com", role: "Editor", createdAt: "2023-05-11" },
-        { id: 3, name: "Bob Johnson", email: "bob@example.com", role: "Viewer", createdAt: "2023-05-10" },
-        { id: 4, name: "Alice Brown", email: "alice@example.com", role: "Editor", createdAt: "2023-05-09" },
-        { id: 5, name: "Charlie Davis", email: "charlie@example.com", role: "Viewer", createdAt: "2023-05-08" },
-        { id: 6, name: "Eva Wilson", email: "eva@example.com", role: "Admin", createdAt: "2023-05-07" },
-        { id: 7, name: "Frank Miller", email: "frank@example.com", role: "Editor", createdAt: "2023-05-06" },
-      ],
-      columns: [
-        { key: "name", title: "Name" },
-        { key: "email", title: "Email" },
-        { key: "role", title: "Role" },
-        { key: "createdAt", title: "Created At" },
-      ],
-      searchable: true,
-      pagination: true,
-      pageSize: 5,
-    },
-  },
-  {
-    id: "widget-8",
-    type: "table-security-issues",
-    title: "Security Issues",
-    size: { w: 6, h: 4 },
-    position: { x: 6, y: 6 },
-    props: {
-      title: "Security Issues",
-      data: [
-        { id: 1, issue: "Outdated dependency", severity: "High", status: "Open", createdAt: "2023-05-12" },
-        { id: 2, issue: "Weak password policy", severity: "Medium", status: "In Progress", createdAt: "2023-05-11" },
-        { id: 3, issue: "Missing SSL certificate", severity: "High", status: "Resolved", createdAt: "2023-05-10" },
-        { id: 4, issue: "Insecure API endpoint", severity: "Critical", status: "Open", createdAt: "2023-05-09" },
-        {
-          id: 5,
-          issue: "Exposed environment variables",
-          severity: "Medium",
-          status: "In Progress",
-          createdAt: "2023-05-08",
-        },
-      ],
-      columns: [
-        { key: "issue", title: "Issue" },
-        { key: "severity", title: "Severity" },
-        { key: "status", title: "Status" },
-        { key: "createdAt", title: "Created At" },
-      ],
-      searchable: true,
-      pagination: true,
-      pageSize: 5,
+      title: "Revenue",
+      value: "$12,345",
+      description: "Monthly income",
     },
   },
 ]
