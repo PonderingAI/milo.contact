@@ -5,7 +5,7 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, X, ImageIcon, Film } from "lucide-react"
+import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,8 +14,8 @@ import { extractVideoInfo } from "@/lib/project-data"
 import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import UploadWidget from "@/components/admin/upload-widget"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import MediaSelector from "@/components/admin/media-selector"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -25,6 +25,8 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null)
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
+  const [showMediaSelector, setShowMediaSelector] = useState(false)
+  const [currentMediaTarget, setCurrentMediaTarget] = useState<"main" | "bts">("main")
 
   // Form state
   const [formData, setFormData] = useState({
@@ -39,7 +41,7 @@ export default function NewProjectPage() {
     crew: "",
   })
 
-  // BTS images state
+  // Media state
   const [btsImages, setBtsImages] = useState<string[]>([])
   const [btsVideos, setBtsVideos] = useState<string[]>([])
   const [mainImages, setMainImages] = useState<string[]>([])
@@ -55,15 +57,22 @@ export default function NewProjectPage() {
   }
 
   const handleMainMediaSelect = (url: string) => {
-    // Determine if it's an image or video based on extension
+    // Determine if it's an image or video based on extension or URL
     const isVideo =
-      url.match(/\.(mp4|webm|ogg|mov)$/) !== null || url.includes("youtube.com") || url.includes("vimeo.com")
+      url.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+      url.includes("youtube.com") ||
+      url.includes("vimeo.com") ||
+      url.includes("youtu.be")
 
     if (isVideo) {
-      setMainVideos((prev) => [...prev, url])
+      if (!mainVideos.includes(url)) {
+        setMainVideos((prev) => [...prev, url])
+      }
       setFormData((prev) => ({ ...prev, video_url: url }))
     } else {
-      setMainImages((prev) => [...prev, url])
+      if (!mainImages.includes(url)) {
+        setMainImages((prev) => [...prev, url])
+      }
       // Set as cover image if none is set
       if (!formData.image) {
         setFormData((prev) => ({ ...prev, image: url }))
@@ -84,15 +93,36 @@ export default function NewProjectPage() {
   }
 
   const handleBtsMediaSelect = (url: string) => {
-    // Determine if it's an image or video based on extension
+    // Determine if it's an image or video based on extension or URL
     const isVideo =
-      url.match(/\.(mp4|webm|ogg|mov)$/) !== null || url.includes("youtube.com") || url.includes("vimeo.com")
+      url.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+      url.includes("youtube.com") ||
+      url.includes("vimeo.com") ||
+      url.includes("youtu.be")
 
     if (isVideo) {
-      setBtsVideos((prev) => [...prev, url])
+      if (!btsVideos.includes(url)) {
+        setBtsVideos((prev) => [...prev, url])
+      }
     } else {
-      setBtsImages((prev) => [...prev, url])
+      if (!btsImages.includes(url)) {
+        setBtsImages((prev) => [...prev, url])
+      }
     }
+  }
+
+  const openMediaSelector = (target: "main" | "bts") => {
+    setCurrentMediaTarget(target)
+    setShowMediaSelector(true)
+  }
+
+  const handleMediaSelectorSelect = (url: string) => {
+    if (currentMediaTarget === "main") {
+      handleMainMediaSelect(url)
+    } else {
+      handleBtsMediaSelect(url)
+    }
+    setShowMediaSelector(false)
   }
 
   const removeMainImage = (index: number) => {
@@ -186,12 +216,14 @@ export default function NewProjectPage() {
         }
       }
 
-      // Set video URL in form data
-      setFormData((prev) => ({ ...prev, video_url: url }))
-      setMainVideos((prev) => [...prev, url])
+      // Set video URL in form data if not already in the list
+      if (!mainVideos.includes(url)) {
+        setFormData((prev) => ({ ...prev, video_url: url }))
+        setMainVideos((prev) => [...prev, url])
+      }
 
       // If we have a thumbnail and no image is set, use the thumbnail
-      if (thumbnailUrl && !formData.image) {
+      if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
         setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
         setVideoThumbnail(thumbnailUrl)
         setMainImages((prev) => [...prev, thumbnailUrl])
@@ -247,8 +279,10 @@ export default function NewProjectPage() {
         return
       }
 
-      // Add to BTS videos
-      setBtsVideos((prev) => [...prev, url])
+      // Add to BTS videos if not already in the list
+      if (!btsVideos.includes(url)) {
+        setBtsVideos((prev) => [...prev, url])
+      }
 
       // Add to media library
       const {
@@ -287,8 +321,8 @@ export default function NewProjectPage() {
         },
       })
 
-      // Add thumbnail to BTS images if available
-      if (thumbnailUrl) {
+      // Add thumbnail to BTS images if available and not already in the list
+      if (thumbnailUrl && !btsImages.includes(thumbnailUrl)) {
         setBtsImages((prev) => [...prev, thumbnailUrl])
       }
 
@@ -318,7 +352,7 @@ export default function NewProjectPage() {
       }
 
       if (!formData.image) {
-        setError("Image is required")
+        setError("Cover image is required")
         return
       }
 
@@ -410,28 +444,242 @@ export default function NewProjectPage() {
             {/* Main upload area */}
             <div>
               <h2 className="text-sm font-medium mb-2 text-gray-400">Main</h2>
-              <UploadWidget
-                onMediaSelect={handleMainMediaSelect}
-                onUrlSubmit={addMainVideoUrl}
-                urlPlaceholder="Enter video URL..."
-                folder="projects"
-                compact={true}
-                mediaType="all"
-              />
+              <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
+                <div className="space-y-2">
+                  {/* Browse Media button */}
+                  <button
+                    onClick={() => openMediaSelector("main")}
+                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm`}
+                  >
+                    Browse Media
+                  </button>
+
+                  {/* URL input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Enter video URL..."
+                      className={`w-full py-2 px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 text-sm`}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const input = e.target as HTMLInputElement
+                          if (input.value.trim()) {
+                            addMainVideoUrl(input.value)
+                            input.value = ""
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={(e) => {
+                        const input = e.currentTarget.previousSibling as HTMLInputElement
+                        if (input.value.trim()) {
+                          addMainVideoUrl(input.value)
+                          input.value = ""
+                        }
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                    >
+                      <ArrowRight size={18} />
+                    </button>
+                  </div>
+
+                  {/* Browse Device button */}
+                  <label
+                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm cursor-pointer block`}
+                  >
+                    Browse Device
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*,video/*"
+                      onChange={async (e) => {
+                        const files = e.target.files
+                        if (files && files.length > 0) {
+                          // Upload to Supabase storage and add to media pool
+                          try {
+                            for (let i = 0; i < files.length; i++) {
+                              const file = files[i]
+                              const fileExt = file.name.split(".").pop()
+                              const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
+                              const filePath = `projects/${fileName}`
+
+                              // Upload to storage
+                              const { data, error } = await supabase.storage.from("media").upload(filePath, file)
+
+                              if (error) {
+                                throw error
+                              }
+
+                              // Get public URL
+                              const { data: urlData } = supabase.storage.from("media").getPublicUrl(filePath)
+
+                              const publicUrl = urlData.publicUrl
+
+                              // Add to media table
+                              const {
+                                data: { session },
+                              } = await supabase.auth.getSession()
+                              const userId = session?.user?.id || "anonymous"
+
+                              await supabase.from("media").insert({
+                                filename: file.name,
+                                filepath: filePath,
+                                filesize: file.size,
+                                filetype: file.type,
+                                public_url: publicUrl,
+                                tags: ["projects", file.type.split("/")[0]],
+                                metadata: {
+                                  uploadedBy: userId,
+                                },
+                              })
+
+                              // Notify parent component
+                              handleMainMediaSelect(publicUrl)
+                            }
+
+                            toast({
+                              title: "Upload successful",
+                              description: `${files.length} file(s) uploaded successfully`,
+                            })
+                          } catch (error: any) {
+                            console.error("Error uploading file:", error)
+                            toast({
+                              title: "Upload failed",
+                              description: error.message || "Failed to upload file",
+                              variant: "destructive",
+                            })
+                          }
+
+                          // Reset the input to allow selecting the same file again
+                          e.target.value = ""
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
 
             {/* BTS upload area */}
             <div>
               <h2 className="text-sm font-medium mb-2 text-gray-400">BTS</h2>
-              <UploadWidget
-                onMediaSelect={handleBtsMediaSelect}
-                onUrlSubmit={addBtsVideoUrl}
-                urlPlaceholder="Enter video URL..."
-                folder="bts"
-                multiple={true}
-                compact={true}
-                mediaType="all"
-              />
+              <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
+                <div className="space-y-2">
+                  {/* Browse Media button */}
+                  <button
+                    onClick={() => openMediaSelector("bts")}
+                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm`}
+                  >
+                    Browse Media
+                  </button>
+
+                  {/* URL input */}
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Enter video URL..."
+                      className={`w-full py-2 px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 text-sm`}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          const input = e.target as HTMLInputElement
+                          if (input.value.trim()) {
+                            addBtsVideoUrl(input.value)
+                            input.value = ""
+                          }
+                        }
+                      }}
+                    />
+                    <button
+                      onClick={(e) => {
+                        const input = e.currentTarget.previousSibling as HTMLInputElement
+                        if (input.value.trim()) {
+                          addBtsVideoUrl(input.value)
+                          input.value = ""
+                        }
+                      }}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+                    >
+                      <ArrowRight size={18} />
+                    </button>
+                  </div>
+
+                  {/* Browse Device button */}
+                  <label
+                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm cursor-pointer block`}
+                  >
+                    Browse Device
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept="image/*,video/*"
+                      multiple
+                      onChange={async (e) => {
+                        const files = e.target.files
+                        if (files && files.length > 0) {
+                          // Upload to Supabase storage and add to media pool
+                          try {
+                            for (let i = 0; i < files.length; i++) {
+                              const file = files[i]
+                              const fileExt = file.name.split(".").pop()
+                              const fileName = `${Math.random().toString(36).substring(2, 15)}.${fileExt}`
+                              const filePath = `bts/${fileName}`
+
+                              // Upload to storage
+                              const { data, error } = await supabase.storage.from("media").upload(filePath, file)
+
+                              if (error) {
+                                throw error
+                              }
+
+                              // Get public URL
+                              const { data: urlData } = supabase.storage.from("media").getPublicUrl(filePath)
+
+                              const publicUrl = urlData.publicUrl
+
+                              // Add to media table
+                              const {
+                                data: { session },
+                              } = await supabase.auth.getSession()
+                              const userId = session?.user?.id || "anonymous"
+
+                              await supabase.from("media").insert({
+                                filename: file.name,
+                                filepath: filePath,
+                                filesize: file.size,
+                                filetype: file.type,
+                                public_url: publicUrl,
+                                tags: ["bts", file.type.split("/")[0]],
+                                metadata: {
+                                  uploadedBy: userId,
+                                },
+                              })
+
+                              // Notify parent component
+                              handleBtsMediaSelect(publicUrl)
+                            }
+
+                            toast({
+                              title: "Upload successful",
+                              description: `${files.length} file(s) uploaded successfully`,
+                            })
+                          } catch (error: any) {
+                            console.error("Error uploading file:", error)
+                            toast({
+                              title: "Upload failed",
+                              description: error.message || "Failed to upload file",
+                              variant: "destructive",
+                            })
+                          }
+
+                          // Reset the input to allow selecting the same file again
+                          e.target.value = ""
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -600,7 +848,13 @@ export default function NewProjectPage() {
                           >
                             {video.includes("youtube.com") ? (
                               <img
-                                src={`https://img.youtube.com/vi/${video.split("v=")[1].split("&")[0]}/hqdefault.jpg`}
+                                src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
+                                alt={`YouTube video ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : video.includes("youtu.be") ? (
+                              <img
+                                src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
                                 alt={`YouTube video ${index + 1}`}
                                 className="w-full h-full object-cover"
                               />
@@ -692,7 +946,13 @@ export default function NewProjectPage() {
                           <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center">
                             {video.includes("youtube.com") ? (
                               <img
-                                src={`https://img.youtube.com/vi/${video.split("v=")[1].split("&")[0]}/hqdefault.jpg`}
+                                src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
+                                alt={`YouTube video ${index + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : video.includes("youtu.be") ? (
+                              <img
+                                src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
                                 alt={`YouTube video ${index + 1}`}
                                 className="w-full h-full object-cover"
                               />
@@ -763,6 +1023,23 @@ export default function NewProjectPage() {
           </Button>
         </div>
       </div>
+
+      {/* Media Selector Modal */}
+      {showMediaSelector && (
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-[#070a10] rounded-xl w-full max-w-4xl max-h-[90vh] overflow-auto border border-gray-800">
+            <div className="p-4 border-b border-gray-800 flex justify-between items-center">
+              <h2 className="text-xl font-medium text-gray-200">Select Media</h2>
+              <button onClick={() => setShowMediaSelector(false)} className="text-gray-400 hover:text-gray-200">
+                Close
+              </button>
+            </div>
+            <div className="p-4">
+              <MediaSelector onSelect={handleMediaSelectorSelect} mediaType="all" buttonLabel="" />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
