@@ -4,25 +4,51 @@ import { promisify } from "util"
 
 const execAsync = promisify(exec)
 
+const MAX_RETRY_ATTEMPTS = 3
+const RETRY_DELAY_MS = 1000
+
+async function retryWithDelay(fn, attempts = MAX_RETRY_ATTEMPTS, delay = RETRY_DELAY_MS) {
+  try {
+    return await fn()
+  } catch (error) {
+    if (attempts <= 1) throw error
+    console.log(`Retrying operation, ${attempts - 1} attempts remaining...`)
+    await new Promise((resolve) => setTimeout(resolve, delay))
+    return retryWithDelay(fn, attempts - 1, delay)
+  }
+}
+
 export async function GET() {
   try {
     // First try npm-check-updates for more detailed information
     try {
-      const { stdout: ncuOutput } = await execAsync("npx npm-check-updates --jsonUpgraded", { timeout: 30000 })
-      const ncuData = JSON.parse(ncuOutput)
+      const { stdout: ncuOutput } = await retryWithDelay(() =>
+        execAsync("npx npm-check-updates --jsonUpgraded", { timeout: 45000 }),
+      )
 
-      // Transform to the format we need
-      const outdatedDeps = {}
-      Object.entries(ncuData).forEach(([name, version]) => {
-        outdatedDeps[name] = { latest: version }
-      })
+      console.log("npm-check-updates completed successfully")
 
-      return NextResponse.json({
-        success: true,
-        outdated: outdatedDeps,
-        count: Object.keys(outdatedDeps).length,
-        source: "npm-check-updates",
-      })
+      try {
+        const ncuData = JSON.parse(ncuOutput)
+
+        // Transform to the format we need
+        const outdatedDeps = {}
+        Object.entries(ncuData).forEach(([name, version]) => {
+          outdatedDeps[name] = { latest: version }
+        })
+
+        return NextResponse.json({
+          success: true,
+          outdated: outdatedDeps,
+          count: Object.keys(outdatedDeps).length,
+          source: "npm-check-updates",
+          timestamp: new Date().toISOString(),
+        })
+      } catch (parseError) {
+        console.error("Error parsing npm-check-updates output:", parseError)
+        console.error("Raw output:", ncuOutput)
+        throw parseError
+      }
     } catch (ncuError) {
       console.error("Error using npm-check-updates, falling back to npm outdated:", ncuError)
     }

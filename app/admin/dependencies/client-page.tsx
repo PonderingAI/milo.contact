@@ -7,6 +7,7 @@ import AdminCheck from "@/components/admin/admin-check"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Package } from "lucide-react"
 import DependencyTableSetupGuide from "@/components/admin/dependency-table-setup-guide"
+import { Badge } from "@/components/ui/badge"
 
 export default function ClientDependenciesPage() {
   const { isLoaded, isSignedIn } = useUser()
@@ -53,6 +54,39 @@ export default function ClientDependenciesPage() {
       setLoading(false)
     }
   }
+
+  // Add after the fetchDependencies function
+  const scanDependencies = async () => {
+    if (typeof window === "undefined") return
+
+    setLoading(true)
+    setError(null)
+
+    try {
+      // First, trigger a scan to update dependency information
+      const scanResponse = await fetch("/api/dependencies/scan", {
+        method: "POST",
+      })
+
+      if (!scanResponse.ok) {
+        throw new Error("Failed to scan dependencies")
+      }
+
+      // Then fetch the updated dependency information
+      await fetchDependencies()
+    } catch (err) {
+      console.error("Error scanning dependencies:", err)
+      setError("Failed to scan dependencies. Please try again.")
+      setLoading(false)
+    }
+  }
+
+  // Add a useEffect to scan dependencies on initial load
+  useEffect(() => {
+    if (isSignedIn && !setupNeeded) {
+      scanDependencies()
+    }
+  }, [isSignedIn, setupNeeded])
 
   const handleSetupComplete = () => {
     setSetupComplete(true)
@@ -124,19 +158,59 @@ export default function ClientDependenciesPage() {
               <Package className="h-16 w-16 mb-4 text-gray-400" />
               <h2 className="text-xl font-bold mb-2">No Dependencies Found</h2>
               <p className="text-center text-gray-400 mb-4">Your project doesn't have any dependencies yet.</p>
+              <Button onClick={scanDependencies}>Scan for Dependencies</Button>
             </div>
           </div>
         ) : (
           <div className="bg-gray-800 p-6 rounded-lg">
-            <h2 className="text-xl font-bold mb-4">Project Dependencies</h2>
-            <p className="mb-6">
-              Here you can view and manage your project dependencies. Keep your project up-to-date and secure.
-            </p>
-
-            {/* Dependencies list would go here */}
-            <div className="text-center py-8 text-gray-400">
-              <p>Your dependencies will appear here after scanning.</p>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-xl font-bold">Project Dependencies</h2>
+              <Button onClick={scanDependencies} className="ml-auto">
+                Refresh Dependencies
+              </Button>
             </div>
+
+            {dependencies.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-gray-700">
+                      <th className="text-left py-2 px-4">Package</th>
+                      <th className="text-left py-2 px-4">Current</th>
+                      <th className="text-left py-2 px-4">Latest</th>
+                      <th className="text-left py-2 px-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {dependencies.map((dep) => (
+                      <tr key={dep.name} className="border-b border-gray-800">
+                        <td className="py-2 px-4">
+                          <div className="font-medium">{dep.name}</div>
+                          <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
+                        </td>
+                        <td className="py-2 px-4">{dep.current_version}</td>
+                        <td className="py-2 px-4">{dep.latest_version}</td>
+                        <td className="py-2 px-4">
+                          {dep.outdated ? (
+                            <Badge variant="outline" className="border-yellow-600 text-yellow-300">
+                              Outdated
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-green-600 text-green-300">
+                              Up to date
+                            </Badge>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div className="text-center py-8 text-gray-400">
+                <p>Click "Scan for Dependencies" to analyze your project.</p>
+              </div>
+            )}
           </div>
         )}
       </div>

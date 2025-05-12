@@ -76,44 +76,15 @@ async function getSecurityIssues() {
   }
 }
 
-// Helper function to check for Dependabot alerts from GitHub
-async function getDependabotAlerts() {
-  try {
-    // In a real implementation, this would call the GitHub API
-    // For now, we'll simulate some Dependabot alerts
-
-    // Simulate some Dependabot alerts for demonstration
-    const simulatedAlerts = {
-      react: {
-        severity: "high",
-        summary: "Prototype Pollution in React",
-        url: "https://github.com/advisories/GHSA-example-react",
-        createdAt: new Date().toISOString(),
-      },
-      lodash: {
-        severity: "critical",
-        summary: "Prototype Pollution in Lodash",
-        url: "https://github.com/advisories/GHSA-example-lodash",
-        createdAt: new Date().toISOString(),
-      },
-      // Add more simulated alerts as needed
-    }
-
-    return simulatedAlerts
-  } catch (error) {
-    console.error("Error fetching Dependabot alerts:", error)
-    return {}
-  }
-}
-
 // Helper function to fetch package info from npm
 async function fetchPackageInfo(packageName) {
   try {
+    // Use the full metadata to ensure we get accurate version information
     const response = await fetch(`https://registry.npmjs.org/${packageName}`, {
       headers: {
-        Accept: "application/vnd.npm.install-v1+json", // Lightweight metadata
+        Accept: "application/json", // Get full metadata for accurate version info
       },
-      next: { revalidate: 3600 }, // Cache for 1 hour
+      cache: "no-store", // Don't use cached data to ensure we get the latest
     })
 
     if (!response.ok) {
@@ -184,8 +155,8 @@ export async function GET() {
     // Get security vulnerabilities
     const securityIssues = await getSecurityIssues()
 
-    // Get Dependabot alerts
-    const dependabotAlerts = await getDependabotAlerts()
+    // We'll use real npm audit data instead of simulated Dependabot alerts
+    const dependabotAlerts = {}
 
     // Fetch package info for each dependency (in parallel)
     const packageInfoPromises = allDeps.map(async (dep) => {
@@ -209,13 +180,14 @@ export async function GET() {
         id: dep.name,
         name: dep.name,
         current_version: dep.current_version,
+        // Prioritize npm registry data for latest version
         latest_version: dep.latestVersion || outdatedInfo?.latest || dep.current_version,
-        outdated: !!outdatedInfo,
+        outdated: dep.latestVersion ? dep.current_version !== dep.latestVersion : !!outdatedInfo,
         locked: false,
         has_security_issue: hasSecurityIssue,
         security_details: hasSecurityIssue ? securityIssues?.vulnerabilities?.[dep.name] : null,
-        has_dependabot_alert: hasDependabotAlert,
-        dependabot_alert_details: alertDetails,
+        has_dependabot_alert: false, // We're not using simulated data anymore
+        dependabot_alert_details: null,
         update_mode: "conservative", // Default to conservative
         is_dev: dep.is_dev,
         description: dep.description || "",

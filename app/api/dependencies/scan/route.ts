@@ -35,11 +35,12 @@ async function getDependenciesFromPackageJson() {
 // Helper function to fetch package info from npm
 async function fetchPackageInfo(packageName) {
   try {
+    // Use the full metadata to ensure we get accurate version information
     const response = await fetch(`https://registry.npmjs.org/${packageName}`, {
       headers: {
-        Accept: "application/vnd.npm.install-v1+json", // Lightweight metadata
+        Accept: "application/json", // Get full metadata for accurate version info
       },
-      next: { revalidate: 3600 }, // Cache for 1 hour
+      cache: "no-store", // Don't use cached data to ensure we get the latest
     })
 
     if (!response.ok) {
