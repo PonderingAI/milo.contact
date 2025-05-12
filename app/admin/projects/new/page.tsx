@@ -58,44 +58,49 @@ export default function NewProjectPage() {
 
   // Handler for main media selection
   const handleMainMediaSelect = (url: string | string[]) => {
-    // Ensure we're working with a single URL for main media
-    const mediaUrl = Array.isArray(url) ? url[0] : url
+    // Handle both single and multiple selections
+    const urls = Array.isArray(url) ? url : [url]
 
-    if (!mediaUrl) return
+    urls.forEach((mediaUrl) => {
+      if (!mediaUrl) return
 
-    // Determine if it's an image or video based on extension or URL
-    const isVideo =
-      mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
-      mediaUrl.includes("youtube.com") ||
-      mediaUrl.includes("vimeo.com") ||
-      mediaUrl.includes("youtu.be")
+      // Determine if it's an image or video based on extension or URL
+      const isVideo =
+        mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+        mediaUrl.includes("youtube.com") ||
+        mediaUrl.includes("vimeo.com") ||
+        mediaUrl.includes("youtu.be")
 
-    if (isVideo) {
-      if (!mainVideos.includes(mediaUrl)) {
-        setMainVideos((prev) => [...prev, mediaUrl])
+      if (isVideo) {
+        if (!mainVideos.includes(mediaUrl)) {
+          setMainVideos((prev) => [...prev, mediaUrl])
+        }
+        // Set as main video if none is set
+        if (!formData.video_url) {
+          setFormData((prev) => ({ ...prev, video_url: mediaUrl }))
+        }
+      } else {
+        if (!mainImages.includes(mediaUrl)) {
+          setMainImages((prev) => [...prev, mediaUrl])
+        }
+        // Set as cover image if none is set
+        if (!formData.image) {
+          setFormData((prev) => ({ ...prev, image: mediaUrl }))
+        }
       }
-      setFormData((prev) => ({ ...prev, video_url: mediaUrl }))
-    } else {
-      if (!mainImages.includes(mediaUrl)) {
-        setMainImages((prev) => [...prev, mediaUrl])
-      }
-      // Set as cover image if none is set
-      if (!formData.image) {
-        setFormData((prev) => ({ ...prev, image: mediaUrl }))
-      }
-    }
 
-    // If title is empty, try to extract a title from the filename
-    if (!formData.title) {
-      const filename = mediaUrl.split("/").pop()
-      if (filename) {
-        // Remove extension and replace dashes/underscores with spaces
-        const nameWithoutExt = filename.split(".")[0]
-        const title = nameWithoutExt.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) // Capitalize first letter of each word
+      // If title is empty, try to extract a title from the filename
+      if (!formData.title) {
+        const filename = mediaUrl.split("/").pop()
+        if (filename) {
+          // Remove extension and replace dashes/underscores with spaces
+          const nameWithoutExt = filename.split(".")[0]
+          const title = nameWithoutExt.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) // Capitalize first letter of each word
 
-        setFormData((prev) => ({ ...prev, title }))
+          setFormData((prev) => ({ ...prev, title }))
+        }
       }
-    }
+    })
   }
 
   // Handler for BTS media selection
@@ -519,8 +524,9 @@ export default function NewProjectPage() {
                   {/* Direct MediaSelector component for MAIN media */}
                   <MediaSelector
                     onSelect={handleMainMediaSelect}
-                    currentValue={formData.image || formData.video_url}
+                    currentValue={[...mainImages, ...mainVideos]}
                     mediaType="all"
+                    multiple={true}
                     buttonLabel="Browse Media Library"
                   />
 

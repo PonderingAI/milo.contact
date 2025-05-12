@@ -13,13 +13,15 @@ import {
   Trash2,
   Search,
   Filter,
-  CheckCircle,
   Link,
   ImageIcon,
   RefreshCw,
   UploadCloud,
   Loader2,
   AlertCircle,
+  Edit,
+  Plus,
+  X,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
@@ -27,6 +29,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Label } from "@/components/ui/label"
 
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return "0 Bytes"
@@ -85,6 +89,12 @@ export default function UnifiedMediaLibrary() {
 
   // Reference to track if we need to process the queue
   const pendingQueueRef = useRef(false)
+
+  const [editingItem, setEditingItem] = useState<MediaItem | null>(null)
+  const [newFilename, setNewFilename] = useState("")
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [newTag, setNewTag] = useState("")
+  const [editingTags, setEditingTags] = useState<string[]>([])
 
   useEffect(() => {
     fetchMedia()
@@ -596,39 +606,6 @@ export default function UnifiedMediaLibrary() {
     })
   }
 
-  const handleDeleteMedia = async (id: string, filepath: string) => {
-    if (!confirm("Are you sure you want to delete this media item?")) return
-
-    try {
-      // Delete from storage if it's not an external URL
-      if (!filepath.startsWith("http")) {
-        const { error: storageError } = await supabase.storage.from("media").remove([filepath])
-
-        if (storageError) throw storageError
-      }
-
-      // Delete from database
-      const { error: dbError } = await supabase.from("media").delete().eq("id", id)
-
-      if (dbError) throw dbError
-
-      toast({
-        title: "Success",
-        description: "Media deleted successfully",
-      })
-
-      // Update state
-      setMediaItems(mediaItems.filter((item) => item.id !== id))
-    } catch (error) {
-      console.error("Error deleting media:", error)
-      toast({
-        title: "Error",
-        description: "Failed to delete media",
-        variant: "destructive",
-      })
-    }
-  }
-
   const handleTagClick = (tag: string) => {
     if (selectedTags.includes(tag)) {
       setSelectedTags(selectedTags.filter((t) => t !== tag))
@@ -659,7 +636,115 @@ export default function UnifiedMediaLibrary() {
     return mediaItems.reduce((total, item) => total + (item.filesize || 0), 0)
   }
 
-  const renderMediaItem = (item: MediaItem) => {
+  const handleEditMedia = (item: MediaItem) => {
+    setEditingItem(item)
+    setNewFilename(item.filename)
+    setEditingTags(item.tags || [])
+    setIsEditDialogOpen(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editingItem) return
+
+    try {
+      // Update the media item in the database
+      const { error } = await supabase
+        .from("media")
+        .update({
+          filename: newFilename,
+          tags: editingTags,
+        })
+        .eq("id", editingItem.id)
+
+      if (error) throw error
+
+      // Update local state
+      setMediaItems(
+        mediaItems.map((item) =>
+          item.id === editingItem.id ? { ...item, filename: newFilename, tags: editingTags } : item,
+        ),
+      )
+
+      // Extract all unique tags for the filter
+      const tags = new Set<string>()
+      mediaItems.forEach((item) => {
+        if (item.tags) {
+          item.tags.forEach((tag: string) => tags.add(tag))
+        }
+      })
+      // Add any new tags
+      editingTags.forEach((tag) => tags.add(tag))
+      setAllTags(Array.from(tags))
+
+      toast({
+        title: "Success",
+        description: "Media updated successfully",
+      })
+
+      // Close the dialog
+      setIsEditDialogOpen(false)
+    } catch (error) {
+      console.error("Error updating media:", error)
+      toast({
+        title: "Error",
+        description: "Failed to update media",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleAddTag = () => {
+    if (!newTag.trim()) return
+
+    // Don't add duplicate tags
+    if (!editingTags.includes(newTag.trim())) {
+      setEditingTags([...editingTags, newTag.trim()])
+    }
+    setNewTag("")
+  }
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setEditingTags(editingTags.filter((tag) => tag !== tagToRemove))
+  }
+
+  const handleDeleteMedia = async (id: string, filepath: string, filetype: string) => {
+    if (!confirm("Are you sure you want to delete this media item?")) return
+
+    try {
+      // First delete from database to ensure we don't have orphaned records
+      const { error: dbError } = await supabase.from("media").delete().eq("id", id)
+
+      if (dbError) throw dbError
+
+      // Then try to delete from storage if it's not an external URL
+      // Only attempt storage deletion for items that are actually in storage
+      if (!filepath.startsWith("http") && filetype !== "vimeo" && filetype !== "youtube" && filetype !== "linkedin") {
+        const { error: storageError } = await supabase.storage.from("media").remove([filepath])
+
+        // Log but don't throw on storage error - the DB record is already gone
+        if (storageError) {
+          console.warn("Storage deletion error:", storageError)
+        }
+      }
+
+      toast({
+        title: "Success",
+        description: "Media deleted successfully",
+      })
+
+      // Update state
+      setMediaItems(mediaItems.filter((item) => item.id !== id))
+    } catch (error) {
+      console.error("Error deleting media:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete media",
+        variant: "destructive",
+      })
+    }
+  }
+
+  function renderMediaItem(item: MediaItem) {
     const isVimeo = item.filetype === "vimeo"
     const isYoutube = item.filetype === "youtube"
     const isLinkedin = item.filetype === "linkedin"
@@ -717,29 +802,31 @@ export default function UnifiedMediaLibrary() {
           )}
 
           <div className="flex justify-between items-center mt-3">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex items-center gap-1 text-xs"
-              onClick={() => handleCopyUrl(item.public_url)}
-            >
-              {copiedUrl === item.public_url ? (
-                <>
-                  <CheckCircle className="h-3 w-3 text-green-500" />
-                  Copied
-                </>
-              ) : (
-                <>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="flex items-center gap-1 text-xs">
                   <Link className="h-3 w-3" />
+                  Actions
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent>
+                <DropdownMenuItem onClick={() => handleCopyUrl(item.public_url)}>
+                  <Copy className="h-4 w-4 mr-2" />
                   Copy URL
-                </>
-              )}
-            </Button>
-
-            <Button variant="ghost" size="icon" onClick={() => handleDeleteMedia(item.id, item.filepath)}>
-              <Trash2 className="h-4 w-4 text-red-500" />
-              <span className="sr-only">Delete</span>
-            </Button>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleEditMedia(item)}>
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit Details
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => handleDeleteMedia(item.id, item.filepath, item.filetype)}
+                  className="text-red-500"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>
@@ -1087,6 +1174,60 @@ export default function UnifiedMediaLibrary() {
                 </span>
               )}
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Media Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Media</DialogTitle>
+            <DialogDescription>Update the details of this media item</DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="filename">Filename</Label>
+              <Input
+                id="filename"
+                value={newFilename}
+                onChange={(e) => setNewFilename(e.target.value)}
+                placeholder="Enter filename"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tags</Label>
+              <div className="flex flex-wrap gap-2 mb-2">
+                {editingTags.map((tag) => (
+                  <div key={tag} className="bg-gray-800 text-white px-2 py-1 rounded-md flex items-center gap-1">
+                    <span>{tag}</span>
+                    <button onClick={() => handleRemoveTag(tag)} className="text-gray-400 hover:text-white">
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={newTag}
+                  onChange={(e) => setNewTag(e.target.value)}
+                  placeholder="Add a tag"
+                  onKeyDown={(e) => e.key === "Enter" && handleAddTag()}
+                />
+                <Button type="button" size="sm" onClick={handleAddTag}>
+                  <Plus size={16} />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit}>Save Changes</Button>
           </div>
         </DialogContent>
       </Dialog>
