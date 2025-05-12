@@ -50,7 +50,7 @@ export default function NewProjectPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleMainImageUpload = (url: string) => {
+  const handleMainMediaSelect = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
 
     // If title is empty, try to extract a title from the image filename
@@ -66,40 +66,8 @@ export default function NewProjectPage() {
     }
   }
 
-  const handleBtsImageUpload = (url: string) => {
+  const handleBtsMediaSelect = (url: string) => {
     setBtsImages((prev) => [...prev, url])
-  }
-
-  const openMainMediaBrowser = () => {
-    // This would open your media browser component
-    toast({
-      title: "Media Browser",
-      description: "Opening media browser for main content",
-    })
-  }
-
-  const openBtsMediaBrowser = () => {
-    // This would open your media browser component
-    toast({
-      title: "Media Browser",
-      description: "Opening media browser for BTS content",
-    })
-  }
-
-  const handleMainDeviceBrowse = () => {
-    // This would be handled by the UploadWidget component
-    toast({
-      title: "File Browser",
-      description: "Opening file browser for main content",
-    })
-  }
-
-  const handleBtsDeviceBrowse = () => {
-    // This would be handled by the UploadWidget component
-    toast({
-      title: "File Browser",
-      description: "Opening file browser for BTS content",
-    })
   }
 
   const addMainVideoUrl = async (url: string) => {
@@ -201,9 +169,6 @@ export default function NewProjectPage() {
         })
         return
       }
-
-      // Add to BTS videos
-      // (In a real implementation, you would store this in a separate array or database table)
 
       // Add to media library
       const {
@@ -322,14 +287,20 @@ export default function NewProjectPage() {
   return (
     <div className="relative pb-20">
       {/* Header with back button and save button */}
-      <div className="sticky top-0 z-10 bg-[#121212]/80 backdrop-blur-sm p-4 flex justify-between items-center mb-6">
-        <Link href="/admin/projects" className="flex items-center gap-2 text-gray-300 hover:text-white">
+      <div className="sticky top-0 z-10 bg-blue-950/80 backdrop-blur-sm p-4 flex justify-between items-center mb-4">
+        <Link href="/admin/projects" className="flex items-center gap-2 text-blue-200 hover:text-white">
           <ArrowLeft size={18} />
           <span>Back to Projects</span>
         </Link>
 
         <div className="flex gap-2">
-          <Button onClick={handleSave} disabled={saving} size="sm" variant="outline">
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            size="sm"
+            variant="outline"
+            className="border-blue-500 text-blue-200 hover:bg-blue-900/50"
+          >
             {saving ? (
               <>
                 <Loader2 size={16} className="mr-1 animate-spin" />
@@ -346,87 +317,89 @@ export default function NewProjectPage() {
       </div>
 
       {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-6 max-w-7xl mx-auto">
+        <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-4 max-w-7xl mx-auto">
           <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {/* Project form */}
       <div className="max-w-7xl mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Left column - Upload areas */}
-          <div className="space-y-6">
+          <div className="space-y-4">
             {/* Main upload area */}
             <div>
-              <h2 className="text-2xl font-medium mb-4">Main</h2>
+              <h2 className="text-sm font-medium mb-2 text-blue-200">Main</h2>
               <UploadWidget
-                onMediaBrowse={openMainMediaBrowser}
-                onDeviceBrowse={handleMainDeviceBrowse}
+                onMediaSelect={handleMainMediaSelect}
                 onUrlSubmit={addMainVideoUrl}
                 urlPlaceholder="Enter video URL..."
+                folder="projects"
+                compact={true}
               />
             </div>
 
             {/* BTS upload area */}
             <div>
-              <h2 className="text-2xl font-medium mb-4">BTS</h2>
+              <h2 className="text-sm font-medium mb-2 text-blue-200">BTS</h2>
               <UploadWidget
-                onMediaBrowse={openBtsMediaBrowser}
-                onDeviceBrowse={handleBtsDeviceBrowse}
+                onMediaSelect={handleBtsMediaSelect}
                 onUrlSubmit={addBtsVideoUrl}
                 urlPlaceholder="Enter video URL..."
+                folder="bts"
                 multiple={true}
+                compact={true}
               />
             </div>
           </div>
 
           {/* Right column - Project details */}
           <div>
-            <Card className="border-gray-800 bg-transparent">
-              <CardHeader>
-                <CardTitle className="text-2xl">Project Details</CardTitle>
+            <Card className="border-blue-900 bg-blue-950/30">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xl text-blue-100">Project Details</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-3 pt-0">
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Title</label>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">Title</label>
                   <Input
                     name="title"
                     value={formData.title}
                     onChange={handleChange}
-                    className="border-gray-800 bg-transparent"
+                    className="border-blue-900/50 bg-blue-900/20 text-blue-100"
                     placeholder="Project Title"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Category</label>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">Category</label>
                   <Input
                     name="category"
                     value={formData.category}
                     onChange={handleChange}
-                    className="border-gray-800 bg-transparent"
+                    className="border-blue-900/50 bg-blue-900/20 text-blue-100"
                     placeholder="e.g. Short Film, Music Video"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Role</label>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">Role</label>
                   <Input
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className="border-gray-800 bg-transparent"
+                    className="border-blue-900/50 bg-blue-900/20 text-blue-100"
                     placeholder="e.g. Director, 1st AC"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-400 mb-1">Type</label>
+                  <label className="block text-xs font-medium text-blue-300 mb-1">Type</label>
                   <Select value={formData.type} onValueChange={(value) => handleSelectChange("type", value)}>
-                    <SelectTrigger className="border-gray-800 bg-transparent">
+                    <SelectTrigger className="border-blue-900/50 bg-blue-900/20 text-blue-100">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
-                    <SelectContent className="bg-[#121212] border-gray-800">
+                    <SelectContent className="bg-blue-950 border-blue-900 text-blue-100">
                       <SelectItem value="directed">Directed</SelectItem>
                       <SelectItem value="camera">Camera</SelectItem>
                       <SelectItem value="production">Production</SelectItem>
@@ -440,47 +413,56 @@ export default function NewProjectPage() {
         </div>
 
         {/* Bottom row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           {/* Description */}
-          <Card className="border-gray-800 bg-transparent">
-            <CardHeader>
-              <CardTitle className="text-2xl">Description</CardTitle>
+          <Card className="border-blue-900 bg-blue-950/30">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xl text-blue-100">Description</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <Textarea
                 name="description"
                 value={formData.description}
                 onChange={handleChange}
                 placeholder="Describe the project..."
-                className="min-h-[200px] border-gray-800 bg-transparent"
+                className="min-h-[180px] border-blue-900/50 bg-blue-900/20 text-blue-100"
               />
             </CardContent>
           </Card>
 
           {/* Crew */}
-          <Card className="border-gray-800 bg-transparent">
-            <CardHeader>
-              <CardTitle className="text-2xl">Crew</CardTitle>
+          <Card className="border-blue-900 bg-blue-950/30">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xl text-blue-100">Crew</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               <Textarea
                 name="crew"
                 value={formData.crew}
                 onChange={handleChange}
                 placeholder="Enter Names"
-                className="min-h-[200px] border-gray-800 bg-transparent"
+                className="min-h-[180px] border-blue-900/50 bg-blue-900/20 text-blue-100"
               />
             </CardContent>
           </Card>
         </div>
 
         {/* Bottom save button */}
-        <div className="flex justify-end gap-4 mt-8">
-          <Button variant="outline" onClick={() => router.push("/admin/projects")}>
+        <div className="flex justify-end gap-4 mt-6">
+          <Button
+            variant="outline"
+            onClick={() => router.push("/admin/projects")}
+            className="border-blue-700 text-blue-200 hover:bg-blue-900/30"
+          >
             Cancel
           </Button>
 
-          <Button onClick={handleSave} disabled={saving} variant="outline">
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            variant="outline"
+            className="border-blue-500 bg-blue-900/30 text-blue-100 hover:bg-blue-800/50"
+          >
             {saving ? (
               <>
                 <Loader2 size={16} className="mr-2 animate-spin" />
