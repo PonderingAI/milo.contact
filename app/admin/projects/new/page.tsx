@@ -25,7 +25,6 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null)
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
-  const [currentMediaTarget, setCurrentMediaTarget] = useState<"main" | "bts">("main")
   const fileInputMainRef = useRef<HTMLInputElement>(null)
   const fileInputBtsRef = useRef<HTMLInputElement>(null)
 
@@ -57,32 +56,38 @@ export default function NewProjectPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleMainMediaSelect = (url: string) => {
+  // Handler for main media selection
+  const handleMainMediaSelect = (url: string | string[]) => {
+    // Ensure we're working with a single URL for main media
+    const mediaUrl = Array.isArray(url) ? url[0] : url
+
+    if (!mediaUrl) return
+
     // Determine if it's an image or video based on extension or URL
     const isVideo =
-      url.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
-      url.includes("youtube.com") ||
-      url.includes("vimeo.com") ||
-      url.includes("youtu.be")
+      mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+      mediaUrl.includes("youtube.com") ||
+      mediaUrl.includes("vimeo.com") ||
+      mediaUrl.includes("youtu.be")
 
     if (isVideo) {
-      if (!mainVideos.includes(url)) {
-        setMainVideos((prev) => [...prev, url])
+      if (!mainVideos.includes(mediaUrl)) {
+        setMainVideos((prev) => [...prev, mediaUrl])
       }
-      setFormData((prev) => ({ ...prev, video_url: url }))
+      setFormData((prev) => ({ ...prev, video_url: mediaUrl }))
     } else {
-      if (!mainImages.includes(url)) {
-        setMainImages((prev) => [...prev, url])
+      if (!mainImages.includes(mediaUrl)) {
+        setMainImages((prev) => [...prev, mediaUrl])
       }
       // Set as cover image if none is set
       if (!formData.image) {
-        setFormData((prev) => ({ ...prev, image: url }))
+        setFormData((prev) => ({ ...prev, image: mediaUrl }))
       }
     }
 
     // If title is empty, try to extract a title from the filename
     if (!formData.title) {
-      const filename = url.split("/").pop()
+      const filename = mediaUrl.split("/").pop()
       if (filename) {
         // Remove extension and replace dashes/underscores with spaces
         const nameWithoutExt = filename.split(".")[0]
@@ -93,43 +98,29 @@ export default function NewProjectPage() {
     }
   }
 
-  const handleBtsMediaSelect = (url: string) => {
-    // Determine if it's an image or video based on extension or URL
-    const isVideo =
-      url.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
-      url.includes("youtube.com") ||
-      url.includes("vimeo.com") ||
-      url.includes("youtu.be")
+  // Handler for BTS media selection
+  const handleBtsMediaSelect = (url: string | string[]) => {
+    // Handle both single and multiple selections
+    const urls = Array.isArray(url) ? url : [url]
 
-    if (isVideo) {
-      if (!btsVideos.includes(url)) {
-        setBtsVideos((prev) => [...prev, url])
-      }
-    } else {
-      if (!btsImages.includes(url)) {
-        setBtsImages((prev) => [...prev, url])
-      }
-    }
-  }
+    urls.forEach((mediaUrl) => {
+      // Determine if it's an image or video based on extension or URL
+      const isVideo =
+        mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+        mediaUrl.includes("youtube.com") ||
+        mediaUrl.includes("vimeo.com") ||
+        mediaUrl.includes("youtu.be")
 
-  const handleMediaSelect = (url: string | string[]) => {
-    if (Array.isArray(url)) {
-      // Handle multiple selection
-      url.forEach((item) => {
-        if (currentMediaTarget === "main") {
-          handleMainMediaSelect(item)
-        } else {
-          handleBtsMediaSelect(item)
+      if (isVideo) {
+        if (!btsVideos.includes(mediaUrl)) {
+          setBtsVideos((prev) => [...prev, mediaUrl])
         }
-      })
-    } else {
-      // Handle single selection
-      if (currentMediaTarget === "main") {
-        handleMainMediaSelect(url)
       } else {
-        handleBtsMediaSelect(url)
+        if (!btsImages.includes(mediaUrl)) {
+          setBtsImages((prev) => [...prev, mediaUrl])
+        }
       }
-    }
+    })
   }
 
   const removeMainImage = (index: number) => {
@@ -525,9 +516,9 @@ export default function NewProjectPage() {
               <h2 className="text-sm font-medium mb-2 text-gray-400">Main</h2>
               <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
                 <div className="space-y-2">
-                  {/* Direct MediaSelector component */}
+                  {/* Direct MediaSelector component for MAIN media */}
                   <MediaSelector
-                    onSelect={handleMediaSelect}
+                    onSelect={handleMainMediaSelect}
                     currentValue={formData.image || formData.video_url}
                     mediaType="all"
                     buttonLabel="Browse Media Library"
@@ -590,13 +581,10 @@ export default function NewProjectPage() {
               <h2 className="text-sm font-medium mb-2 text-gray-400">BTS</h2>
               <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
                 <div className="space-y-2">
-                  {/* Direct MediaSelector component */}
+                  {/* Direct MediaSelector component for BTS media */}
                   <MediaSelector
-                    onSelect={(urls) => {
-                      setCurrentMediaTarget("bts")
-                      handleMediaSelect(urls)
-                    }}
-                    currentValue={btsImages.length > 0 ? btsImages[0] : btsVideos.length > 0 ? btsVideos[0] : ""}
+                    onSelect={handleBtsMediaSelect}
+                    currentValue={[...btsImages, ...btsVideos]}
                     mediaType="all"
                     multiple={true}
                     buttonLabel="Browse Media Library"

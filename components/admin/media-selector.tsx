@@ -203,6 +203,32 @@ export default function MediaSelector({
     }
   }
 
+  // Function to get video thumbnail URL
+  const getVideoThumbnail = (item: any) => {
+    // First check if there's a thumbnail_url in the item
+    if (item.thumbnail_url) {
+      return item.thumbnail_url
+    }
+
+    // If not, try to generate one based on the video platform
+    const url = item.public_url
+
+    if (url.includes("youtube.com")) {
+      const videoId = url.split("v=")[1]?.split("&")[0]
+      if (videoId) {
+        return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+      }
+    } else if (url.includes("youtu.be")) {
+      const videoId = url.split("youtu.be/")[1]?.split("?")[0]
+      if (videoId) {
+        return `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`
+      }
+    }
+
+    // Default placeholder for videos without thumbnails
+    return null
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -320,31 +346,44 @@ export default function MediaSelector({
                 <p className="text-sm">Add video URLs or adjust your search</p>
               </div>
             ) : (
-              <div className="space-y-2">
-                {filteredMedia.map((item) => (
-                  <div
-                    key={item.id}
-                    className={`relative p-3 rounded-md border cursor-pointer transition-all ${
-                      selectedItems.includes(item.public_url)
-                        ? "bg-primary/10 ring-2 ring-primary border-primary"
-                        : "hover:bg-muted"
-                    }`}
-                    onClick={() => handleSelect(item.public_url)}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Film className="h-5 w-5 flex-shrink-0" />
-                      <div className="flex-grow min-w-0">
-                        <p className="font-medium truncate">{item.filename}</p>
-                        <p className="text-sm text-muted-foreground truncate">{item.public_url}</p>
-                      </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                {filteredMedia.map((item) => {
+                  const thumbnailUrl = getVideoThumbnail(item)
+                  return (
+                    <div
+                      key={item.id}
+                      className={`relative aspect-video rounded-md overflow-hidden border cursor-pointer transition-all ${
+                        selectedItems.includes(item.public_url)
+                          ? "ring-2 ring-primary border-primary"
+                          : "hover:opacity-90"
+                      }`}
+                      onClick={() => handleSelect(item.public_url)}
+                    >
+                      {thumbnailUrl ? (
+                        <img
+                          src={thumbnailUrl || "/placeholder.svg"}
+                          alt={item.filename}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            e.currentTarget.src = "/placeholder.svg"
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                          <Film className="h-12 w-12 text-gray-400" />
+                        </div>
+                      )}
                       {selectedItems.includes(item.public_url) && (
-                        <div className="flex-shrink-0 bg-primary text-primary-foreground rounded-full p-1">
+                        <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
                           <Check className="h-4 w-4" />
                         </div>
                       )}
+                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-1 text-xs">
+                        <div className="truncate">{item.filename}</div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             )}
           </TabsContent>
