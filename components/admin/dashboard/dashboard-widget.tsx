@@ -5,7 +5,7 @@ import { useState, useRef } from "react"
 import { motion } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { X, GripHorizontal } from "lucide-react"
+import { X } from "lucide-react"
 import type { Widget } from "./widget-container"
 
 interface DashboardWidgetProps {
@@ -17,7 +17,7 @@ interface DashboardWidgetProps {
   children: React.ReactNode
   onRemove: (id: string) => void
   onPositionChange: (id: string, position: { x: number; y: number }) => void
-  onSizeChange: (id: string, size: { w: number; h: number }) => void
+  onSizeChange: (id: string, size: { w: number; h: number }, direction: string) => void
   onDragStart: () => void
   onDragEnd: () => void
   onResizeStart: () => void
@@ -25,6 +25,9 @@ interface DashboardWidgetProps {
   isDragging: boolean
   isResizing: boolean
 }
+
+// Edge detection constants
+const EDGE_THRESHOLD = 20 // px from edge to trigger resize highlight
 
 export function DashboardWidget({
   widget,
@@ -47,6 +50,16 @@ export function DashboardWidget({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, w: 0, h: 0 })
   const widgetRef = useRef<HTMLDivElement>(null)
+
+  // Edge highlighting states
+  const [highlightEdge, setHighlightEdge] = useState({
+    top: false,
+    right: false,
+    bottom: false,
+    left: false,
+  })
+
+  // Track if we're in resize mode and which direction
   const [isResizingWidget, setIsResizingWidget] = useState(false)
   const [resizeDirection, setResizeDirection] = useState("")
 
@@ -65,11 +78,68 @@ export function DashboardWidget({
     height: gridSize.h * cellHeight + (gridSize.h - 1) * gap,
   }
 
-  // Handle drag start
-  const handleDragStart = (e: React.MouseEvent) => {
+  // Handle mouse movement for edge detection
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!widgetRef.current || isResizingWidget) return
+
+    const rect = widgetRef.current.getBoundingClientRect()
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+
+    // Detect if mouse is near any edge
+    const isNearTop = mouseY < EDGE_THRESHOLD
+    const isNearRight = mouseX > rect.width - EDGE_THRESHOLD
+    const isNearBottom = mouseY > rect.height - EDGE_THRESHOLD
+    const isNearLeft = mouseX < EDGE_THRESHOLD
+
+    setHighlightEdge({
+      top: isNearTop,
+      right: isNearRight,
+      bottom: isNearBottom,
+      left: isNearLeft,
+    })
+  }
+
+  // Reset edge highlights when mouse leaves
+  const handleMouseLeave = () => {
+    setIsHovered(false)
+    setHighlightEdge({ top: false, right: false, bottom: false, left: false })
+  }
+
+  // Handle mouse down for either drag or resize
+  const handleMouseDown = (e: React.MouseEvent) => {
     e.preventDefault()
 
-    // Don't start drag if we're resizing
+    const rect = widgetRef.current?.getBoundingClientRect()
+    if (!rect) return
+
+    const mouseX = e.clientX - rect.left
+    const mouseY = e.clientY - rect.top
+
+    // Detect if mouse is near any edge
+    const isNearTop = mouseY < EDGE_THRESHOLD
+    const isNearRight = mouseX > rect.width - EDGE_THRESHOLD
+    const isNearBottom = mouseY > rect.height - EDGE_THRESHOLD
+    const isNearLeft = mouseX < EDGE_THRESHOLD
+
+    // Determine if this is a resize or drag operation
+    if (isNearTop || isNearRight || isNearBottom || isNearLeft) {
+      // This is a resize operation
+      let direction = ""
+      if (isNearTop) direction += "n"
+      if (isNearRight) direction += "e"
+      if (isNearBottom) direction += "s"
+      if (isNearLeft) direction += "w"
+
+      handleResizeStart(e, direction)
+    } else {
+      // This is a drag operation
+      handleDragStart(e)
+    }
+  }
+
+  // Handle drag start
+  const handleDragStart = (e: React.MouseEvent) => {
     if (isResizingWidget) return
 
     onDragStart()
@@ -148,39 +218,39 @@ export function DashboardWidget({
 
     let newW = resizeStart.w
     let newH = resizeStart.h
+    let newX = gridPosition.x
+    let newY = gridPosition.y
 
     // Update size based on direction
-    if (resizeDirection.includes("e")) newW = Math.max(1, resizeStart.w + deltaGridX)
-    if (resizeDirection.includes("s")) newH = Math.max(1, resizeStart.h + deltaGridY)
+    if (resizeDirection.includes("e")) {
+      newW = Math.max(1, resizeStart.w + deltaGridX)
+    }
+    if (resizeDirection.includes("s")) {
+      newH = Math.max(1, resizeStart.h + deltaGridY)
+    }
     if (resizeDirection.includes("w")) {
-      const potentialNewW = Math.max(1, resizeStart.w - deltaGridX)
-      if (potentialNewW !== newW) {
-        newW = potentialNewW
-        // Also need to update x position
-        onPositionChange(widget.id, {
-          x: gridPosition.x + (resizeStart.w - newW),
-          y: gridPosition.y,
-        })
-      }
+      const widthChange = Math.min(resizeStart.w - 1, Math.max(-deltaGridX, 0))
+      newW = resizeStart.w - widthChange
+      newX = gridPosition.x + widthChange
     }
     if (resizeDirection.includes("n")) {
-      const potentialNewH = Math.max(1, resizeStart.h - deltaGridY)
-      if (potentialNewH !== newH) {
-        newH = potentialNewH
-        // Also need to update y position
-        onPositionChange(widget.id, {
-          x: gridPosition.x,
-          y: gridPosition.y + (resizeStart.h - newH),
-        })
-      }
+      const heightChange = Math.min(resizeStart.h - 1, Math.max(-deltaGridY, 0))
+      newH = resizeStart.h - heightChange
+      newY = gridPosition.y + heightChange
     }
 
     // Apply min/max constraints
     newW = Math.max(gridSize.minW || 1, Math.min(gridSize.maxW || gridColumns, newW))
     newH = Math.max(gridSize.minH || 1, Math.min(gridSize.maxH || 10, newH))
 
+    // Update position if needed (for n/w resize)
+    if (newX !== gridPosition.x || newY !== gridPosition.y) {
+      onPositionChange(widget.id, { x: newX, y: newY })
+    }
+
+    // Update size if changed
     if (newW !== gridSize.w || newH !== gridSize.h) {
-      onSizeChange(widget.id, { w: newW, h: newH })
+      onSizeChange(widget.id, { w: newW, h: newH }, resizeDirection)
     }
   }
 
@@ -190,6 +260,19 @@ export function DashboardWidget({
     document.removeEventListener("mouseup", handleResizeEnd)
     setIsResizingWidget(false)
     onResizeEnd()
+  }
+
+  // Set cursor based on edge highlighting
+  const getCursor = () => {
+    if (highlightEdge.top && highlightEdge.left) return "nw-resize"
+    if (highlightEdge.top && highlightEdge.right) return "ne-resize"
+    if (highlightEdge.bottom && highlightEdge.left) return "sw-resize"
+    if (highlightEdge.bottom && highlightEdge.right) return "se-resize"
+    if (highlightEdge.top) return "n-resize"
+    if (highlightEdge.right) return "e-resize"
+    if (highlightEdge.bottom) return "s-resize"
+    if (highlightEdge.left) return "w-resize"
+    return "grab"
   }
 
   return (
@@ -213,18 +296,13 @@ export function DashboardWidget({
       }}
       exit={{ opacity: 0, scale: 0.8 }}
       onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseLeave={handleMouseLeave}
+      onMouseMove={handleMouseMove}
+      onMouseDown={handleMouseDown}
+      style={{ cursor: getCursor() }}
     >
       <Card className="w-full h-full overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-xl">
         <div className="p-4 h-full relative">
-          {/* Drag handle */}
-          <div
-            className="absolute top-2 left-2 cursor-move opacity-0 hover:opacity-100 transition-opacity z-10"
-            onMouseDown={handleDragStart}
-          >
-            <GripHorizontal className="h-4 w-4 text-gray-400" />
-          </div>
-
           {/* Close button */}
           {isHovered && (
             <Button
@@ -244,47 +322,11 @@ export function DashboardWidget({
           <div className="h-full">{children}</div>
         </div>
 
-        {/* Resize handles */}
-        <div
-          className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "se")}
-        >
-          <div className="absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-gray-400"></div>
-        </div>
-        <div
-          className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "s")}
-        ></div>
-        <div
-          className="absolute top-0 bottom-0 right-0 w-2 cursor-e-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "e")}
-        ></div>
-        <div
-          className="absolute top-0 left-0 right-0 h-2 cursor-n-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "n")}
-        ></div>
-        <div
-          className="absolute top-0 bottom-0 left-0 w-2 cursor-w-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "w")}
-        ></div>
-        <div
-          className="absolute top-0 left-0 w-6 h-6 cursor-nw-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "nw")}
-        >
-          <div className="absolute top-1 left-1 w-3 h-3 border-t-2 border-l-2 border-gray-400"></div>
-        </div>
-        <div
-          className="absolute top-0 right-0 w-6 h-6 cursor-ne-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "ne")}
-        >
-          <div className="absolute top-1 right-1 w-3 h-3 border-t-2 border-r-2 border-gray-400"></div>
-        </div>
-        <div
-          className="absolute bottom-0 left-0 w-6 h-6 cursor-sw-resize opacity-0 hover:opacity-100 transition-opacity"
-          onMouseDown={(e) => handleResizeStart(e, "sw")}
-        >
-          <div className="absolute bottom-1 left-1 w-3 h-3 border-b-2 border-l-2 border-gray-400"></div>
-        </div>
+        {/* Edge highlight overlays */}
+        {highlightEdge.top && <div className="absolute top-0 left-0 right-0 h-[20px] bg-primary/20 z-10" />}
+        {highlightEdge.right && <div className="absolute top-0 right-0 bottom-0 w-[20px] bg-primary/20 z-10" />}
+        {highlightEdge.bottom && <div className="absolute bottom-0 left-0 right-0 h-[20px] bg-primary/20 z-10" />}
+        {highlightEdge.left && <div className="absolute top-0 left-0 bottom-0 w-[20px] bg-primary/20 z-10" />}
       </Card>
     </motion.div>
   )

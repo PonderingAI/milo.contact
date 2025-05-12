@@ -73,7 +73,7 @@ export function WidgetContainer({
   const [cellWidth, setCellWidth] = useState(0)
   const [cellHeight, setRowHeight] = useState(rowHeight)
   const [gridColumns, setGridColumns] = useState(columns)
-  const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null)
+  const [activeWidgetId, setActiveWidgetId] = useState<string | null>(null)
 
   // Calculate container dimensions
   useEffect(() => {
@@ -91,8 +91,30 @@ export function WidgetContainer({
     }
   }, [gridColumns, gap])
 
+  // Create a grid representation of widget positions
+  const createGrid = (currentWidgets: Widget[], skipId?: string): boolean[][] => {
+    const grid: boolean[][] = Array(100)
+      .fill(null)
+      .map(() => Array(gridColumns).fill(false))
+
+    currentWidgets.forEach((widget) => {
+      if (widget.id !== skipId && widget.position) {
+        for (let y = widget.position.y; y < widget.position.y + widget.size.h; y++) {
+          for (let x = widget.position.x; x < widget.position.x + widget.size.w; x++) {
+            if (y >= 0 && x >= 0 && x < gridColumns) {
+              if (!grid[y]) grid[y] = Array(gridColumns).fill(false)
+              grid[y][x] = true
+            }
+          }
+        }
+      }
+    })
+
+    return grid
+  }
+
   // Check if a widget can be placed at a position
-  const canPlace = (grid: boolean[][], x: number, y: number, w: number, h: number, skipId?: string): boolean => {
+  const canPlace = (grid: boolean[][], x: number, y: number, w: number, h: number): boolean => {
     if (x < 0 || y < 0 || x + w > gridColumns) return false
 
     for (let i = y; i < y + h; i++) {
@@ -104,14 +126,108 @@ export function WidgetContainer({
     return true
   }
 
-  // Mark grid cells as occupied
-  const placeWidget = (grid: boolean[][], x: number, y: number, w: number, h: number, id?: string): void => {
-    for (let i = y; i < y + h; i++) {
-      if (!grid[i]) grid[i] = []
-      for (let j = x; j < x + w; j++) {
-        grid[i][j] = true
+  // Reflow widgets to avoid overlaps
+  const reflowWidgets = (currentWidgets: Widget[], activeId?: string): Widget[] => {
+    // Sort widgets by position (top to bottom, left to right)
+    const sortedWidgets = [...currentWidgets].sort((a, b) => {
+      if (!a.position) return -1
+      if (!b.position) return 1
+      if (a.position.y !== b.position.y) return a.position.y - b.position.y
+      return a.position.x - b.position.x
+    })
+
+    // Move active widget to the front if specified
+    if (activeId) {
+      const activeIndex = sortedWidgets.findIndex((w) => w.id === activeId)
+      if (activeIndex !== -1) {
+        const activeWidget = sortedWidgets.splice(activeIndex, 1)[0]
+        sortedWidgets.unshift(activeWidget)
       }
     }
+
+    // Initialize grid
+    const grid: boolean[][] = Array(100)
+      .fill(null)
+      .map(() => Array(gridColumns).fill(false))
+
+    // Place widgets on grid, moving them if needed
+    return sortedWidgets.map((widget) => {
+      const widgetCopy = { ...widget }
+
+      // If no position, find first available spot
+      if (!widgetCopy.position) {
+        let placed = false
+        let x = 0
+        let y = 0
+
+        while (!placed && y < 100) {
+          if (canPlace(grid, x, y, widgetCopy.size.w, widgetCopy.size.h)) {
+            placed = true
+            widgetCopy.position = { x, y }
+
+            // Mark grid as occupied
+            for (let i = y; i < y + widgetCopy.size.h; i++) {
+              for (let j = x; j < x + widgetCopy.size.w; j++) {
+                if (!grid[i]) grid[i] = Array(gridColumns).fill(false)
+                grid[i][j] = true
+              }
+            }
+          } else {
+            // Try next position
+            x++
+            if (x + widgetCopy.size.w > gridColumns) {
+              x = 0
+              y++
+            }
+          }
+        }
+
+        return widgetCopy
+      }
+
+      // Try to place at current position
+      let { x, y } = widgetCopy.position
+
+      // If current position is occupied, find nearest available spot
+      if (!canPlace(grid, x, y, widgetCopy.size.w, widgetCopy.size.h)) {
+        // Try to find closest available position
+        let bestX = 0
+        let bestY = 0
+        let bestDistance = Number.POSITIVE_INFINITY
+
+        // Search for available positions
+        for (let searchY = 0; searchY < 100; searchY++) {
+          for (let searchX = 0; searchX <= gridColumns - widgetCopy.size.w; searchX++) {
+            if (canPlace(grid, searchX, searchY, widgetCopy.size.w, widgetCopy.size.h)) {
+              const distance = Math.abs(searchX - x) + Math.abs(searchY - y)
+              if (distance < bestDistance) {
+                bestDistance = distance
+                bestX = searchX
+                bestY = searchY
+              }
+            }
+          }
+
+          // If we found a position in this row, and it's getting further away, stop searching
+          if (bestDistance < Number.POSITIVE_INFINITY && searchY > y + bestDistance) break
+        }
+
+        // Update position to best available spot
+        x = bestX
+        y = bestY
+        widgetCopy.position = { x, y }
+      }
+
+      // Mark grid as occupied
+      for (let i = y; i < y + widgetCopy.size.h; i++) {
+        for (let j = x; j < x + widgetCopy.size.w; j++) {
+          if (!grid[i]) grid[i] = Array(gridColumns).fill(false)
+          grid[i][j] = true
+        }
+      }
+
+      return widgetCopy
+    })
   }
 
   // Add a new widget
@@ -130,8 +246,11 @@ export function WidgetContainer({
       props: widgetDef.defaultProps || {},
     }
 
-    setWidgets([...widgets, newWidget])
+    // Add widget and reflow
+    const updatedWidgets = reflowWidgets([...widgets, newWidget], newWidget.id)
+    setWidgets(updatedWidgets)
     setSelectorOpen(false)
+
     toast({
       title: "Widget Added",
       description: `Added ${widgetDef.title} widget to dashboard`,
@@ -143,7 +262,10 @@ export function WidgetContainer({
     // Save current state for undo
     setUndoStack([...undoStack, JSON.parse(JSON.stringify(widgets))])
 
-    setWidgets(widgets.filter((w) => w.id !== id))
+    // Remove widget and reflow
+    const updatedWidgets = reflowWidgets(widgets.filter((w) => w.id !== id))
+    setWidgets(updatedWidgets)
+
     toast({
       title: "Widget Removed",
       description: "Widget removed from dashboard",
@@ -152,67 +274,53 @@ export function WidgetContainer({
 
   // Update widget position
   const updateWidgetPosition = (id: string, position: { x: number; y: number }) => {
-    // Create a temporary grid to check for collisions
-    const grid: boolean[][] = Array(100)
-      .fill(null)
-      .map(() => Array(gridColumns).fill(false))
+    // Find the widget
+    const widgetIndex = widgets.findIndex((w) => w.id === id)
+    if (widgetIndex === -1) return
 
-    // Mark all widgets except the one being moved
-    widgets.forEach((widget) => {
-      if (widget.id !== id && widget.position) {
-        placeWidget(grid, widget.position.x, widget.position.y, widget.size.w, widget.size.h)
-      }
-    })
-
-    // Find the widget being moved
-    const widget = widgets.find((w) => w.id === id)
-    if (!widget) return
-
-    // Check if the new position is valid
-    if (canPlace(grid, position.x, position.y, widget.size.w, widget.size.h)) {
-      const updatedWidgets = widgets.map((w) => (w.id === id ? { ...w, position } : w))
-      setWidgets(updatedWidgets)
-      setDraggedWidgetId(id)
+    // Create updated widgets array
+    const updatedWidgets = [...widgets]
+    updatedWidgets[widgetIndex] = {
+      ...updatedWidgets[widgetIndex],
+      position,
     }
+
+    // Reflow widgets to avoid overlaps
+    const reflowedWidgets = reflowWidgets(updatedWidgets, id)
+    setWidgets(reflowedWidgets)
+    setActiveWidgetId(id)
   }
 
   // Update widget size
-  const updateWidgetSize = (id: string, size: { w: number; h: number }) => {
-    // Create a temporary grid to check for collisions
-    const grid: boolean[][] = Array(100)
-      .fill(null)
-      .map(() => Array(gridColumns).fill(false))
+  const updateWidgetSize = (id: string, size: { w: number; h: number }, direction: string) => {
+    // Find the widget
+    const widgetIndex = widgets.findIndex((w) => w.id === id)
+    if (widgetIndex === -1) return
 
-    // Mark all widgets except the one being resized
-    widgets.forEach((widget) => {
-      if (widget.id !== id && widget.position) {
-        placeWidget(grid, widget.position.x, widget.position.y, widget.size.w, widget.size.h)
-      }
-    })
-
-    // Find the widget being resized
-    const widget = widgets.find((w) => w.id === id)
-    if (!widget || !widget.position) return
-
-    // Check if the new size is valid
-    if (canPlace(grid, widget.position.x, widget.position.y, size.w, size.h)) {
-      const updatedWidgets = widgets.map((w) => (w.id === id ? { ...w, size: { ...w.size, ...size } } : w))
-      setWidgets(updatedWidgets)
+    // Create updated widgets array
+    const updatedWidgets = [...widgets]
+    updatedWidgets[widgetIndex] = {
+      ...updatedWidgets[widgetIndex],
+      size: { ...updatedWidgets[widgetIndex].size, ...size },
     }
+
+    // Reflow widgets to avoid overlaps
+    const reflowedWidgets = reflowWidgets(updatedWidgets, id)
+    setWidgets(reflowedWidgets)
+    setActiveWidgetId(id)
   }
 
   // Handle widget drag start
-  const handleDragStart = (id: string) => {
+  const handleDragStart = () => {
     // Save current state for undo
     setUndoStack([...undoStack, JSON.parse(JSON.stringify(widgets))])
     setIsDragging(true)
-    setDraggedWidgetId(id)
   }
 
   // Handle widget drag end
   const handleDragEnd = () => {
     setIsDragging(false)
-    setDraggedWidgetId(null)
+    setActiveWidgetId(null)
   }
 
   // Handle widget resize start
@@ -225,6 +333,7 @@ export function WidgetContainer({
   // Handle widget resize end
   const handleResizeEnd = () => {
     setIsResizing(false)
+    setActiveWidgetId(null)
   }
 
   // Undo last action
@@ -315,12 +424,12 @@ export function WidgetContainer({
               onRemove={removeWidget}
               onPositionChange={updateWidgetPosition}
               onSizeChange={updateWidgetSize}
-              onDragStart={() => handleDragStart(widget.id)}
+              onDragStart={handleDragStart}
               onDragEnd={handleDragEnd}
               onResizeStart={handleResizeStart}
               onResizeEnd={handleResizeEnd}
-              isDragging={isDragging && draggedWidgetId === widget.id}
-              isResizing={isResizing}
+              isDragging={isDragging && activeWidgetId === widget.id}
+              isResizing={isResizing && activeWidgetId === widget.id}
             >
               {renderWidgetComponent(widget)}
             </DashboardWidget>

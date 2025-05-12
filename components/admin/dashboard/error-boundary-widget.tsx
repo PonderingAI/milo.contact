@@ -22,17 +22,19 @@ export class ErrorBoundaryWidget extends Component<Props, State> {
     return { hasError: true, error }
   }
 
-  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Widget error:", error, errorInfo)
   }
 
-  render(): ReactNode {
+  render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center h-full p-4">
+        <div className="flex flex-col items-center justify-center h-full">
           <AlertCircle className="h-8 w-8 text-red-500 mb-2" />
-          <h3 className="text-sm font-medium mb-1">Widget Error</h3>
-          <p className="text-xs text-gray-500 text-center">{this.state.error?.message || "Something went wrong"}</p>
+          <p className="text-sm font-medium">Widget Error</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {this.state.error?.message || "An error occurred while rendering this widget"}
+          </p>
         </div>
       )
     }

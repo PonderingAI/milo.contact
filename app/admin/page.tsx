@@ -1,4 +1,5 @@
 "use client"
+
 import { WidgetContainer } from "@/components/admin/dashboard/widget-container"
 import { availableWidgets, defaultWidgets } from "@/components/admin/dashboard/widget-registry"
 
