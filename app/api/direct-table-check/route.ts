@@ -17,11 +17,17 @@ export async function POST(request: Request) {
 
     // Check environment variables
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      return NextResponse.json({ error: "Missing NEXT_PUBLIC_SUPABASE_URL environment variable" }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: "Missing NEXT_PUBLIC_SUPABASE_URL environment variable" },
+        { status: 500 },
+      )
     }
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY environment variable" }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: "Missing SUPABASE_SERVICE_ROLE_KEY environment variable" },
+        { status: 500 },
+      )
     }
 
     // Create a Supabase client directly
@@ -53,17 +59,23 @@ export async function POST(request: Request) {
             missingTables.push(table)
           } else {
             // For other errors, try a different approach
-            const { data: pgData, error: pgError } = await supabase
-              .from("pg_catalog.pg_tables")
-              .select("tablename")
-              .eq("schemaname", "public")
-              .eq("tablename", table)
-              .limit(1)
+            try {
+              const { data: pgData, error: pgError } = await supabase
+                .from("pg_catalog.pg_tables")
+                .select("tablename")
+                .eq("schemaname", "public")
+                .eq("tablename", table)
+                .limit(1)
 
-            if (!pgError && pgData && pgData.length > 0) {
-              results[table] = true
-              existingTables.push(table)
-            } else {
+              if (!pgError && pgData && pgData.length > 0) {
+                results[table] = true
+                existingTables.push(table)
+              } else {
+                results[table] = false
+                missingTables.push(table)
+              }
+            } catch (innerError) {
+              console.error(`Alternative check for table ${table} failed:`, innerError)
               results[table] = false
               missingTables.push(table)
             }
