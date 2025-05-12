@@ -4,7 +4,7 @@ import { availableWidgets, defaultWidgets } from "@/components/admin/dashboard/w
 
 export default function AdminDashboardPage() {
   return (
-    <div className="container mx-auto py-6">
+    <div className="h-screen w-full overflow-hidden">
       <WidgetContainer
         availableWidgets={availableWidgets}
         defaultWidgets={defaultWidgets}

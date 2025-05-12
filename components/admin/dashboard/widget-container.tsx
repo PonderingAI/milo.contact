@@ -9,7 +9,6 @@ import { useLocalStorage } from "@/hooks/use-local-storage"
 import { toast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Plus, Undo, Save, AlertCircle } from "lucide-react"
-import { ErrorBoundaryWidget } from "./error-boundary-widget"
 
 export interface Widget {
   id: string
@@ -74,6 +73,7 @@ export function WidgetContainer({
   const [cellWidth, setCellWidth] = useState(0)
   const [cellHeight, setRowHeight] = useState(rowHeight)
   const [gridColumns, setGridColumns] = useState(columns)
+  const [draggedWidgetId, setDraggedWidgetId] = useState<string | null>(null)
 
   // Calculate container dimensions
   useEffect(() => {
@@ -91,96 +91,8 @@ export function WidgetContainer({
     }
   }, [gridColumns, gap])
 
-  // Update layout when widgets change or on mount
-  useEffect(() => {
-    if (widgets.length > 0 && containerWidth > 0) {
-      const widgetsWithoutPositions = widgets.some((widget) => !widget.position)
-      if (widgetsWithoutPositions || isDragging === false) {
-        const compactedWidgets = compactLayout([...widgets])
-        if (JSON.stringify(compactedWidgets) !== JSON.stringify(widgets)) {
-          setWidgets(compactedWidgets)
-        }
-      }
-    }
-  }, [widgets, containerWidth, isDragging])
-
-  // Compact the layout to fill empty spaces
-  const compactLayout = (currentWidgets: Widget[]): Widget[] => {
-    // Create a deep copy to avoid mutating the original
-    const widgetsCopy = JSON.parse(JSON.stringify(currentWidgets)) as Widget[]
-
-    // Sort widgets by y position (top to bottom)
-    const sortedWidgets = widgetsCopy.sort((a, b) => {
-      if (!a.position) return -1
-      if (!b.position) return 1
-      return a.position.y - b.position.y || a.position.x - b.position.x
-    })
-
-    // Initialize grid representation (100 rows should be enough for most dashboards)
-    const grid: boolean[][] = Array(100)
-      .fill(null)
-      .map(() => Array(gridColumns).fill(false))
-
-    // Place widgets on grid
-    return sortedWidgets.map((widget) => {
-      // Find first available position if no position exists
-      if (!widget.position) {
-        let placed = false
-        let x = 0
-        let y = 0
-
-        while (!placed && y < 100) {
-          if (canPlace(grid, x, y, widget.size.w, widget.size.h)) {
-            placeWidget(grid, x, y, widget.size.w, widget.size.h)
-            placed = true
-            widget.position = { x, y }
-          } else {
-            // Move to next position
-            x++
-            if (x + widget.size.w > gridColumns) {
-              x = 0
-              y++
-            }
-          }
-        }
-        return widget
-      }
-
-      // Try to place widget at its current position
-      const { x, y } = widget.position
-
-      // If current position is available, keep it
-      if (canPlace(grid, x, y, widget.size.w, widget.size.h)) {
-        placeWidget(grid, x, y, widget.size.w, widget.size.h)
-        return widget
-      }
-
-      // Otherwise, find a new position
-      let newX = 0
-      let newY = 0
-      let placed = false
-
-      while (!placed && newY < 100) {
-        if (canPlace(grid, newX, newY, widget.size.w, widget.size.h)) {
-          placeWidget(grid, newX, newY, widget.size.w, widget.size.h)
-          placed = true
-          widget.position = { x: newX, y: newY }
-        } else {
-          // Move to next position
-          newX++
-          if (newX + widget.size.w > gridColumns) {
-            newX = 0
-            newY++
-          }
-        }
-      }
-
-      return widget
-    })
-  }
-
   // Check if a widget can be placed at a position
-  const canPlace = (grid: boolean[][], x: number, y: number, w: number, h: number): boolean => {
+  const canPlace = (grid: boolean[][], x: number, y: number, w: number, h: number, skipId?: string): boolean => {
     if (x < 0 || y < 0 || x + w > gridColumns) return false
 
     for (let i = y; i < y + h; i++) {
@@ -193,7 +105,7 @@ export function WidgetContainer({
   }
 
   // Mark grid cells as occupied
-  const placeWidget = (grid: boolean[][], x: number, y: number, w: number, h: number): void => {
+  const placeWidget = (grid: boolean[][], x: number, y: number, w: number, h: number, id?: string): void => {
     for (let i = y; i < y + h; i++) {
       if (!grid[i]) grid[i] = []
       for (let j = x; j < x + w; j++) {
@@ -208,7 +120,7 @@ export function WidgetContainer({
     if (!widgetDef) return
 
     // Save current state for undo
-    setUndoStack([...undoStack, [...widgets]])
+    setUndoStack([...undoStack, JSON.parse(JSON.stringify(widgets))])
 
     const newWidget: Widget = {
       id: `widget-${Date.now()}`,
@@ -229,7 +141,7 @@ export function WidgetContainer({
   // Remove a widget
   const removeWidget = (id: string) => {
     // Save current state for undo
-    setUndoStack([...undoStack, [...widgets]])
+    setUndoStack([...undoStack, JSON.parse(JSON.stringify(widgets))])
 
     setWidgets(widgets.filter((w) => w.id !== id))
     toast({
@@ -240,46 +152,79 @@ export function WidgetContainer({
 
   // Update widget position
   const updateWidgetPosition = (id: string, position: { x: number; y: number }) => {
-    const updatedWidgets = widgets.map((widget) => (widget.id === id ? { ...widget, position } : widget))
-    setWidgets(updatedWidgets)
+    // Create a temporary grid to check for collisions
+    const grid: boolean[][] = Array(100)
+      .fill(null)
+      .map(() => Array(gridColumns).fill(false))
+
+    // Mark all widgets except the one being moved
+    widgets.forEach((widget) => {
+      if (widget.id !== id && widget.position) {
+        placeWidget(grid, widget.position.x, widget.position.y, widget.size.w, widget.size.h)
+      }
+    })
+
+    // Find the widget being moved
+    const widget = widgets.find((w) => w.id === id)
+    if (!widget) return
+
+    // Check if the new position is valid
+    if (canPlace(grid, position.x, position.y, widget.size.w, widget.size.h)) {
+      const updatedWidgets = widgets.map((w) => (w.id === id ? { ...w, position } : w))
+      setWidgets(updatedWidgets)
+      setDraggedWidgetId(id)
+    }
   }
 
   // Update widget size
   const updateWidgetSize = (id: string, size: { w: number; h: number }) => {
-    const updatedWidgets = widgets.map((widget) =>
-      widget.id === id ? { ...widget, size: { ...widget.size, ...size } } : widget,
-    )
-    setWidgets(updatedWidgets)
+    // Create a temporary grid to check for collisions
+    const grid: boolean[][] = Array(100)
+      .fill(null)
+      .map(() => Array(gridColumns).fill(false))
+
+    // Mark all widgets except the one being resized
+    widgets.forEach((widget) => {
+      if (widget.id !== id && widget.position) {
+        placeWidget(grid, widget.position.x, widget.position.y, widget.size.w, widget.size.h)
+      }
+    })
+
+    // Find the widget being resized
+    const widget = widgets.find((w) => w.id === id)
+    if (!widget || !widget.position) return
+
+    // Check if the new size is valid
+    if (canPlace(grid, widget.position.x, widget.position.y, size.w, size.h)) {
+      const updatedWidgets = widgets.map((w) => (w.id === id ? { ...w, size: { ...w.size, ...size } } : w))
+      setWidgets(updatedWidgets)
+    }
   }
 
   // Handle widget drag start
-  const handleDragStart = () => {
+  const handleDragStart = (id: string) => {
     // Save current state for undo
-    setUndoStack([...undoStack, [...widgets]])
+    setUndoStack([...undoStack, JSON.parse(JSON.stringify(widgets))])
     setIsDragging(true)
+    setDraggedWidgetId(id)
   }
 
   // Handle widget drag end
   const handleDragEnd = () => {
     setIsDragging(false)
-    // Recompact layout after drag
-    const compactedWidgets = compactLayout([...widgets])
-    setWidgets(compactedWidgets)
+    setDraggedWidgetId(null)
   }
 
   // Handle widget resize start
   const handleResizeStart = () => {
     // Save current state for undo
-    setUndoStack([...undoStack, [...widgets]])
+    setUndoStack([...undoStack, JSON.parse(JSON.stringify(widgets))])
     setIsResizing(true)
   }
 
   // Handle widget resize end
   const handleResizeEnd = () => {
     setIsResizing(false)
-    // Recompact layout after resize
-    const compactedWidgets = compactLayout([...widgets])
-    setWidgets(compactedWidgets)
   }
 
   // Undo last action
@@ -329,39 +274,35 @@ export function WidgetContainer({
   }
 
   return (
-    <div className="flex flex-col w-full h-full">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleUndo}
-            disabled={undoStack.length === 0}
-            className="flex items-center gap-1"
-          >
-            <Undo className="h-4 w-4" />
-            Undo
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleSave} className="flex items-center gap-1">
-            <Save className="h-4 w-4" />
-            Save
-          </Button>
-          <Button onClick={() => setSelectorOpen(true)} className="flex items-center gap-1 rounded-full">
-            <Plus className="h-4 w-4" />
-            Add Widget
-          </Button>
-        </div>
+    <div className="flex flex-col w-full h-full bg-gray-100 dark:bg-gray-900">
+      {/* Floating controls */}
+      <div className="absolute top-4 right-4 z-50 flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleUndo}
+          disabled={undoStack.length === 0}
+          className="flex items-center gap-1 bg-background/80 backdrop-blur-sm"
+        >
+          <Undo className="h-4 w-4" />
+          Undo
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSave}
+          className="flex items-center gap-1 bg-background/80 backdrop-blur-sm"
+        >
+          <Save className="h-4 w-4" />
+          Save
+        </Button>
+        <Button onClick={() => setSelectorOpen(true)} className="flex items-center gap-1 rounded-full bg-primary">
+          <Plus className="h-4 w-4" />
+          Add Widget
+        </Button>
       </div>
 
-      <div
-        ref={containerRef}
-        className="relative flex-grow bg-gray-100 dark:bg-gray-900 rounded-lg overflow-auto p-4"
-        style={{
-          minHeight: "calc(100vh - 200px)",
-          height: "100%",
-        }}
-      >
+      <div ref={containerRef} className="relative flex-grow overflow-auto p-4 w-full h-full">
         <AnimatePresence>
           {widgets.map((widget) => (
             <DashboardWidget
@@ -374,14 +315,14 @@ export function WidgetContainer({
               onRemove={removeWidget}
               onPositionChange={updateWidgetPosition}
               onSizeChange={updateWidgetSize}
-              onDragStart={handleDragStart}
+              onDragStart={() => handleDragStart(widget.id)}
               onDragEnd={handleDragEnd}
               onResizeStart={handleResizeStart}
               onResizeEnd={handleResizeEnd}
-              isDragging={isDragging}
+              isDragging={isDragging && draggedWidgetId === widget.id}
               isResizing={isResizing}
             >
-              <ErrorBoundaryWidget>{renderWidgetComponent(widget)}</ErrorBoundaryWidget>
+              {renderWidgetComponent(widget)}
             </DashboardWidget>
           ))}
         </AnimatePresence>

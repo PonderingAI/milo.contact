@@ -5,7 +5,7 @@ import { useState, useRef } from "react"
 import { motion } from "framer-motion"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { X } from "lucide-react"
+import { X, GripHorizontal } from "lucide-react"
 import type { Widget } from "./widget-container"
 
 interface DashboardWidgetProps {
@@ -47,6 +47,8 @@ export function DashboardWidget({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, w: 0, h: 0 })
   const widgetRef = useRef<HTMLDivElement>(null)
+  const [isResizingWidget, setIsResizingWidget] = useState(false)
+  const [resizeDirection, setResizeDirection] = useState("")
 
   // Calculate grid position and size
   const gridPosition = widget.position || { x: 0, y: 0 }
@@ -66,6 +68,10 @@ export function DashboardWidget({
   // Handle drag start
   const handleDragStart = (e: React.MouseEvent) => {
     e.preventDefault()
+
+    // Don't start drag if we're resizing
+    if (isResizingWidget) return
+
     onDragStart()
 
     const rect = widgetRef.current?.getBoundingClientRect()
@@ -91,15 +97,11 @@ export function DashboardWidget({
     const y = e.clientY - rect.top - dragStart.y
 
     // Convert to grid coordinates
-    const gridX = Math.round(x / (cellWidth + gap))
-    const gridY = Math.round(y / (cellHeight + gap))
+    const gridX = Math.max(0, Math.min(gridColumns - gridSize.w, Math.round(x / (cellWidth + gap))))
+    const gridY = Math.max(0, Math.round(y / (cellHeight + gap)))
 
-    // Ensure within bounds
-    const boundedX = Math.max(0, Math.min(gridColumns - gridSize.w, gridX))
-    const boundedY = Math.max(0, gridY)
-
-    if (boundedX !== gridPosition.x || boundedY !== gridPosition.y) {
-      onPositionChange(widget.id, { x: boundedX, y: boundedY })
+    if (gridX !== gridPosition.x || gridY !== gridPosition.y) {
+      onPositionChange(widget.id, { x: gridX, y: gridY })
     }
   }
 
@@ -114,6 +116,9 @@ export function DashboardWidget({
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
     e.preventDefault()
     e.stopPropagation()
+
+    setIsResizingWidget(true)
+    setResizeDirection(direction)
     onResizeStart()
 
     const rect = widgetRef.current?.getBoundingClientRect()
@@ -126,23 +131,13 @@ export function DashboardWidget({
       })
     }
 
-    const handleDirection = (e: MouseEvent) => handleResizeMove(e, direction)
-    document.addEventListener("mousemove", handleDirection)
-    document.addEventListener("mouseup", () => handleResizeEnd(direction))
-
-    // Store the cleanup function
-    const cleanup = () => {
-      document.removeEventListener("mousemove", handleDirection)
-      document.removeEventListener("mouseup", cleanup)
-    }
-
-    // Add cleanup to mouseup
-    document.addEventListener("mouseup", cleanup)
+    document.addEventListener("mousemove", handleResizeMove)
+    document.addEventListener("mouseup", handleResizeEnd)
   }
 
   // Handle resize move
-  const handleResizeMove = (e: MouseEvent, direction: string) => {
-    if (!widgetRef.current) return
+  const handleResizeMove = (e: MouseEvent) => {
+    if (!widgetRef.current || !isResizingWidget) return
 
     const deltaX = e.clientX - resizeStart.x
     const deltaY = e.clientY - resizeStart.y
@@ -155,8 +150,30 @@ export function DashboardWidget({
     let newH = resizeStart.h
 
     // Update size based on direction
-    if (direction.includes("e")) newW = Math.max(1, resizeStart.w + deltaGridX)
-    if (direction.includes("s")) newH = Math.max(1, resizeStart.h + deltaGridY)
+    if (resizeDirection.includes("e")) newW = Math.max(1, resizeStart.w + deltaGridX)
+    if (resizeDirection.includes("s")) newH = Math.max(1, resizeStart.h + deltaGridY)
+    if (resizeDirection.includes("w")) {
+      const potentialNewW = Math.max(1, resizeStart.w - deltaGridX)
+      if (potentialNewW !== newW) {
+        newW = potentialNewW
+        // Also need to update x position
+        onPositionChange(widget.id, {
+          x: gridPosition.x + (resizeStart.w - newW),
+          y: gridPosition.y,
+        })
+      }
+    }
+    if (resizeDirection.includes("n")) {
+      const potentialNewH = Math.max(1, resizeStart.h - deltaGridY)
+      if (potentialNewH !== newH) {
+        newH = potentialNewH
+        // Also need to update y position
+        onPositionChange(widget.id, {
+          x: gridPosition.x,
+          y: gridPosition.y + (resizeStart.h - newH),
+        })
+      }
+    }
 
     // Apply min/max constraints
     newW = Math.max(gridSize.minW || 1, Math.min(gridSize.maxW || gridColumns, newW))
@@ -168,9 +185,10 @@ export function DashboardWidget({
   }
 
   // Handle resize end
-  const handleResizeEnd = (direction: string) => {
-    const handleDirection = (e: MouseEvent) => handleResizeMove(e, direction)
-    document.removeEventListener("mousemove", handleDirection)
+  const handleResizeEnd = () => {
+    document.removeEventListener("mousemove", handleResizeMove)
+    document.removeEventListener("mouseup", handleResizeEnd)
+    setIsResizingWidget(false)
     onResizeEnd()
   }
 
@@ -186,7 +204,7 @@ export function DashboardWidget({
         y: pixelPosition.y,
         width: pixelSize.width,
         height: pixelSize.height,
-        zIndex: isDragging || isResizing ? 10 : 1,
+        zIndex: isDragging || isResizing || isHovered ? 10 : 1,
       }}
       transition={{
         type: "spring",
@@ -197,11 +215,17 @@ export function DashboardWidget({
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      <Card
-        className="w-full h-full overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-xl cursor-grab active:cursor-grabbing"
-        onMouseDown={handleDragStart}
-      >
+      <Card className="w-full h-full overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-xl">
         <div className="p-4 h-full relative">
+          {/* Drag handle */}
+          <div
+            className="absolute top-2 left-2 cursor-move opacity-0 hover:opacity-100 transition-opacity z-10"
+            onMouseDown={handleDragStart}
+          >
+            <GripHorizontal className="h-4 w-4 text-gray-400" />
+          </div>
+
+          {/* Close button */}
           {isHovered && (
             <Button
               variant="ghost"
@@ -215,22 +239,52 @@ export function DashboardWidget({
               <X className="h-3 w-3" />
             </Button>
           )}
+
+          {/* Widget content */}
           <div className="h-full">{children}</div>
         </div>
 
         {/* Resize handles */}
         <div
-          className="absolute bottom-0 right-0 w-4 h-4 cursor-se-resize"
+          className="absolute bottom-0 right-0 w-6 h-6 cursor-se-resize opacity-0 hover:opacity-100 transition-opacity"
           onMouseDown={(e) => handleResizeStart(e, "se")}
-        />
+        >
+          <div className="absolute bottom-1 right-1 w-3 h-3 border-b-2 border-r-2 border-gray-400"></div>
+        </div>
         <div
-          className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize"
+          className="absolute bottom-0 left-0 right-0 h-2 cursor-s-resize opacity-0 hover:opacity-100 transition-opacity"
           onMouseDown={(e) => handleResizeStart(e, "s")}
-        />
+        ></div>
         <div
-          className="absolute top-0 bottom-0 right-0 w-2 cursor-e-resize"
+          className="absolute top-0 bottom-0 right-0 w-2 cursor-e-resize opacity-0 hover:opacity-100 transition-opacity"
           onMouseDown={(e) => handleResizeStart(e, "e")}
-        />
+        ></div>
+        <div
+          className="absolute top-0 left-0 right-0 h-2 cursor-n-resize opacity-0 hover:opacity-100 transition-opacity"
+          onMouseDown={(e) => handleResizeStart(e, "n")}
+        ></div>
+        <div
+          className="absolute top-0 bottom-0 left-0 w-2 cursor-w-resize opacity-0 hover:opacity-100 transition-opacity"
+          onMouseDown={(e) => handleResizeStart(e, "w")}
+        ></div>
+        <div
+          className="absolute top-0 left-0 w-6 h-6 cursor-nw-resize opacity-0 hover:opacity-100 transition-opacity"
+          onMouseDown={(e) => handleResizeStart(e, "nw")}
+        >
+          <div className="absolute top-1 left-1 w-3 h-3 border-t-2 border-l-2 border-gray-400"></div>
+        </div>
+        <div
+          className="absolute top-0 right-0 w-6 h-6 cursor-ne-resize opacity-0 hover:opacity-100 transition-opacity"
+          onMouseDown={(e) => handleResizeStart(e, "ne")}
+        >
+          <div className="absolute top-1 right-1 w-3 h-3 border-t-2 border-r-2 border-gray-400"></div>
+        </div>
+        <div
+          className="absolute bottom-0 left-0 w-6 h-6 cursor-sw-resize opacity-0 hover:opacity-100 transition-opacity"
+          onMouseDown={(e) => handleResizeStart(e, "sw")}
+        >
+          <div className="absolute bottom-1 left-1 w-3 h-3 border-b-2 border-l-2 border-gray-400"></div>
+        </div>
       </Card>
     </motion.div>
   )
