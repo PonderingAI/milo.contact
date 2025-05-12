@@ -4,9 +4,9 @@ import type React from "react"
 
 import { useState, useRef } from "react"
 import { motion } from "framer-motion"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { X, Maximize2, Minimize2, GripVertical } from "lucide-react"
+import { X } from "lucide-react"
 import type { Widget } from "./widget-container"
 
 interface DashboardWidgetProps {
@@ -44,8 +44,7 @@ export function DashboardWidget({
   isDragging,
   isResizing,
 }: DashboardWidgetProps) {
-  const [isExpanded, setIsExpanded] = useState(false)
-  const [originalSize, setOriginalSize] = useState<{ w: number; h: number } | null>(null)
+  const [isHovered, setIsHovered] = useState(false)
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 })
   const [resizeStart, setResizeStart] = useState({ x: 0, y: 0, w: 0, h: 0 })
   const widgetRef = useRef<HTMLDivElement>(null)
@@ -67,8 +66,6 @@ export function DashboardWidget({
 
   // Handle drag start
   const handleDragStart = (e: React.MouseEvent) => {
-    if (isExpanded) return
-
     e.preventDefault()
     onDragStart()
 
@@ -116,8 +113,6 @@ export function DashboardWidget({
 
   // Handle resize start
   const handleResizeStart = (e: React.MouseEvent, direction: string) => {
-    if (isExpanded) return
-
     e.preventDefault()
     e.stopPropagation()
     onResizeStart()
@@ -180,20 +175,6 @@ export function DashboardWidget({
     onResizeEnd()
   }
 
-  // Toggle expanded state
-  const toggleExpand = () => {
-    if (!isExpanded) {
-      // Save original size before expanding
-      setOriginalSize({ w: gridSize.w, h: gridSize.h })
-      onSizeChange(widget.id, { w: gridColumns, h: gridSize.h * 2 })
-    } else if (originalSize) {
-      // Restore original size
-      onSizeChange(widget.id, originalSize)
-    }
-
-    setIsExpanded(!isExpanded)
-  }
-
   return (
     <motion.div
       ref={widgetRef}
@@ -214,30 +195,29 @@ export function DashboardWidget({
         stiffness: 300,
       }}
       exit={{ opacity: 0, scale: 0.8 }}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <Card className="w-full h-full overflow-hidden shadow-md hover:shadow-lg transition-shadow">
-        <CardHeader className="p-3 flex flex-row items-center space-y-0 gap-2 bg-gray-50 dark:bg-gray-800 border-b">
-          <div className="cursor-move flex items-center" onMouseDown={handleDragStart}>
-            <GripVertical className="h-4 w-4 text-gray-500" />
-          </div>
-          <CardTitle className="text-sm font-medium flex-grow truncate">{widget.title}</CardTitle>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-6 w-6" onClick={toggleExpand}>
-              {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-            </Button>
+      <Card
+        className="w-full h-full overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-xl cursor-grab active:cursor-grabbing"
+        onMouseDown={handleDragStart}
+      >
+        <div className="p-4 h-full relative">
+          {isHovered && (
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-gray-500 hover:text-red-500"
-              onClick={() => onRemove(widget.id)}
+              className="absolute top-1 right-1 h-6 w-6 text-gray-500 hover:text-red-500 z-10 bg-background/80 backdrop-blur-sm rounded-full"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemove(widget.id)
+              }}
             >
               <X className="h-3 w-3" />
             </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="p-4 overflow-auto" style={{ height: "calc(100% - 42px)" }}>
-          {children}
-        </CardContent>
+          )}
+          <div className="h-full">{children}</div>
+        </div>
 
         {/* Resize handles */}
         <div

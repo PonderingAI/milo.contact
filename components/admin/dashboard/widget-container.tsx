@@ -9,7 +9,7 @@ import { DashboardWidget } from "./dashboard-widget"
 import { useLocalStorage } from "@/hooks/use-local-storage"
 import { toast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
-import { Plus, Save, Undo } from "lucide-react"
+import { Plus, Undo, Save } from "lucide-react"
 
 export interface Widget {
   id: string
@@ -65,7 +65,6 @@ export function WidgetContainer({
   gap = 16,
 }: WidgetContainerProps) {
   const [widgets, setWidgets] = useLocalStorage<Widget[]>(storageKey, defaultWidgets)
-  const [layout, setLayout] = useState<any[]>([])
   const [isDragging, setIsDragging] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
   const [isSelectorOpen, setSelectorOpen] = useState(false)
@@ -92,39 +91,49 @@ export function WidgetContainer({
     }
   }, [gridColumns, gap])
 
-  // Update layout when widgets change
+  // Update layout when widgets change or on mount
   useEffect(() => {
     if (widgets.length > 0 && containerWidth > 0) {
-      compactLayout(widgets)
+      const widgetsWithoutPositions = widgets.some((widget) => !widget.position)
+      if (widgetsWithoutPositions || isDragging === false) {
+        const compactedWidgets = compactLayout([...widgets])
+        if (JSON.stringify(compactedWidgets) !== JSON.stringify(widgets)) {
+          setWidgets(compactedWidgets)
+        }
+      }
     }
-  }, [widgets, containerWidth])
+  }, [widgets, containerWidth, isDragging])
 
   // Compact the layout to fill empty spaces
-  const compactLayout = (currentWidgets: Widget[]) => {
+  const compactLayout = (currentWidgets: Widget[]): Widget[] => {
+    // Create a deep copy to avoid mutating the original
+    const widgetsCopy = JSON.parse(JSON.stringify(currentWidgets)) as Widget[]
+
     // Sort widgets by y position (top to bottom)
-    const sortedWidgets = [...currentWidgets].sort((a, b) => {
+    const sortedWidgets = widgetsCopy.sort((a, b) => {
       if (!a.position) return -1
       if (!b.position) return 1
       return a.position.y - b.position.y || a.position.x - b.position.x
     })
 
-    // Initialize grid representation
+    // Initialize grid representation (100 rows should be enough for most dashboards)
     const grid: boolean[][] = Array(100)
       .fill(null)
       .map(() => Array(gridColumns).fill(false))
 
     // Place widgets on grid
-    const newLayout = sortedWidgets.map((widget) => {
+    return sortedWidgets.map((widget) => {
+      // Find first available position if no position exists
       if (!widget.position) {
-        // Find first available position
         let placed = false
         let x = 0
         let y = 0
 
-        while (!placed) {
+        while (!placed && y < 100) {
           if (canPlace(grid, x, y, widget.size.w, widget.size.h)) {
             placeWidget(grid, x, y, widget.size.w, widget.size.h)
             placed = true
+            widget.position = { x, y }
           } else {
             // Move to next position
             x++
@@ -134,59 +143,60 @@ export function WidgetContainer({
             }
           }
         }
-
-        return { ...widget, position: { x, y } }
-      }
-
-      // Use existing position if possible
-      if (canPlace(grid, widget.position.x, widget.position.y, widget.size.w, widget.size.h)) {
-        placeWidget(grid, widget.position.x, widget.position.y, widget.size.w, widget.size.h)
         return widget
       }
 
-      // Find new position if current is occupied
-      let placed = false
-      let x = 0
-      let y = 0
+      // Try to place widget at its current position
+      const { x, y } = widget.position
 
-      while (!placed) {
-        if (canPlace(grid, x, y, widget.size.w, widget.size.h)) {
-          placeWidget(grid, x, y, widget.size.w, widget.size.h)
+      // If current position is available, keep it
+      if (canPlace(grid, x, y, widget.size.w, widget.size.h)) {
+        placeWidget(grid, x, y, widget.size.w, widget.size.h)
+        return widget
+      }
+
+      // Otherwise, find a new position
+      let newX = 0
+      let newY = 0
+      let placed = false
+
+      while (!placed && newY < 100) {
+        if (canPlace(grid, newX, newY, widget.size.w, widget.size.h)) {
+          placeWidget(grid, newX, newY, widget.size.w, widget.size.h)
           placed = true
+          widget.position = { x: newX, y: newY }
         } else {
           // Move to next position
-          x++
-          if (x + widget.size.w > gridColumns) {
-            x = 0
-            y++
+          newX++
+          if (newX + widget.size.w > gridColumns) {
+            newX = 0
+            newY++
           }
         }
       }
 
-      return { ...widget, position: { x, y } }
+      return widget
     })
-
-    setWidgets(newLayout)
-    setLayout(newLayout)
   }
 
   // Check if a widget can be placed at a position
-  const canPlace = (grid: boolean[][], x: number, y: number, w: number, h: number) => {
+  const canPlace = (grid: boolean[][], x: number, y: number, w: number, h: number): boolean => {
     if (x < 0 || y < 0 || x + w > gridColumns) return false
 
     for (let i = y; i < y + h; i++) {
       for (let j = x; j < x + w; j++) {
-        if (grid[i] && grid[i][j]) return false
+        if (!grid[i]) continue // Skip if row doesn't exist
+        if (grid[i][j]) return false
       }
     }
     return true
   }
 
   // Mark grid cells as occupied
-  const placeWidget = (grid: boolean[][], x: number, y: number, w: number, h: number) => {
+  const placeWidget = (grid: boolean[][], x: number, y: number, w: number, h: number): void => {
     for (let i = y; i < y + h; i++) {
+      if (!grid[i]) grid[i] = []
       for (let j = x; j < x + w; j++) {
-        if (!grid[i]) grid[i] = []
         grid[i][j] = true
       }
     }
@@ -252,7 +262,9 @@ export function WidgetContainer({
   // Handle widget drag end
   const handleDragEnd = () => {
     setIsDragging(false)
-    compactLayout(widgets)
+    // Recompact layout after drag
+    const compactedWidgets = compactLayout([...widgets])
+    setWidgets(compactedWidgets)
   }
 
   // Handle widget resize start
@@ -265,7 +277,9 @@ export function WidgetContainer({
   // Handle widget resize end
   const handleResizeEnd = () => {
     setIsResizing(false)
-    compactLayout(widgets)
+    // Recompact layout after resize
+    const compactedWidgets = compactLayout([...widgets])
+    setWidgets(compactedWidgets)
   }
 
   // Undo last action
@@ -311,7 +325,7 @@ export function WidgetContainer({
             <Save className="h-4 w-4" />
             Save
           </Button>
-          <Button onClick={() => setSelectorOpen(true)} className="flex items-center gap-1">
+          <Button onClick={() => setSelectorOpen(true)} className="flex items-center gap-1 rounded-full">
             <Plus className="h-4 w-4" />
             Add Widget
           </Button>
@@ -320,12 +334,10 @@ export function WidgetContainer({
 
       <div
         ref={containerRef}
-        className="relative flex-grow grid auto-rows-min gap-4 p-4 bg-gray-100 dark:bg-gray-900 rounded-lg overflow-auto"
+        className="relative flex-grow bg-gray-100 dark:bg-gray-900 rounded-lg overflow-auto p-4"
         style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
-          gap: `${gap}px`,
           minHeight: "calc(100vh - 200px)",
+          height: "100%",
         }}
       >
         <AnimatePresence>

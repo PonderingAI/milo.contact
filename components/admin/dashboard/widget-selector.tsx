@@ -3,10 +3,8 @@
 import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ScrollArea } from "@/components/ui/scroll-area"
-import { Search, X } from "lucide-react"
+import { Search } from "lucide-react"
 import type { WidgetDefinition } from "./widget-container"
 
 interface WidgetSelectorProps {
@@ -18,49 +16,42 @@ interface WidgetSelectorProps {
 
 export function WidgetSelector({ open, onClose, widgets, onSelectWidget }: WidgetSelectorProps) {
   const [searchTerm, setSearchTerm] = useState("")
-  const [activeCategory, setActiveCategory] = useState<string>("all")
   const [filteredWidgets, setFilteredWidgets] = useState<WidgetDefinition[]>(widgets)
+  const [categories, setCategories] = useState<string[]>([])
+  const [activeCategory, setActiveCategory] = useState<string>("all")
 
   // Get unique categories
-  const categories = ["all", ...Array.from(new Set(widgets.map((w) => w.category)))].sort()
+  useEffect(() => {
+    const uniqueCategories = Array.from(new Set(widgets.map((widget) => widget.category)))
+    setCategories(uniqueCategories)
+  }, [widgets])
 
-  // Filter widgets based on search and category
+  // Filter widgets based on search term and category
   useEffect(() => {
     let filtered = widgets
 
-    // Apply search filter
+    // Filter by search term
     if (searchTerm) {
       const term = searchTerm.toLowerCase()
       filtered = filtered.filter(
-        (w) =>
-          w.title.toLowerCase().includes(term) ||
-          w.description.toLowerCase().includes(term) ||
-          w.category.toLowerCase().includes(term),
+        (widget) =>
+          widget.title.toLowerCase().includes(term) ||
+          widget.description.toLowerCase().includes(term) ||
+          widget.category.toLowerCase().includes(term),
       )
     }
 
-    // Apply category filter
+    // Filter by category
     if (activeCategory !== "all") {
-      filtered = filtered.filter((w) => w.category === activeCategory)
+      filtered = filtered.filter((widget) => widget.category === activeCategory)
     }
 
     setFilteredWidgets(filtered)
   }, [searchTerm, activeCategory, widgets])
 
-  // Clear search
-  const clearSearch = () => {
-    setSearchTerm("")
-  }
-
-  // Handle widget selection
-  const handleSelectWidget = (widgetType: string) => {
-    onSelectWidget(widgetType)
-    onClose()
-  }
-
   return (
-    <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-[800px] max-h-[80vh] flex flex-col">
+    <Dialog open={open} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[600px] max-h-[80vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>Add Widget</DialogTitle>
         </DialogHeader>
@@ -71,44 +62,44 @@ export function WidgetSelector({ open, onClose, widgets, onSelectWidget }: Widge
             placeholder="Search widgets..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-8 pr-8"
+            className="pl-8"
           />
-          {searchTerm && (
-            <Button variant="ghost" size="icon" className="absolute right-1 top-1 h-7 w-7" onClick={clearSearch}>
-              <X className="h-4 w-4" />
-            </Button>
-          )}
         </div>
 
-        <Tabs defaultValue="all" value={activeCategory} onValueChange={setActiveCategory}>
-          <TabsList className="mb-4 flex flex-wrap">
+        <Tabs
+          defaultValue="all"
+          value={activeCategory}
+          onValueChange={setActiveCategory}
+          className="flex-grow overflow-hidden flex flex-col"
+        >
+          <TabsList className="mb-4 flex flex-wrap h-auto">
+            <TabsTrigger value="all" className="rounded-full">
+              All
+            </TabsTrigger>
             {categories.map((category) => (
-              <TabsTrigger key={category} value={category} className="capitalize">
-                {category}
+              <TabsTrigger key={category} value={category} className="rounded-full">
+                {category.charAt(0).toUpperCase() + category.slice(1)}
               </TabsTrigger>
             ))}
           </TabsList>
 
-          <ScrollArea className="flex-grow">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-1">
-              {filteredWidgets.map((widget) => (
-                <Button
-                  key={widget.type}
-                  variant="outline"
-                  className="h-auto p-4 justify-start flex flex-col items-start text-left"
-                  onClick={() => handleSelectWidget(widget.type)}
-                >
-                  <div className="font-medium mb-1">{widget.title}</div>
-                  <div className="text-sm text-gray-500 dark:text-gray-400">{widget.description}</div>
-                  <div className="text-xs text-gray-400 dark:text-gray-500 mt-2 capitalize">{widget.category}</div>
-                </Button>
-              ))}
-
-              {filteredWidgets.length === 0 && (
-                <div className="col-span-2 text-center py-8 text-gray-500">No widgets found matching your criteria</div>
-              )}
-            </div>
-          </ScrollArea>
+          <div className="grid grid-cols-2 gap-4 overflow-y-auto pr-2">
+            {filteredWidgets.map((widget) => (
+              <div
+                key={widget.type}
+                className="bg-gray-100 dark:bg-gray-800 p-4 rounded-xl cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                onClick={() => onSelectWidget(widget.type)}
+              >
+                <h3 className="font-medium mb-1">{widget.title}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{widget.description}</p>
+              </div>
+            ))}
+            {filteredWidgets.length === 0 && (
+              <div className="col-span-2 text-center py-8 text-gray-500">
+                No widgets found. Try a different search term or category.
+              </div>
+            )}
+          </div>
         </Tabs>
       </DialogContent>
     </Dialog>
