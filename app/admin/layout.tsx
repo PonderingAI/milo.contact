@@ -33,6 +33,9 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link href="/admin/security" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
                 Security
               </Link>
+              <Link href="/admin/debug" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
+                Debug
+              </Link>
               <Link href="/" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
                 Back to Website
               </Link>
