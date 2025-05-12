@@ -1,50 +1,54 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
+import { createClient } from "@supabase/supabase-js"
 
 export async function POST(request: Request) {
   try {
     // Parse the request body
     const body = await request.json()
-    const tables = body.tables || []
+    const { tables } = body
 
-    // Create a Supabase client
-    const supabase = createAdminClient()
+    if (!Array.isArray(tables)) {
+      return NextResponse.json({ success: false, error: "Tables must be an array" }, { status: 400 })
+    }
 
-    // Use a simple approach: check if each table exists by querying it directly
-    const existingTables: string[] = []
-    const missingTables: string[] = []
+    // Create a Supabase client directly
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      return NextResponse.json({ success: false, error: "Missing Supabase environment variables" }, { status: 500 })
+    }
 
-    // For each table, try a simple query
-    for (const tableName of tables) {
+    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    })
+
+    // Check if each table exists
+    const results: Record<string, boolean> = {}
+
+    for (const table of tables) {
       try {
-        // Simple query to check if table exists
-        const { error } = await supabase.from(tableName).select("*", { count: "exact", head: true })
+        // Try to select a single row from the table
+        const { data, error } = await supabase.from(table).select("*").limit(1)
 
-        if (error && error.message.includes("does not exist")) {
-          missingTables.push(tableName)
-        } else {
-          existingTables.push(tableName)
-        }
-      } catch (e) {
-        // If any error occurs, assume the table doesn't exist
-        missingTables.push(tableName)
+        // If there's no error, the table exists
+        results[table] = !error
+      } catch (error) {
+        console.error(`Error checking table ${table}:`, error)
+        results[table] = false
       }
     }
 
-    // Return the results
     return NextResponse.json({
-      missingTables,
-      existingTables,
-      checkedTables: tables,
+      success: true,
+      results,
     })
   } catch (error) {
-    console.error("Error in direct-table-check:", error)
+    console.error("Error checking tables:", error)
     return NextResponse.json(
       {
+        success: false,
         error: error instanceof Error ? error.message : "Unknown error",
-        missingTables: [],
-        existingTables: [],
-        checkedTables: [],
       },
       { status: 500 },
     )
