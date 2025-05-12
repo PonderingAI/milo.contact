@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, Upload, ImageIcon } from "lucide-react"
+import { Loader2, ArrowLeft, Save } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,6 +14,7 @@ import { extractVideoInfo } from "@/lib/project-data"
 import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import UploadWidget from "@/components/admin/upload-widget"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -21,14 +22,8 @@ export default function NewProjectPage() {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mainVideoUrl, setMainVideoUrl] = useState("")
-  const [btsVideoUrl, setBtsVideoUrl] = useState("")
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
-
-  // Refs for the file inputs
-  const mainFileInputRef = useRef<HTMLInputElement>(null)
-  const btsFileInputRef = useRef<HTMLInputElement>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -75,17 +70,8 @@ export default function NewProjectPage() {
     setBtsImages((prev) => [...prev, url])
   }
 
-  const handleMainVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setMainVideoUrl(e.target.value)
-  }
-
-  const handleBtsVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setBtsVideoUrl(e.target.value)
-  }
-
   const openMainMediaBrowser = () => {
     // This would open your media browser component
-    // For now, we'll just show a toast
     toast({
       title: "Media Browser",
       description: "Opening media browser for main content",
@@ -94,31 +80,34 @@ export default function NewProjectPage() {
 
   const openBtsMediaBrowser = () => {
     // This would open your media browser component
-    // For now, we'll just show a toast
     toast({
       title: "Media Browser",
       description: "Opening media browser for BTS content",
     })
   }
 
-  const triggerMainFileUpload = () => {
-    if (mainFileInputRef.current) {
-      mainFileInputRef.current.click()
-    }
+  const handleMainDeviceBrowse = () => {
+    // This would be handled by the UploadWidget component
+    toast({
+      title: "File Browser",
+      description: "Opening file browser for main content",
+    })
   }
 
-  const triggerBtsFileUpload = () => {
-    if (btsFileInputRef.current) {
-      btsFileInputRef.current.click()
-    }
+  const handleBtsDeviceBrowse = () => {
+    // This would be handled by the UploadWidget component
+    toast({
+      title: "File Browser",
+      description: "Opening file browser for BTS content",
+    })
   }
 
-  const addMainVideoUrl = async () => {
-    if (!mainVideoUrl.trim()) return
+  const addMainVideoUrl = async (url: string) => {
+    if (!url.trim()) return
 
     setProcessingVideo(true)
     try {
-      const videoInfo = extractVideoInfo(mainVideoUrl)
+      const videoInfo = extractVideoInfo(url)
       if (!videoInfo) {
         toast({
           title: "Invalid video URL",
@@ -155,7 +144,7 @@ export default function NewProjectPage() {
       }
 
       // Set video URL in form data
-      setFormData((prev) => ({ ...prev, video_url: mainVideoUrl }))
+      setFormData((prev) => ({ ...prev, video_url: url }))
 
       // If we have a thumbnail and no image is set, use the thumbnail
       if (thumbnailUrl && !formData.image) {
@@ -171,10 +160,10 @@ export default function NewProjectPage() {
 
       await supabase.from("media").insert({
         filename: videoTitle || `${videoInfo.platform} Video ${videoInfo.id}`,
-        filepath: mainVideoUrl,
+        filepath: url,
         filesize: 0,
         filetype: videoInfo.platform,
-        public_url: mainVideoUrl,
+        public_url: url,
         thumbnail_url: thumbnailUrl,
         tags: ["video", videoInfo.platform],
         metadata: {
@@ -187,9 +176,6 @@ export default function NewProjectPage() {
         title: "Video added",
         description: "Video has been added to the project and media library",
       })
-
-      // Clear the input
-      setMainVideoUrl("")
     } catch (error) {
       console.error("Error processing video:", error)
       toast({
@@ -202,11 +188,11 @@ export default function NewProjectPage() {
     }
   }
 
-  const addBtsVideoUrl = async () => {
-    if (!btsVideoUrl.trim()) return
+  const addBtsVideoUrl = async (url: string) => {
+    if (!url.trim()) return
 
     try {
-      const videoInfo = extractVideoInfo(btsVideoUrl)
+      const videoInfo = extractVideoInfo(url)
       if (!videoInfo) {
         toast({
           title: "Invalid video URL",
@@ -243,10 +229,10 @@ export default function NewProjectPage() {
 
       await supabase.from("media").insert({
         filename: videoTitle || `BTS ${videoInfo.platform} Video ${videoInfo.id}`,
-        filepath: btsVideoUrl,
+        filepath: url,
         filesize: 0,
         filetype: videoInfo.platform,
-        public_url: btsVideoUrl,
+        public_url: url,
         thumbnail_url: thumbnailUrl,
         tags: ["video", videoInfo.platform, "bts"],
         metadata: {
@@ -265,9 +251,6 @@ export default function NewProjectPage() {
         title: "BTS Video added",
         description: "Behind the scenes video has been added to the project",
       })
-
-      // Clear the input
-      setBtsVideoUrl("")
     } catch (error) {
       console.error("Error processing BTS video:", error)
       toast({
@@ -337,16 +320,16 @@ export default function NewProjectPage() {
   }
 
   return (
-    <div className="relative pb-20 bg-black">
+    <div className="relative pb-20">
       {/* Header with back button and save button */}
-      <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-sm p-4 flex justify-between items-center mb-6">
+      <div className="sticky top-0 z-10 bg-[#121212]/80 backdrop-blur-sm p-4 flex justify-between items-center mb-6">
         <Link href="/admin/projects" className="flex items-center gap-2 text-gray-300 hover:text-white">
           <ArrowLeft size={18} />
           <span>Back to Projects</span>
         </Link>
 
         <div className="flex gap-2">
-          <Button onClick={handleSave} disabled={saving} size="sm">
+          <Button onClick={handleSave} disabled={saving} size="sm" variant="outline">
             {saving ? (
               <>
                 <Loader2 size={16} className="mr-1 animate-spin" />
@@ -375,122 +358,31 @@ export default function NewProjectPage() {
           <div className="space-y-6">
             {/* Main upload area */}
             <div>
-              <h2 className="text-2xl font-bold mb-4">Main</h2>
-              <div className="border border-gray-700 rounded-lg overflow-hidden">
-                <div className="p-4 space-y-4">
-                  <button
-                    onClick={openMainMediaBrowser}
-                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
-                  >
-                    <span>Browse Media</span>
-                    <ImageIcon size={18} />
-                  </button>
-
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Paste video URL"
-                      value={mainVideoUrl}
-                      onChange={handleMainVideoUrlChange}
-                      className="flex-1"
-                    />
-                    <Button
-                      onClick={addMainVideoUrl}
-                      disabled={processingVideo || !mainVideoUrl}
-                      size="icon"
-                      variant="outline"
-                    >
-                      <Upload size={18} />
-                    </Button>
-                  </div>
-
-                  <button
-                    onClick={triggerMainFileUpload}
-                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
-                  >
-                    <span>Browse Device</span>
-                    <Upload size={18} />
-                  </button>
-
-                  <input
-                    type="file"
-                    ref={mainFileInputRef}
-                    className="hidden"
-                    accept="image/*,video/*"
-                    onChange={(e) => {
-                      // Handle file upload
-                      const file = e.target.files?.[0]
-                      if (file) {
-                        // This would normally upload the file
-                        toast({
-                          title: "File selected",
-                          description: `Selected file: ${file.name}`,
-                        })
-                      }
-                    }}
-                  />
-                </div>
-              </div>
+              <h2 className="text-2xl font-medium mb-4">Main</h2>
+              <UploadWidget
+                onMediaBrowse={openMainMediaBrowser}
+                onDeviceBrowse={handleMainDeviceBrowse}
+                onUrlSubmit={addMainVideoUrl}
+                urlPlaceholder="Enter video URL..."
+              />
             </div>
 
             {/* BTS upload area */}
             <div>
-              <h2 className="text-2xl font-bold mb-4">BTS</h2>
-              <div className="border border-gray-700 rounded-lg overflow-hidden">
-                <div className="p-4 space-y-4">
-                  <button
-                    onClick={openBtsMediaBrowser}
-                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
-                  >
-                    <span>Browse Media</span>
-                    <ImageIcon size={18} />
-                  </button>
-
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Paste video URL"
-                      value={btsVideoUrl}
-                      onChange={handleBtsVideoUrlChange}
-                      className="flex-1"
-                    />
-                    <Button onClick={addBtsVideoUrl} disabled={!btsVideoUrl} size="icon" variant="outline">
-                      <Upload size={18} />
-                    </Button>
-                  </div>
-
-                  <button
-                    onClick={triggerBtsFileUpload}
-                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
-                  >
-                    <span>Browse Device</span>
-                    <Upload size={18} />
-                  </button>
-
-                  <input
-                    type="file"
-                    ref={btsFileInputRef}
-                    className="hidden"
-                    accept="image/*,video/*"
-                    multiple
-                    onChange={(e) => {
-                      // Handle file upload
-                      const files = e.target.files
-                      if (files && files.length > 0) {
-                        // This would normally upload the files
-                        toast({
-                          title: "Files selected",
-                          description: `Selected ${files.length} files`,
-                        })
-                      }
-                    }}
-                  />
-                </div>
-              </div>
+              <h2 className="text-2xl font-medium mb-4">BTS</h2>
+              <UploadWidget
+                onMediaBrowse={openBtsMediaBrowser}
+                onDeviceBrowse={handleBtsDeviceBrowse}
+                onUrlSubmit={addBtsVideoUrl}
+                urlPlaceholder="Enter video URL..."
+                multiple={true}
+              />
             </div>
           </div>
 
           {/* Right column - Project details */}
           <div>
-            <Card className="bg-black border-gray-700">
+            <Card className="border-gray-800 bg-transparent">
               <CardHeader>
                 <CardTitle className="text-2xl">Project Details</CardTitle>
               </CardHeader>
@@ -501,7 +393,7 @@ export default function NewProjectPage() {
                     name="title"
                     value={formData.title}
                     onChange={handleChange}
-                    className="bg-black border-gray-700 text-white"
+                    className="border-gray-800 bg-transparent"
                     placeholder="Project Title"
                   />
                 </div>
@@ -512,7 +404,7 @@ export default function NewProjectPage() {
                     name="category"
                     value={formData.category}
                     onChange={handleChange}
-                    className="bg-black border-gray-700 text-white"
+                    className="border-gray-800 bg-transparent"
                     placeholder="e.g. Short Film, Music Video"
                   />
                 </div>
@@ -523,7 +415,7 @@ export default function NewProjectPage() {
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className="bg-black border-gray-700 text-white"
+                    className="border-gray-800 bg-transparent"
                     placeholder="e.g. Director, 1st AC"
                   />
                 </div>
@@ -531,10 +423,10 @@ export default function NewProjectPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-1">Type</label>
                   <Select value={formData.type} onValueChange={(value) => handleSelectChange("type", value)}>
-                    <SelectTrigger className="bg-black border-gray-700 text-white">
+                    <SelectTrigger className="border-gray-800 bg-transparent">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
-                    <SelectContent className="bg-black border-gray-700 text-white">
+                    <SelectContent className="bg-[#121212] border-gray-800">
                       <SelectItem value="directed">Directed</SelectItem>
                       <SelectItem value="camera">Camera</SelectItem>
                       <SelectItem value="production">Production</SelectItem>
@@ -550,7 +442,7 @@ export default function NewProjectPage() {
         {/* Bottom row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
           {/* Description */}
-          <Card className="bg-black border-gray-700">
+          <Card className="border-gray-800 bg-transparent">
             <CardHeader>
               <CardTitle className="text-2xl">Description</CardTitle>
             </CardHeader>
@@ -560,13 +452,13 @@ export default function NewProjectPage() {
                 value={formData.description}
                 onChange={handleChange}
                 placeholder="Describe the project..."
-                className="min-h-[200px] bg-black border-gray-700 text-white"
+                className="min-h-[200px] border-gray-800 bg-transparent"
               />
             </CardContent>
           </Card>
 
           {/* Crew */}
-          <Card className="bg-black border-gray-700">
+          <Card className="border-gray-800 bg-transparent">
             <CardHeader>
               <CardTitle className="text-2xl">Crew</CardTitle>
             </CardHeader>
@@ -576,7 +468,7 @@ export default function NewProjectPage() {
                 value={formData.crew}
                 onChange={handleChange}
                 placeholder="Enter Names"
-                className="min-h-[200px] bg-black border-gray-700 text-white"
+                className="min-h-[200px] border-gray-800 bg-transparent"
               />
             </CardContent>
           </Card>
@@ -588,7 +480,7 @@ export default function NewProjectPage() {
             Cancel
           </Button>
 
-          <Button onClick={handleSave} disabled={saving} className="bg-white text-black hover:bg-gray-200">
+          <Button onClick={handleSave} disabled={saving} variant="outline">
             {saving ? (
               <>
                 <Loader2 size={16} className="mr-2 animate-spin" />
