@@ -22,6 +22,7 @@ import {
   Edit,
   Plus,
   X,
+  CheckCircle,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
@@ -29,7 +30,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
 import { Textarea } from "@/components/ui/textarea"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Label } from "@/components/ui/label"
 
 const formatFileSize = (bytes: number): string => {
@@ -802,31 +802,41 @@ export default function UnifiedMediaLibrary() {
           )}
 
           <div className="flex justify-between items-center mt-3">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="flex items-center gap-1 text-xs">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex items-center gap-1 text-xs"
+              onClick={() => handleCopyUrl(item.public_url)}
+            >
+              {copiedUrl === item.public_url ? (
+                <>
+                  <CheckCircle className="h-3 w-3 text-green-500" />
+                  Copied
+                </>
+              ) : (
+                <>
                   <Link className="h-3 w-3" />
-                  Actions
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                <DropdownMenuItem onClick={() => handleCopyUrl(item.public_url)}>
-                  <Copy className="h-4 w-4 mr-2" />
                   Copy URL
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => handleEditMedia(item)}>
-                  <Edit className="h-4 w-4 mr-2" />
-                  Edit Details
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={() => handleDeleteMedia(item.id, item.filepath, item.filetype)}
-                  className="text-red-500"
-                >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                </>
+              )}
+            </Button>
+
+            <div className="flex gap-1">
+              <Button variant="ghost" size="icon" onClick={() => handleEditMedia(item)} className="h-8 w-8">
+                <Edit className="h-4 w-4 text-blue-500" />
+                <span className="sr-only">Edit</span>
+              </Button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => handleDeleteMedia(item.id, item.filepath, item.filetype)}
+                className="h-8 w-8"
+              >
+                <Trash2 className="h-4 w-4 text-red-500" />
+                <span className="sr-only">Delete</span>
+              </Button>
+            </div>
           </div>
         </div>
       </div>
