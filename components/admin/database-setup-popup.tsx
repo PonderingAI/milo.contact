@@ -869,7 +869,8 @@ ON user_widgets(position);`,
   }, [requiredSections, customTables, forceClose, setupCompleted, onSetupComplete, adminOnly, isAdminPage, allTables])
 
   // Function to generate SQL for selected tables
-  const generateSQL = () => {
+  // Make the generateSQL function public and static so it can be called without an instance
+  const generateSQLForTables = (tableNames: string[], allTables: TableConfig[]): string => {
     // Start with UUID extension
     let sql = `-- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -885,7 +886,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       const table = allTables.find((t) => t.name === tableName)
       if (table) {
         for (const dep of table.dependencies) {
-          if (selectedTables.includes(dep)) {
+          if (tableNames.includes(dep)) {
             processTable(dep)
           }
         }
@@ -900,11 +901,16 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     }
 
     // Process all selected tables
-    for (const tableName of selectedTables) {
+    for (const tableName of tableNames) {
       processTable(tableName)
     }
 
     return sql.trim()
+  }
+
+  // Modify the existing generateSQL method to use the static method
+  const generateSQL = () => {
+    return generateSQLForTables(selectedTables, allTables)
   }
 
   // Function to copy SQL to clipboard
