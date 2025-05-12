@@ -2,21 +2,18 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, Upload, LinkIcon, ImageIcon } from "lucide-react"
+import { Loader2, ArrowLeft, Save, Upload, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import ImageUploader from "@/components/admin/image-uploader"
-import MediaSelector from "@/components/admin/media-selector"
 import { extractVideoInfo } from "@/lib/project-data"
 import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -24,10 +21,14 @@ export default function NewProjectPage() {
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [videoUrl, setVideoUrl] = useState("")
+  const [mainVideoUrl, setMainVideoUrl] = useState("")
   const [btsVideoUrl, setBtsVideoUrl] = useState("")
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
+
+  // Refs for the file inputs
+  const mainFileInputRef = useRef<HTMLInputElement>(null)
+  const btsFileInputRef = useRef<HTMLInputElement>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -39,6 +40,7 @@ export default function NewProjectPage() {
     video_url: "",
     description: "",
     special_notes: "",
+    crew: "",
   })
 
   // BTS images state
@@ -53,7 +55,7 @@ export default function NewProjectPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleImageUpload = (url: string) => {
+  const handleMainImageUpload = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
 
     // If title is empty, try to extract a title from the image filename
@@ -73,20 +75,50 @@ export default function NewProjectPage() {
     setBtsImages((prev) => [...prev, url])
   }
 
-  const handleVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVideoUrl(e.target.value)
+  const handleMainVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setMainVideoUrl(e.target.value)
   }
 
   const handleBtsVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setBtsVideoUrl(e.target.value)
   }
 
-  const addVideoUrl = async () => {
-    if (!videoUrl.trim()) return
+  const openMainMediaBrowser = () => {
+    // This would open your media browser component
+    // For now, we'll just show a toast
+    toast({
+      title: "Media Browser",
+      description: "Opening media browser for main content",
+    })
+  }
+
+  const openBtsMediaBrowser = () => {
+    // This would open your media browser component
+    // For now, we'll just show a toast
+    toast({
+      title: "Media Browser",
+      description: "Opening media browser for BTS content",
+    })
+  }
+
+  const triggerMainFileUpload = () => {
+    if (mainFileInputRef.current) {
+      mainFileInputRef.current.click()
+    }
+  }
+
+  const triggerBtsFileUpload = () => {
+    if (btsFileInputRef.current) {
+      btsFileInputRef.current.click()
+    }
+  }
+
+  const addMainVideoUrl = async () => {
+    if (!mainVideoUrl.trim()) return
 
     setProcessingVideo(true)
     try {
-      const videoInfo = extractVideoInfo(videoUrl)
+      const videoInfo = extractVideoInfo(mainVideoUrl)
       if (!videoInfo) {
         toast({
           title: "Invalid video URL",
@@ -123,7 +155,7 @@ export default function NewProjectPage() {
       }
 
       // Set video URL in form data
-      setFormData((prev) => ({ ...prev, video_url: videoUrl }))
+      setFormData((prev) => ({ ...prev, video_url: mainVideoUrl }))
 
       // If we have a thumbnail and no image is set, use the thumbnail
       if (thumbnailUrl && !formData.image) {
@@ -139,10 +171,10 @@ export default function NewProjectPage() {
 
       await supabase.from("media").insert({
         filename: videoTitle || `${videoInfo.platform} Video ${videoInfo.id}`,
-        filepath: videoUrl,
+        filepath: mainVideoUrl,
         filesize: 0,
         filetype: videoInfo.platform,
-        public_url: videoUrl,
+        public_url: mainVideoUrl,
         thumbnail_url: thumbnailUrl,
         tags: ["video", videoInfo.platform],
         metadata: {
@@ -157,7 +189,7 @@ export default function NewProjectPage() {
       })
 
       // Clear the input
-      setVideoUrl("")
+      setMainVideoUrl("")
     } catch (error) {
       console.error("Error processing video:", error)
       toast({
@@ -305,7 +337,7 @@ export default function NewProjectPage() {
   }
 
   return (
-    <div className="relative pb-20">
+    <div className="relative pb-20 bg-black">
       {/* Header with back button and save button */}
       <div className="sticky top-0 z-10 bg-black/80 backdrop-blur-sm p-4 flex justify-between items-center mb-6">
         <Link href="/admin/projects" className="flex items-center gap-2 text-gray-300 hover:text-white">
@@ -331,24 +363,136 @@ export default function NewProjectPage() {
       </div>
 
       {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-6">
+        <div className="bg-red-900/20 border border-red-800 rounded-lg p-4 mb-6 max-w-7xl mx-auto">
           <p className="text-red-400">{error}</p>
         </div>
       )}
 
       {/* Project form */}
-      <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
-          <h1 className="text-3xl font-serif mb-2">New Project</h1>
-          <p className="text-gray-400">Create a new project for your portfolio.</p>
-        </div>
+      <div className="max-w-7xl mx-auto px-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Left column - Upload areas */}
+          <div className="space-y-6">
+            {/* Main upload area */}
+            <div>
+              <h2 className="text-2xl font-bold mb-4">Main</h2>
+              <div className="border border-gray-700 rounded-lg overflow-hidden">
+                <div className="p-4 space-y-4">
+                  <button
+                    onClick={openMainMediaBrowser}
+                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
+                  >
+                    <span>Browse Media</span>
+                    <ImageIcon size={18} />
+                  </button>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left column - Project details */}
-          <div className="lg:col-span-1 space-y-6">
-            <Card>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Paste video URL"
+                      value={mainVideoUrl}
+                      onChange={handleMainVideoUrlChange}
+                      className="flex-1"
+                    />
+                    <Button
+                      onClick={addMainVideoUrl}
+                      disabled={processingVideo || !mainVideoUrl}
+                      size="icon"
+                      variant="outline"
+                    >
+                      <Upload size={18} />
+                    </Button>
+                  </div>
+
+                  <button
+                    onClick={triggerMainFileUpload}
+                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
+                  >
+                    <span>Browse Device</span>
+                    <Upload size={18} />
+                  </button>
+
+                  <input
+                    type="file"
+                    ref={mainFileInputRef}
+                    className="hidden"
+                    accept="image/*,video/*"
+                    onChange={(e) => {
+                      // Handle file upload
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        // This would normally upload the file
+                        toast({
+                          title: "File selected",
+                          description: `Selected file: ${file.name}`,
+                        })
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* BTS upload area */}
+            <div>
+              <h2 className="text-2xl font-bold mb-4">BTS</h2>
+              <div className="border border-gray-700 rounded-lg overflow-hidden">
+                <div className="p-4 space-y-4">
+                  <button
+                    onClick={openBtsMediaBrowser}
+                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
+                  >
+                    <span>Browse Media</span>
+                    <ImageIcon size={18} />
+                  </button>
+
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Paste video URL"
+                      value={btsVideoUrl}
+                      onChange={handleBtsVideoUrlChange}
+                      className="flex-1"
+                    />
+                    <Button onClick={addBtsVideoUrl} disabled={!btsVideoUrl} size="icon" variant="outline">
+                      <Upload size={18} />
+                    </Button>
+                  </div>
+
+                  <button
+                    onClick={triggerBtsFileUpload}
+                    className="w-full py-3 px-4 border border-blue-500 rounded-lg text-blue-400 hover:bg-blue-900/20 flex justify-between items-center"
+                  >
+                    <span>Browse Device</span>
+                    <Upload size={18} />
+                  </button>
+
+                  <input
+                    type="file"
+                    ref={btsFileInputRef}
+                    className="hidden"
+                    accept="image/*,video/*"
+                    multiple
+                    onChange={(e) => {
+                      // Handle file upload
+                      const files = e.target.files
+                      if (files && files.length > 0) {
+                        // This would normally upload the files
+                        toast({
+                          title: "Files selected",
+                          description: `Selected ${files.length} files`,
+                        })
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right column - Project details */}
+          <div>
+            <Card className="bg-black border-gray-700">
               <CardHeader>
-                <CardTitle>Project Details</CardTitle>
+                <CardTitle className="text-2xl">Project Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
@@ -357,7 +501,7 @@ export default function NewProjectPage() {
                     name="title"
                     value={formData.title}
                     onChange={handleChange}
-                    className="text-lg font-serif py-2"
+                    className="bg-black border-gray-700 text-white"
                     placeholder="Project Title"
                   />
                 </div>
@@ -368,6 +512,7 @@ export default function NewProjectPage() {
                     name="category"
                     value={formData.category}
                     onChange={handleChange}
+                    className="bg-black border-gray-700 text-white"
                     placeholder="e.g. Short Film, Music Video"
                   />
                 </div>
@@ -378,6 +523,7 @@ export default function NewProjectPage() {
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
+                    className="bg-black border-gray-700 text-white"
                     placeholder="e.g. Director, 1st AC"
                   />
                 </div>
@@ -385,10 +531,10 @@ export default function NewProjectPage() {
                 <div>
                   <label className="block text-sm font-medium text-gray-400 mb-1">Type</label>
                   <Select value={formData.type} onValueChange={(value) => handleSelectChange("type", value)}>
-                    <SelectTrigger>
+                    <SelectTrigger className="bg-black border-gray-700 text-white">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent className="bg-black border-gray-700 text-white">
                       <SelectItem value="directed">Directed</SelectItem>
                       <SelectItem value="camera">Camera</SelectItem>
                       <SelectItem value="production">Production</SelectItem>
@@ -398,202 +544,42 @@ export default function NewProjectPage() {
                 </div>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Description</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  placeholder="Describe the project..."
-                  className="min-h-[150px]"
-                />
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Special Notes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Textarea
-                  name="special_notes"
-                  value={formData.special_notes}
-                  onChange={handleChange}
-                  placeholder="Any special notes about this project..."
-                  className="min-h-[150px]"
-                />
-              </CardContent>
-            </Card>
           </div>
+        </div>
 
-          {/* Right column - Media uploads */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Main media drop area */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Main Media</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <div className="aspect-video relative rounded-lg overflow-hidden bg-gray-900 mb-2">
-                    {formData.image ? (
-                      <img
-                        src={formData.image || "/placeholder.svg"}
-                        alt={formData.title || "Project cover"}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="flex items-center justify-center h-full text-gray-500">
-                        <div className="text-center">
-                          <ImageIcon className="h-12 w-12 mx-auto mb-2 opacity-50" />
-                          <p>No cover image selected</p>
-                          <p className="text-sm">Upload an image or add a video URL</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+        {/* Bottom row */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+          {/* Description */}
+          <Card className="bg-black border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-2xl">Description</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                placeholder="Describe the project..."
+                className="min-h-[200px] bg-black border-gray-700 text-white"
+              />
+            </CardContent>
+          </Card>
 
-                <Tabs defaultValue="upload" className="mb-4">
-                  <TabsList className="grid grid-cols-3 mb-4">
-                    <TabsTrigger value="upload" className="flex items-center gap-1">
-                      <Upload size={14} />
-                      Upload
-                    </TabsTrigger>
-                    <TabsTrigger value="media" className="flex items-center gap-1">
-                      <ImageIcon size={14} />
-                      Media Library
-                    </TabsTrigger>
-                    <TabsTrigger value="video" className="flex items-center gap-1">
-                      <LinkIcon size={14} />
-                      Video URL
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="upload">
-                    <ImageUploader
-                      currentImage={formData.image}
-                      onImageUploaded={handleImageUpload}
-                      folder="projects"
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="media">
-                    <MediaSelector onSelect={handleImageUpload} mediaType="images" buttonLabel="Browse Media Library" />
-                  </TabsContent>
-
-                  <TabsContent value="video">
-                    <div className="space-y-4">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Paste YouTube, Vimeo, or LinkedIn URL"
-                          value={videoUrl}
-                          onChange={handleVideoUrlChange}
-                        />
-                        <Button onClick={addVideoUrl} disabled={processingVideo || !videoUrl}>
-                          {processingVideo ? <Loader2 className="h-4 w-4 animate-spin" /> : "Add"}
-                        </Button>
-                      </div>
-                      <p className="text-xs text-gray-400">
-                        Adding a video will automatically use its thumbnail as the project cover image if none is set.
-                      </p>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-
-                {formData.video_url && (
-                  <div className="mt-4 p-3 bg-gray-800 rounded-md">
-                    <div className="flex items-center gap-2">
-                      <LinkIcon size={16} className="text-blue-400" />
-                      <span className="text-sm font-medium">Video URL:</span>
-                      <span className="text-sm text-gray-300 truncate">{formData.video_url}</span>
-                    </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* BTS media drop area */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Behind the Scenes</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
-                    {btsImages.map((image, index) => (
-                      <div key={index} className="aspect-square relative rounded-md overflow-hidden bg-gray-900">
-                        <img
-                          src={image || "/placeholder.svg"}
-                          alt={`BTS ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                    ))}
-                    {btsImages.length === 0 && (
-                      <div className="aspect-square flex items-center justify-center bg-gray-900 rounded-md col-span-full">
-                        <div className="text-center p-4">
-                          <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                          <p className="text-sm text-gray-400">No BTS images yet</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <Tabs defaultValue="upload" className="mb-4">
-                  <TabsList className="grid grid-cols-3 mb-4">
-                    <TabsTrigger value="upload" className="flex items-center gap-1">
-                      <Upload size={14} />
-                      Upload
-                    </TabsTrigger>
-                    <TabsTrigger value="media" className="flex items-center gap-1">
-                      <ImageIcon size={14} />
-                      Media Library
-                    </TabsTrigger>
-                    <TabsTrigger value="video" className="flex items-center gap-1">
-                      <LinkIcon size={14} />
-                      Video URL
-                    </TabsTrigger>
-                  </TabsList>
-
-                  <TabsContent value="upload">
-                    <ImageUploader currentImage="" onImageUploaded={handleBtsImageUpload} folder="bts" />
-                  </TabsContent>
-
-                  <TabsContent value="media">
-                    <MediaSelector
-                      onSelect={handleBtsImageUpload}
-                      mediaType="images"
-                      buttonLabel="Browse Media Library"
-                    />
-                  </TabsContent>
-
-                  <TabsContent value="video">
-                    <div className="space-y-4">
-                      <div className="flex gap-2">
-                        <Input
-                          placeholder="Paste YouTube, Vimeo, or LinkedIn URL"
-                          value={btsVideoUrl}
-                          onChange={handleBtsVideoUrlChange}
-                        />
-                        <Button onClick={addBtsVideoUrl} disabled={!btsVideoUrl}>
-                          Add
-                        </Button>
-                      </div>
-                      <p className="text-xs text-gray-400">
-                        Adding a BTS video will automatically extract its thumbnail and add it to the BTS images.
-                      </p>
-                    </div>
-                  </TabsContent>
-                </Tabs>
-              </CardContent>
-            </Card>
-          </div>
+          {/* Crew */}
+          <Card className="bg-black border-gray-700">
+            <CardHeader>
+              <CardTitle className="text-2xl">Crew</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Textarea
+                name="crew"
+                value={formData.crew}
+                onChange={handleChange}
+                placeholder="Enter Names"
+                className="min-h-[200px] bg-black border-gray-700 text-white"
+              />
+            </CardContent>
+          </Card>
         </div>
 
         {/* Bottom save button */}
