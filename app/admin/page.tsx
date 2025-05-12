@@ -3,7 +3,8 @@
 import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import { useEffect } from "react"
-import Link from "next/link"
+import { WidgetContainer } from "@/components/admin/dashboard/widget-container"
+import { widgetRegistry, defaultDashboardWidgets } from "@/components/admin/dashboard/widget-registry"
 
 export default function AdminDashboard() {
   const { isLoaded, isSignedIn, user } = useUser()
@@ -29,31 +30,11 @@ export default function AdminDashboard() {
 
   return (
     <div className="container mx-auto p-6">
-      <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
-
-      <div className="bg-gray-800 p-6 rounded-lg mb-8">
-        <h2 className="text-xl font-bold mb-2">Welcome, {user.firstName || user.emailAddresses[0].emailAddress}</h2>
-        <p>You are signed in as {user.emailAddresses[0].emailAddress}</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <AdminCard title="Projects" description="Manage your portfolio projects" link="/admin/projects" />
-        <AdminCard title="Media" description="Upload and manage media files" link="/admin/media" />
-        <AdminCard title="Settings" description="Configure site settings" link="/admin/settings" />
-        <AdminCard title="Users" description="Manage user access and permissions" link="/admin/users" />
-        <AdminCard title="Security" description="Manage security and dependencies" link="/admin/security" />
-      </div>
+      <WidgetContainer
+        availableWidgets={widgetRegistry}
+        defaultWidgets={defaultDashboardWidgets}
+        storageKey="milo-admin-dashboard-widgets"
+      />
     </div>
-  )
-}
-
-function AdminCard({ title, description, link }: { title: string; description: string; link: string }) {
-  return (
-    <Link href={link} className="block">
-      <div className="bg-gray-800 p-6 rounded-lg hover:bg-gray-700 transition-colors">
-        <h2 className="text-xl font-bold mb-2">{title}</h2>
-        <p>{description}</p>
-      </div>
-    </Link>
   )
 }
