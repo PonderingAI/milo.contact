@@ -47,7 +47,7 @@ export function DatabaseSetupPopup({
   onSetupComplete,
   title = "Database Setup Required",
   description = "Some required database tables are missing. Please set up the database to continue.",
-  ...props
+  isStationary = false,
 }: DatabaseSetupPopupProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -56,11 +56,13 @@ export function DatabaseSetupPopup({
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [missingTables, setMissingTables] = useState<string[]>([])
+  const [existingTables, setExistingTables] = useState<string[]>([])
   const [selectedTables, setSelectedTables] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<string>("all")
   const [setupCompleted, setSetupCompleted] = useState(false)
   const [forceClose, setForceClose] = useState(false)
   const [isAdminPage, setIsAdminPage] = useState(false)
+  const [functionSetup, setFunctionSetup] = useState(false)
 
   // Define all possible tables with their SQL
   const allTables: TableConfig[] = [
@@ -535,8 +537,8 @@ END $$;`,
       sql: `
 CREATE TABLE IF NOT EXISTS dependency_settings (
   id SERIAL PRIMARY KEY,
-  update_mode VARCHAR(50) DEFAULT 'conservative',
-  auto_update_enabled BOOLEAN DEFAULT FALSE,
+  update_mode VARCHAR(50) DEFAULT 'aggressive',
+  auto_update_enabled BOOLEAN DEFAULT TRUE,
   update_schedule VARCHAR(100) DEFAULT 'daily',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
@@ -544,7 +546,7 @@ CREATE TABLE IF NOT EXISTS dependency_settings (
 
 -- Insert default settings
 INSERT INTO dependency_settings (update_mode, auto_update_enabled, update_schedule)
-VALUES ('conservative', FALSE, 'daily')
+VALUES ('aggressive', TRUE, 'daily')
 ON CONFLICT DO NOTHING;
 
 -- Add RLS policies
@@ -574,6 +576,69 @@ BEGIN
   ) THEN
     CREATE POLICY "admins_manage_settings"
     ON dependency_settings
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;`,
+      dependencies: ["user_roles"],
+      required: false,
+      category: "dependencies",
+    },
+    {
+      name: "dependency_compatibility",
+      displayName: "Dependency Compatibility",
+      description: "Stores compatibility information between dependencies",
+      sql: `
+CREATE TABLE IF NOT EXISTS dependency_compatibility (
+  id SERIAL PRIMARY KEY,
+  dependency_name VARCHAR(255) NOT NULL,
+  compatible_with VARCHAR(255) NOT NULL,
+  min_version VARCHAR(100),
+  max_version VARCHAR(100),
+  notes TEXT,
+  source VARCHAR(100),
+  verified BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(dependency_name, compatible_with)
+);
+
+-- Add RLS policies
+ALTER TABLE dependency_compatibility ENABLE ROW LEVEL SECURITY;
+
+-- Allow authenticated users to read compatibility data
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_compatibility' AND policyname = 'authenticated_read_compatibility'
+  ) THEN
+    CREATE POLICY "authenticated_read_compatibility"
+    ON dependency_compatibility
+    FOR SELECT
+    TO authenticated
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage compatibility data
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_compatibility' AND policyname = 'admins_manage_compatibility'
+  ) THEN
+    CREATE POLICY "admins_manage_compatibility"
+    ON dependency_compatibility
     FOR ALL
     TO authenticated
     USING (
@@ -790,6 +855,25 @@ ON user_widgets(position);`,
     },
   ]
 
+  // Setup the check_tables_exist function
+  const setupCheckTablesFunction = useCallback(async () => {
+    if (functionSetup) return
+
+    try {
+      const response = await fetch("/api/setup-check-tables-function", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        console.warn("Failed to setup check_tables_exist function, will use fallback methods")
+      } else {
+        setFunctionSetup(true)
+      }
+    } catch (error) {
+      console.warn("Error setting up check_tables_exist function:", error)
+    }
+  }, [functionSetup])
+
   // Check if we're on an admin page
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -801,7 +885,10 @@ ON user_widgets(position);`,
         setForceClose(true)
       }
     }
-  }, [adminOnly])
+
+    // Setup the check_tables_exist function
+    setupCheckTablesFunction()
+  }, [adminOnly, setupCheckTablesFunction])
 
   // Function to check if tables exist - using a more reliable method
   const checkTables = useCallback(async () => {
@@ -813,20 +900,27 @@ ON user_widgets(position);`,
     setError(null)
 
     try {
-      // First, try to directly query the information_schema to check tables
-      // This is more reliable than the API route
+      // Get the list of tables to check
+      const tablesToCheck =
+        customTables.length > 0
+          ? customTables
+          : allTables
+              .filter((table) => requiredSections.includes("all") || requiredSections.includes(table.category))
+              .map((table) => table.name)
+
+      // If we're in stationary mode, check all tables
+      const finalTablesToCheck = isStationary ? allTables.map((table) => table.name) : tablesToCheck
+
+      console.log("Checking tables:", finalTablesToCheck)
+
+      // Try to check tables using our API
       const response = await fetch("/api/direct-table-check", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          tables:
-            customTables.length > 0
-              ? customTables
-              : allTables
-                  .filter((table) => requiredSections.includes("all") || requiredSections.includes(table.category))
-                  .map((table) => table.name),
+          tables: finalTablesToCheck,
         }),
       })
 
@@ -843,12 +937,19 @@ ON user_widgets(position);`,
 
       // data.missingTables contains the list of tables that don't exist
       const missingTablesList = data.missingTables || []
+      const existingTablesList = data.existingTables || []
 
       setMissingTables(missingTablesList)
+      setExistingTables(existingTablesList)
       setSelectedTables(missingTablesList)
 
+      console.log("Tables check result:", {
+        missing: missingTablesList,
+        existing: existingTablesList,
+      })
+
       // Only open the popup if there are missing tables and we're on an admin page
-      if (missingTablesList.length > 0 && isAdminPage) {
+      if (missingTablesList.length > 0 && (isAdminPage || isStationary)) {
         setOpen(true)
       } else {
         setOpen(false)
@@ -865,14 +966,33 @@ ON user_widgets(position);`,
       if (!isAdminPage && adminOnly) {
         setForceClose(true)
       }
+
+      // In stationary mode, we still want to show the component even if there's an error
+      if (isStationary) {
+        // Show all tables as missing so the user can create them
+        const allTableNames = allTables.map((table) => table.name)
+        setMissingTables(allTableNames)
+        setSelectedTables(allTableNames)
+        setExistingTables([])
+        setOpen(true)
+      }
     } finally {
       setChecking(false)
     }
-  }, [requiredSections, customTables, forceClose, setupCompleted, onSetupComplete, adminOnly, isAdminPage, allTables])
+  }, [
+    requiredSections,
+    customTables,
+    forceClose,
+    setupCompleted,
+    onSetupComplete,
+    adminOnly,
+    isAdminPage,
+    allTables,
+    isStationary,
+  ])
 
   // Function to generate SQL for selected tables
-  // Make the generateSQL function public and static so it can be called without an instance
-  const generateSQLForTables = (tableNames: string[], allTables: TableConfig[]): string => {
+  const generateSQL = () => {
     // Start with UUID extension
     let sql = `-- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
@@ -888,7 +1008,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       const table = allTables.find((t) => t.name === tableName)
       if (table) {
         for (const dep of table.dependencies) {
-          if (tableNames.includes(dep)) {
+          if (selectedTables.includes(dep)) {
             processTable(dep)
           }
         }
@@ -903,16 +1023,11 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     }
 
     // Process all selected tables
-    for (const tableName of tableNames) {
+    for (const tableName of selectedTables) {
       processTable(tableName)
     }
 
     return sql.trim()
-  }
-
-  // Modify the existing generateSQL method to use the static method
-  const generateSQL = () => {
-    return generateSQLForTables(selectedTables, allTables)
   }
 
   // Function to copy SQL to clipboard
@@ -949,7 +1064,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
       // Wait a moment before closing to show success message
       setTimeout(() => {
-        setOpen(false)
+        if (!isStationary) {
+          setOpen(false)
+        }
         setSetupCompleted(true)
 
         // Save to localStorage to prevent popup from showing again
@@ -962,6 +1079,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         if (onSetupComplete) {
           onSetupComplete()
         }
+
+        // Refresh the table list
+        checkTables()
       }, 1500)
     } catch (error) {
       console.error("Error executing SQL:", error)
@@ -1033,7 +1153,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
     // Wait a moment before closing to show success message
     setTimeout(() => {
-      setOpen(false)
+      if (!isStationary) {
+        setOpen(false)
+      }
       setSetupCompleted(true)
 
       if (onSetupComplete) {
@@ -1047,10 +1169,16 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
   // Check for missing tables on component mount
   useEffect(() => {
+    // For stationary mode, always check tables
+    if (isStationary) {
+      checkTables()
+      return
+    }
+
     // Check if setup was previously completed
     try {
       const completed = localStorage.getItem("database_setup_completed")
-      if (completed === "true") {
+      if (completed === "true" && !isStationary) {
         setForceClose(true)
         setSetupCompleted(true)
         return
@@ -1063,15 +1191,15 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     if (!adminOnly || (adminOnly && isAdminPage)) {
       checkTables()
     }
-  }, [checkTables, adminOnly, isAdminPage])
+  }, [checkTables, adminOnly, isAdminPage, isStationary])
 
   // If force closed, setup completed, or not on admin page when adminOnly is true, don't render
-  if (forceClose || (setupCompleted && !open) || (adminOnly && !isAdminPage)) {
+  if (forceClose || (setupCompleted && !open && !isStationary) || (adminOnly && !isAdminPage && !isStationary)) {
     return null
   }
 
   // If stationary, render the content directly without the Dialog wrapper
-  if (props.isStationary) {
+  if (isStationary) {
     return (
       <div className="w-full">
         <div className="flex items-center justify-between gap-2 mb-4">
@@ -1079,8 +1207,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             <Database className="h-5 w-5 mr-2" />
             <h2 className="text-xl font-semibold">{title}</h2>
           </div>
-          <Button variant="ghost" size="icon" onClick={handleForceClose} title="Skip setup (not recommended)">
-            <X className="h-4 w-4" />
+          <Button variant="outline" size="sm" onClick={checkTables} disabled={checking}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
+            Refresh
           </Button>
         </div>
         <p className="text-sm text-gray-500 mb-6">{description}</p>
@@ -1102,10 +1231,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">Database Tables</h3>
-            <Button variant="outline" size="sm" onClick={checkTables} disabled={checking}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
+            <div className="text-sm text-gray-500">
+              {existingTables.length} existing / {missingTables.length} missing
+            </div>
           </div>
 
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
@@ -1192,9 +1320,6 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             <Button variant="outline" onClick={copyToClipboard}>
               {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
               {copied ? "Copied!" : "Copy SQL"}
-            </Button>
-            <Button variant="outline" onClick={handleForceClose}>
-              Skip Setup
             </Button>
             <Button variant="outline" onClick={handleManualSetupComplete}>
               I've Run the SQL Manually

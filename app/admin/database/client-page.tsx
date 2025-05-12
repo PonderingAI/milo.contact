@@ -12,13 +12,26 @@ export default function DatabaseClientPage() {
 
   useEffect(() => {
     // Force localStorage to not remember the database setup completion
+    // This ensures the database management page always shows tables
     try {
       localStorage.removeItem("database_setup_completed")
     } catch (e) {
       console.error("Could not access localStorage", e)
     }
 
-    setLoading(false)
+    // Setup the check_tables_exist function
+    fetch("/api/setup-check-tables-function")
+      .then((response) => {
+        if (!response.ok) {
+          console.warn("Failed to setup check_tables_exist function")
+        }
+      })
+      .catch((err) => {
+        console.warn("Error setting up check_tables_exist function:", err)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [])
 
   if (loading) {
@@ -58,26 +71,18 @@ export default function DatabaseClientPage() {
             </Alert>
           )}
 
-          {/* Use the DatabaseSetupPopup component directly */}
+          {/* Use the DatabaseSetupPopup component directly in stationary mode */}
           <div className="mt-4">
-            <DatabaseSetupPopupWrapper />
+            <DatabaseSetupPopup
+              requiredSections={["all"]}
+              adminOnly={false}
+              title="Database Tables Management"
+              description="View, create, and manage database tables for your application."
+              isStationary={true}
+            />
           </div>
         </CardContent>
       </Card>
-    </div>
-  )
-}
-
-// This wrapper component ensures the popup is always shown
-function DatabaseSetupPopupWrapper() {
-  return (
-    <div className="border rounded-lg p-4">
-      <DatabaseSetupPopup
-        requiredSections={["all"]}
-        adminOnly={false}
-        title="Database Tables Management"
-        description="View, create, and manage database tables for your application."
-      />
     </div>
   )
 }
