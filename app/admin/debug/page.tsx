@@ -1,79 +1,129 @@
 import Link from "next/link"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Database, Bug, AlertTriangle, Terminal, Server } from "lucide-react"
+import { Database, Server, FileText, AlertTriangle, Bug } from "lucide-react"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 
-export default function DebugPage() {
+export default function AdminDebugPage() {
   return (
-    <div className="container mx-auto p-4 space-y-6">
-      <div className="flex items-center gap-2 mb-4">
-        <Bug className="h-6 w-6" />
-        <h1 className="text-2xl font-bold">Debug Tools</h1>
-      </div>
-
-      <p className="text-gray-400 mb-6">
-        These tools are designed to help diagnose and troubleshoot issues with your application.
-      </p>
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-8">Debug Tools</h1>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Link href="/admin/debug/database" className="block">
-          <Card className="h-full transition-all hover:bg-gray-800/50">
-            <CardHeader>
-              <Database className="h-8 w-8 mb-2 text-blue-500" />
-              <CardTitle>Database Diagnostics</CardTitle>
-              <CardDescription>Test database connections and check table structures</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-400">
-                Run diagnostics on your Supabase connection, check tables, and view database structure.
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+        {/* Database Debug Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Database className="h-5 w-5" />
+              Database Diagnostics
+            </CardTitle>
+            <CardDescription>Inspect database tables, run queries, and diagnose connection issues</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              View database structure, check table existence, and run diagnostic queries to troubleshoot database
+              issues.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug/database" className="w-full">
+              <Button variant="default" className="w-full">
+                Open Database Debug
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
 
-        <Link href="/admin/debug-client" className="block">
-          <Card className="h-full transition-all hover:bg-gray-800/50">
-            <CardHeader>
-              <Terminal className="h-8 w-8 mb-2 text-green-500" />
-              <CardTitle>Client Debug</CardTitle>
-              <CardDescription>Debug client-side issues and environment</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-400">
-                Check client-side environment variables, browser information, and runtime details.
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+        {/* Client Debug Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bug className="h-5 w-5" />
+              Client Debug
+            </CardTitle>
+            <CardDescription>Debug client-side issues and browser-specific problems</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Inspect client-side state, check browser compatibility, and diagnose rendering issues.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug-client" className="w-full">
+              <Button variant="default" className="w-full">
+                Open Client Debug
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
 
-        <Link href="/admin/debug/system" className="block">
-          <Card className="h-full transition-all hover:bg-gray-800/50">
-            <CardHeader>
-              <Server className="h-8 w-8 mb-2 text-purple-500" />
-              <CardTitle>System Information</CardTitle>
-              <CardDescription>View system and environment details</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-400">
-                Check server information, runtime environment, and deployment details.
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+        {/* System Info Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Server className="h-5 w-5" />
+              System Information
+            </CardTitle>
+            <CardDescription>View system status, environment variables, and configuration</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Check system health, environment configuration, and runtime information.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug/system" className="w-full">
+              <Button variant="default" className="w-full">
+                View System Info
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
 
-        <Link href="/admin/debug/logs" className="block">
-          <Card className="h-full transition-all hover:bg-gray-800/50">
-            <CardHeader>
-              <AlertTriangle className="h-8 w-8 mb-2 text-yellow-500" />
-              <CardTitle>Error Logs</CardTitle>
-              <CardDescription>View application error logs</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-gray-400">
-                Browse and search through application error logs to diagnose issues.
-              </p>
-            </CardContent>
-          </Card>
-        </Link>
+        {/* Error Logs Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5" />
+              Error Logs
+            </CardTitle>
+            <CardDescription>View application error logs and warnings</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Browse recent errors, warnings, and system messages to diagnose issues.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug/logs" className="w-full">
+              <Button variant="default" className="w-full">
+                View Logs
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
+        {/* RPC Functions Debug Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5" />
+              RPC Functions
+            </CardTitle>
+            <CardDescription>Manage and debug database RPC functions</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Create, test, and troubleshoot database RPC functions used by the application.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/api/setup-rpc-functions" className="w-full">
+              <Button variant="default" className="w-full bg-purple-600 hover:bg-purple-700">
+                Fix RPC Functions
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
       </div>
     </div>
   )

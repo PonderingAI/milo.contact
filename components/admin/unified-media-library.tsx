@@ -23,6 +23,7 @@ import {
   Plus,
   X,
   CheckCircle,
+  Database,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
@@ -83,6 +84,7 @@ export default function UnifiedMediaLibrary() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [isSettingUpRpc, setIsSettingUpRpc] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = getSupabaseBrowserClient()
@@ -98,7 +100,9 @@ export default function UnifiedMediaLibrary() {
   const [imageLoadError, setImageLoadError] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    fetchMedia()
+    setupRpcFunctions().then(() => {
+      fetchMedia()
+    })
   }, [])
 
   // Effect to monitor the upload queue and start processing when needed
@@ -110,6 +114,26 @@ export default function UnifiedMediaLibrary() {
       processBulkUpload()
     }
   }, [uploadQueue, isProcessingQueue])
+
+  const setupRpcFunctions = async () => {
+    setIsSettingUpRpc(true)
+    try {
+      const response = await fetch("/api/setup-rpc-functions", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        console.warn("RPC setup warning:", data)
+      } else {
+        console.log("RPC functions set up successfully")
+      }
+    } catch (error) {
+      console.error("Error setting up RPC functions:", error)
+    } finally {
+      setIsSettingUpRpc(false)
+    }
+  }
 
   const setupDatabase = async () => {
     setSetupInProgress(true)
@@ -133,6 +157,9 @@ export default function UnifiedMediaLibrary() {
         description: "Database tables have been created successfully",
       })
 
+      // Set up RPC functions after database setup
+      await setupRpcFunctions()
+
       // Refresh media after setup
       fetchMedia()
     } catch (error) {
@@ -155,37 +182,51 @@ export default function UnifiedMediaLibrary() {
     try {
       console.log("Fetching media from database...")
 
-      // Use a direct RPC call to ensure we get fresh data
-      const { data, error } = await supabase.rpc("get_all_media")
+      // Try using the RPC function first
+      let data: MediaItem[] = []
+      let fetchError = null
 
-      if (error) {
-        if (error.code === "42P01") {
-          setError("Media table does not exist. Please set up the database.")
-          return
+      try {
+        const rpcResult = await supabase.rpc("get_all_media")
+
+        if (rpcResult.error) {
+          console.warn("RPC fetch failed, falling back to direct query:", rpcResult.error)
+          fetchError = rpcResult.error
+        } else {
+          data = rpcResult.data || []
         }
-        throw error
+      } catch (rpcError) {
+        console.warn("RPC fetch exception, falling back to direct query:", rpcError)
+        fetchError = rpcError instanceof Error ? rpcError : new Error(String(rpcError))
       }
 
       // If RPC fails, fall back to regular query
-      if (!data) {
+      if (fetchError || data.length === 0) {
+        console.log("Using fallback query method")
         const { data: fallbackData, error: fallbackError } = await supabase
           .from("media")
           .select("*")
           .order("created_at", { ascending: false })
 
-        if (fallbackError) throw fallbackError
+        if (fallbackError) {
+          if (fallbackError.code === "42P01") {
+            setError("Media table does not exist. Please set up the database.")
+            return
+          }
+          throw fallbackError
+        }
 
         console.log("Media items fetched (fallback):", fallbackData?.length || 0)
-        setMediaItems(fallbackData || [])
+        data = fallbackData || []
       } else {
         console.log("Media items fetched (RPC):", data?.length || 0)
-        setMediaItems(data || [])
       }
+
+      setMediaItems(data)
 
       // Extract all unique tags
       const tags = new Set<string>()
-      const items = data || []
-      items.forEach((item) => {
+      data.forEach((item) => {
         if (item.tags) {
           item.tags.forEach((tag: string) => tags.add(tag))
         }
@@ -1310,10 +1351,17 @@ export default function UnifiedMediaLibrary() {
         </DialogContent>
       </Dialog>
 
-      <Button onClick={fetchMedia} className="fixed bottom-4 right-4 bg-blue-600 hover:bg-blue-700">
-        <RefreshCw className="h-4 w-4 mr-2" />
-        Refresh Media
-      </Button>
+      <div className="fixed bottom-4 right-4 flex gap-2">
+        <Button onClick={setupRpcFunctions} disabled={isSettingUpRpc} className="bg-purple-600 hover:bg-purple-700">
+          <Database className="h-4 w-4 mr-2" />
+          {isSettingUpRpc ? "Setting up..." : "Fix RPC Functions"}
+        </Button>
+
+        <Button onClick={fetchMedia} className="bg-blue-600 hover:bg-blue-700">
+          <RefreshCw className="h-4 w-4 mr-2" />
+          Refresh Media
+        </Button>
+      </div>
     </div>
   )
 

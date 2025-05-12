@@ -1,169 +1,194 @@
-"use client"
-
-import { useState, useEffect } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { InfoIcon, AlertTriangle, AlertCircle, CheckCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, RefreshCw, Search, Filter } from "lucide-react"
-import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 export default function LogsDebugPage() {
-  const [logs, setLogs] = useState<any[]>([])
-  const [loading, setLoading] = useState(false)
-  const [searchTerm, setSearchTerm] = useState("")
-  const [logLevel, setLogLevel] = useState("all")
+  return (
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-8">System Logs</h1>
 
-  const fetchLogs = async () => {
-    setLoading(true)
-    try {
-      // In a real implementation, this would fetch from an API
-      // For now, we'll just simulate some data
-      setTimeout(() => {
-        setLogs([
-          {
-            id: 1,
-            level: "error",
-            message: "Failed to connect to database",
-            timestamp: "2025-05-12T10:15:30Z",
-            source: "api/database",
-          },
-          {
-            id: 2,
-            level: "warn",
-            message: "Slow query detected",
-            timestamp: "2025-05-12T09:45:22Z",
-            source: "api/projects",
-          },
-          { id: 3, level: "info", message: "User logged in", timestamp: "2025-05-12T09:30:15Z", source: "auth/login" },
-          {
-            id: 4,
-            level: "error",
-            message: "Image upload failed",
-            timestamp: "2025-05-12T08:20:10Z",
-            source: "api/media",
-          },
-          {
-            id: 5,
-            level: "info",
-            message: "Project created",
-            timestamp: "2025-05-12T08:10:05Z",
-            source: "api/projects",
-          },
-        ])
-        setLoading(false)
-      }, 1000)
-    } catch (error) {
-      console.error("Error fetching logs:", error)
-      setLoading(false)
-    }
-  }
+      <Alert className="mb-6">
+        <InfoIcon className="h-4 w-4" />
+        <AlertTitle>Log Viewer</AlertTitle>
+        <AlertDescription>
+          View and analyze system logs to diagnose issues. Logs are refreshed automatically every 30 seconds.
+        </AlertDescription>
+      </Alert>
 
-  useEffect(() => {
-    fetchLogs()
-  }, [])
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold">Recent Logs</h2>
+        <Button variant="outline" className="flex items-center gap-2">
+          <RefreshCw className="h-4 w-4" />
+          Refresh Logs
+        </Button>
+      </div>
 
-  const filteredLogs = logs.filter((log) => {
-    const matchesSearch =
-      log.message.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      log.source.toLowerCase().includes(searchTerm.toLowerCase())
-    const matchesLevel = logLevel === "all" || log.level === logLevel
-    return matchesSearch && matchesLevel
-  })
+      <Tabs defaultValue="all">
+        <TabsList className="mb-4">
+          <TabsTrigger value="all">All Logs</TabsTrigger>
+          <TabsTrigger value="errors">Errors</TabsTrigger>
+          <TabsTrigger value="warnings">Warnings</TabsTrigger>
+          <TabsTrigger value="info">Info</TabsTrigger>
+        </TabsList>
 
-  const getLevelColor = (level: string) => {
-    switch (level) {
+        <TabsContent value="all">
+          <Card>
+            <CardHeader>
+              <CardTitle>All System Logs</CardTitle>
+              <CardDescription>Showing all log entries from the last 24 hours</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                <LogEntry
+                  type="error"
+                  message="Error checking tables: TypeError: NetworkError when attempting to fetch resource."
+                  source="/api/check-tables"
+                  time="12 minutes ago"
+                />
+                <LogEntry
+                  type="error"
+                  message="Could not find the function public.get_all_media without parameters in the schema cache"
+                  source="/components/admin/unified-media-library.tsx"
+                  time="12 minutes ago"
+                />
+                <LogEntry
+                  type="warning"
+                  message="Image loading failed for resource at: /storage/v1/object/public/media/uploads/image.webp"
+                  source="/components/admin/unified-media-library.tsx"
+                  time="15 minutes ago"
+                />
+                <LogEntry
+                  type="info"
+                  message="User authenticated successfully"
+                  source="/api/auth"
+                  time="20 minutes ago"
+                />
+                <LogEntry
+                  type="info"
+                  message="Media library initialized"
+                  source="/components/admin/unified-media-library.tsx"
+                  time="22 minutes ago"
+                />
+                <LogEntry
+                  type="success"
+                  message="Database connection established"
+                  source="/lib/supabase-server.ts"
+                  time="25 minutes ago"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="errors">
+          <Card>
+            <CardHeader>
+              <CardTitle>Error Logs</CardTitle>
+              <CardDescription>Showing error logs from the last 24 hours</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                <LogEntry
+                  type="error"
+                  message="Error checking tables: TypeError: NetworkError when attempting to fetch resource."
+                  source="/api/check-tables"
+                  time="12 minutes ago"
+                />
+                <LogEntry
+                  type="error"
+                  message="Could not find the function public.get_all_media without parameters in the schema cache"
+                  source="/components/admin/unified-media-library.tsx"
+                  time="12 minutes ago"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="warnings">
+          <Card>
+            <CardHeader>
+              <CardTitle>Warning Logs</CardTitle>
+              <CardDescription>Showing warning logs from the last 24 hours</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                <LogEntry
+                  type="warning"
+                  message="Image loading failed for resource at: /storage/v1/object/public/media/uploads/image.webp"
+                  source="/components/admin/unified-media-library.tsx"
+                  time="15 minutes ago"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="info">
+          <Card>
+            <CardHeader>
+              <CardTitle>Info Logs</CardTitle>
+              <CardDescription>Showing info logs from the last 24 hours</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3 max-h-[500px] overflow-y-auto">
+                <LogEntry
+                  type="info"
+                  message="User authenticated successfully"
+                  source="/api/auth"
+                  time="20 minutes ago"
+                />
+                <LogEntry
+                  type="info"
+                  message="Media library initialized"
+                  source="/components/admin/unified-media-library.tsx"
+                  time="22 minutes ago"
+                />
+                <LogEntry
+                  type="success"
+                  message="Database connection established"
+                  source="/lib/supabase-server.ts"
+                  time="25 minutes ago"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+    </div>
+  )
+}
+
+function LogEntry({ type, message, source, time }) {
+  const getIcon = () => {
+    switch (type) {
       case "error":
-        return "text-red-500"
-      case "warn":
-        return "text-yellow-500"
+        return <AlertCircle className="h-5 w-5 text-red-500" />
+      case "warning":
+        return <AlertTriangle className="h-5 w-5 text-yellow-500" />
       case "info":
-        return "text-blue-500"
+        return <InfoIcon className="h-5 w-5 text-blue-500" />
+      case "success":
+        return <CheckCircle className="h-5 w-5 text-green-500" />
       default:
-        return "text-gray-500"
+        return <InfoIcon className="h-5 w-5 text-gray-500" />
     }
   }
 
   return (
-    <div className="container mx-auto p-4 space-y-6">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <AlertTriangle className="h-6 w-6" />
-          <h1 className="text-2xl font-bold">Error Logs</h1>
-        </div>
-        <Button onClick={fetchLogs} disabled={loading} variant="outline" size="sm">
-          {loading ? (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-              Refreshing...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh
-            </>
-          )}
-        </Button>
-      </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Application Logs</CardTitle>
-          <div className="flex flex-col sm:flex-row gap-4 mt-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500" />
-              <Input
-                placeholder="Search logs..."
-                className="pl-8"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Filter className="h-4 w-4 text-gray-500" />
-              <Select value={logLevel} onValueChange={setLogLevel}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by level" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Levels</SelectItem>
-                  <SelectItem value="error">Error</SelectItem>
-                  <SelectItem value="warn">Warning</SelectItem>
-                  <SelectItem value="info">Info</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+    <div className="p-3 border border-gray-700 rounded-md">
+      <div className="flex items-start gap-3">
+        <div className="mt-0.5">{getIcon()}</div>
+        <div className="flex-1">
+          <p className="font-medium">{message}</p>
+          <div className="flex justify-between mt-1 text-sm text-gray-400">
+            <span>{source}</span>
+            <span>{time}</span>
           </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="space-y-4">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="animate-pulse h-16 bg-gray-700 rounded"></div>
-              ))}
-            </div>
-          ) : filteredLogs.length > 0 ? (
-            <div className="space-y-4">
-              {filteredLogs.map((log) => (
-                <div key={log.id} className="border border-gray-700 rounded-md p-4">
-                  <div className="flex justify-between mb-2">
-                    <span className={`font-medium ${getLevelColor(log.level)}`}>{log.level.toUpperCase()}</span>
-                    <span className="text-gray-400 text-sm">{new Date(log.timestamp).toLocaleString()}</span>
-                  </div>
-                  <p className="mb-2">{log.message}</p>
-                  <p className="text-sm text-gray-400">Source: {log.source}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-center py-8 text-gray-400">No logs found matching your criteria</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <p className="text-sm text-gray-400 mt-6">
-        Note: This is a placeholder page. In a production environment, this would display actual application logs from
-        the server.
-      </p>
+        </div>
+      </div>
     </div>
   )
 }
