@@ -37,6 +37,7 @@ interface DatabaseSetupPopupProps {
   onSetupComplete?: () => void
   title?: string
   description?: string
+  isStationary?: boolean
 }
 
 export function DatabaseSetupPopup({
@@ -46,6 +47,7 @@ export function DatabaseSetupPopup({
   onSetupComplete,
   title = "Database Setup Required",
   description = "Some required database tables are missing. Please set up the database to continue.",
+  ...props
 }: DatabaseSetupPopupProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -1068,6 +1070,145 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     return null
   }
 
+  // If stationary, render the content directly without the Dialog wrapper
+  if (props.isStationary) {
+    return (
+      <div className="w-full">
+        <div className="flex items-center justify-between gap-2 mb-4">
+          <div className="flex items-center">
+            <Database className="h-5 w-5 mr-2" />
+            <h2 className="text-xl font-semibold">{title}</h2>
+          </div>
+          <Button variant="ghost" size="icon" onClick={handleForceClose} title="Skip setup (not recommended)">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+        <p className="text-sm text-gray-500 mb-6">{description}</p>
+
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {success && (
+          <Alert variant="default" className="mb-4 bg-green-50 text-green-800 border-green-200">
+            <Check className="h-4 w-4" />
+            <AlertDescription>{success}</AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-medium">Database Tables</h3>
+            <Button variant="outline" size="sm" onClick={checkTables} disabled={checking}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
+              Refresh
+            </Button>
+          </div>
+
+          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+            <TabsList>
+              <TabsTrigger value="all">All Tables</TabsTrigger>
+              {getCategories().map((category) => (
+                <TabsTrigger key={category} value={category}>
+                  {category.charAt(0).toUpperCase() + category.slice(1)}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+
+            <TabsContent value="all" className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                {getFilteredTables().map((table) => (
+                  <div key={table.name} className="flex items-start space-x-2 border p-3 rounded-md">
+                    <Checkbox
+                      id={`table-${table.name}`}
+                      checked={selectedTables.includes(table.name)}
+                      onCheckedChange={(checked) => handleTableSelection(table.name, checked === true)}
+                      disabled={table.required}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor={`table-${table.name}`} className="font-medium cursor-pointer">
+                        {table.displayName}
+                        {table.required && <span className="text-red-500 ml-2">(Required)</span>}
+                      </Label>
+                      <p className="text-sm text-gray-500">{table.description}</p>
+                      {table.dependencies.length > 0 && (
+                        <p className="text-xs text-gray-400">Depends on: {table.dependencies.join(", ")}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </TabsContent>
+
+            {getCategories().map((category) => (
+              <TabsContent key={category} value={category} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {getFilteredTables().map((table) => (
+                    <div key={table.name} className="flex items-start space-x-2 border p-3 rounded-md">
+                      <Checkbox
+                        id={`table-${table.name}-${category}`}
+                        checked={selectedTables.includes(table.name)}
+                        onCheckedChange={(checked) => handleTableSelection(table.name, checked === true)}
+                        disabled={table.required}
+                      />
+                      <div className="space-y-1">
+                        <Label htmlFor={`table-${table.name}-${category}`} className="font-medium cursor-pointer">
+                          {table.displayName}
+                          {table.required && <span className="text-red-500 ml-2">(Required)</span>}
+                        </Label>
+                        <p className="text-sm text-gray-500">{table.description}</p>
+                        {table.dependencies.length > 0 && (
+                          <p className="text-xs text-gray-400">Depends on: {table.dependencies.join(", ")}</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+            ))}
+          </Tabs>
+
+          <div className="mt-6">
+            <h3 className="text-lg font-medium mb-2">Generated SQL</h3>
+            <Textarea value={generateSQL()} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
+          </div>
+
+          <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 mt-4">
+            <h3 className="font-medium mb-2">Instructions:</h3>
+            <ol className="list-decimal list-inside space-y-2">
+              <li>Copy the SQL code above using the "Copy SQL" button</li>
+              <li>Go to your Supabase project dashboard</li>
+              <li>Click on "SQL Editor" in the left sidebar</li>
+              <li>Paste the SQL code into the editor</li>
+              <li>Click "Run" to execute the SQL and create all required tables</li>
+              <li>Return here and click "I've Run the SQL Manually"</li>
+            </ol>
+          </div>
+
+          <div className="flex flex-col sm:flex-row gap-3 justify-end">
+            <Button variant="outline" onClick={copyToClipboard}>
+              {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+              {copied ? "Copied!" : "Copy SQL"}
+            </Button>
+            <Button variant="outline" onClick={handleForceClose}>
+              Skip Setup
+            </Button>
+            <Button variant="outline" onClick={handleManualSetupComplete}>
+              I've Run the SQL Manually
+            </Button>
+            <Button onClick={executeSQL} disabled={loading}>
+              {loading ? "Creating tables..." : "Create Tables Automatically"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // For the popup version, wrap in Dialog
   return (
     <Dialog
       open={open}
