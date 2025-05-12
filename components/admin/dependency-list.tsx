@@ -8,17 +8,17 @@ import { motion, AnimatePresence } from "framer-motion"
 interface Dependency {
   id: string
   name: string
-  current_version: string // Changed from currentVersion
-  latest_version: string // Changed from latestVersion
+  currentVersion: string
+  latestVersion: string
   outdated: boolean
   locked: boolean
   description: string
-  has_security_issue: boolean // Changed from hasSecurityIssue
-  security_details?: any
-  has_dependabot_alert?: boolean // Changed from hasDependabotAlert
-  dependabot_alert_details?: any
-  update_mode: ToggleState
-  is_dev?: boolean // Changed from isDev
+  hasSecurityIssue: boolean
+  securityDetails?: any
+  hasDependabotAlert?: boolean
+  dependabotAlertDetails?: any
+  updateMode: ToggleState
+  isDev?: boolean
 }
 
 interface DependencyListProps {
@@ -44,9 +44,9 @@ export function DependencyList({
     .filter((dep) => {
       if (filter === "outdated") return dep.outdated
       if (filter === "locked") return dep.locked
-      if (filter === "security") return dep.has_security_issue
-      if (filter === "dependabot") return dep.has_dependabot_alert
-      if (filter === "dev") return dep.is_dev
+      if (filter === "security") return dep.hasSecurityIssue
+      if (filter === "dependabot") return dep.hasDependabotAlert
+      if (filter === "dev") return dep.isDev
       return true
     })
     .filter(
@@ -57,8 +57,8 @@ export function DependencyList({
 
   // Get severity badge for a dependency
   const getSeverityBadge = (dependency: Dependency) => {
-    if (dependency.has_dependabot_alert && dependency.dependabot_alert_details) {
-      const severity = dependency.dependabot_alert_details.severity?.toLowerCase()
+    if (dependency.hasDependabotAlert && dependency.dependabotAlertDetails) {
+      const severity = dependency.dependabotAlertDetails.severity?.toLowerCase()
 
       switch (severity) {
         case "critical":
@@ -75,8 +75,8 @@ export function DependencyList({
       }
     }
 
-    if (dependency.has_security_issue && dependency.security_details) {
-      const severity = dependency.security_details.severity?.toLowerCase()
+    if (dependency.hasSecurityIssue && dependency.securityDetails) {
+      const severity = dependency.securityDetails.severity?.toLowerCase()
 
       switch (severity) {
         case "critical":
@@ -157,34 +157,34 @@ export function DependencyList({
                 exit={{ opacity: 0, y: 10 }}
                 transition={{ duration: 0.2, delay: index * 0.02 }}
                 className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${
-                  dep.has_dependabot_alert ? "bg-gray-700/30" : dep.has_security_issue ? "bg-gray-700/20" : ""
-                } ${dep.update_mode === "global" ? "border-l-2 border-gray-600" : ""} ${
-                  dep.has_dependabot_alert && dep.update_mode === "off" ? "border-l-2 border-gray-500" : ""
+                  dep.hasDependabotAlert ? "bg-gray-700/30" : dep.hasSecurityIssue ? "bg-gray-700/20" : ""
+                } ${dep.updateMode === "global" ? "border-l-2 border-gray-600" : ""} ${
+                  dep.hasDependabotAlert && dep.updateMode === "off" ? "border-l-2 border-gray-500" : ""
                 }`}
               >
                 <td className="py-3 px-4">
                   <div className="font-medium flex items-center">
                     {dep.name}
-                    {dep.is_dev && (
+                    {dep.isDev && (
                       <Badge variant="outline" className="ml-2 border-gray-700 text-gray-400">
                         Dev
                       </Badge>
                     )}
-                    {dep.update_mode === "global" && (
+                    {dep.updateMode === "global" && (
                       <Badge variant="outline" className="ml-2 border-gray-600 text-gray-300 bg-gray-700/50">
                         Global
                       </Badge>
                     )}
-                    {dep.has_dependabot_alert && dep.update_mode === "off" && (
+                    {dep.hasDependabotAlert && dep.updateMode === "off" && (
                       <Badge variant="outline" className="ml-2 border-gray-500 text-gray-300 bg-gray-700/50">
                         Force Update
                       </Badge>
                     )}
                   </div>
                   <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
-                  {dep.has_dependabot_alert && dep.dependabot_alert_details?.url && (
+                  {dep.hasDependabotAlert && dep.dependabotAlertDetails?.url && (
                     <a
-                      href={dep.dependabot_alert_details.url}
+                      href={dep.dependabotAlertDetails.url}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-xs text-gray-400 hover:text-gray-300 flex items-center mt-1"
@@ -194,10 +194,10 @@ export function DependencyList({
                     </a>
                   )}
                 </td>
-                <td className="py-3 px-4">{dep.current_version}</td>
-                <td className="py-3 px-4">{dep.latest_version}</td>
+                <td className="py-3 px-4">{dep.currentVersion}</td>
+                <td className="py-3 px-4">{dep.latestVersion}</td>
                 <td className="py-3 px-4">
-                  {dep.has_dependabot_alert ? (
+                  {dep.hasDependabotAlert ? (
                     <div className="flex items-center gap-1">
                       {getSeverityBadge(dep)}
                       <Button
@@ -209,7 +209,7 @@ export function DependencyList({
                         <Info className="h-4 w-4" />
                       </Button>
                     </div>
-                  ) : dep.has_security_issue ? (
+                  ) : dep.hasSecurityIssue ? (
                     <div className="flex items-center gap-1">
                       {getSeverityBadge(dep)}
                       <Button
@@ -234,16 +234,16 @@ export function DependencyList({
                 <td className="py-3 px-4">
                   <div className="relative">
                     <FourStateToggle
-                      value={dep.update_mode}
+                      value={dep.updateMode}
                       onValueChange={(value) => updateDependencyMode(dep.id, value)}
                       showLabels={false}
                       className="w-[300px] max-w-full"
                     />
-                    {dep.has_dependabot_alert && dep.update_mode === "off" && (
+                    {dep.hasDependabotAlert && dep.updateMode === "off" && (
                       <div className="absolute -top-2 -right-2 bg-gray-600 text-white text-xs px-1 rounded-full">!</div>
                     )}
                   </div>
-                  {dep.has_dependabot_alert && dep.update_mode === "off" && (
+                  {dep.hasDependabotAlert && dep.updateMode === "off" && (
                     <div className="text-xs text-gray-400 mt-1">
                       Will be updated despite "Off" setting due to Dependabot alert
                     </div>
@@ -252,10 +252,8 @@ export function DependencyList({
                 <td className="py-3 px-4">
                   <Button
                     size="sm"
-                    disabled={!dep.outdated && !dep.has_security_issue && !dep.has_dependabot_alert}
-                    className={
-                      dep.has_dependabot_alert || dep.has_security_issue ? "bg-gray-700 hover:bg-gray-600" : ""
-                    }
+                    disabled={!dep.outdated && !dep.hasSecurityIssue && !dep.hasDependabotAlert}
+                    className={dep.hasDependabotAlert || dep.hasSecurityIssue ? "bg-gray-700 hover:bg-gray-600" : ""}
                   >
                     Update
                   </Button>

@@ -5,18 +5,40 @@ import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import AdminCheck from "@/components/admin/admin-check"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, Package } from "lucide-react"
+import { AlertCircle, Package, RefreshCw } from "lucide-react"
 import DependencyTableSetupGuide from "@/components/admin/dependency-table-setup-guide"
-import { Badge } from "@/components/ui/badge"
+import { DependencyList } from "@/components/admin/dependency-list"
+import type { ToggleState } from "@/components/ui/four-state-toggle"
+
+// Define the dependency interface
+interface Dependency {
+  id: string
+  name: string
+  currentVersion: string
+  latestVersion: string
+  outdated: boolean
+  locked: boolean
+  description: string
+  hasSecurityIssue: boolean
+  securityDetails?: any
+  hasDependabotAlert?: boolean
+  dependabotAlertDetails?: any
+  updateMode: ToggleState
+  isDev?: boolean
+}
 
 export default function ClientDependenciesPage() {
   const { isLoaded, isSignedIn } = useUser()
   const router = useRouter()
-  const [dependencies, setDependencies] = useState([])
+  const [dependencies, setDependencies] = useState<Dependency[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [setupNeeded, setSetupNeeded] = useState(false)
   const [setupComplete, setSetupComplete] = useState(false)
+  const [filter, setFilter] = useState("")
+  const [searchTerm, setSearchTerm] = useState("")
+  const [showVulnerabilityDetails, setShowVulnerabilityDetails] = useState(false)
+  const [selectedDependency, setSelectedDependency] = useState(null)
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -44,7 +66,24 @@ export default function ClientDependenciesPage() {
         setSetupNeeded(true)
         setDependencies([])
       } else {
-        setDependencies(data.dependencies || [])
+        // Map the API response to the expected format
+        const mappedDependencies = (data.dependencies || []).map((dep) => ({
+          id: dep.id || dep.name,
+          name: dep.name,
+          currentVersion: dep.current_version,
+          latestVersion: dep.latest_version,
+          outdated: dep.outdated,
+          locked: dep.locked || false,
+          description: dep.description || "",
+          hasSecurityIssue: dep.has_security_issue || false,
+          securityDetails: dep.security_details,
+          hasDependabotAlert: dep.has_dependabot_alert || false,
+          dependabotAlertDetails: dep.dependabot_alert_details,
+          updateMode: dep.update_mode || "global",
+          isDev: dep.is_dev || false,
+        }))
+
+        setDependencies(mappedDependencies)
         setSetupNeeded(false)
       }
     } catch (err) {
@@ -55,7 +94,6 @@ export default function ClientDependenciesPage() {
     }
   }
 
-  // Add after the fetchDependencies function
   const scanDependencies = async () => {
     if (typeof window === "undefined") return
 
@@ -81,7 +119,6 @@ export default function ClientDependenciesPage() {
     }
   }
 
-  // Add a useEffect to scan dependencies on initial load
   useEffect(() => {
     if (isSignedIn && !setupNeeded) {
       scanDependencies()
@@ -92,6 +129,45 @@ export default function ClientDependenciesPage() {
     setSetupComplete(true)
     setSetupNeeded(false)
     fetchDependencies()
+  }
+
+  const updateDependencyMode = async (id: string, value: ToggleState) => {
+    // Find the dependency
+    const dependency = dependencies.find((dep) => dep.id === id)
+    if (!dependency) return
+
+    // Update locally first for immediate feedback
+    setDependencies((deps) => deps.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep)))
+
+    // Then update on the server
+    try {
+      await fetch(`/api/dependencies/update-mode`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, mode: value }),
+      })
+    } catch (error) {
+      console.error("Failed to update dependency mode:", error)
+      // Revert on failure
+      fetchDependencies()
+    }
+  }
+
+  const viewVulnerabilityDetails = (dependency) => {
+    setSelectedDependency(dependency)
+    setShowVulnerabilityDetails(true)
+  }
+
+  const viewDependabotAlertDetails = (dependency) => {
+    setSelectedDependency(dependency)
+    setShowVulnerabilityDetails(true)
+  }
+
+  const clearFilters = () => {
+    setFilter("")
+    setSearchTerm("")
   }
 
   if (!isLoaded) {
@@ -166,49 +242,73 @@ export default function ClientDependenciesPage() {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-xl font-bold">Project Dependencies</h2>
               <Button onClick={scanDependencies} className="ml-auto">
+                <RefreshCw className="h-4 w-4 mr-2" />
                 Refresh Dependencies
               </Button>
             </div>
 
-            {dependencies.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="text-left py-2 px-4">Package</th>
-                      <th className="text-left py-2 px-4">Current</th>
-                      <th className="text-left py-2 px-4">Latest</th>
-                      <th className="text-left py-2 px-4">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {dependencies.map((dep) => (
-                      <tr key={dep.name} className="border-b border-gray-800">
-                        <td className="py-2 px-4">
-                          <div className="font-medium">{dep.name}</div>
-                          <div className="text-sm text-gray-400">{dep.description || "No description"}</div>
-                        </td>
-                        <td className="py-2 px-4">{dep.current_version}</td>
-                        <td className="py-2 px-4">{dep.latest_version}</td>
-                        <td className="py-2 px-4">
-                          {dep.outdated ? (
-                            <Badge variant="outline" className="border-yellow-600 text-yellow-300">
-                              Outdated
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="border-green-600 text-green-300">
-                              Up to date
-                            </Badge>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Search and filter controls */}
+            <div className="mb-6 flex flex-wrap gap-4">
+              <div className="flex-1 min-w-[200px]">
+                <input
+                  type="text"
+                  placeholder="Search dependencies..."
+                  className="w-full p-2 bg-gray-700 border border-gray-600 rounded"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
               </div>
+              <div className="flex gap-2 flex-wrap">
+                <Button
+                  variant={filter === "" ? "default" : "outline"}
+                  onClick={() => setFilter("")}
+                  className="border-gray-600"
+                >
+                  All
+                </Button>
+                <Button
+                  variant={filter === "outdated" ? "default" : "outline"}
+                  onClick={() => setFilter("outdated")}
+                  className="border-gray-600"
+                >
+                  Outdated
+                </Button>
+                <Button
+                  variant={filter === "security" ? "default" : "outline"}
+                  onClick={() => setFilter("security")}
+                  className="border-gray-600"
+                >
+                  Security Issues
+                </Button>
+                <Button
+                  variant={filter === "dev" ? "default" : "outline"}
+                  onClick={() => setFilter("dev")}
+                  className="border-gray-600"
+                >
+                  Dev Dependencies
+                </Button>
+              </div>
+            </div>
+
+            {/* Dependency list */}
+            {dependencies.length > 0 ? (
+              <DependencyList
+                dependencies={dependencies}
+                filter={filter}
+                searchTerm={searchTerm}
+                updateDependencyMode={updateDependencyMode}
+                viewVulnerabilityDetails={viewVulnerabilityDetails}
+                viewDependabotAlertDetails={viewDependabotAlertDetails}
+                clearFilters={clearFilters}
+              />
             ) : (
               <div className="text-center py-8 text-gray-400">
-                <p>Click "Scan for Dependencies" to analyze your project.</p>
+                <p>No dependencies match your search criteria.</p>
+                {(filter !== "" || searchTerm !== "") && (
+                  <Button variant="outline" className="mt-4 border-gray-700" onClick={clearFilters}>
+                    Clear Filters
+                  </Button>
+                )}
               </div>
             )}
           </div>

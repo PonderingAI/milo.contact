@@ -180,7 +180,6 @@ export async function GET() {
         id: dep.name,
         name: dep.name,
         current_version: dep.current_version,
-        // Prioritize npm registry data for latest version
         latest_version: dep.latestVersion || outdatedInfo?.latest || dep.current_version,
         outdated: dep.latestVersion ? dep.current_version !== dep.latestVersion : !!outdatedInfo,
         locked: false,
