@@ -15,7 +15,7 @@ import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import UnifiedMediaLibrary from "@/components/admin/unified-media-library"
+import MediaSelector from "@/components/admin/media-selector"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -25,7 +25,6 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null)
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
-  const [showMediaLibrary, setShowMediaLibrary] = useState(false)
   const [currentMediaTarget, setCurrentMediaTarget] = useState<"main" | "bts">("main")
   const fileInputMainRef = useRef<HTMLInputElement>(null)
   const fileInputBtsRef = useRef<HTMLInputElement>(null)
@@ -113,18 +112,24 @@ export default function NewProjectPage() {
     }
   }
 
-  const openMediaLibrary = (target: "main" | "bts") => {
-    setCurrentMediaTarget(target)
-    setShowMediaLibrary(true)
-  }
-
-  const handleMediaSelected = (url: string) => {
-    if (currentMediaTarget === "main") {
-      handleMainMediaSelect(url)
+  const handleMediaSelect = (url: string | string[]) => {
+    if (Array.isArray(url)) {
+      // Handle multiple selection
+      url.forEach((item) => {
+        if (currentMediaTarget === "main") {
+          handleMainMediaSelect(item)
+        } else {
+          handleBtsMediaSelect(item)
+        }
+      })
     } else {
-      handleBtsMediaSelect(url)
+      // Handle single selection
+      if (currentMediaTarget === "main") {
+        handleMainMediaSelect(url)
+      } else {
+        handleBtsMediaSelect(url)
+      }
     }
-    setShowMediaLibrary(false)
   }
 
   const removeMainImage = (index: number) => {
@@ -520,13 +525,13 @@ export default function NewProjectPage() {
               <h2 className="text-sm font-medium mb-2 text-gray-400">Main</h2>
               <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
                 <div className="space-y-2">
-                  {/* Browse Media button */}
-                  <button
-                    onClick={() => openMediaLibrary("main")}
-                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm`}
-                  >
-                    Browse Media
-                  </button>
+                  {/* Direct MediaSelector component */}
+                  <MediaSelector
+                    onSelect={handleMediaSelect}
+                    currentValue={formData.image || formData.video_url}
+                    mediaType="all"
+                    buttonLabel="Browse Media Library"
+                  />
 
                   {/* URL input */}
                   <div className="relative">
@@ -585,13 +590,17 @@ export default function NewProjectPage() {
               <h2 className="text-sm font-medium mb-2 text-gray-400">BTS</h2>
               <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
                 <div className="space-y-2">
-                  {/* Browse Media button */}
-                  <button
-                    onClick={() => openMediaLibrary("bts")}
-                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm`}
-                  >
-                    Browse Media
-                  </button>
+                  {/* Direct MediaSelector component */}
+                  <MediaSelector
+                    onSelect={(urls) => {
+                      setCurrentMediaTarget("bts")
+                      handleMediaSelect(urls)
+                    }}
+                    currentValue={btsImages.length > 0 ? btsImages[0] : btsVideos.length > 0 ? btsVideos[0] : ""}
+                    mediaType="all"
+                    multiple={true}
+                    buttonLabel="Browse Media Library"
+                  />
 
                   {/* URL input */}
                   <div className="relative">
@@ -987,23 +996,6 @@ export default function NewProjectPage() {
           </Button>
         </div>
       </div>
-
-      {/* Media Library Modal */}
-      {showMediaLibrary && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-black/80 p-4">
-          <div className="relative w-full max-w-6xl max-h-[90vh] overflow-auto bg-[#070a10] rounded-lg border border-gray-800">
-            <div className="sticky top-0 z-10 flex justify-between items-center p-4 border-b border-gray-800 bg-[#070a10]">
-              <h2 className="text-xl font-medium">Select Media</h2>
-              <button onClick={() => setShowMediaLibrary(false)} className="text-gray-400 hover:text-white">
-                Close
-              </button>
-            </div>
-            <div className="p-4">
-              <UnifiedMediaLibrary onSelect={handleMediaSelected} />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
