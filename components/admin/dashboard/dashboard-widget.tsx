@@ -8,6 +8,8 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { X } from "lucide-react"
 import type { Widget } from "./widget-container"
+// Import the error boundary
+import { ErrorBoundaryWidget } from "./error-boundary-widget"
 
 interface DashboardWidgetProps {
   widget: Widget
@@ -216,7 +218,9 @@ export function DashboardWidget({
               <X className="h-3 w-3" />
             </Button>
           )}
-          <div className="h-full">{children}</div>
+          <div className="h-full">
+            <ErrorBoundaryWidget>{children}</ErrorBoundaryWidget>
+          </div>
         </div>
 
         {/* Resize handles */}

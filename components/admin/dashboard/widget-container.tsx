@@ -1,6 +1,6 @@
 "use client"
 
-import type React from "react"
+import React from "react"
 
 import { useState, useRef, useEffect } from "react"
 import { AnimatePresence } from "framer-motion"
@@ -365,7 +365,7 @@ export function WidgetContainer({
                 isDragging={isDragging}
                 isResizing={isResizing}
               >
-                <WidgetComponent {...widget.props} />
+                {React.createElement(WidgetComponent, widget.props || {})}
               </DashboardWidget>
             )
           })}

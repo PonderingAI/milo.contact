@@ -1,26 +1,17 @@
+import { createClient } from "@/lib/supabase-server"
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
-import { getTableByName } from "@/lib/database-schema"
 
 export async function POST(request: Request) {
   try {
     const { tableName } = await request.json()
 
-    // Validate table name
-    const tableDefinition = getTableByName(tableName)
-    if (!tableDefinition) {
-      return NextResponse.json(
-        {
-          exists: false,
-          error: `Table "${tableName}" is not defined in the database schema`,
-        },
-        { status: 400 },
-      )
+    if (!tableName) {
+      return NextResponse.json({ error: "Table name is required" }, { status: 400 })
     }
 
-    const supabase = createAdminClient()
+    const supabase = createClient()
 
-    // Check if the table exists
+    // Query to check if table exists
     const { data, error } = await supabase
       .from("information_schema.tables")
       .select("table_name")
@@ -29,8 +20,15 @@ export async function POST(request: Request) {
       .single()
 
     if (error) {
-      // If there's an error, the table likely doesn't exist
-      return NextResponse.json({ exists: false })
+      console.error("Error checking if table exists:", error)
+      return NextResponse.json(
+        {
+          exists: false,
+          error: error.message,
+          details: "Database query failed",
+        },
+        { status: 500 },
+      )
     }
 
     return NextResponse.json({ exists: !!data })
@@ -40,6 +38,7 @@ export async function POST(request: Request) {
       {
         exists: false,
         error: error instanceof Error ? error.message : "Unknown error",
+        details: "Server error occurred",
       },
       { status: 500 },
     )
