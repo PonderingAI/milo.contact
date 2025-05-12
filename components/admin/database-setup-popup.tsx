@@ -15,8 +15,9 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { AlertCircle, Copy, Check, Database, RefreshCw, X } from "lucide-react"
+import { AlertCircle, Copy, Check, Database, RefreshCw, X, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { toast } from "@/components/ui/use-toast"
 
 // Define the table configuration type
 interface TableConfig {
@@ -58,11 +59,13 @@ export function DatabaseSetupPopup({
   const [missingTables, setMissingTables] = useState<string[]>([])
   const [existingTables, setExistingTables] = useState<string[]>([])
   const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [tablesToDelete, setTablesToDelete] = useState<string[]>([])
   const [activeTab, setActiveTab] = useState<string>("all")
   const [setupCompleted, setSetupCompleted] = useState(false)
   const [forceClose, setForceClose] = useState(false)
   const [isAdminPage, setIsAdminPage] = useState(false)
   const [generatedSQL, setGeneratedSQL] = useState<string>("")
+  const [mode, setMode] = useState<"create" | "manage">("create")
 
   // Define all possible tables with their SQL
   const allTables: TableConfig[] = [
@@ -855,25 +858,6 @@ ON user_widgets(position);`,
     },
   ]
 
-  // Setup the check_tables_exist function
-  // const setupCheckTablesFunction = useCallback(async () => {
-  //   if (functionSetup) return
-
-  //   try {
-  //     const response = await fetch("/api/setup-check-tables-function", {
-  //       method: "POST",
-  //     })
-
-  //     if (!response.ok) {
-  //       console.warn("Failed to setup check_tables_exist function, will use fallback methods")
-  //     } else {
-  //       setFunctionSetup(true)
-  //     }
-  //   } catch (error) {
-  //     console.warn("Error setting up check_tables_exist function:", error)
-  //   }
-  // }, [functionSetup])
-
   // Check if we're on an admin page
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -885,57 +869,85 @@ ON user_widgets(position);`,
         setForceClose(true)
       }
     }
-
-    // Setup the check_tables_exist function
-    // setupCheckTablesFunction()
   }, [adminOnly])
 
-  // Function to generate SQL for selected tables
+  // Function to generate SQL for selected tables and tables to delete
   const generateSQL = useCallback(() => {
-    // Start with UUID extension
-    let sql = `-- Enable UUID extension if not already enabled
+    let sql = ""
+
+    // Add DROP TABLE statements for tables marked for deletion
+    if (tablesToDelete.length > 0) {
+      sql += `-- Drop tables marked for deletion\n`
+
+      // Sort tables to ensure dependencies are respected (drop dependent tables first)
+      const sortedTablesToDelete = [...tablesToDelete].sort((a, b) => {
+        const tableA = allTables.find((t) => t.name === a)
+        const tableB = allTables.find((t) => t.name === b)
+
+        // If tableA depends on tableB, tableA should be dropped first
+        if (tableA && tableB && tableA.dependencies.includes(b)) {
+          return -1
+        }
+        // If tableB depends on tableA, tableB should be dropped first
+        if (tableA && tableB && tableB.dependencies.includes(a)) {
+          return 1
+        }
+        return 0
+      })
+
+      for (const tableName of sortedTablesToDelete) {
+        sql += `DROP TABLE IF EXISTS ${tableName} CASCADE;\n`
+      }
+      sql += "\n"
+    }
+
+    // If there are tables to create
+    if (selectedTables.length > 0) {
+      // Start with UUID extension
+      sql += `-- Enable UUID extension if not already enabled
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 `
 
-    // Add SQL for each selected table, respecting dependencies
-    const processedTables = new Set<string>()
-    const processTable = (tableName: string) => {
-      if (processedTables.has(tableName)) return
+      // Add SQL for each selected table, respecting dependencies
+      const processedTables = new Set<string>()
+      const processTable = (tableName: string) => {
+        if (processedTables.has(tableName)) return
 
-      // Process dependencies first
-      const table = allTables.find((t) => t.name === tableName)
-      if (table) {
-        for (const dep of table.dependencies) {
-          if (selectedTables.includes(dep)) {
-            processTable(dep)
+        // Process dependencies first
+        const table = allTables.find((t) => t.name === tableName)
+        if (table) {
+          for (const dep of table.dependencies) {
+            if (selectedTables.includes(dep)) {
+              processTable(dep)
+            }
           }
+
+          // Add this table's SQL
+          sql += `-- Setup for ${table.displayName} table\n`
+          sql += table.sql
+          sql += "\n\n"
+
+          processedTables.add(tableName)
         }
+      }
 
-        // Add this table's SQL
-        sql += `-- Setup for ${table.displayName} table\n`
-        sql += table.sql
-        sql += "\n\n"
-
-        processedTables.add(tableName)
+      // Process all selected tables
+      for (const tableName of selectedTables) {
+        processTable(tableName)
       }
     }
 
-    // Process all selected tables
-    for (const tableName of selectedTables) {
-      processTable(tableName)
-    }
-
     return sql.trim()
-  }, [selectedTables, allTables])
+  }, [selectedTables, tablesToDelete, allTables])
 
-  // Update generated SQL whenever selected tables change
+  // Update generated SQL whenever selected tables or tables to delete change
   useEffect(() => {
     const sql = generateSQL()
     setGeneratedSQL(sql)
-  }, [selectedTables, generateSQL])
+  }, [selectedTables, tablesToDelete, generateSQL])
 
-  // Function to check if tables exist - using our new direct-table-check API
+  // Function to check if tables exist - using our direct-table-check API
   const checkTables = useCallback(async () => {
     if (forceClose || setupCompleted || (adminOnly && !isAdminPage)) {
       return
@@ -945,18 +957,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     setError(null)
 
     try {
-      // Get the list of tables to check
-      const tablesToCheck =
-        customTables.length > 0
-          ? customTables
-          : allTables
-              .filter((table) => requiredSections.includes("all") || requiredSections.includes(table.category))
-              .map((table) => table.name)
+      // Get all table names to check
+      const allTableNames = allTables.map((table) => table.name)
 
-      // If we're in stationary mode, check all tables
-      const finalTablesToCheck = isStationary ? allTables.map((table) => table.name) : tablesToCheck
-
-      console.log("Checking tables:", finalTablesToCheck)
+      console.log("Checking tables:", allTableNames)
 
       // Try to check tables using our API
       const response = await fetch("/api/direct-table-check", {
@@ -965,7 +969,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          tables: finalTablesToCheck,
+          tables: allTableNames,
         }),
       })
 
@@ -987,16 +991,26 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       setMissingTables(missingTablesList)
       setExistingTables(existingTablesList)
       setSelectedTables(missingTablesList)
+      setTablesToDelete([]) // Reset tables to delete
 
       console.log("Tables check result:", {
         missing: missingTablesList,
         existing: existingTablesList,
       })
 
+      // Set the mode based on what we found
+      if (missingTablesList.length > 0) {
+        setMode("create")
+        setActiveTab("create")
+      } else {
+        setMode("manage")
+        setActiveTab("manage")
+      }
+
       // Only open the popup if there are missing tables and we're on an admin page
       if (missingTablesList.length > 0 && (isAdminPage || isStationary)) {
         setOpen(true)
-      } else {
+      } else if (!isStationary) {
         setOpen(false)
         setSetupCompleted(true)
         if (onSetupComplete) {
@@ -1026,22 +1040,16 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     } finally {
       setChecking(false)
     }
-  }, [
-    requiredSections,
-    customTables,
-    forceClose,
-    setupCompleted,
-    onSetupComplete,
-    adminOnly,
-    isAdminPage,
-    allTables,
-    isStationary,
-  ])
+  }, [forceClose, setupCompleted, onSetupComplete, adminOnly, isAdminPage, allTables, isStationary])
 
   // Function to copy SQL to clipboard
   const copyToClipboard = () => {
     navigator.clipboard.writeText(generatedSQL)
     setCopied(true)
+    toast({
+      title: "SQL Copied",
+      description: "SQL has been copied to clipboard",
+    })
     setTimeout(() => setCopied(false), 3000)
   }
 
@@ -1066,38 +1074,31 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         throw new Error(data.error || "Failed to execute SQL")
       }
 
-      setSuccess("Database tables created successfully!")
+      setSuccess("Database changes applied successfully!")
+      toast({
+        title: "Success",
+        description: "Database changes applied successfully!",
+      })
 
-      // Wait a moment before closing to show success message
+      // Wait a moment before refreshing
       setTimeout(() => {
-        if (!isStationary) {
-          setOpen(false)
-        }
-        setSetupCompleted(true)
-
-        // Save to localStorage to prevent popup from showing again
-        try {
-          localStorage.setItem("database_setup_completed", "true")
-        } catch (e) {
-          console.error("Could not save to localStorage", e)
-        }
-
-        if (onSetupComplete) {
-          onSetupComplete()
-        }
-
         // Refresh the table list
         checkTables()
       }, 1500)
     } catch (error) {
       console.error("Error executing SQL:", error)
       setError(error instanceof Error ? error.message : "An unexpected error occurred")
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "An unexpected error occurred",
+        variant: "destructive",
+      })
     } finally {
       setLoading(false)
     }
   }
 
-  // Function to handle table selection
+  // Function to handle table selection for creation
   const handleTableSelection = (tableName: string, checked: boolean) => {
     if (checked) {
       setSelectedTables((prev) => [...prev, tableName])
@@ -1106,21 +1107,52 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     }
   }
 
-  // Filter tables by category
-  const getFilteredTables = () => {
-    if (activeTab === "all") {
+  // Function to handle table selection for deletion
+  const handleTableDeletion = (tableName: string, checked: boolean) => {
+    if (checked) {
+      setTablesToDelete((prev) => [...prev, tableName])
+    } else {
+      setTablesToDelete((prev) => prev.filter((t) => t !== tableName))
+    }
+  }
+
+  // Filter tables by category for creation
+  const getFilteredTablesForCreation = () => {
+    if (activeTab === "all" || activeTab === "create") {
       return allTables.filter((table) => missingTables.includes(table.name))
     }
 
     return allTables.filter((table) => missingTables.includes(table.name) && table.category === activeTab)
   }
 
+  // Filter tables by category for management
+  const getFilteredTablesForManagement = () => {
+    if (activeTab === "all" || activeTab === "manage") {
+      return allTables.filter((table) => existingTables.includes(table.name))
+    }
+
+    return allTables.filter((table) => existingTables.includes(table.name) && table.category === activeTab)
+  }
+
   // Get categories that have missing tables
-  const getCategories = () => {
+  const getCategoriesForCreation = () => {
     const categories = new Set<string>()
 
     for (const table of allTables) {
       if (missingTables.includes(table.name)) {
+        categories.add(table.category)
+      }
+    }
+
+    return Array.from(categories)
+  }
+
+  // Get categories that have existing tables
+  const getCategoriesForManagement = () => {
+    const categories = new Set<string>()
+
+    for (const table of allTables) {
+      if (existingTables.includes(table.name)) {
         categories.add(table.category)
       }
     }
@@ -1218,7 +1250,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             Refresh
           </Button>
         </div>
-        <p className="text-sm text-gray-500 mb-6">{description}</p>
+        <p className="text-sm text-muted-foreground mb-6">{description}</p>
 
         {error && (
           <Alert variant="destructive" className="mb-4">
@@ -1228,7 +1260,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         )}
 
         {success && (
-          <Alert variant="default" className="mb-4 bg-green-50 text-green-800 border-green-200">
+          <Alert
+            variant="default"
+            className="mb-4 bg-green-50 text-green-800 border-green-200 dark:bg-green-900 dark:text-green-100 dark:border-green-800"
+          >
             <Check className="h-4 w-4" />
             <AlertDescription>{success}</AlertDescription>
           </Alert>
@@ -1237,105 +1272,139 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">Database Tables</h3>
-            <div className="text-sm text-gray-500">
+            <div className="text-sm text-muted-foreground">
               {existingTables.length} existing / {missingTables.length} missing
             </div>
           </div>
 
-          <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
+          <Tabs
+            defaultValue={missingTables.length > 0 ? "create" : "manage"}
+            value={activeTab}
+            onValueChange={setActiveTab}
+          >
             <TabsList>
-              <TabsTrigger value="all">All Tables</TabsTrigger>
-              {getCategories().map((category) => (
-                <TabsTrigger key={category} value={category}>
-                  {category.charAt(0).toUpperCase() + category.slice(1)}
-                </TabsTrigger>
-              ))}
+              {missingTables.length > 0 && <TabsTrigger value="create">Create Tables</TabsTrigger>}
+              {existingTables.length > 0 && <TabsTrigger value="manage">Manage Tables</TabsTrigger>}
             </TabsList>
 
-            <TabsContent value="all" className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {getFilteredTables().map((table) => (
-                  <div key={table.name} className="flex items-start space-x-2 border p-3 rounded-md">
-                    <Checkbox
-                      id={`table-${table.name}`}
-                      checked={selectedTables.includes(table.name)}
-                      onCheckedChange={(checked) => handleTableSelection(table.name, checked === true)}
-                      disabled={table.required}
-                    />
-                    <div className="space-y-1">
-                      <Label htmlFor={`table-${table.name}`} className="font-medium cursor-pointer">
-                        {table.displayName}
-                        {table.required && <span className="text-red-500 ml-2">(Required)</span>}
-                      </Label>
-                      <p className="text-sm text-gray-500">{table.description}</p>
-                      {table.dependencies.length > 0 && (
-                        <p className="text-xs text-gray-400">Depends on: {table.dependencies.join(", ")}</p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </TabsContent>
-
-            {getCategories().map((category) => (
-              <TabsContent key={category} value={category} className="space-y-4">
+            {missingTables.length > 0 && (
+              <TabsContent value="create" className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {getFilteredTables().map((table) => (
+                  {getFilteredTablesForCreation().map((table) => (
                     <div key={table.name} className="flex items-start space-x-2 border p-3 rounded-md">
                       <Checkbox
-                        id={`table-${table.name}-${category}`}
+                        id={`table-create-${table.name}`}
                         checked={selectedTables.includes(table.name)}
                         onCheckedChange={(checked) => handleTableSelection(table.name, checked === true)}
                         disabled={table.required}
                       />
                       <div className="space-y-1">
-                        <Label htmlFor={`table-${table.name}-${category}`} className="font-medium cursor-pointer">
+                        <Label htmlFor={`table-create-${table.name}`} className="font-medium cursor-pointer">
                           {table.displayName}
                           {table.required && <span className="text-red-500 ml-2">(Required)</span>}
                         </Label>
-                        <p className="text-sm text-gray-500">{table.description}</p>
+                        <p className="text-sm text-muted-foreground">{table.description}</p>
                         {table.dependencies.length > 0 && (
-                          <p className="text-xs text-gray-400">Depends on: {table.dependencies.join(", ")}</p>
+                          <p className="text-xs text-muted-foreground">Depends on: {table.dependencies.join(", ")}</p>
                         )}
                       </div>
                     </div>
                   ))}
                 </div>
               </TabsContent>
-            ))}
+            )}
+
+            {existingTables.length > 0 && (
+              <TabsContent value="manage" className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                  {getFilteredTablesForManagement().map((table) => (
+                    <div key={table.name} className="flex items-start space-x-2 border p-3 rounded-md">
+                      <Checkbox
+                        id={`table-delete-${table.name}`}
+                        checked={tablesToDelete.includes(table.name)}
+                        onCheckedChange={(checked) => handleTableDeletion(table.name, checked === true)}
+                        disabled={
+                          table.required &&
+                          existingTables.some((t) => {
+                            const tableConfig = allTables.find((at) => at.name === t)
+                            return tableConfig?.dependencies.includes(table.name) || false
+                          })
+                        }
+                      />
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center justify-between">
+                          <Label htmlFor={`table-delete-${table.name}`} className="font-medium cursor-pointer">
+                            {table.displayName}
+                            {table.required && <span className="text-red-500 ml-2">(Required)</span>}
+                          </Label>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleTableDeletion(table.name, !tablesToDelete.includes(table.name))}
+                            disabled={
+                              table.required &&
+                              existingTables.some((t) => {
+                                const tableConfig = allTables.find((at) => at.name === t)
+                                return tableConfig?.dependencies.includes(table.name) || false
+                              })
+                            }
+                            className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-100 dark:hover:bg-red-900"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <p className="text-sm text-muted-foreground">{table.description}</p>
+                        {existingTables.some((t) => {
+                          const tableConfig = allTables.find((at) => at.name === t)
+                          return tableConfig?.dependencies.includes(table.name) || false
+                        }) && (
+                          <p className="text-xs text-amber-600 dark:text-amber-400">Other tables depend on this one</p>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </TabsContent>
+            )}
           </Tabs>
 
-          <div className="mt-6">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-lg font-medium">Generated SQL</h3>
-              <Button variant="outline" size="sm" onClick={copyToClipboard}>
-                {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
-                {copied ? "Copied!" : "Copy SQL"}
+          {(selectedTables.length > 0 || tablesToDelete.length > 0) && (
+            <div className="mt-6">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-medium">Generated SQL</h3>
+                <Button variant="outline" size="sm" onClick={copyToClipboard}>
+                  {copied ? <Check className="mr-2 h-4 w-4" /> : <Copy className="mr-2 h-4 w-4" />}
+                  {copied ? "Copied!" : "Copy SQL"}
+                </Button>
+              </div>
+              <Textarea value={generatedSQL} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
+            </div>
+          )}
+
+          {(selectedTables.length > 0 || tablesToDelete.length > 0) && (
+            <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 mt-4">
+              <h3 className="font-medium mb-2">Instructions:</h3>
+              <ol className="list-decimal list-inside space-y-2">
+                <li>Copy the SQL code above using the "Copy SQL" button</li>
+                <li>Go to your Supabase project dashboard</li>
+                <li>Click on "SQL Editor" in the left sidebar</li>
+                <li>Paste the SQL code into the editor</li>
+                <li>Click "Run" to execute the SQL and apply the changes</li>
+                <li>Return here and click "I've Run the SQL Manually"</li>
+              </ol>
+            </div>
+          )}
+
+          {(selectedTables.length > 0 || tablesToDelete.length > 0) && (
+            <div className="flex flex-col sm:flex-row gap-3 justify-end">
+              <Button variant="outline" onClick={handleManualSetupComplete}>
+                I've Run the SQL Manually
+              </Button>
+              <Button onClick={executeSQL} disabled={loading}>
+                {loading ? "Applying changes..." : "Apply Changes Automatically"}
               </Button>
             </div>
-            <Textarea value={generatedSQL} readOnly className="h-64 font-mono text-sm bg-gray-50 dark:bg-gray-900" />
-          </div>
-
-          <div className="bg-gray-100 dark:bg-gray-800 rounded-md p-4 mt-4">
-            <h3 className="font-medium mb-2">Instructions:</h3>
-            <ol className="list-decimal list-inside space-y-2">
-              <li>Copy the SQL code above using the "Copy SQL" button</li>
-              <li>Go to your Supabase project dashboard</li>
-              <li>Click on "SQL Editor" in the left sidebar</li>
-              <li>Paste the SQL code into the editor</li>
-              <li>Click "Run" to execute the SQL and create all required tables</li>
-              <li>Return here and click "I've Run the SQL Manually"</li>
-            </ol>
-          </div>
-
-          <div className="flex flex-col sm:flex-row gap-3 justify-end">
-            <Button variant="outline" onClick={handleManualSetupComplete}>
-              I've Run the SQL Manually
-            </Button>
-            <Button onClick={executeSQL} disabled={loading}>
-              {loading ? "Creating tables..." : "Create Tables Automatically"}
-            </Button>
-          </div>
+          )}
         </div>
       </div>
     )
@@ -1374,7 +1443,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         )}
 
         {success && (
-          <Alert variant="default" className="mb-4 bg-green-50 text-green-800 border-green-200">
+          <Alert
+            variant="default"
+            className="mb-4 bg-green-50 text-green-800 border-green-200 dark:bg-green-900 dark:text-green-100 dark:border-green-800"
+          >
             <Check className="h-4 w-4" />
             <AlertDescription>{success}</AlertDescription>
           </Alert>
@@ -1392,7 +1464,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
           <Tabs defaultValue="all" value={activeTab} onValueChange={setActiveTab}>
             <TabsList>
               <TabsTrigger value="all">All Tables</TabsTrigger>
-              {getCategories().map((category) => (
+              {getCategoriesForCreation().map((category) => (
                 <TabsTrigger key={category} value={category}>
                   {category.charAt(0).toUpperCase() + category.slice(1)}
                 </TabsTrigger>
@@ -1401,7 +1473,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
             <TabsContent value="all" className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                {getFilteredTables().map((table) => (
+                {getFilteredTablesForCreation().map((table) => (
                   <div key={table.name} className="flex items-start space-x-2 border p-3 rounded-md">
                     <Checkbox
                       id={`table-${table.name}`}
@@ -1414,9 +1486,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
                         {table.displayName}
                         {table.required && <span className="text-red-500 ml-2">(Required)</span>}
                       </Label>
-                      <p className="text-sm text-gray-500">{table.description}</p>
+                      <p className="text-sm text-muted-foreground">{table.description}</p>
                       {table.dependencies.length > 0 && (
-                        <p className="text-xs text-gray-400">Depends on: {table.dependencies.join(", ")}</p>
+                        <p className="text-xs text-muted-foreground">Depends on: {table.dependencies.join(", ")}</p>
                       )}
                     </div>
                   </div>
@@ -1424,10 +1496,10 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
               </div>
             </TabsContent>
 
-            {getCategories().map((category) => (
+            {getCategoriesForCreation().map((category) => (
               <TabsContent key={category} value={category} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-                  {getFilteredTables().map((table) => (
+                  {getFilteredTablesForCreation().map((table) => (
                     <div key={table.name} className="flex items-start space-x-2 border p-3 rounded-md">
                       <Checkbox
                         id={`table-${table.name}-${category}`}
@@ -1440,9 +1512,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
                           {table.displayName}
                           {table.required && <span className="text-red-500 ml-2">(Required)</span>}
                         </Label>
-                        <p className="text-sm text-gray-500">{table.description}</p>
+                        <p className="text-sm text-muted-foreground">{table.description}</p>
                         {table.dependencies.length > 0 && (
-                          <p className="text-xs text-gray-400">Depends on: {table.dependencies.join(", ")}</p>
+                          <p className="text-xs text-muted-foreground">Depends on: {table.dependencies.join(", ")}</p>
                         )}
                       </div>
                     </div>

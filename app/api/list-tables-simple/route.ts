@@ -5,17 +5,11 @@ export async function GET() {
   try {
     // Check environment variables
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      return NextResponse.json(
-        { success: false, error: "Missing NEXT_PUBLIC_SUPABASE_URL environment variable" },
-        { status: 500 },
-      )
+      return NextResponse.json({ error: "Missing NEXT_PUBLIC_SUPABASE_URL environment variable" }, { status: 500 })
     }
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json(
-        { success: false, error: "Missing SUPABASE_SERVICE_ROLE_KEY environment variable" },
-        { status: 500 },
-      )
+      return NextResponse.json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY environment variable" }, { status: 500 })
     }
 
     // Create a Supabase client directly
@@ -26,104 +20,103 @@ export async function GET() {
       },
     })
 
-    // Try a simple query to pg_catalog.pg_tables
+    // Try method 1: Query pg_catalog.pg_tables
     try {
-      const { data, error } = await supabase
-        .from("pg_catalog.pg_tables")
-        .select("tablename")
-        .eq("schemaname", "public")
-        .order("tablename")
+      const { data, error } = await supabase.from("pg_catalog.pg_tables").select("tablename").eq("schemaname", "public")
 
-      if (error) {
-        throw error
-      }
-
-      return NextResponse.json({
-        success: true,
-        method: "pg_catalog",
-        tables: data.map((t) => t.tablename),
-        count: data.length,
-      })
-    } catch (error) {
-      console.warn("pg_catalog query failed:", error)
-
-      // Try a direct RPC call as fallback
-      try {
-        const { data, error } = await supabase.rpc("exec_sql", {
-          sql_query: `
-            SELECT tablename FROM pg_catalog.pg_tables 
-            WHERE schemaname = 'public' 
-            ORDER BY tablename;
-          `,
-        })
-
-        if (error) {
-          throw error
-        }
-
+      if (!error && data) {
+        const tables = data.map((row) => row.tablename)
         return NextResponse.json({
           success: true,
-          method: "exec_sql",
-          tables: data.map((row: any) => row.tablename),
-          count: data.length,
+          method: "pg_catalog",
+          tables,
+          count: tables.length,
         })
-      } catch (rpcError) {
-        console.warn("RPC query failed:", rpcError)
+      }
+    } catch (error) {
+      console.warn("Method 1 failed:", error)
+    }
 
-        // Last resort: try to get tables using the direct table check method
-        try {
-          // Get a list of common tables to check
-          const commonTables = [
-            "user_roles",
-            "site_settings",
-            "projects",
-            "media",
-            "bts_images",
-            "contact_messages",
-            "dependencies",
-            "dependency_settings",
-            "dependency_compatibility",
-            "security_audits",
-            "widget_types",
-            "user_widgets",
-          ]
+    // Try method 2: Use direct-table-check with common table names
+    try {
+      const commonTables = [
+        "user_roles",
+        "site_settings",
+        "projects",
+        "media",
+        "bts_images",
+        "contact_messages",
+        "dependencies",
+        "dependency_settings",
+        "dependency_compatibility",
+        "security_audits",
+        "widget_types",
+        "user_widgets",
+      ]
 
-          const results: Record<string, boolean> = {}
-          const existingTables: string[] = []
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/direct-table-check`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ tables: commonTables }),
+      })
 
-          for (const table of commonTables) {
-            try {
-              const { error } = await supabase.from(table).select("*").limit(1)
-              const exists = !error
-              results[table] = exists
-              if (exists) {
-                existingTables.push(table)
-              }
-            } catch (e) {
-              results[table] = false
-            }
-          }
-
+      if (response.ok) {
+        const data = await response.json()
+        if (data.success) {
           return NextResponse.json({
             success: true,
-            method: "direct_check",
-            tables: existingTables,
-            count: existingTables.length,
-            results,
+            method: "direct-table-check",
+            tables: data.existingTables,
+            count: data.existingTables.length,
           })
-        } catch (directError) {
-          throw directError
         }
       }
+    } catch (error) {
+      console.warn("Method 2 failed:", error)
     }
+
+    // Try method 3: Use a direct SQL query via REST API
+    try {
+      const query = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+      const response = await fetch(`${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/?${encodeURIComponent(query)}`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        const tables = data.map((row: any) => row.tablename)
+        return NextResponse.json({
+          success: true,
+          method: "direct-sql",
+          tables,
+          count: tables.length,
+        })
+      }
+    } catch (error) {
+      console.warn("Method 3 failed:", error)
+    }
+
+    // If all methods fail, return an error
+    return NextResponse.json(
+      {
+        success: false,
+        error: "Failed to list tables using all available methods",
+      },
+      { status: 500 },
+    )
   } catch (error) {
     console.error("Error listing tables:", error)
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
-        tables: [],
-        count: 0,
       },
       { status: 500 },
     )

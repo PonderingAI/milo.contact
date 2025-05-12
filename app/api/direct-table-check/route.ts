@@ -3,27 +3,25 @@ import { createClient } from "@supabase/supabase-js"
 
 export async function POST(request: Request) {
   try {
-    // Parse the request body
-    const body = await request.json()
-    const { tables } = body
+    const { tables } = await request.json()
 
-    if (!Array.isArray(tables)) {
-      return NextResponse.json({ success: false, error: "Tables must be an array" }, { status: 400 })
+    if (!tables || !Array.isArray(tables)) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Invalid request: tables must be an array",
+        },
+        { status: 400 },
+      )
     }
 
     // Check environment variables
     if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
-      return NextResponse.json(
-        { success: false, error: "Missing NEXT_PUBLIC_SUPABASE_URL environment variable" },
-        { status: 500 },
-      )
+      return NextResponse.json({ error: "Missing NEXT_PUBLIC_SUPABASE_URL environment variable" }, { status: 500 })
     }
 
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      return NextResponse.json(
-        { success: false, error: "Missing SUPABASE_SERVICE_ROLE_KEY environment variable" },
-        { status: 500 },
-      )
+      return NextResponse.json({ error: "Missing SUPABASE_SERVICE_ROLE_KEY environment variable" }, { status: 500 })
     }
 
     // Create a Supabase client directly
@@ -34,7 +32,7 @@ export async function POST(request: Request) {
       },
     })
 
-    // Check if each table exists
+    // Check each table
     const results: Record<string, boolean> = {}
     const existingTables: string[] = []
     const missingTables: string[] = []
@@ -45,13 +43,31 @@ export async function POST(request: Request) {
         const { data, error } = await supabase.from(table).select("*").limit(1)
 
         // If there's no error, the table exists
-        const exists = !error
-        results[table] = exists
-
-        if (exists) {
+        if (!error) {
+          results[table] = true
           existingTables.push(table)
         } else {
-          missingTables.push(table)
+          // Check if the error is because the table doesn't exist
+          if (error.message.includes("does not exist") || error.code === "42P01") {
+            results[table] = false
+            missingTables.push(table)
+          } else {
+            // For other errors, try a different approach
+            const { data: pgData, error: pgError } = await supabase
+              .from("pg_catalog.pg_tables")
+              .select("tablename")
+              .eq("schemaname", "public")
+              .eq("tablename", table)
+              .limit(1)
+
+            if (!pgError && pgData && pgData.length > 0) {
+              results[table] = true
+              existingTables.push(table)
+            } else {
+              results[table] = false
+              missingTables.push(table)
+            }
+          }
         }
       } catch (error) {
         console.error(`Error checking table ${table}:`, error)
@@ -69,7 +85,7 @@ export async function POST(request: Request) {
       checkedTables: tables,
     })
   } catch (error) {
-    console.error("Error checking tables:", error)
+    console.error("Error in direct-table-check:", error)
     return NextResponse.json(
       {
         success: false,
