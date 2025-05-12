@@ -1,4 +1,4 @@
--- Table for storing dependency compatibility information
+-- Dependency Compatibility Table
 CREATE TABLE IF NOT EXISTS dependency_compatibility (
   id SERIAL PRIMARY KEY,
   package_name VARCHAR(255) NOT NULL,
@@ -9,19 +9,17 @@ CREATE TABLE IF NOT EXISTS dependency_compatibility (
   last_verified_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   verified_by VARCHAR(255),
   test_results TEXT,
-  breaking_versions JSONB,  -- Store known breaking versions and why they break
+  breaking_versions JSONB,
+  source VARCHAR(50) DEFAULT 'auto', -- 'auto', 'manual', 'npm', 'github'
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(package_name)
 );
-
--- Add index on package_name for faster lookups
-CREATE INDEX IF NOT EXISTS idx_dependency_compatibility_package_name
-ON dependency_compatibility(package_name);
 
 -- Add RLS policies
 ALTER TABLE dependency_compatibility ENABLE ROW LEVEL SECURITY;
 
--- Allow authenticated users to read dependency compatibility information
+-- Allow authenticated users to read compatibility data
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -37,7 +35,7 @@ EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error
 END $$;
 
--- Allow authenticated users with admin role to manage dependency compatibility
+-- Allow authenticated users with admin role to manage compatibility data
 DO $$
 BEGIN
   IF NOT EXISTS (

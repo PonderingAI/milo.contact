@@ -1,237 +1,254 @@
 "use client"
 
-import { useState } from "react"
-import { AlertCircle, CheckCircle, Copy, Database, Terminal } from "lucide-react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { AlertCircle, Check, Database, RefreshCw, Shield, Settings } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { DependencyCompatibilitySetupGuide } from "./dependency-compatibility-setup-guide"
 
-interface DependencySystemSetupGuideProps {
-  onSetupComplete?: () => void
-  onDismiss?: () => void
+interface TableStatus {
+  dependencies: boolean
+  dependency_settings: boolean
+  security_audits: boolean
+  dependency_compatibility: boolean
 }
 
-export function DependencySystemSetupGuide({ onSetupComplete, onDismiss }: DependencySystemSetupGuideProps) {
+export function DependencySystemSetupGuide() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [tableStatus, setTableStatus] = useState<TableStatus>({
+    dependencies: false,
+    dependency_settings: false,
+    security_audits: false,
+    dependency_compatibility: false,
+  })
+  const [checking, setChecking] = useState(false)
+  const [activeTab, setActiveTab] = useState("overview")
 
-  const setupSql = `-- Dependencies System Tables
+  // Function to check if tables exist
+  const checkTables = async () => {
+    setChecking(true)
+    setError(null)
 
--- Table for dependency settings
-CREATE TABLE IF NOT EXISTS dependency_settings (
-  id SERIAL PRIMARY KEY,
-  update_mode VARCHAR(20) DEFAULT 'conservative',
-  auto_update BOOLEAN DEFAULT false,
-  last_scan TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  last_update TIMESTAMP WITH TIME ZONE,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Table for dependencies
-CREATE TABLE IF NOT EXISTS dependencies (
-  id SERIAL PRIMARY KEY,
-  name VARCHAR(255) NOT NULL,
-  current_version VARCHAR(100),
-  latest_version VARCHAR(100),
-  description TEXT,
-  is_dev BOOLEAN DEFAULT false,
-  outdated BOOLEAN DEFAULT false,
-  locked BOOLEAN DEFAULT false,
-  has_security_issue BOOLEAN DEFAULT false,
-  security_details JSONB,
-  update_mode VARCHAR(20) DEFAULT 'global',
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(name)
-);
-
--- Table for security audits
-CREATE TABLE IF NOT EXISTS security_audits (
-  id SERIAL PRIMARY KEY,
-  scan_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  vulnerabilities INTEGER DEFAULT 0,
-  outdated_packages INTEGER DEFAULT 0,
-  security_score INTEGER DEFAULT 100,
-  details JSONB,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Table for update history
-CREATE TABLE IF NOT EXISTS dependency_updates (
-  id SERIAL PRIMARY KEY,
-  dependency_name VARCHAR(255) NOT NULL,
-  from_version VARCHAR(100),
-  to_version VARCHAR(100),
-  update_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  success BOOLEAN DEFAULT true,
-  error_message TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- Insert default settings if not exists
-INSERT INTO dependency_settings (update_mode, auto_update)
-SELECT 'conservative', false
-WHERE NOT EXISTS (SELECT 1 FROM dependency_settings);`
-
-  const handleAutomaticSetup = async () => {
     try {
-      setLoading(true)
-      setError(null)
-      setSuccess(false)
+      const response = await fetch("/api/dependencies/check-tables")
+      const data = await response.json()
 
+      if (response.ok) {
+        setTableStatus(data.tables)
+      } else {
+        throw new Error(data.error || "Failed to check tables")
+      }
+    } catch (error) {
+      console.error("Error checking tables:", error)
+      setError(error instanceof Error ? error.message : "An unexpected error occurred")
+    } finally {
+      setChecking(false)
+    }
+  }
+
+  // Function to set up all tables
+  const setupTables = async () => {
+    setLoading(true)
+    setError(null)
+
+    try {
       const response = await fetch("/api/dependencies/setup", {
         method: "POST",
       })
 
-      if (!response.ok) {
-        const data = await response.json()
-        throw new Error(data.message || data.error || "Failed to set up dependency system")
-      }
+      const data = await response.json()
 
-      setSuccess(true)
-      if (onSetupComplete) {
-        onSetupComplete()
+      if (response.ok) {
+        setSuccess(true)
+        await checkTables() // Refresh table status
+      } else {
+        throw new Error(data.error || "Failed to set up tables")
       }
-    } catch (err: any) {
-      setError(err.message || "An error occurred during setup")
-      console.error("Error setting up dependency system:", err)
+    } catch (error) {
+      console.error("Error setting up tables:", error)
+      setError(error instanceof Error ? error.message : "An unexpected error occurred")
     } finally {
       setLoading(false)
     }
   }
 
-  const handleCopySQL = () => {
-    navigator.clipboard.writeText(setupSql)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+  // Check tables on component mount
+  useEffect(() => {
+    checkTables()
+  }, [])
+
+  // Check if all tables are set up
+  const allTablesSetUp = Object.values(tableStatus).every((status) => status === true)
 
   return (
-    <Card className="w-full max-w-4xl mx-auto bg-gray-900 border-gray-800">
+    <Card className="w-full">
       <CardHeader>
-        <CardTitle className="text-xl font-bold">Dependency System Setup</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Database className="h-5 w-5" />
+          Dependency Management System
+        </CardTitle>
         <CardDescription>
-          Set up the dependency management system to track and update your project dependencies
+          Set up the dependency management system to track and update project dependencies
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {error && (
-          <Alert variant="destructive" className="mb-4 bg-red-900/20 border-red-800">
-            <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Error</AlertTitle>
-            <AlertDescription>{error}</AlertDescription>
-          </Alert>
-        )}
 
-        {success && (
-          <Alert className="mb-4 bg-green-900/20 border-green-800">
-            <CheckCircle className="h-4 w-4" />
-            <AlertTitle>Success</AlertTitle>
-            <AlertDescription>
-              The dependency system has been set up successfully. You can now scan for dependencies.
-            </AlertDescription>
-          </Alert>
-        )}
+      <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="mx-6">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="tables">Tables</TabsTrigger>
+          <TabsTrigger value="compatibility">Compatibility</TabsTrigger>
+        </TabsList>
 
-        <Tabs defaultValue="automatic" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 bg-gray-800">
-            <TabsTrigger value="automatic">Automatic Setup</TabsTrigger>
-            <TabsTrigger value="manual">Manual Setup</TabsTrigger>
-          </TabsList>
-          <TabsContent value="automatic" className="p-4 border border-gray-800 rounded-md mt-2">
-            <div className="space-y-4">
-              <div className="flex items-start">
-                <div className="bg-blue-900/20 p-2 rounded-full mr-3">
-                  <Terminal className="h-5 w-5 text-blue-400" />
+        <CardContent>
+          {error && (
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
+          {success && (
+            <Alert variant="default" className="mb-4 bg-green-50 text-green-800 border-green-200">
+              <Check className="h-4 w-4" />
+              <AlertDescription>Dependency management system set up successfully!</AlertDescription>
+            </Alert>
+          )}
+
+          <TabsContent value="overview" className="space-y-4 mt-0">
+            <div className="rounded-md bg-gray-50 p-4">
+              <h3 className="font-medium mb-2">Dependency Management System</h3>
+              <p className="text-sm text-gray-600 mb-4">
+                This system helps you track, manage, and update your project dependencies automatically. It provides
+                security monitoring, compatibility tracking, and automatic updates.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="flex flex-col items-center p-3 bg-white rounded-md border">
+                  <Shield className="h-8 w-8 text-amber-500 mb-2" />
+                  <h4 className="font-medium text-center">Security Monitoring</h4>
+                  <p className="text-xs text-center text-gray-500">
+                    Tracks vulnerabilities and security issues in dependencies
+                  </p>
                 </div>
-                <div>
-                  <h3 className="text-lg font-medium">Automatic Setup</h3>
-                  <p className="text-gray-400 mt-1">
-                    This will automatically create all necessary database tables for the dependency management system.
+
+                <div className="flex flex-col items-center p-3 bg-white rounded-md border">
+                  <Settings className="h-8 w-8 text-blue-500 mb-2" />
+                  <h4 className="font-medium text-center">Automatic Updates</h4>
+                  <p className="text-xs text-center text-gray-500">
+                    Safely updates dependencies based on compatibility data
+                  </p>
+                </div>
+
+                <div className="flex flex-col items-center p-3 bg-white rounded-md border">
+                  <Database className="h-8 w-8 text-green-500 mb-2" />
+                  <h4 className="font-medium text-center">Compatibility Tracking</h4>
+                  <p className="text-xs text-center text-gray-500">
+                    Maintains a database of compatible package versions
                   </p>
                 </div>
               </div>
+            </div>
 
-              <div className="bg-gray-800 p-4 rounded-md">
-                <p className="text-sm text-gray-300 mb-2">The following actions will be performed:</p>
-                <ul className="list-disc list-inside text-sm text-gray-400 space-y-1">
-                  <li>Create the dependencies table</li>
-                  <li>Create the dependency_settings table</li>
-                  <li>Create the security_audits table</li>
-                  <li>Create the dependency_updates table</li>
-                  <li>Initialize default settings</li>
-                </ul>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-medium">System Status</h3>
+                <p className="text-sm text-gray-500">
+                  {allTablesSetUp
+                    ? "All components are installed and ready to use"
+                    : "Some components need to be installed"}
+                </p>
               </div>
-
-              <Button onClick={handleAutomaticSetup} disabled={loading || success} className="w-full">
-                {loading ? (
-                  <>
-                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                    Setting Up...
-                  </>
-                ) : success ? (
-                  <>
-                    <CheckCircle className="mr-2 h-4 w-4" />
-                    Setup Complete
-                  </>
-                ) : (
-                  "Set Up Dependency System"
-                )}
-              </Button>
+              <div className="flex items-center gap-2">
+                {allTablesSetUp && <Check className="h-4 w-4 text-green-500" />}
+                {!allTablesSetUp && <AlertCircle className="h-4 w-4 text-amber-500" />}
+                <span className="text-sm">{allTablesSetUp ? "Ready" : "Setup Required"}</span>
+              </div>
             </div>
           </TabsContent>
-          <TabsContent value="manual" className="p-4 border border-gray-800 rounded-md mt-2">
+
+          <TabsContent value="tables" className="space-y-4 mt-0">
             <div className="space-y-4">
-              <div className="flex items-start">
-                <div className="bg-purple-900/20 p-2 rounded-full mr-3">
-                  <Database className="h-5 w-5 text-purple-400" />
-                </div>
+              <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-lg font-medium">Manual Setup</h3>
-                  <p className="text-gray-400 mt-1">
-                    Copy and run the following SQL in your Supabase SQL Editor to set up the dependency system manually.
-                  </p>
+                  <h3 className="text-sm font-medium">Dependencies Table</h3>
+                  <p className="text-sm text-gray-500">Stores information about project dependencies</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {tableStatus.dependencies && <Check className="h-4 w-4 text-green-500" />}
+                  {!tableStatus.dependencies && <AlertCircle className="h-4 w-4 text-amber-500" />}
+                  <span className="text-sm">{tableStatus.dependencies ? "Installed" : "Not Installed"}</span>
                 </div>
               </div>
 
-              <div className="relative">
-                <pre className="bg-gray-800 p-4 rounded-md overflow-auto max-h-80 text-sm text-gray-300">
-                  {setupSql}
-                </pre>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="absolute top-2 right-2 h-8 w-8 p-0"
-                  onClick={handleCopySQL}
-                >
-                  {copied ? <CheckCircle className="h-4 w-4 text-green-400" /> : <Copy className="h-4 w-4" />}
-                </Button>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium">Dependency Settings Table</h3>
+                  <p className="text-sm text-gray-500">Stores settings for dependency management</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {tableStatus.dependency_settings && <Check className="h-4 w-4 text-green-500" />}
+                  {!tableStatus.dependency_settings && <AlertCircle className="h-4 w-4 text-amber-500" />}
+                  <span className="text-sm">{tableStatus.dependency_settings ? "Installed" : "Not Installed"}</span>
+                </div>
               </div>
 
-              <div className="bg-gray-800 p-4 rounded-md">
-                <p className="text-sm text-gray-300 mb-2">After running the SQL:</p>
-                <ol className="list-decimal list-inside text-sm text-gray-400 space-y-1">
-                  <li>Return to this page and refresh</li>
-                  <li>Click on &quot;Scan Dependencies&quot; to populate the system</li>
-                  <li>Run a security audit to check for vulnerabilities</li>
-                </ol>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium">Security Audits Table</h3>
+                  <p className="text-sm text-gray-500">Stores security audit results</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {tableStatus.security_audits && <Check className="h-4 w-4 text-green-500" />}
+                  {!tableStatus.security_audits && <AlertCircle className="h-4 w-4 text-amber-500" />}
+                  <span className="text-sm">{tableStatus.security_audits ? "Installed" : "Not Installed"}</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-medium">Dependency Compatibility Table</h3>
+                  <p className="text-sm text-gray-500">Stores compatibility information for dependencies</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {tableStatus.dependency_compatibility && <Check className="h-4 w-4 text-green-500" />}
+                  {!tableStatus.dependency_compatibility && <AlertCircle className="h-4 w-4 text-amber-500" />}
+                  <span className="text-sm">
+                    {tableStatus.dependency_compatibility ? "Installed" : "Not Installed"}
+                  </span>
+                </div>
               </div>
             </div>
           </TabsContent>
-        </Tabs>
-      </CardContent>
-      <CardFooter className="flex justify-end gap-2 border-t border-gray-800 pt-4">
-        {onDismiss && (
-          <Button variant="outline" onClick={onDismiss} className="border-gray-700">
-            Dismiss
+
+          <TabsContent value="compatibility" className="mt-0">
+            <DependencyCompatibilitySetupGuide />
+          </TabsContent>
+        </CardContent>
+
+        <CardFooter className="flex justify-between">
+          <Button variant="outline" onClick={checkTables} disabled={checking}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
+            Check Status
           </Button>
-        )}
-        {success && onSetupComplete && <Button onClick={onSetupComplete}>Continue</Button>}
-      </CardFooter>
+
+          {!allTablesSetUp && (
+            <Button onClick={setupTables} disabled={loading}>
+              {loading ? "Setting Up..." : "Set Up All Tables"}
+            </Button>
+          )}
+
+          {allTablesSetUp && (
+            <Button variant="outline" disabled>
+              <Check className="h-4 w-4 mr-2" />
+              All Tables Installed
+            </Button>
+          )}
+        </CardFooter>
+      </Tabs>
     </Card>
   )
 }
