@@ -287,8 +287,8 @@ export default function NewProjectPage() {
   return (
     <div className="relative pb-20">
       {/* Header with back button and save button */}
-      <div className="sticky top-0 z-10 bg-blue-950/80 backdrop-blur-sm p-4 flex justify-between items-center mb-4">
-        <Link href="/admin/projects" className="flex items-center gap-2 text-blue-200 hover:text-white">
+      <div className="sticky top-0 z-10 bg-[#070a10]/80 backdrop-blur-sm p-4 flex justify-between items-center mb-4">
+        <Link href="/admin/projects" className="flex items-center gap-2 text-gray-300 hover:text-white">
           <ArrowLeft size={18} />
           <span>Back to Projects</span>
         </Link>
@@ -299,7 +299,7 @@ export default function NewProjectPage() {
             disabled={saving}
             size="sm"
             variant="outline"
-            className="border-blue-500 text-blue-200 hover:bg-blue-900/50"
+            className="border-gray-700 text-gray-300 hover:bg-[#131a2a]"
           >
             {saving ? (
               <>
@@ -329,19 +329,20 @@ export default function NewProjectPage() {
           <div className="space-y-4">
             {/* Main upload area */}
             <div>
-              <h2 className="text-sm font-medium mb-2 text-blue-200">Main</h2>
+              <h2 className="text-sm font-medium mb-2 text-gray-400">Main</h2>
               <UploadWidget
                 onMediaSelect={handleMainMediaSelect}
                 onUrlSubmit={addMainVideoUrl}
                 urlPlaceholder="Enter video URL..."
                 folder="projects"
                 compact={true}
+                mediaType="all"
               />
             </div>
 
             {/* BTS upload area */}
             <div>
-              <h2 className="text-sm font-medium mb-2 text-blue-200">BTS</h2>
+              <h2 className="text-sm font-medium mb-2 text-gray-400">BTS</h2>
               <UploadWidget
                 onMediaSelect={handleBtsMediaSelect}
                 onUrlSubmit={addBtsVideoUrl}
@@ -349,57 +350,58 @@ export default function NewProjectPage() {
                 folder="bts"
                 multiple={true}
                 compact={true}
+                mediaType="all"
               />
             </div>
           </div>
 
           {/* Right column - Project details */}
           <div>
-            <Card className="border-blue-900 bg-blue-950/30">
+            <Card className="border-gray-800 bg-[#070a10]">
               <CardHeader className="pb-2">
-                <CardTitle className="text-xl text-blue-100">Project Details</CardTitle>
+                <CardTitle className="text-xl text-gray-200">Project Details</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 pt-0">
                 <div>
-                  <label className="block text-xs font-medium text-blue-300 mb-1">Title</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Title</label>
                   <Input
                     name="title"
                     value={formData.title}
                     onChange={handleChange}
-                    className="border-blue-900/50 bg-blue-900/20 text-blue-100"
+                    className="border-gray-800 bg-[#0f1520] text-gray-200"
                     placeholder="Project Title"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-blue-300 mb-1">Category</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
                   <Input
                     name="category"
                     value={formData.category}
                     onChange={handleChange}
-                    className="border-blue-900/50 bg-blue-900/20 text-blue-100"
+                    className="border-gray-800 bg-[#0f1520] text-gray-200"
                     placeholder="e.g. Short Film, Music Video"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-blue-300 mb-1">Role</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Role</label>
                   <Input
                     name="role"
                     value={formData.role}
                     onChange={handleChange}
-                    className="border-blue-900/50 bg-blue-900/20 text-blue-100"
+                    className="border-gray-800 bg-[#0f1520] text-gray-200"
                     placeholder="e.g. Director, 1st AC"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-blue-300 mb-1">Type</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Type</label>
                   <Select value={formData.type} onValueChange={(value) => handleSelectChange("type", value)}>
-                    <SelectTrigger className="border-blue-900/50 bg-blue-900/20 text-blue-100">
+                    <SelectTrigger className="border-gray-800 bg-[#0f1520] text-gray-200">
                       <SelectValue placeholder="Select type" />
                     </SelectTrigger>
-                    <SelectContent className="bg-blue-950 border-blue-900 text-blue-100">
+                    <SelectContent className="bg-[#070a10] border-gray-800 text-gray-200">
                       <SelectItem value="directed">Directed</SelectItem>
                       <SelectItem value="camera">Camera</SelectItem>
                       <SelectItem value="production">Production</SelectItem>
@@ -415,9 +417,9 @@ export default function NewProjectPage() {
         {/* Bottom row */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
           {/* Description */}
-          <Card className="border-blue-900 bg-blue-950/30">
+          <Card className="border-gray-800 bg-[#070a10]">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl text-blue-100">Description</CardTitle>
+              <CardTitle className="text-xl text-gray-200">Description</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <Textarea
@@ -425,15 +427,15 @@ export default function NewProjectPage() {
                 value={formData.description}
                 onChange={handleChange}
                 placeholder="Describe the project..."
-                className="min-h-[180px] border-blue-900/50 bg-blue-900/20 text-blue-100"
+                className="min-h-[180px] border-gray-800 bg-[#0f1520] text-gray-200"
               />
             </CardContent>
           </Card>
 
           {/* Crew */}
-          <Card className="border-blue-900 bg-blue-950/30">
+          <Card className="border-gray-800 bg-[#070a10]">
             <CardHeader className="pb-2">
-              <CardTitle className="text-xl text-blue-100">Crew</CardTitle>
+              <CardTitle className="text-xl text-gray-200">Crew</CardTitle>
             </CardHeader>
             <CardContent className="pt-0">
               <Textarea
@@ -441,7 +443,7 @@ export default function NewProjectPage() {
                 value={formData.crew}
                 onChange={handleChange}
                 placeholder="Enter Names"
-                className="min-h-[180px] border-blue-900/50 bg-blue-900/20 text-blue-100"
+                className="min-h-[180px] border-gray-800 bg-[#0f1520] text-gray-200"
               />
             </CardContent>
           </Card>
@@ -452,7 +454,7 @@ export default function NewProjectPage() {
           <Button
             variant="outline"
             onClick={() => router.push("/admin/projects")}
-            className="border-blue-700 text-blue-200 hover:bg-blue-900/30"
+            className="border-gray-700 text-gray-300 hover:bg-[#131a2a]"
           >
             Cancel
           </Button>
@@ -461,7 +463,7 @@ export default function NewProjectPage() {
             onClick={handleSave}
             disabled={saving}
             variant="outline"
-            className="border-blue-500 bg-blue-900/30 text-blue-100 hover:bg-blue-800/50"
+            className="border-gray-700 bg-[#0f1520] text-gray-200 hover:bg-[#131a2a]"
           >
             {saving ? (
               <>

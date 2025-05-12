@@ -7,6 +7,7 @@ import { ArrowRight } from "lucide-react"
 import MediaSelector from "@/components/admin/media-selector"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { toast } from "@/components/ui/use-toast"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 
 interface UploadWidgetProps {
   onMediaSelect: (url: string) => void
@@ -16,6 +17,7 @@ interface UploadWidgetProps {
   urlPlaceholder?: string
   folder?: string
   compact?: boolean
+  mediaType?: "images" | "videos" | "all"
 }
 
 export default function UploadWidget({
@@ -26,6 +28,7 @@ export default function UploadWidget({
   urlPlaceholder = "Enter video URL...",
   folder = "projects",
   compact = false,
+  mediaType = "all",
 }: UploadWidgetProps) {
   const supabase = createClientComponentClient()
   const [url, setUrl] = useState("")
@@ -48,10 +51,6 @@ export default function UploadWidget({
       onUrlSubmit(url)
       setUrl("")
     }
-  }
-
-  const openMediaBrowser = () => {
-    setShowMediaSelector(true)
   }
 
   const handleMediaSelect = (selectedUrl: string) => {
@@ -132,12 +131,12 @@ export default function UploadWidget({
 
   return (
     <>
-      <div className={`rounded-xl bg-blue-950/30 p-4 ${compact ? "text-sm" : ""}`}>
+      <div className={`rounded-xl bg-[#070a10] p-4 ${compact ? "text-sm" : ""}`}>
         <div className="space-y-2">
           {/* Browse Media button */}
           <button
-            onClick={openMediaBrowser}
-            className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-blue-900/50 hover:bg-blue-800/50 transition-colors text-blue-100 text-center ${compact ? "text-sm" : "text-base"}`}
+            onClick={() => setShowMediaSelector(true)}
+            className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
           >
             Browse Media
           </button>
@@ -150,11 +149,11 @@ export default function UploadWidget({
               onChange={handleUrlChange}
               onKeyDown={handleUrlKeyDown}
               placeholder={urlPlaceholder}
-              className={`w-full ${compact ? "py-2" : "py-3"} px-3 pr-10 rounded-lg bg-blue-900/30 text-blue-100 placeholder-blue-300/50 focus:outline-none focus:ring-1 focus:ring-blue-500 ${compact ? "text-sm" : "text-base"}`}
+              className={`w-full ${compact ? "py-2" : "py-3"} px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 ${compact ? "text-sm" : "text-base"}`}
             />
             <button
               onClick={handleUrlSubmit}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-blue-300 hover:text-blue-100"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
             >
               <ArrowRight size={compact ? 18 : 22} />
             </button>
@@ -163,7 +162,7 @@ export default function UploadWidget({
           {/* Browse Device button */}
           <button
             onClick={triggerFileInput}
-            className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-blue-900/50 hover:bg-blue-800/50 transition-colors text-blue-100 text-center ${compact ? "text-sm" : "text-base"}`}
+            className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
           >
             Browse Device
           </button>
@@ -180,22 +179,12 @@ export default function UploadWidget({
         </div>
       </div>
 
-      {/* Media Selector Modal */}
-      {showMediaSelector && (
-        <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
-          <div className="bg-blue-950 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-auto">
-            <div className="p-4 border-b border-blue-800 flex justify-between items-center">
-              <h2 className="text-xl font-medium">Select Media</h2>
-              <button onClick={() => setShowMediaSelector(false)} className="text-blue-300 hover:text-blue-100">
-                Close
-              </button>
-            </div>
-            <div className="p-4">
-              <MediaSelector onSelect={handleMediaSelect} mediaType="all" buttonLabel="Select" />
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Media Selector Dialog */}
+      <Dialog open={showMediaSelector} onOpenChange={setShowMediaSelector}>
+        <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto bg-[#070a10] border-[#1a2030]">
+          <MediaSelector onSelect={handleMediaSelect} mediaType={mediaType} buttonLabel="" currentValue="" />
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
