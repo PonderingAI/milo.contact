@@ -14,15 +14,14 @@ export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps
   const [setupComplete, setSetupComplete] = useState(false)
   const [initialCheckDone, setInitialCheckDone] = useState(false)
   const [isChecking, setIsChecking] = useState(false)
-  const [missingTables, setMissingTables] = useState<string[]>([])
 
   // Check if setup was previously completed
   useEffect(() => {
     try {
       const completed = localStorage.getItem("database_setup_completed")
       if (completed === "true") {
-        // Even if marked as complete, still verify the tables exist
-        checkDatabase(true)
+        setSetupComplete(true)
+        setInitialCheckDone(true)
         return
       }
     } catch (e) {
@@ -30,81 +29,45 @@ export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps
     }
 
     // If not marked as complete in localStorage, check the database directly
-    checkDatabase(false)
+    checkDatabase()
   }, [])
 
-  const checkDatabase = async (skipSetupComplete = false) => {
+  const checkDatabase = async () => {
     if (isChecking) return
     setIsChecking(true)
 
     try {
-      // First try the API endpoint
-      try {
-        const response = await fetch("/api/check-database-setup")
-        if (response.ok) {
-          const data = await response.json()
-
-          if (data.missingTables && data.missingTables.length > 0) {
-            setMissingTables(data.missingTables)
-            setSetupComplete(false)
-            // Clear the localStorage flag if tables are missing
-            localStorage.removeItem("database_setup_completed")
-          } else {
-            setMissingTables([])
-            if (!skipSetupComplete) {
-              setSetupComplete(true)
-              try {
-                localStorage.setItem("database_setup_completed", "true")
-              } catch (e) {
-                console.error("Could not save to localStorage", e)
-              }
-            }
-          }
-
-          setInitialCheckDone(true)
-          return
-        }
-      } catch (apiError) {
-        console.warn("API check failed, falling back to direct check:", apiError)
-      }
-
-      // Fallback to direct check
       const supabase = createClientComponentClient()
-      const coreTables = ["user_roles", "site_settings", "projects"]
-      const missing: string[] = []
+
+      // Check if core tables exist - specifically include projects table
+      const coreTables = ["user_roles", "projects"]
+      let allTablesExist = true
 
       for (const table of coreTables) {
         try {
           const { error } = await supabase.from(table).select("id").limit(1)
           if (error && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
-            missing.push(table)
+            allTablesExist = false
+            break
           }
         } catch (err) {
           console.warn(`Error checking table ${table}:`, err)
-          missing.push(table)
+          allTablesExist = false
+          break
         }
       }
 
-      setMissingTables(missing)
-
-      if (missing.length === 0) {
-        if (!skipSetupComplete) {
-          setSetupComplete(true)
-          try {
-            localStorage.setItem("database_setup_completed", "true")
-          } catch (e) {
-            console.error("Could not save to localStorage", e)
-          }
+      if (allTablesExist) {
+        setSetupComplete(true)
+        try {
+          localStorage.setItem("database_setup_completed", "true")
+        } catch (e) {
+          console.error("Could not save to localStorage", e)
         }
-      } else {
-        setSetupComplete(false)
-        // Clear the localStorage flag if tables are missing
-        localStorage.removeItem("database_setup_completed")
       }
     } catch (err) {
       console.warn("Error checking database:", err)
       // If there's an error, we'll assume setup is not complete
-      setSetupComplete(false)
     } finally {
       setIsChecking(false)
       setInitialCheckDone(true)
@@ -127,13 +90,8 @@ export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps
 
   return (
     <>
-      {!setupComplete && missingTables.length > 0 && (
-        <DatabaseSetupPopup
-          requiredSections={["core"]}
-          adminOnly={true}
-          onSetupComplete={handleSetupComplete}
-          customTables={missingTables}
-        />
+      {!setupComplete && (
+        <DatabaseSetupPopup requiredSections={["core"]} adminOnly={true} onSetupComplete={handleSetupComplete} />
       )}
       {children}
     </>

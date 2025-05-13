@@ -5,22 +5,15 @@ export async function GET() {
   try {
     const supabase = createClient()
 
-    // Check if core tables exist
+    // Check if core tables exist - specifically include projects table
     const coreTables = ["user_roles", "site_settings", "projects"]
     const missingTables: string[] = []
 
     for (const table of coreTables) {
       try {
-        // Use a more reliable method to check if table exists
-        const { data, error } = await supabase
-          .from("information_schema.tables")
-          .select("table_name")
-          .eq("table_schema", "public")
-          .eq("table_name", table)
-          .maybeSingle()
+        const { data, error } = await supabase.from(table).select("id").limit(1).maybeSingle()
 
-        if (error || !data) {
-          console.warn(`Table ${table} not found:`, error)
+        if (error && error.code === "PGRST116") {
           missingTables.push(table)
         }
       } catch (err) {
@@ -36,11 +29,7 @@ export async function GET() {
   } catch (error) {
     console.error("Error checking database setup:", error)
     return NextResponse.json(
-      {
-        isSetup: false,
-        error: error instanceof Error ? error.message : String(error),
-        errorType: error instanceof Error ? error.name : "Unknown",
-      },
+      { isSetup: false, error: error instanceof Error ? error.message : String(error) },
       { status: 500 },
     )
   }
