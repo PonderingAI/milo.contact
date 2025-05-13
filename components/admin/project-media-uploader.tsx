@@ -3,50 +3,10 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Music, Upload } from "lucide-react"
+import { Upload, ArrowRight } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import MediaSelector from "./media-selector"
-
-// Global state to track if any file is being dragged over the document
-let globalDragging = false
-let dragCounter = 0
-const dragListeners: ((isDragging: boolean) => void)[] = []
-
-// Function to notify all listeners about drag state changes
-function notifyDragListeners(isDragging: boolean) {
-  globalDragging = isDragging
-  dragListeners.forEach((listener) => listener(isDragging))
-}
-
-// Add global document drag event listeners (only once)
-if (typeof window !== "undefined") {
-  document.addEventListener("dragenter", (e) => {
-    e.preventDefault()
-    dragCounter++
-    if (dragCounter === 1) {
-      notifyDragListeners(true)
-    }
-  })
-
-  document.addEventListener("dragleave", (e) => {
-    e.preventDefault()
-    dragCounter--
-    if (dragCounter === 0) {
-      notifyDragListeners(false)
-    }
-  })
-
-  document.addEventListener("dragover", (e) => {
-    e.preventDefault()
-  })
-
-  document.addEventListener("drop", (e) => {
-    e.preventDefault()
-    dragCounter = 0
-    notifyDragListeners(false)
-  })
-}
 
 interface ProjectMediaUploaderProps {
   title: string
@@ -67,43 +27,57 @@ export default function ProjectMediaUploader({
 }: ProjectMediaUploaderProps) {
   const supabase = createClientComponentClient()
   const [isDragging, setIsDragging] = useState(false)
-  const [isLocalDrag, setIsLocalDrag] = useState(false)
   const [videoUrl, setVideoUrl] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropAreaRef = useRef<HTMLDivElement>(null)
 
-  // Subscribe to global drag events
+  // Listen for global drag events
   useEffect(() => {
-    const handleGlobalDrag = (isDragging: boolean) => {
-      setIsDragging(isDragging)
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault()
     }
 
-    dragListeners.push(handleGlobalDrag)
+    const handleDrop = (e: DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+    }
+
+    document.addEventListener("dragover", handleDragOver)
+    document.addEventListener("drop", handleDrop)
 
     return () => {
-      // Remove this component's listener when unmounted
-      const index = dragListeners.indexOf(handleGlobalDrag)
-      if (index > -1) {
-        dragListeners.splice(index, 1)
-      }
+      document.removeEventListener("dragover", handleDragOver)
+      document.removeEventListener("drop", handleDrop)
     }
   }, [])
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsLocalDrag(true)
+    setIsDragging(true)
   }
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsLocalDrag(false)
+
+    // Check if we're leaving the actual drop target (not a child element)
+    const relatedTarget = e.relatedTarget as Node
+    if (dropAreaRef.current && !dropAreaRef.current.contains(relatedTarget)) {
+      setIsDragging(false)
+    }
+  }
+
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    // Set the drop effect
+    e.dataTransfer.dropEffect = "copy"
   }
 
   const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault()
     e.stopPropagation()
-    setIsLocalDrag(false)
     setIsDragging(false)
 
     const files = e.dataTransfer.files
@@ -119,7 +93,7 @@ export default function ProjectMediaUploader({
       // Show upload in progress toast
       toast({
         title: "Upload in progress",
-        description: `Uploading ${files.length} file(s)...`,
+        description: `Uploading ${files.length} file(s) to ${title}...`,
       })
 
       const uploadedUrls: string[] = []
@@ -158,7 +132,7 @@ export default function ProjectMediaUploader({
 
         toast({
           title: "Upload successful",
-          description: `${files.length} file(s) uploaded successfully`,
+          description: `${files.length} file(s) uploaded to ${title}`,
         })
       }
     } catch (error) {
@@ -183,14 +157,17 @@ export default function ProjectMediaUploader({
       <h2 className="text-sm font-medium mb-2 text-gray-400">{title}</h2>
 
       <div
-        className={`rounded-xl bg-[#070a10] p-4 relative min-h-[180px]`}
+        ref={dropAreaRef}
+        className={`rounded-xl bg-[#070a10] p-4 relative min-h-[180px] ${
+          isDragging ? "ring-2 ring-blue-500 bg-[#0a101e]" : ""
+        } transition-all duration-200`}
         onDragEnter={handleDragEnter}
-        onDragOver={(e) => e.preventDefault()}
+        onDragOver={handleDragOver}
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Normal UI - hidden when dragging */}
-        {!isLocalDrag && (
+        {/* Normal UI - shown when not dragging */}
+        {!isDragging && (
           <div className="space-y-2">
             {/* Media Selector */}
             <MediaSelector
@@ -221,7 +198,7 @@ export default function ProjectMediaUploader({
                   onClick={handleVideoUrlSubmit}
                   className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
                 >
-                  <Upload size={18} className="rotate-90" />
+                  <ArrowRight size={18} />
                 </button>
               </div>
             )}
@@ -246,32 +223,19 @@ export default function ProjectMediaUploader({
           </div>
         )}
 
-        {/* Local drag overlay - replaces the normal UI */}
-        {isLocalDrag && (
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-600/90 to-blue-600/90 rounded-xl flex flex-col items-center justify-center z-10 transition-all duration-300 ease-in-out animate-pulse">
-            <Music className="h-12 w-12 text-white mb-3 animate-bounce" />
-            <h3 className="text-2xl font-bold text-white mb-1">Drop it like it's hot!</h3>
-            <p className="text-white/80 text-center">Release to upload your files</p>
+        {/* Drop UI - shown when dragging */}
+        {isDragging && (
+          <div className="absolute inset-0 rounded-xl border-2 border-dashed border-blue-500 bg-[#0a101e]/80 backdrop-blur-sm flex flex-col items-center justify-center z-10">
+            <div className="bg-[#131a2a] p-6 rounded-lg shadow-lg flex flex-col items-center">
+              <Upload className="h-10 w-10 text-blue-400 mb-3" />
+              <h3 className="text-xl font-bold text-white mb-1">Drop in {title}</h3>
+              <p className="text-gray-300 text-center text-sm">
+                Files will be added to the {title.toLowerCase()} section
+              </p>
+            </div>
           </div>
         )}
       </div>
-
-      {/* Global drag overlay - appears when dragging anywhere on the page */}
-      {isDragging && !isLocalDrag && (
-        <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50"
-          onDragOver={(e) => e.preventDefault()}
-          onDrop={handleDrop}
-        >
-          <div className="bg-gradient-to-br from-purple-600/90 to-blue-600/90 p-8 rounded-xl max-w-lg w-full animate-pulse">
-            <div className="flex flex-col items-center">
-              <Music className="h-16 w-16 text-white mb-4 animate-bounce" />
-              <h3 className="text-3xl font-bold text-white mb-2">Drop it like it's hot!</h3>
-              <p className="text-white/80 text-center">Release to upload your files</p>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }
