@@ -9,6 +9,7 @@ import SetupTablesPopup from "@/components/setup-tables-popup"
 import CookieConsent from "@/components/cookie-consent"
 import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
+import { initErrorTracking } from "@/lib/error-tracking"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -29,6 +30,8 @@ export const metadata = {
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // Initialize error tracking
+  initErrorTracking()
   return (
     <ClerkProvider>
       <html lang="en">

@@ -91,6 +91,7 @@ export default function ProjectMediaUploader({
     }
   }
 
+  // Find the handleFileUpload function and update it to ensure URLs are properly passed back
   const handleFileUpload = async (files: FileList) => {
     if (!files || files.length === 0) return
 
@@ -130,6 +131,7 @@ export default function ProjectMediaUploader({
         console.log("Upload result:", result)
 
         if (result.success) {
+          // Make sure we're using the correct URL property
           uploadedUrls.push(result.publicUrl)
           setUploadedFiles((prev) => prev + 1)
           setUploadProgress(Math.round(((i + 1) / files.length) * 100))
@@ -140,7 +142,8 @@ export default function ProjectMediaUploader({
 
       // Call the onMediaSelect with all uploaded URLs
       if (uploadedUrls.length > 0) {
-        onMediaSelect(uploadedUrls)
+        console.log("Calling onMediaSelect with URLs:", uploadedUrls)
+        onMediaSelect(uploadedUrls.length === 1 ? uploadedUrls[0] : uploadedUrls)
 
         toast({
           id: toastId,

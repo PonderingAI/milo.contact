@@ -15,6 +15,7 @@ import {
   Bug,
   Menu,
   X,
+  TerminalSquare,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -130,6 +131,19 @@ export default function Sidebar({ className }: SidebarProps) {
                 <span className="ml-3">{item.name}</span>
               </Link>
             ))}
+            <Link
+              href="/admin/debug/advanced"
+              className={cn(
+                "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                isActive("/admin/debug/advanced")
+                  ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-white"
+                  : "text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white",
+              )}
+              onClick={closeSidebar}
+            >
+              <TerminalSquare className="mr-3 h-5 w-5" />
+              <span className="ml-3">Advanced Debug</span>
+            </Link>
           </nav>
         </div>
       </div>

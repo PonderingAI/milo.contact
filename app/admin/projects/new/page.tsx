@@ -108,6 +108,7 @@ export default function NewProjectPage() {
   const handleMainMediaSelect = async (url: string | string[]) => {
     // Handle both single and multiple selections
     const urls = Array.isArray(url) ? url : [url]
+    console.log("handleMainMediaSelect received URLs:", urls)
 
     for (const mediaUrl of urls) {
       if (!mediaUrl) continue

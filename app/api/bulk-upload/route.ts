@@ -167,7 +167,7 @@ export async function POST(request: NextRequest) {
       filename: isConvertibleImage ? `${originalName}.webp` : file.name,
       filepath: filePath,
       filesize: processedBuffer.byteLength,
-      publicUrl,
+      publicUrl, // Make sure this is the correct property name
       convertedToWebP: isConvertibleImage,
     })
   } catch (error) {

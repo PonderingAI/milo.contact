@@ -830,24 +830,48 @@ export default function UnifiedMediaLibrary() {
   const handleDeleteMedia = async (id: string, filepath: string, filetype: string) => {
     if (!confirm("Are you sure you want to delete this media item?")) return
 
-    try {
-      // Use direct Supabase delete
-      const { error } = await supabase.from("media").delete().eq("id", id)
+    // Optimistic UI update - remove the item from the UI immediately
+    const itemToDelete = mediaItems.find((item) => item.id === id)
+    setMediaItems(mediaItems.filter((item) => item.id !== id))
 
-      if (error) {
-        throw new Error(error.message || "Failed to delete media")
+    // Show toast with loading state
+    const toastId = toast({
+      title: "Deleting media...",
+      description: "Please wait while the media is being deleted",
+    }).id
+
+    try {
+      // Use non-blocking fetch to delete the media
+      const response = await fetch("/api/media/delete", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, filepath, filetype }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete media")
       }
 
+      // Update toast on success
       toast({
+        id: toastId,
         title: "Success",
         description: "Media deleted successfully",
       })
-
-      // Update state
-      setMediaItems(mediaItems.filter((item) => item.id !== id))
     } catch (error) {
       console.error("Error deleting media:", error)
+
+      // Revert the optimistic update
+      if (itemToDelete) {
+        setMediaItems((prev) => [...prev, itemToDelete])
+      }
+
+      // Show error toast
       toast({
+        id: toastId,
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to delete media",
         variant: "destructive",
