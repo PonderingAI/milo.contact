@@ -12,6 +12,7 @@ interface DatabaseSetupAlertProps {
 
 export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps) {
   const [dismissed, setDismissed] = useState(false)
+  const [isDatabaseSetup, setIsDatabaseSetup] = useState(isSetup)
 
   // Check local storage on mount to see if the alert has been dismissed
   useEffect(() => {
@@ -19,12 +20,54 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
     setDismissed(isDismissed)
   }, [])
 
+  useEffect(() => {
+    const checkTables = async () => {
+      try {
+        // Add a timeout to the fetch request
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+
+        const response = await fetch("/api/check-table", {
+          signal: controller.signal,
+        }).catch((err) => {
+          // Handle network errors explicitly
+          console.warn("Network error checking tables:", err)
+          // Return a fake response to continue execution
+          return {
+            ok: false,
+            json: async () => ({ success: false, message: "Network error" }),
+          }
+        })
+
+        clearTimeout(timeoutId)
+
+        if (!response?.ok) {
+          console.warn("Error checking tables:", response)
+          return
+        }
+
+        const data = await response.json()
+
+        if (data?.success) {
+          setIsDatabaseSetup(true)
+        }
+      } catch (err) {
+        console.warn("Error checking tables:", err)
+        // Handle error gracefully
+      }
+    }
+
+    if (!isSetup) {
+      checkTables()
+    }
+  }, [isSetup])
+
   const handleDismiss = () => {
     localStorage.setItem("dbSetupAlertDismissed", "true")
     setDismissed(true)
   }
 
-  if (isSetup || dismissed) {
+  if (isDatabaseSetup || dismissed) {
     return null
   }
 

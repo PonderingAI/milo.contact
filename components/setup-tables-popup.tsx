@@ -80,6 +80,10 @@ export function DatabaseSetupPopup({
       setLastRefreshTime(new Date())
 
       try {
+        // Add a timeout to the fetch request
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+
         const response = await fetch("/api/direct-table-check", {
           method: "POST",
           headers: {
@@ -93,16 +97,28 @@ export function DatabaseSetupPopup({
                     (table) => requiredSections.includes("all") || requiredSections.includes(table.category),
                   ).map((table) => table.name),
           }),
+          signal: controller.signal,
+        }).catch((err) => {
+          // Handle network errors explicitly
+          console.warn("Network error checking tables:", err)
+          // Return a fake response to continue execution
+          return {
+            ok: false,
+            json: async () => ({ error: "Network error" }),
+          }
         })
 
+        clearTimeout(timeoutId)
+
         if (!response.ok) {
-          throw new Error("Failed to check tables")
+          const data = await response.json().catch(() => ({ error: "Failed to parse error response" }))
+          throw new Error(data.error || "Failed to check tables")
         }
 
-        const data = await response.json()
+        const data = await response.json().catch(() => ({ error: "Failed to parse response" }))
 
         if (data.error) {
-          console.error("Error checking tables:", data.error)
+          console.warn("Error checking tables:", data.error)
           throw new Error(data.error)
         }
 
@@ -149,7 +165,7 @@ export function DatabaseSetupPopup({
           }
         }
       } catch (error) {
-        console.error("Error checking tables:", error)
+        console.warn("Error checking tables:", error)
         // Only show errors for user-initiated checks
         if (shouldOpenPopup) {
           setError("Failed to check database tables. Please try again.")
@@ -315,7 +331,6 @@ BEGIN
                  WHERE table_name = 'dependency_settings' AND column_name = 'key_name') THEN
       -- Insert using 'key_name' column
       INSERT INTO dependency_settings (key_name, value)
-      VALUES ('update_mode', '"conservative"')
       ON CONFLICT (key_name) DO NOTHING;
     END IF;
   END IF;

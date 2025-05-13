@@ -11,6 +11,16 @@ import { Suspense } from "react"
 
 const inter = Inter({ subsets: ["latin"] })
 
+// Add this ErrorBoundary component
+function ErrorBoundary({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }) {
+  try {
+    return <>{children}</>
+  } catch (error) {
+    console.error("Error in component:", error)
+    return <>{fallback}</>
+  }
+}
+
 export const metadata = {
   title: "Milo Presedo - Film Production & Photography",
   description: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
@@ -35,8 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <Suspense>{children}</Suspense>
             <Analytics />
           </ThemeProvider>
-          {/* Database setup popup */}
-          <SetupTablesPopup />
+          {/* Database setup popup - wrapped in error handling */}
+          <ErrorBoundary fallback={<div className="hidden">Database setup error</div>}>
+            <SetupTablesPopup />
+          </ErrorBoundary>
         </body>
       </html>
     </ClerkProvider>
