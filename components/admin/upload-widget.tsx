@@ -2,10 +2,50 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
-import { ArrowRight } from "lucide-react"
+import { useState, useRef, useEffect } from "react"
+import { ArrowRight, Upload } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { toast } from "@/components/ui/use-toast"
+
+// Global state to track if any file is being dragged over the document
+let globalDragging = false
+let dragCounter = 0
+const dragListeners: ((isDragging: boolean) => void)[] = []
+
+// Function to notify all listeners about drag state changes
+function notifyDragListeners(isDragging: boolean) {
+  globalDragging = isDragging
+  dragListeners.forEach((listener) => listener(isDragging))
+}
+
+// Add global document drag event listeners (only once)
+if (typeof window !== "undefined") {
+  document.addEventListener("dragenter", (e) => {
+    e.preventDefault()
+    dragCounter++
+    if (dragCounter === 1) {
+      notifyDragListeners(true)
+    }
+  })
+
+  document.addEventListener("dragleave", (e) => {
+    e.preventDefault()
+    dragCounter--
+    if (dragCounter === 0) {
+      notifyDragListeners(false)
+    }
+  })
+
+  document.addEventListener("dragover", (e) => {
+    e.preventDefault()
+  })
+
+  document.addEventListener("drop", (e) => {
+    e.preventDefault()
+    dragCounter = 0
+    notifyDragListeners(false)
+  })
+}
 
 interface UploadWidgetProps {
   onMediaSelect: (url: string) => void
@@ -30,7 +70,27 @@ export default function UploadWidget({
 }: UploadWidgetProps) {
   const supabase = createClientComponentClient()
   const [url, setUrl] = useState("")
+  const [isDragging, setIsDragging] = useState(false)
+  const [isLocalDrag, setIsLocalDrag] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const dropAreaRef = useRef<HTMLDivElement>(null)
+
+  // Subscribe to global drag events
+  useEffect(() => {
+    const handleGlobalDrag = (isDragging: boolean) => {
+      setIsDragging(isDragging)
+    }
+
+    dragListeners.push(handleGlobalDrag)
+
+    return () => {
+      // Remove this component's listener when unmounted
+      const index = dragListeners.indexOf(handleGlobalDrag)
+      if (index > -1) {
+        dragListeners.splice(index, 1)
+      }
+    }
+  }, [])
 
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUrl(e.target.value)
@@ -115,6 +175,29 @@ export default function UploadWidget({
     }
   }
 
+  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsLocalDrag(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsLocalDrag(false)
+  }
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsLocalDrag(false)
+
+    const files = e.dataTransfer.files
+    if (files && files.length > 0) {
+      await handleFileChange({ target: { files } } as any)
+    }
+  }
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files
     if (files && files.length > 0) {
@@ -181,52 +264,89 @@ export default function UploadWidget({
   }
 
   return (
-    <div className={`rounded-xl bg-[#070a10] p-4 ${compact ? "text-sm" : ""}`}>
-      <div className="space-y-2">
-        {/* Browse Media button */}
-        <button
-          onClick={openMediaBrowser}
-          className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
-        >
-          Browse Media
-        </button>
-
-        {/* URL input */}
-        <div className="relative">
-          <input
-            type="text"
-            value={url}
-            onChange={handleUrlChange}
-            onKeyDown={handleUrlKeyDown}
-            placeholder={urlPlaceholder}
-            className={`w-full ${compact ? "py-2" : "py-3"} px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 ${compact ? "text-sm" : "text-base"}`}
-          />
+    <>
+      <div
+        className={`rounded-xl bg-[#070a10] p-4 ${compact ? "text-sm" : ""} relative`}
+        ref={dropAreaRef}
+        onDragEnter={handleDragEnter}
+        onDragOver={(e) => e.preventDefault()}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <div className="space-y-2">
+          {/* Browse Media button */}
           <button
-            onClick={handleUrlSubmit}
-            className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+            onClick={openMediaBrowser}
+            className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
           >
-            <ArrowRight size={compact ? 18 : 22} />
+            Browse Media
           </button>
+
+          {/* URL input */}
+          <div className="relative">
+            <input
+              type="text"
+              value={url}
+              onChange={handleUrlChange}
+              onKeyDown={handleUrlKeyDown}
+              placeholder={urlPlaceholder}
+              className={`w-full ${compact ? "py-2" : "py-3"} px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 ${compact ? "text-sm" : "text-base"}`}
+            />
+            <button
+              onClick={handleUrlSubmit}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
+            >
+              <ArrowRight size={compact ? 18 : 22} />
+            </button>
+          </div>
+
+          {/* Browse Device button */}
+          <button
+            onClick={triggerFileInput}
+            className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
+          >
+            Browse Device
+          </button>
+
+          {/* Hidden file input */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept={acceptedFileTypes}
+            multiple={multiple}
+            onChange={handleFileChange}
+          />
         </div>
 
-        {/* Browse Device button */}
-        <button
-          onClick={triggerFileInput}
-          className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
-        >
-          Browse Device
-        </button>
-
-        {/* Hidden file input */}
-        <input
-          type="file"
-          ref={fileInputRef}
-          className="hidden"
-          accept={acceptedFileTypes}
-          multiple={multiple}
-          onChange={handleFileChange}
-        />
+        {/* Local drag overlay */}
+        {isLocalDrag && (
+          <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-400 rounded-xl flex items-center justify-center z-10">
+            <div className="bg-[#131a2a]/90 p-4 rounded-lg flex flex-col items-center">
+              <Upload className="h-8 w-8 text-blue-400 mb-2" />
+              <p className="text-white font-medium">Drop files here</p>
+            </div>
+          </div>
+        )}
       </div>
-    </div>
+
+      {/* Global drag overlay - appears when dragging anywhere on the page */}
+      {isDragging && !isLocalDrag && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+        >
+          <div className="bg-[#131a2a] p-8 rounded-xl border-2 border-dashed border-blue-400 max-w-lg w-full">
+            <div className="flex flex-col items-center">
+              <Upload className="h-16 w-16 text-blue-400 mb-4" />
+              <h3 className="text-2xl font-bold text-white mb-2">Drop files to upload</h3>
+              <p className="text-gray-300 text-center mb-4">Drop your files anywhere to upload them to your project</p>
+              <p className="text-sm text-gray-400">Supported formats: images and videos</p>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
