@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, ArrowRight, Calendar } from "lucide-react"
+import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, ArrowRight, Calendar, Eye, EyeOff, Clock } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,6 +15,8 @@ import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import MediaSelector from "@/components/admin/media-selector"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import { Label } from "@/components/ui/label"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -27,6 +29,11 @@ export default function NewProjectPage() {
   const fileInputMainRef = useRef<HTMLInputElement>(null)
   const fileInputBtsRef = useRef<HTMLInputElement>(null)
 
+  // Visibility state
+  const [visibilityType, setVisibilityType] = useState<"public" | "private" | "scheduled">("public")
+  const [scheduledDate, setScheduledDate] = useState<string>("")
+  const [scheduledTime, setScheduledTime] = useState<string>("12:00")
+
   // Form state
   const [formData, setFormData] = useState({
     title: "",
@@ -38,6 +45,8 @@ export default function NewProjectPage() {
     description: "",
     special_notes: "",
     project_date: new Date().toISOString().split("T")[0], // Default to today
+    published: true,
+    scheduled_publish_date: null as string | null,
   })
 
   // Media state
@@ -45,6 +54,33 @@ export default function NewProjectPage() {
   const [btsVideos, setBtsVideos] = useState<string[]>([])
   const [mainImages, setMainImages] = useState<string[]>([])
   const [mainVideos, setMainVideos] = useState<string[]>([])
+
+  // Update form data when visibility type changes
+  useEffect(() => {
+    if (visibilityType === "public") {
+      setFormData((prev) => ({
+        ...prev,
+        published: true,
+        scheduled_publish_date: null,
+      }))
+    } else if (visibilityType === "private") {
+      setFormData((prev) => ({
+        ...prev,
+        published: false,
+        scheduled_publish_date: null,
+      }))
+    } else if (visibilityType === "scheduled") {
+      // Only update if we have a valid date and time
+      if (scheduledDate) {
+        const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}:00`)
+        setFormData((prev) => ({
+          ...prev,
+          published: false,
+          scheduled_publish_date: scheduledDateTime.toISOString(),
+        }))
+      }
+    }
+  }, [visibilityType, scheduledDate, scheduledTime])
 
   // Helper function to format date for input field
   function formatDateForInput(date: Date): string {
@@ -566,6 +602,25 @@ export default function NewProjectPage() {
         return
       }
 
+      // Validate scheduled date if using scheduled visibility
+      if (visibilityType === "scheduled") {
+        if (!scheduledDate) {
+          setError("Please select a publication date")
+          return
+        }
+
+        const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}:00`)
+        if (isNaN(scheduledDateTime.getTime())) {
+          setError("Invalid publication date or time")
+          return
+        }
+
+        if (scheduledDateTime <= new Date()) {
+          setError("Publication date must be in the future")
+          return
+        }
+      }
+
       // Create in Supabase
       const { data, error: projectError } = await supabase.from("projects").insert([formData]).select()
 
@@ -596,7 +651,11 @@ export default function NewProjectPage() {
       // Success
       toast({
         title: "Project created",
-        description: "Project created successfully!",
+        description: formData.published
+          ? "Project created and published successfully!"
+          : visibilityType === "scheduled"
+            ? "Project created and scheduled for publication!"
+            : "Project created as private (not published)!",
       })
 
       router.push(`/admin/projects/${projectId}/edit`)
@@ -607,6 +666,9 @@ export default function NewProjectPage() {
       setSaving(false)
     }
   }
+
+  // Get min date for scheduled publishing (today)
+  const today = new Date().toISOString().split("T")[0]
 
   return (
     <div className="relative pb-20">
@@ -790,7 +852,7 @@ export default function NewProjectPage() {
           </div>
 
           {/* Right column - Project details */}
-          <div>
+          <div className="space-y-4">
             <Card className="border-gray-800 bg-[#070a10]">
               <CardHeader className="pb-2">
                 <CardTitle className="text-xl text-gray-200">Project Details</CardTitle>
@@ -845,7 +907,7 @@ export default function NewProjectPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Date</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Project Date</label>
                   <div className="relative">
                     <Input
                       type="date"
@@ -857,6 +919,76 @@ export default function NewProjectPage() {
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Visibility Card */}
+            <Card className="border-gray-800 bg-[#070a10]">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-xl text-gray-200">Visibility</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                <RadioGroup
+                  value={visibilityType}
+                  onValueChange={(value) => setVisibilityType(value as "public" | "private" | "scheduled")}
+                  className="space-y-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="public" id="visibility-public" />
+                    <Label htmlFor="visibility-public" className="flex items-center cursor-pointer">
+                      <Eye className="h-4 w-4 mr-2 text-green-500" />
+                      <span>Public (visible to everyone)</span>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="private" id="visibility-private" />
+                    <Label htmlFor="visibility-private" className="flex items-center cursor-pointer">
+                      <EyeOff className="h-4 w-4 mr-2 text-red-500" />
+                      <span>Private (only visible to admins)</span>
+                    </Label>
+                  </div>
+
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="scheduled" id="visibility-scheduled" />
+                    <Label htmlFor="visibility-scheduled" className="flex items-center cursor-pointer">
+                      <Clock className="h-4 w-4 mr-2 text-blue-500" />
+                      <span>Scheduled publication</span>
+                    </Label>
+                  </div>
+                </RadioGroup>
+
+                {visibilityType === "scheduled" && (
+                  <div className="pt-2 border-t border-gray-800">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">Publication Date</label>
+                        <Input
+                          type="date"
+                          value={scheduledDate}
+                          onChange={(e) => setScheduledDate(e.target.value)}
+                          min={today}
+                          className="border-gray-800 bg-[#0f1520] text-gray-200"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium text-gray-400 mb-1">Publication Time</label>
+                        <Input
+                          type="time"
+                          value={scheduledTime}
+                          onChange={(e) => setScheduledTime(e.target.value)}
+                          className="border-gray-800 bg-[#0f1520] text-gray-200"
+                        />
+                      </div>
+                    </div>
+
+                    {scheduledDate && scheduledTime && (
+                      <div className="mt-2 text-xs text-gray-400">
+                        Project will be published on {new Date(`${scheduledDate}T${scheduledTime}:00`).toLocaleString()}
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS projects (
   client TEXT,
   url TEXT,
   featured BOOLEAN DEFAULT false,
+  published BOOLEAN DEFAULT true,
+  scheduled_publish_date TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -75,21 +77,45 @@ BEGIN
   END IF;
 END $$;
 
--- Add RLS policies
-ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
-
--- Allow public read access
+-- Add published column if it doesn't exist
 DO $$
 BEGIN
   IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'projects' AND column_name = 'published'
+  ) THEN
+    ALTER TABLE projects ADD COLUMN published BOOLEAN DEFAULT true;
+  END IF;
+END $$;
+
+-- Add scheduled_publish_date column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'projects' AND column_name = 'scheduled_publish_date'
+  ) THEN
+    ALTER TABLE projects ADD COLUMN scheduled_publish_date TIMESTAMP WITH TIME ZONE;
+  END IF;
+END $$;
+
+-- Add RLS policies
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access only to published projects
+DO $$
+BEGIN
+  IF EXISTS (
     SELECT 1 FROM pg_policies WHERE tablename = 'projects' AND policyname = 'public_read_projects'
   ) THEN
-    CREATE POLICY "public_read_projects"
-    ON projects
-    FOR SELECT
-    TO public
-    USING (true);
+    DROP POLICY "public_read_projects" ON projects;
   END IF;
+  
+  CREATE POLICY "public_read_projects"
+  ON projects
+  FOR SELECT
+  TO public
+  USING (published = true OR scheduled_publish_date <= NOW());
 EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error
 END $$;

@@ -238,6 +238,38 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
   }
 }
 
+// Add this function to filter projects by published status
+export async function getPublishedProjects(): Promise<Project[]> {
+  try {
+    // First check if database is set up
+    const isDbSetup = await isDatabaseSetup()
+    if (!isDbSetup) {
+      console.log("Database not set up, returning mock data")
+      return mockProjects
+    }
+
+    const supabase = createServerClient()
+    const now = new Date().toISOString()
+
+    // Get projects that are either published or have a scheduled_publish_date in the past
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .or(`published.eq.true,and(scheduled_publish_date.lt.${now},scheduled_publish_date.is.not.null)`)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching published projects:", error)
+      return mockProjects
+    }
+
+    return data.length > 0 ? data : mockProjects
+  } catch (error) {
+    console.error("Error in getPublishedProjects:", error)
+    return mockProjects
+  }
+}
+
 /**
  * Extract video platform and ID from a video URL
  */

@@ -1,13 +1,13 @@
 import { Suspense } from "react"
 import ProjectsContent from "./projects-content"
-import { getProjects, mockProjects } from "@/lib/project-data"
+import { getPublishedProjects, mockProjects } from "@/lib/project-data"
 
 export default async function ProjectsPage() {
   // In production, fetch projects from Supabase
   // For development, use mock data
   let projects
   try {
-    projects = await getProjects()
+    projects = await getPublishedProjects()
     // If no projects are returned (e.g., during development without Supabase),
     // fall back to mock data
     if (projects.length === 0) {
