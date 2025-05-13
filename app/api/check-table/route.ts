@@ -22,13 +22,28 @@ export async function GET(request: Request) {
 
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Check if the table exists
-    const { data, error } = await supabase
+    // Check if the table exists with a timeout
+    const checkPromise = supabase
       .from("information_schema.tables")
       .select("table_name")
       .eq("table_schema", "public")
       .eq("table_name", tableName)
       .single()
+
+    // Create a timeout promise
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error("Database query timed out after 5 seconds"))
+      }, 5000)
+    })
+
+    // Race the query against the timeout
+    const { data, error } = (await Promise.race([
+      checkPromise,
+      timeoutPromise.then(() => {
+        throw new Error("Query timed out")
+      }),
+    ])) as any
 
     if (error) {
       console.error("Error checking table:", error)

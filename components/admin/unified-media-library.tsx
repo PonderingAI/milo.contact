@@ -148,6 +148,7 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
+  // Update the fetchMedia function to better handle network errors
   const fetchMedia = async () => {
     setLoading(true)
     setError(null)
@@ -155,35 +156,53 @@ export default function UnifiedMediaLibrary() {
     try {
       console.log("Fetching media from database...")
 
-      // Use direct query instead of RPC
-      const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
+      // Set up timeout handling
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
 
-      if (error) {
-        if (error.code === "42P01") {
-          setError("Media table does not exist. Please set up the database.")
-          return
+      try {
+        // Use direct query instead of RPC
+        const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
+
+        clearTimeout(timeoutId)
+
+        if (error) {
+          if (error.code === "42P01") {
+            setError("Media table does not exist. Please set up the database.")
+            return
+          }
+          throw error
         }
-        throw error
+
+        console.log("Media items fetched:", data?.length || 0)
+        setMediaItems(data || [])
+
+        // Extract all unique tags
+        const tags = new Set<string>()
+        data?.forEach((item) => {
+          if (item.tags) {
+            item.tags.forEach((tag: string) => tags.add(tag))
+          }
+        })
+
+        setAllTags(Array.from(tags))
+
+        // Reset image load errors
+        setImageLoadError({})
+      } catch (fetchError) {
+        clearTimeout(timeoutId)
+        console.error("Fetch error getting media:", fetchError)
+
+        // Handle AbortError specifically
+        if (fetchError.name === "AbortError") {
+          throw new Error("Request timed out. Server may be busy.")
+        }
+
+        throw fetchError
       }
-
-      console.log("Media items fetched:", data?.length || 0)
-      setMediaItems(data || [])
-
-      // Extract all unique tags
-      const tags = new Set<string>()
-      data?.forEach((item) => {
-        if (item.tags) {
-          item.tags.forEach((tag: string) => tags.add(tag))
-        }
-      })
-
-      setAllTags(Array.from(tags))
-
-      // Reset image load errors
-      setImageLoadError({})
     } catch (error) {
       console.error("Error fetching media:", error)
-      setError("Failed to load media library. Please check console for details.")
+      setError(`Failed to load media library: ${error.message || "Unknown error"}`)
       toast({
         title: "Error",
         description: "Failed to load media library",
@@ -194,6 +213,7 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
+  // Update the handleFileUpload function to better handle network errors
   const handleFileUpload = async (files: File[]) => {
     if (files.length === 0) return
 
@@ -207,19 +227,38 @@ export default function UnifiedMediaLibrary() {
         const formData = new FormData()
         formData.append("file", file)
 
-        // Upload the file directly
-        const response = await fetch("/api/bulk-upload", {
-          method: "POST",
-          body: formData,
-        })
+        // Set up timeout handling
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout for uploads
 
-        const result = await response.json()
+        try {
+          // Upload the file directly
+          const response = await fetch("/api/bulk-upload", {
+            method: "POST",
+            body: formData,
+            signal: controller.signal,
+          })
 
-        if (!response.ok) {
-          throw new Error(result.error || "Failed to upload file")
-        }
+          clearTimeout(timeoutId)
 
-        if (result.success) {
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error("Error response from upload:", errorText)
+            throw new Error(`Server error: ${response.status}`)
+          }
+
+          let result
+          try {
+            result = await response.json()
+          } catch (parseError) {
+            console.error("Error parsing JSON response:", parseError)
+            throw new Error("Failed to parse server response")
+          }
+
+          if (!result.success) {
+            throw new Error(result.error || "Unknown error during upload")
+          }
+
           toast({
             title: "Success",
             description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
@@ -227,8 +266,16 @@ export default function UnifiedMediaLibrary() {
 
           // Refresh the media list
           fetchMedia()
-        } else {
-          throw new Error(result.error || "Unknown error during upload")
+        } catch (fetchError) {
+          clearTimeout(timeoutId)
+          console.error("Fetch error uploading file:", fetchError)
+
+          // Handle AbortError specifically
+          if (fetchError.name === "AbortError") {
+            throw new Error("Upload timed out. The file may be too large or the server is busy.")
+          }
+
+          throw fetchError
         }
       } catch (error) {
         console.error("Error uploading file:", error)
@@ -304,14 +351,15 @@ export default function UnifiedMediaLibrary() {
     }
   }, [])
 
+  // Update the processBulkUpload function to better handle network errors
   const processBulkUpload = async () => {
     if (isProcessingQueue || uploadQueue.length === 0) return
 
     console.log("Starting bulk upload process")
     setIsProcessingQueue(true)
 
-    // Process files in parallel with a limit (3 at a time)
-    const batchSize = 3
+    // Process files in parallel with a limit (2 at a time instead of 3)
+    const batchSize = 2
     const pendingUploads = uploadQueue.filter((item) => item.status === "pending")
 
     for (let i = 0; i < pendingUploads.length; i += batchSize) {
@@ -356,38 +404,70 @@ export default function UnifiedMediaLibrary() {
               })
             }, 800)
 
-            const response = await fetch("/api/bulk-upload", {
-              method: "POST",
-              body: formData,
-            })
+            // Set up timeout handling
+            const controller = new AbortController()
+            const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout for uploads
 
-            // Clear the interval
-            clearInterval(progressUpdater)
+            try {
+              const response = await fetch("/api/bulk-upload", {
+                method: "POST",
+                body: formData,
+                signal: controller.signal,
+              })
 
-            // Update progress to 95%
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = { ...updated[queueIndex], progress: 95 }
-              return updated
-            })
+              clearTimeout(timeoutId)
 
-            const result = await response.json()
+              // Clear the interval
+              clearInterval(progressUpdater)
 
-            if (!response.ok) {
-              throw new Error(result.error || "Upload failed")
-            }
+              // Update progress to 95%
+              setUploadQueue((prev) => {
+                const updated = [...prev]
+                updated[queueIndex] = { ...updated[queueIndex], progress: 95 }
+                return updated
+              })
 
-            // Success
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = {
-                ...updated[queueIndex],
-                status: "success",
-                progress: 100,
-                response: result,
+              if (!response.ok) {
+                const errorText = await response.text()
+                console.error("Error response from upload:", errorText)
+                throw new Error(`Server error: ${response.status}`)
               }
-              return updated
-            })
+
+              let result
+              try {
+                result = await response.json()
+              } catch (parseError) {
+                console.error("Error parsing JSON response:", parseError)
+                throw new Error("Failed to parse server response")
+              }
+
+              if (!result.success) {
+                throw new Error(result.error || "Upload failed")
+              }
+
+              // Success
+              setUploadQueue((prev) => {
+                const updated = [...prev]
+                updated[queueIndex] = {
+                  ...updated[queueIndex],
+                  status: "success",
+                  progress: 100,
+                  response: result,
+                }
+                return updated
+              })
+            } catch (fetchError) {
+              clearTimeout(timeoutId)
+              clearInterval(progressUpdater)
+              console.error("Fetch error uploading file:", fetchError)
+
+              // Handle AbortError specifically
+              if (fetchError.name === "AbortError") {
+                throw new Error("Upload timed out. The file may be too large or the server is busy.")
+              }
+
+              throw fetchError
+            }
           } catch (error) {
             // Exception
             setUploadQueue((prev) => {
