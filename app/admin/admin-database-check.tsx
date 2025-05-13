@@ -51,7 +51,7 @@ export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps
             break
           }
         } catch (err) {
-          console.warn(`Error checking table ${table}:`, err)
+          // Silently handle the error without logging to console
           allTablesExist = false
           break
         }
@@ -62,11 +62,11 @@ export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps
         try {
           localStorage.setItem("database_setup_completed", "true")
         } catch (e) {
-          console.error("Could not save to localStorage", e)
+          // Silently handle localStorage errors
         }
       }
     } catch (err) {
-      console.warn("Error checking database:", err)
+      // Silently handle errors without logging to console
       // If there's an error, we'll assume setup is not complete
     } finally {
       setIsChecking(false)

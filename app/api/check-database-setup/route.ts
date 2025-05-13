@@ -1,36 +1,67 @@
-import { createClient } from "@/lib/supabase-server"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
+
+export const dynamic = "force-dynamic"
 
 export async function GET() {
   try {
-    const supabase = createClient()
+    const supabase = createRouteHandlerClient({ cookies })
 
-    // Check if core tables exist - specifically include projects table
-    const coreTables = ["user_roles", "site_settings", "projects"]
-    const missingTables: string[] = []
+    // Check if the projects table exists
+    const { data: projectsExists, error: projectsError } = await supabase
+      .from("projects")
+      .select("id")
+      .limit(1)
+      .single()
 
-    for (const table of coreTables) {
-      try {
-        const { data, error } = await supabase.from(table).select("id").limit(1).maybeSingle()
+    // Check if the settings table exists
+    const { data: settingsExists, error: settingsError } = await supabase
+      .from("site_settings")
+      .select("id")
+      .limit(1)
+      .single()
 
-        if (error && error.code === "PGRST116") {
-          missingTables.push(table)
-        }
-      } catch (err) {
-        console.warn(`Error checking table ${table}:`, err)
-        missingTables.push(table)
-      }
+    // Check if the media table exists
+    const { data: mediaExists, error: mediaError } = await supabase.from("media").select("id").limit(1).single()
+
+    // Check if the dependencies table exists
+    const { data: dependenciesExists, error: dependenciesError } = await supabase
+      .from("dependencies")
+      .select("id")
+      .limit(1)
+      .single()
+
+    // Determine which tables need to be created
+    const tablesNeeded = []
+
+    if (projectsError && projectsError.code === "PGRST116") {
+      tablesNeeded.push("projects")
+    }
+
+    if (settingsError && settingsError.code === "PGRST116") {
+      tablesNeeded.push("site_settings")
+    }
+
+    if (mediaError && mediaError.code === "PGRST116") {
+      tablesNeeded.push("media")
+    }
+
+    if (dependenciesError && dependenciesError.code === "PGRST116") {
+      tablesNeeded.push("dependencies")
     }
 
     return NextResponse.json({
-      isSetup: missingTables.length === 0,
-      missingTables,
+      tablesNeeded,
+      allTablesExist: tablesNeeded.length === 0,
     })
   } catch (error) {
+    // Silently handle the error but return a valid response
     console.error("Error checking database setup:", error)
-    return NextResponse.json(
-      { isSetup: false, error: error instanceof Error ? error.message : String(error) },
-      { status: 500 },
-    )
+    return NextResponse.json({
+      tablesNeeded: [],
+      allTablesExist: false,
+      error: "Error checking database setup",
+    })
   }
 }

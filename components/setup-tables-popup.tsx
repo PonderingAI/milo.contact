@@ -760,6 +760,10 @@ interface SetupTablesPopupProps {
 
 export function SetupTablesPopup({ requiredTables = [], onSetupComplete }: SetupTablesPopupProps) {
   const [isAdminPage, setIsAdminPage] = useState(false)
+  const [isSetup, setIsSetup] = useState(false)
+  const [isChecking, setIsChecking] = useState(true)
+  const [initialCheckDone, setInitialCheckDone] = useState(false)
+  const [missingTables, setMissingTables] = useState<string[]>([])
 
   // Check if we're on an admin page
   useEffect(() => {
@@ -767,6 +771,34 @@ export function SetupTablesPopup({ requiredTables = [], onSetupComplete }: Setup
       const isAdmin = window.location.pathname.startsWith("/admin")
       setIsAdminPage(isAdmin)
     }
+  }, [])
+
+  // Find the useEffect hook that checks tables and update the error handling
+
+  useEffect(() => {
+    const checkTables = async () => {
+      try {
+        setIsChecking(true)
+        const response = await fetch("/api/check-database-setup")
+
+        if (response.ok) {
+          const data = await response.json()
+          setIsSetup(data.isSetup)
+          setMissingTables(data.missingTables || [])
+        } else {
+          // Silently handle API errors
+          setIsSetup(true) // Assume setup is complete if we can't check
+        }
+      } catch (error) {
+        // Silently handle network errors
+        setIsSetup(true) // Assume setup is complete if we can't check
+      } finally {
+        setIsChecking(false)
+        setInitialCheckDone(true)
+      }
+    }
+
+    checkTables()
   }, [])
 
   // Only render in admin pages

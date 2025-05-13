@@ -6,6 +6,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import CustomCursor from "@/components/custom-cursor"
 import DynamicFavicons from "@/components/dynamic-favicons"
 import SetupTablesPopup from "@/components/setup-tables-popup"
+import CookieConsent from "@/components/cookie-consent"
 import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
 
@@ -44,6 +45,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <DynamicFavicons />
             <Suspense>{children}</Suspense>
             <Analytics />
+            <CookieConsent />
           </ThemeProvider>
           {/* Database setup popup - wrapped in error handling */}
           <ErrorBoundary fallback={<div className="hidden">Database setup error</div>}>
