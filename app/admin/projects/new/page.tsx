@@ -242,11 +242,135 @@ export default function NewProjectPage() {
     setFormData((prev) => ({ ...prev, video_url: url }))
   }
 
+  const handleFileUpload = async (files: FileList, target: "main" | "bts") => {
+    if (!files || files.length === 0) return
+
+    try {
+      // Show upload in progress toast
+      const toastId = toast({
+        title: "Upload in progress",
+        description: `Uploading ${files.length} file(s)...`,
+      }).id
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i]
+
+        // Try to extract date from file metadata
+        let fileDate = null
+        if (file.type.startsWith("image/") && !formData.project_date) {
+          try {
+            fileDate = file.lastModified ? new Date(file.lastModified) : null
+          } catch (err) {
+            console.error("Error extracting date from file:", err)
+          }
+        }
+
+        // Create a FormData object
+        const formDataUpload = new FormData()
+        formDataUpload.append("file", file)
+
+        // Upload the file using the bulk-upload endpoint which handles WebP conversion
+        const response = await fetch("/api/bulk-upload", {
+          method: "POST",
+          body: formDataUpload,
+        })
+
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to upload file")
+        }
+
+        const result = await response.json()
+        console.log("Upload result:", result) // Debug log
+
+        if (result.success) {
+          // Add the uploaded file to the appropriate target
+          if (target === "main") {
+            if (file.type.startsWith("image/")) {
+              console.log("Adding image to main images:", result.publicUrl)
+              setMainImages((prev) => {
+                const newImages = [...prev]
+                if (!newImages.includes(result.publicUrl)) {
+                  newImages.push(result.publicUrl)
+                }
+                return newImages
+              })
+
+              // Set as cover image if none is set
+              if (!formData.image) {
+                setFormData((prev) => ({ ...prev, image: result.publicUrl }))
+              }
+
+              // Set project date from file date if available and project_date is empty
+              if (fileDate && !formData.project_date) {
+                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
+              }
+            } else if (file.type.startsWith("video/")) {
+              console.log("Adding video to main videos:", result.publicUrl)
+              setMainVideos((prev) => {
+                const newVideos = [...prev]
+                if (!newVideos.includes(result.publicUrl)) {
+                  newVideos.push(result.publicUrl)
+                }
+                return newVideos
+              })
+
+              if (!formData.video_url) {
+                setFormData((prev) => ({ ...prev, video_url: result.publicUrl }))
+              }
+
+              // Set project date from file date if available and project_date is empty
+              if (fileDate && !formData.project_date) {
+                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
+              }
+            }
+          } else {
+            // BTS
+            if (file.type.startsWith("image/")) {
+              console.log("Adding image to BTS images:", result.publicUrl)
+              setBtsImages((prev) => {
+                const newImages = [...prev]
+                if (!newImages.includes(result.publicUrl)) {
+                  newImages.push(result.publicUrl)
+                }
+                return newImages
+              })
+            } else if (file.type.startsWith("video/")) {
+              console.log("Adding video to BTS videos:", result.publicUrl)
+              setBtsVideos((prev) => {
+                const newVideos = [...prev]
+                if (!newVideos.includes(result.publicUrl)) {
+                  newVideos.push(result.publicUrl)
+                }
+                return newVideos
+              })
+            }
+          }
+
+          toast({
+            title: "Upload successful",
+            description: `${file.name} uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
+          })
+        } else {
+          throw new Error(result.error || "Unknown error during upload")
+        }
+      }
+    } catch (error) {
+      console.error("Error uploading file:", error)
+      toast({
+        title: "Upload failed",
+        description: error instanceof Error ? error.message : "Failed to upload file",
+        variant: "destructive",
+      })
+    }
+  }
+
   const addMainVideoUrl = async (url: string) => {
     if (!url.trim()) return
 
     setProcessingVideo(true)
     try {
+      console.log("Processing video URL:", url)
       const videoInfo = extractVideoInfo(url)
       if (!videoInfo) {
         toast({
@@ -256,6 +380,8 @@ export default function NewProjectPage() {
         })
         return
       }
+
+      console.log("Video info extracted:", videoInfo)
 
       // Add to media library
       let thumbnailUrl = null
@@ -290,10 +416,12 @@ export default function NewProjectPage() {
         }
       }
 
+      console.log("Adding video to mainVideos:", url)
+
       // Set video URL in form data if not already in the list
       if (!mainVideos.includes(url)) {
-        setFormData((prev) => ({ ...prev, video_url: url }))
         setMainVideos((prev) => [...prev, url])
+        setFormData((prev) => ({ ...prev, video_url: url }))
       }
 
       // If we have a thumbnail and no image is set, use the thumbnail
@@ -344,6 +472,7 @@ export default function NewProjectPage() {
     if (!url.trim()) return
 
     try {
+      console.log("Processing BTS video URL:", url)
       const videoInfo = extractVideoInfo(url)
       if (!videoInfo) {
         toast({
@@ -354,8 +483,11 @@ export default function NewProjectPage() {
         return
       }
 
+      console.log("BTS video info extracted:", videoInfo)
+
       // Add to BTS videos if not already in the list
       if (!btsVideos.includes(url)) {
+        console.log("Adding to BTS videos:", url)
         setBtsVideos((prev) => [...prev, url])
       }
 
@@ -413,100 +545,6 @@ export default function NewProjectPage() {
       toast({
         title: "Error adding BTS video",
         description: "Failed to process video URL",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleFileUpload = async (files: FileList, target: "main" | "bts") => {
-    if (!files || files.length === 0) return
-
-    try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-
-        // Try to extract date from file metadata
-        let fileDate = null
-        if (file.type.startsWith("image/") && !formData.project_date) {
-          try {
-            // This is a simplified approach - in a real app, you'd use a library like exif-js
-            // to properly extract EXIF data including the date the photo was taken
-            fileDate = file.lastModified ? new Date(file.lastModified) : null
-          } catch (err) {
-            console.error("Error extracting date from file:", err)
-          }
-        }
-
-        // Create a FormData object
-        const formDataUpload = new FormData()
-        formDataUpload.append("file", file)
-
-        // Upload the file using the bulk-upload endpoint which handles WebP conversion
-        const response = await fetch("/api/bulk-upload", {
-          method: "POST",
-          body: formDataUpload,
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to upload file")
-        }
-
-        const result = await response.json()
-
-        if (result.success) {
-          // Add the uploaded file to the appropriate target
-          if (target === "main") {
-            if (file.type.startsWith("image/")) {
-              if (!mainImages.includes(result.publicUrl)) {
-                setMainImages((prev) => [...prev, result.publicUrl])
-                // Set as cover image if none is set
-                if (!formData.image) {
-                  setFormData((prev) => ({ ...prev, image: result.publicUrl }))
-                }
-
-                // Set project date from file date if available and project_date is empty
-                if (fileDate && !formData.project_date) {
-                  setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
-                }
-              }
-            } else if (file.type.startsWith("video/")) {
-              if (!mainVideos.includes(result.publicUrl)) {
-                setMainVideos((prev) => [...prev, result.publicUrl])
-                setFormData((prev) => ({ ...prev, video_url: result.publicUrl }))
-
-                // Set project date from file date if available and project_date is empty
-                if (fileDate && !formData.project_date) {
-                  setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
-                }
-              }
-            }
-          } else {
-            // BTS
-            if (file.type.startsWith("image/")) {
-              if (!btsImages.includes(result.publicUrl)) {
-                setBtsImages((prev) => [...prev, result.publicUrl])
-              }
-            } else if (file.type.startsWith("video/")) {
-              if (!btsVideos.includes(result.publicUrl)) {
-                setBtsVideos((prev) => [...prev, result.publicUrl])
-              }
-            }
-          }
-
-          toast({
-            title: "Upload successful",
-            description: `${file.name} uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
-          })
-        } else {
-          throw new Error(result.error || "Unknown error during upload")
-        }
-      }
-    } catch (error) {
-      console.error("Error uploading file:", error)
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload file",
         variant: "destructive",
       })
     }
