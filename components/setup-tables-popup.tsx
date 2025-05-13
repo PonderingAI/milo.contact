@@ -67,7 +67,7 @@ export function DatabaseSetupPopup({
     }
   }, [adminOnly])
 
-  // Update the checkTables function to handle network errors and parsing issues better
+  // Function to check if tables exist - using a more reliable method
   const checkTables = useCallback(
     async (shouldOpenPopup = true) => {
       if (checking) return // Prevent multiple simultaneous checks
@@ -80,106 +80,95 @@ export function DatabaseSetupPopup({
       setLastRefreshTime(new Date())
 
       try {
-        // Use hardcoded SQL for now since file loading is failing
+        // Add a timeout to the fetch request
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // Increase timeout to 10 seconds
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
 
-        try {
-          const response = await fetch("/api/direct-table-check", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              tables:
-                customTables.length > 0
-                  ? customTables
-                  : DATABASE_TABLES.filter(
-                      (table) => requiredSections.includes("all") || requiredSections.includes(table.category),
-                    ).map((table) => table.name),
-            }),
-            signal: controller.signal,
-          })
-
-          clearTimeout(timeoutId)
-
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.warn("Error response from table check:", errorText)
-            throw new Error(`Server error: ${response.status}`)
+        const response = await fetch("/api/direct-table-check", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            tables:
+              customTables.length > 0
+                ? customTables
+                : DATABASE_TABLES.filter(
+                    (table) => requiredSections.includes("all") || requiredSections.includes(table.category),
+                  ).map((table) => table.name),
+          }),
+          signal: controller.signal,
+        }).catch((err) => {
+          // Handle network errors explicitly
+          console.warn("Network error checking tables:", err)
+          // Return a fake response to continue execution
+          return {
+            ok: false,
+            json: async () => ({ error: "Network error" }),
           }
+        })
 
-          let data
-          try {
-            data = await response.json()
-          } catch (parseError) {
-            console.error("Error parsing JSON response:", parseError)
-            throw new Error("Failed to parse server response")
+        clearTimeout(timeoutId)
+
+        if (!response.ok) {
+          const data = await response.json().catch(() => ({ error: "Failed to parse error response" }))
+          throw new Error(data.error || "Failed to check tables")
+        }
+
+        const data = await response.json().catch(() => ({ error: "Failed to parse response" }))
+
+        if (data.error) {
+          console.warn("Error checking tables:", data.error)
+          throw new Error(data.error)
+        }
+
+        // data.missingTables contains the list of tables that don't exist
+        const missingTablesList = data.missingTables || []
+
+        // Only update state if there's a change to avoid unnecessary re-renders
+        if (JSON.stringify(missingTablesList) !== JSON.stringify(missingTables)) {
+          setMissingTables(missingTablesList)
+          setSelectedTables(missingTablesList)
+
+          // Only load SQL content if there are missing tables and we're opening the popup
+          // or if the popup is already open and we haven't tried loading SQL yet
+          if (missingTablesList.length > 0 && (shouldOpenPopup || (open && !sqlLoadAttempted))) {
+            loadSqlContent(missingTablesList)
           }
+        }
 
-          if (data.error) {
-            console.warn("Error checking tables:", data.error)
-            throw new Error(data.error)
+        // If manual setup was marked as complete, close the popup regardless of missing tables
+        if (manualSetupComplete) {
+          setOpen(false)
+          setManualSetupComplete(false)
+          if (onSetupComplete) {
+            onSetupComplete()
           }
+          return
+        }
 
-          // data.missingTables contains the list of tables that don't exist
-          const missingTablesList = data.missingTables || []
-
-          // Only update state if there's a change to avoid unnecessary re-renders
-          if (JSON.stringify(missingTablesList) !== JSON.stringify(missingTables)) {
-            setMissingTables(missingTablesList)
-            setSelectedTables(missingTablesList)
-
-            // Only load SQL content if there are missing tables and we're opening the popup
-            // or if the popup is already open and we haven't tried loading SQL yet
-            if (missingTablesList.length > 0 && (shouldOpenPopup || (open && !sqlLoadAttempted))) {
-              loadSqlContent(missingTablesList)
-            }
+        // Only open the popup if there are missing tables, we're on an admin page, and we should open it
+        if (missingTablesList.length > 0 && isAdminPage && shouldOpenPopup) {
+          setOpen(true)
+        } else if (missingTablesList.length === 0) {
+          // If no missing tables, close the popup and call onSetupComplete
+          if (open) {
+            setSuccess("All required tables exist!")
+            setTimeout(() => {
+              setOpen(false)
+              if (onSetupComplete) {
+                onSetupComplete()
+              }
+            }, 1500)
+          } else if (onSetupComplete) {
+            onSetupComplete()
           }
-
-          // If manual setup was marked as complete, close the popup regardless of missing tables
-          if (manualSetupComplete) {
-            setOpen(false)
-            setManualSetupComplete(false)
-            if (onSetupComplete) {
-              onSetupComplete()
-            }
-            return
-          }
-
-          // Only open the popup if there are missing tables, we're on an admin page, and we should open it
-          if (missingTablesList.length > 0 && isAdminPage && shouldOpenPopup) {
-            setOpen(true)
-          } else if (missingTablesList.length === 0) {
-            // If no missing tables, close the popup and call onSetupComplete
-            if (open) {
-              setSuccess("All required tables exist!")
-              setTimeout(() => {
-                setOpen(false)
-                if (onSetupComplete) {
-                  onSetupComplete()
-                }
-              }, 1500)
-            } else if (onSetupComplete) {
-              onSetupComplete()
-            }
-          }
-        } catch (fetchError) {
-          clearTimeout(timeoutId)
-          console.warn("Fetch error checking tables:", fetchError)
-
-          // Handle AbortError specifically
-          if (fetchError.name === "AbortError") {
-            throw new Error("Request timed out. Server may be busy.")
-          }
-
-          throw fetchError
         }
       } catch (error) {
         console.warn("Error checking tables:", error)
         // Only show errors for user-initiated checks
         if (shouldOpenPopup) {
-          setError(`Failed to check database tables: ${error.message || "Unknown error"}`)
+          setError("Failed to check database tables. Please try again.")
         }
 
         // If we can't check tables, don't show the popup on non-admin pages

@@ -20,45 +20,36 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
     setDismissed(isDismissed)
   }, [])
 
-  // Update the useEffect to better handle network errors
   useEffect(() => {
     const checkTables = async () => {
       try {
         // Add a timeout to the fetch request
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
 
-        try {
-          const response = await fetch("/api/check-table?table=projects", {
-            signal: controller.signal,
-          })
-
-          clearTimeout(timeoutId)
-
-          if (!response.ok) {
-            console.warn("Error checking tables:", response.status, response.statusText)
-            return
+        const response = await fetch("/api/check-table?table=projects", {
+          signal: controller.signal,
+        }).catch((err) => {
+          // Handle network errors explicitly
+          console.warn("Network error checking tables:", err)
+          // Return a fake response to continue execution
+          return {
+            ok: false,
+            json: async () => ({ success: false, message: "Network error" }),
           }
+        })
 
-          let data
-          try {
-            data = await response.json()
-          } catch (parseError) {
-            console.error("Error parsing JSON response:", parseError)
-            return
-          }
+        clearTimeout(timeoutId)
 
-          if (data?.exists) {
-            setIsDatabaseSetup(true)
-          }
-        } catch (fetchError) {
-          clearTimeout(timeoutId)
-          console.warn("Fetch error checking tables:", fetchError)
+        if (!response?.ok) {
+          console.warn("Error checking tables:", response)
+          return
+        }
 
-          // Don't show errors for timeout - just fail silently
-          if (fetchError.name !== "AbortError") {
-            console.error("Error checking tables:", fetchError)
-          }
+        const data = await response.json()
+
+        if (data?.exists) {
+          setIsDatabaseSetup(true)
         }
       } catch (err) {
         console.warn("Error checking tables:", err)
