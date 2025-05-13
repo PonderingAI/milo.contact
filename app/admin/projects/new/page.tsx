@@ -246,98 +246,64 @@ export default function NewProjectPage() {
     if (!url.trim()) return
 
     setProcessingVideo(true)
+    const toastId = toast({
+      title: "Processing video",
+      description: "Fetching video information...",
+    }).id
+
     try {
-      console.log("Processing video URL:", url)
-      const videoInfo = extractVideoInfo(url)
-      if (!videoInfo) {
-        toast({
-          title: "Invalid video URL",
-          description: "Please enter a valid YouTube, Vimeo, or LinkedIn video URL",
-          variant: "destructive",
-        })
-        return
+      // Use the new API route to process the video URL
+      const response = await fetch("/api/process-video-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to process video URL")
       }
 
-      console.log("Video info extracted:", videoInfo)
+      const result = await response.json()
+      console.log("Video processing result:", result)
 
-      // Add to media library
-      let thumbnailUrl = null
-      let videoTitle = null
-      let uploadDate = null
-
-      if (videoInfo.platform === "vimeo") {
-        // Get video thumbnail and metadata from Vimeo
-        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-        if (response.ok) {
-          const videoData = await response.json()
-          const video = videoData[0]
-          thumbnailUrl = video.thumbnail_large
-          videoTitle = video.title || `Vimeo ${videoInfo.id}`
-          uploadDate = video.upload_date ? new Date(video.upload_date) : null
-
-          // If project title is empty, use video title
-          if (!formData.title && videoTitle) {
-            setFormData((prev) => ({ ...prev, title: videoTitle }))
-          }
-
-          // If project date is empty and we have an upload date, use it
-          if (!formData.project_date && uploadDate) {
-            setFormData((prev) => ({ ...prev, project_date: formatDateForInput(uploadDate) }))
-          }
-        }
-      } else if (videoInfo.platform === "youtube") {
-        thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-        // If project title is empty, use a generic title
-        if (!formData.title) {
-          setFormData((prev) => ({ ...prev, title: `YouTube Video Project` }))
-        }
-      }
-
-      console.log("Adding video to mainVideos:", url)
-
-      // Set video URL in form data if not already in the list
+      // Add to mainVideos if not already in the list
       if (!mainVideos.includes(url)) {
         setMainVideos((prev) => [...prev, url])
         setFormData((prev) => ({ ...prev, video_url: url }))
       }
 
       // If we have a thumbnail and no image is set, use the thumbnail
-      if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
-        setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-        setVideoThumbnail(thumbnailUrl)
-        setMainImages((prev) => [...prev, thumbnailUrl])
+      if (result.thumbnailUrl && !formData.image && !mainImages.includes(result.thumbnailUrl)) {
+        setFormData((prev) => ({ ...prev, image: result.thumbnailUrl }))
+        setVideoThumbnail(result.thumbnailUrl)
+        setMainImages((prev) => [...prev, result.thumbnailUrl])
       }
 
-      // Add to media library
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const userId = session?.user?.id || "anonymous"
+      // If project title is empty, use video title
+      if (!formData.title && result.title) {
+        setFormData((prev) => ({ ...prev, title: result.title }))
+      }
 
-      await supabase.from("media").insert({
-        filename: videoTitle || `${videoInfo.platform} Video ${videoInfo.id}`,
-        filepath: url,
-        filesize: 0,
-        filetype: videoInfo.platform,
-        public_url: url,
-        thumbnail_url: thumbnailUrl,
-        tags: ["video", videoInfo.platform],
-        metadata: {
-          [videoInfo.platform + "Id"]: videoInfo.id,
-          uploadedBy: userId,
-          uploadDate: uploadDate ? uploadDate.toISOString() : null,
-        },
-      })
+      // If project date is empty and we have an upload date, use it
+      if (!formData.project_date && result.uploadDate) {
+        const date = new Date(result.uploadDate)
+        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+      }
 
       toast({
+        id: toastId,
         title: "Video added",
         description: "Video has been added to the project and media library",
       })
     } catch (error) {
       console.error("Error processing video:", error)
       toast({
+        id: toastId,
         title: "Error adding video",
-        description: "Failed to process video URL",
+        description: error instanceof Error ? error.message : "Failed to process video URL",
         variant: "destructive",
       })
     } finally {
@@ -348,80 +314,50 @@ export default function NewProjectPage() {
   const addBtsVideoUrl = async (url: string) => {
     if (!url.trim()) return
 
+    const toastId = toast({
+      title: "Processing BTS video",
+      description: "Fetching video information...",
+    }).id
+
     try {
-      console.log("Processing BTS video URL:", url)
-      const videoInfo = extractVideoInfo(url)
-      if (!videoInfo) {
-        toast({
-          title: "Invalid video URL",
-          description: "Please enter a valid YouTube, Vimeo, or LinkedIn video URL",
-          variant: "destructive",
-        })
-        return
+      // Use the new API route to process the video URL
+      const response = await fetch("/api/process-video-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url, isBts: true }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to process video URL")
       }
 
-      console.log("BTS video info extracted:", videoInfo)
+      const result = await response.json()
+      console.log("BTS video processing result:", result)
 
       // Add to BTS videos if not already in the list
       if (!btsVideos.includes(url)) {
-        console.log("Adding to BTS videos:", url)
         setBtsVideos((prev) => [...prev, url])
       }
 
-      // Add to media library
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      const userId = session?.user?.id || "anonymous"
-
-      let thumbnailUrl = null
-      let videoTitle = null
-      let uploadDate = null
-
-      if (videoInfo.platform === "vimeo") {
-        // Get video thumbnail and metadata from Vimeo
-        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-        if (response.ok) {
-          const videoData = await response.json()
-          const video = videoData[0]
-          thumbnailUrl = video.thumbnail_large
-          videoTitle = video.title || `Vimeo ${videoInfo.id}`
-          uploadDate = video.upload_date ? new Date(video.upload_date) : null
-        }
-      } else if (videoInfo.platform === "youtube") {
-        thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-      }
-
-      await supabase.from("media").insert({
-        filename: videoTitle || `BTS ${videoInfo.platform} Video ${videoInfo.id}`,
-        filepath: url,
-        filesize: 0,
-        filetype: videoInfo.platform,
-        public_url: url,
-        thumbnail_url: thumbnailUrl,
-        tags: ["video", videoInfo.platform, "bts"],
-        metadata: {
-          [videoInfo.platform + "Id"]: videoInfo.id,
-          uploadedBy: userId,
-          isBts: true,
-          uploadDate: uploadDate ? uploadDate.toISOString() : null,
-        },
-      })
-
       // Add thumbnail to BTS images if available and not already in the list
-      if (thumbnailUrl && !btsImages.includes(thumbnailUrl)) {
-        setBtsImages((prev) => [...prev, thumbnailUrl])
+      if (result.thumbnailUrl && !btsImages.includes(result.thumbnailUrl)) {
+        setBtsImages((prev) => [...prev, result.thumbnailUrl])
       }
 
       toast({
+        id: toastId,
         title: "BTS Video added",
         description: "Behind the scenes video has been added to the project",
       })
     } catch (error) {
       console.error("Error processing BTS video:", error)
       toast({
+        id: toastId,
         title: "Error adding BTS video",
-        description: "Failed to process video URL",
+        description: error instanceof Error ? error.message : "Failed to process video URL",
         variant: "destructive",
       })
     }

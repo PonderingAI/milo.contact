@@ -3,10 +3,11 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { Upload, ArrowRight } from "lucide-react"
+import { Upload, ArrowRight, Loader2 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import MediaSelector from "./media-selector"
+import { Progress } from "@/components/ui/progress"
 
 interface ProjectMediaUploaderProps {
   title: string
@@ -28,6 +29,10 @@ export default function ProjectMediaUploader({
   const supabase = createClientComponentClient()
   const [isDragging, setIsDragging] = useState(false)
   const [videoUrl, setVideoUrl] = useState("")
+  const [isUploading, setIsUploading] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState(0)
+  const [totalFiles, setTotalFiles] = useState(0)
+  const [uploadedFiles, setUploadedFiles] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
 
@@ -90,11 +95,16 @@ export default function ProjectMediaUploader({
     if (!files || files.length === 0) return
 
     try {
+      setIsUploading(true)
+      setTotalFiles(files.length)
+      setUploadedFiles(0)
+      setUploadProgress(0)
+
       // Show upload in progress toast
-      toast({
+      const toastId = toast({
         title: "Upload in progress",
         description: `Uploading ${files.length} file(s) to ${title}...`,
-      })
+      }).id
 
       const uploadedUrls: string[] = []
 
@@ -121,6 +131,8 @@ export default function ProjectMediaUploader({
 
         if (result.success) {
           uploadedUrls.push(result.publicUrl)
+          setUploadedFiles((prev) => prev + 1)
+          setUploadProgress(Math.round(((i + 1) / files.length) * 100))
         } else {
           throw new Error(result.error || "Unknown error during upload")
         }
@@ -131,6 +143,7 @@ export default function ProjectMediaUploader({
         onMediaSelect(uploadedUrls)
 
         toast({
+          id: toastId,
           title: "Upload successful",
           description: `${files.length} file(s) uploaded to ${title}`,
         })
@@ -142,6 +155,8 @@ export default function ProjectMediaUploader({
         description: error instanceof Error ? error.message : "Failed to upload file",
         variant: "destructive",
       })
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -166,8 +181,8 @@ export default function ProjectMediaUploader({
         onDragLeave={handleDragLeave}
         onDrop={handleDrop}
       >
-        {/* Normal UI - shown when not dragging */}
-        {!isDragging && (
+        {/* Normal UI - shown when not dragging and not uploading */}
+        {!isDragging && !isUploading && (
           <div className="space-y-2">
             {/* Media Selector */}
             <MediaSelector
@@ -220,6 +235,20 @@ export default function ProjectMediaUploader({
                 }}
               />
             </label>
+          </div>
+        )}
+
+        {/* Upload Progress UI */}
+        {isUploading && (
+          <div className="absolute inset-0 rounded-xl bg-[#0a101e]/90 backdrop-blur-sm flex flex-col items-center justify-center z-10 p-6">
+            <Loader2 className="h-8 w-8 text-blue-400 mb-4 animate-spin" />
+            <h3 className="text-lg font-medium text-white mb-2">Uploading to {title}...</h3>
+            <div className="w-full max-w-md mb-2">
+              <Progress value={uploadProgress} className="h-2" />
+            </div>
+            <p className="text-gray-300 text-sm">
+              {uploadedFiles} of {totalFiles} files ({uploadProgress}%)
+            </p>
           </div>
         )}
 

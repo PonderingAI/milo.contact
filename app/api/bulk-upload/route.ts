@@ -111,6 +111,15 @@ export async function POST(request: NextRequest) {
             usage_locations JSONB DEFAULT '{}',
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
           );
+          
+          -- Add RLS policy to allow all operations for authenticated users
+          ALTER TABLE media ENABLE ROW LEVEL SECURITY;
+          
+          DROP POLICY IF EXISTS "Allow all operations for authenticated users" ON media;
+          CREATE POLICY "Allow all operations for authenticated users" 
+          ON media 
+          USING (auth.role() = 'authenticated')
+          WITH CHECK (auth.role() = 'authenticated');
         `,
       })
 
@@ -120,7 +129,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Save to media table
+    // Save to media table using admin privileges
     const { error: dbError } = await supabase.from("media").insert({
       filename: isConvertibleImage ? `${originalName}.webp` : file.name,
       filepath: filePath,
