@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useRef, useEffect } from "react"
-import { ArrowRight, Upload } from "lucide-react"
+import { ArrowRight, Music } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { toast } from "@/components/ui/use-toast"
 
@@ -191,6 +191,7 @@ export default function UploadWidget({
     e.preventDefault()
     e.stopPropagation()
     setIsLocalDrag(false)
+    setIsDragging(false)
 
     const files = e.dataTransfer.files
     if (files && files.length > 0) {
@@ -264,15 +265,16 @@ export default function UploadWidget({
   }
 
   return (
-    <>
-      <div
-        className={`rounded-xl bg-[#070a10] p-4 ${compact ? "text-sm" : ""} relative`}
-        ref={dropAreaRef}
-        onDragEnter={handleDragEnter}
-        onDragOver={(e) => e.preventDefault()}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
+    <div
+      className={`rounded-xl bg-[#070a10] p-4 ${compact ? "text-sm" : ""} relative h-full min-h-[180px]`}
+      ref={dropAreaRef}
+      onDragEnter={handleDragEnter}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Normal UI - hidden when dragging */}
+      {!isLocalDrag && (
         <div className="space-y-2">
           {/* Browse Media button */}
           <button
@@ -307,28 +309,27 @@ export default function UploadWidget({
           >
             Browse Device
           </button>
-
-          {/* Hidden file input */}
-          <input
-            type="file"
-            ref={fileInputRef}
-            className="hidden"
-            accept={acceptedFileTypes}
-            multiple={multiple}
-            onChange={handleFileChange}
-          />
         </div>
+      )}
 
-        {/* Local drag overlay */}
-        {isLocalDrag && (
-          <div className="absolute inset-0 bg-blue-500/20 border-2 border-dashed border-blue-400 rounded-xl flex items-center justify-center z-10">
-            <div className="bg-[#131a2a]/90 p-4 rounded-lg flex flex-col items-center">
-              <Upload className="h-8 w-8 text-blue-400 mb-2" />
-              <p className="text-white font-medium">Drop files here</p>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Local drag overlay - replaces the normal UI */}
+      {isLocalDrag && (
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-600/90 to-blue-600/90 rounded-xl flex flex-col items-center justify-center z-10 transition-all duration-300 ease-in-out animate-pulse">
+          <Music className="h-12 w-12 text-white mb-3 animate-bounce" />
+          <h3 className="text-2xl font-bold text-white mb-1">Drop it like it's hot!</h3>
+          <p className="text-white/80 text-center">Release to upload your files</p>
+        </div>
+      )}
+
+      {/* Hidden file input */}
+      <input
+        type="file"
+        ref={fileInputRef}
+        className="hidden"
+        accept={acceptedFileTypes}
+        multiple={multiple}
+        onChange={handleFileChange}
+      />
 
       {/* Global drag overlay - appears when dragging anywhere on the page */}
       {isDragging && !isLocalDrag && (
@@ -337,16 +338,15 @@ export default function UploadWidget({
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
         >
-          <div className="bg-[#131a2a] p-8 rounded-xl border-2 border-dashed border-blue-400 max-w-lg w-full">
+          <div className="bg-gradient-to-br from-purple-600/90 to-blue-600/90 p-8 rounded-xl max-w-lg w-full animate-pulse">
             <div className="flex flex-col items-center">
-              <Upload className="h-16 w-16 text-blue-400 mb-4" />
-              <h3 className="text-2xl font-bold text-white mb-2">Drop files to upload</h3>
-              <p className="text-gray-300 text-center mb-4">Drop your files anywhere to upload them to your project</p>
-              <p className="text-sm text-gray-400">Supported formats: images and videos</p>
+              <Music className="h-16 w-16 text-white mb-4 animate-bounce" />
+              <h3 className="text-3xl font-bold text-white mb-2">Drop it like it's hot!</h3>
+              <p className="text-white/80 text-center">Release to upload your files</p>
             </div>
           </div>
         </div>
       )}
-    </>
+    </div>
   )
 }
