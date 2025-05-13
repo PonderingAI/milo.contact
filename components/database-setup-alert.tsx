@@ -15,35 +15,66 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
   const [dismissed, setDismissed] = useState(false)
   const [isDatabaseSetup, setIsDatabaseSetup] = useState(isSetup)
   const [isChecking, setIsChecking] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   // Check local storage on mount to see if the alert has been dismissed
   useEffect(() => {
     const isDismissed = localStorage.getItem("dbSetupAlertDismissed") === "true"
     setDismissed(isDismissed)
-  }, [])
+
+    // If we're not set up, clear the dismissed state
+    if (!isSetup) {
+      localStorage.removeItem("dbSetupAlertDismissed")
+      setDismissed(false)
+    }
+  }, [isSetup])
 
   useEffect(() => {
     const checkTables = async () => {
       if (isSetup || isChecking) return
 
       setIsChecking(true)
+      setError(null)
 
       try {
-        // Use Supabase client directly instead of fetch API
-        const supabase = createClientComponentClient()
+        // First try the API endpoint
+        const response = await fetch("/api/check-database-setup")
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`)
+        }
 
-        // Try to query the projects table - if it exists, we consider the database set up
-        const { data, error } = await supabase.from("projects").select("id").limit(1).maybeSingle()
+        const data = await response.json()
+        if (!data.isSetup) {
+          setIsDatabaseSetup(false)
+          return
+        }
 
-        // If there's no error, the table exists
-        if (!error) {
+        setIsDatabaseSetup(true)
+        localStorage.setItem("dbSetupAlertDismissed", "true")
+        setDismissed(true)
+      } catch (apiError) {
+        console.warn("API check failed, falling back to direct check:", apiError)
+
+        // Fallback to direct Supabase check
+        try {
+          const supabase = createClientComponentClient()
+          const { data, error } = await supabase.from("projects").select("id").limit(1)
+
+          if (error) {
+            console.warn("Projects table check failed:", error)
+            setIsDatabaseSetup(false)
+            setError("Database tables are missing. Please set up the database.")
+            return
+          }
+
           setIsDatabaseSetup(true)
           localStorage.setItem("dbSetupAlertDismissed", "true")
           setDismissed(true)
+        } catch (err) {
+          console.error("Error in direct database check:", err)
+          setError("Could not connect to database. Please check your connection.")
+          setIsDatabaseSetup(false)
         }
-      } catch (err) {
-        // Silently handle errors - we'll just keep showing the alert
-        console.warn("Error checking database setup:", err)
       } finally {
         setIsChecking(false)
       }
@@ -70,7 +101,8 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
       <AlertTitle>Database Setup Required</AlertTitle>
       <AlertDescription className="flex flex-col md:flex-row md:items-center gap-4">
         <span>
-          Your portfolio is currently using mock data. To use your own content, you need to set up the database.
+          {error ||
+            "Your portfolio is currently using mock data. To use your own content, you need to set up the database."}
         </span>
         <div className="flex gap-2">
           <Button asChild variant="outline" className="border-red-400 text-red-100 hover:bg-red-900/30">

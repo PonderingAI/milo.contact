@@ -20,11 +20,15 @@ export async function POST(request: Request) {
 
     for (const tableName of tables) {
       try {
-        // Use a simple query to check if the table exists
-        const { error } = await supabase.from(tableName).select("*").limit(1)
+        // Use information_schema to check if the table exists
+        const { data, error } = await supabase
+          .from("information_schema.tables")
+          .select("table_name")
+          .eq("table_schema", "public")
+          .eq("table_name", tableName)
+          .maybeSingle()
 
-        if (error && error.code === "PGRST116") {
-          // PGRST116 is the error code for "relation does not exist"
+        if (error || !data) {
           missingTables.push(tableName)
         }
       } catch (error) {
@@ -40,6 +44,12 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Error in direct-table-check:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }

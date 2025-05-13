@@ -1217,10 +1217,20 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       return
     }
 
+    // If custom tables are provided, force check those tables
+    if (customTables && customTables.length > 0) {
+      setForceClose(false)
+      setOpen(true)
+      setMissingTables(customTables)
+      setSelectedTables(customTables)
+      setInitialCheckDone(true)
+      return
+    }
+
     // Check if setup was previously completed
     try {
       const completed = localStorage.getItem("database_setup_completed")
-      if (completed === "true" && !isStationary) {
+      if (completed === "true" && !isStationary && !customTables?.length) {
         setForceClose(true)
         setSetupCompleted(true)
         return
@@ -1233,7 +1243,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     if ((!adminOnly || (adminOnly && isAdminPage)) && !initialCheckDone) {
       checkTablesWithSupabase()
     }
-  }, [checkTablesWithSupabase, adminOnly, isAdminPage, isStationary, initialCheckDone])
+  }, [checkTablesWithSupabase, adminOnly, isAdminPage, isStationary, initialCheckDone, customTables])
 
   // If force closed, setup completed, or not on admin page when adminOnly is true, don't render
   if (forceClose || (setupCompleted && !open && !isStationary) || (adminOnly && !isAdminPage && !isStationary)) {
