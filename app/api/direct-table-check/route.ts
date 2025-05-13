@@ -1,47 +1,43 @@
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+
+export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
-    // Parse the request body
-    const body = await request.json().catch(() => ({}))
-    const { tables } = body || {}
+    // Parse the request body with error handling
+    let requestData
+    try {
+      requestData = await request.json()
+    } catch (error) {
+      return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
+    }
 
-    // Check if tables is provided and is an array
-    if (!tables || !Array.isArray(tables)) {
+    // Validate the tables parameter
+    const { tables } = requestData || {}
+    if (!tables || !Array.isArray(tables) || tables.length === 0) {
       return NextResponse.json({ error: "Tables array is required" }, { status: 400 })
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    console.log("Checking tables: ", tables)
 
-    if (!supabaseUrl || !supabaseKey) {
-      return NextResponse.json(
-        { error: "Supabase credentials are not configured", code: "MISSING_CREDENTIALS" },
-        { status: 500 },
-      )
-    }
+    const supabase = createRouteHandlerClient({ cookies })
 
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
-    // Check each table
-    const missingTables = []
+    // Check if each table exists
+    const missingTables: string[] = []
 
     for (const tableName of tables) {
       try {
-        // Use information_schema to check if the table exists
-        const { data, error } = await supabase
-          .from("information_schema.tables")
-          .select("table_name")
-          .eq("table_schema", "public")
-          .eq("table_name", tableName)
-          .single()
+        // Use a simple query to check if the table exists
+        const { error } = await supabase.from(tableName).select("*").limit(1)
 
-        if (error || !data) {
+        if (error && (error.code === "PGRST116" || error.message?.includes("does not exist"))) {
+          // PGRST116 is the error code for "relation does not exist"
           missingTables.push(tableName)
         }
       } catch (error) {
-        console.warn(`Error checking table ${tableName}:`, error)
+        console.error(`Error checking table ${tableName}:`, error)
         // If we can't check, assume it's missing
         missingTables.push(tableName)
       }
@@ -53,6 +49,12 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Error in direct-table-check:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json(
+      {
+        error: "Unknown error checking tables",
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 },
+    )
   }
 }
