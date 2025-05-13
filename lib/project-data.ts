@@ -24,9 +24,6 @@ export interface Project {
   special_notes?: string
   created_at?: string
   updated_at?: string
-  published?: boolean
-  scheduled_publish_date?: string
-  project_date?: string
 }
 
 /**
@@ -241,38 +238,6 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
   }
 }
 
-// Fix the getPublishedProjects function to use proper SQL syntax
-export async function getPublishedProjects(): Promise<Project[]> {
-  try {
-    // First check if database is set up
-    const isDbSetup = await isDatabaseSetup()
-    if (!isDbSetup) {
-      console.log("Database not set up, returning mock data")
-      return mockProjects
-    }
-
-    const supabase = createServerClient()
-    const now = new Date().toISOString()
-
-    // Fix the query syntax by using separate filters and combining them
-    const { data, error } = await supabase
-      .from("projects")
-      .select("*")
-      .or(`published.eq.true,scheduled_publish_date.lt.${now},and(scheduled_publish_date.is.not.null)`)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Error fetching published projects:", error)
-      return mockProjects
-    }
-
-    return data.length > 0 ? data : mockProjects
-  } catch (error) {
-    console.error("Error in getPublishedProjects:", error)
-    return mockProjects
-  }
-}
-
 /**
  * Extract video platform and ID from a video URL
  */
@@ -320,7 +285,6 @@ export const mockProjects = [
     description: "A compelling short film exploring themes of identity and belonging in a post-digital world.",
     special_notes:
       "This project was particularly special because we shot it entirely during golden hour over three consecutive days, creating a consistent and dreamlike visual atmosphere.",
-    published: true,
   },
   {
     id: "directed-2",
@@ -333,7 +297,6 @@ export const mockProjects = [
     description: "An experimental music video featuring innovative visual techniques and storytelling.",
     special_notes:
       "Working with the artist to develop a visual language that complemented the music was a rewarding creative challenge.",
-    published: true,
   },
 
   // Camera Work Projects
@@ -348,7 +311,6 @@ export const mockProjects = [
     description: "Worked as 1st AC on this award-winning feature film, managing focus and camera operations.",
     special_notes:
       "The challenging lighting conditions and complex camera movements made this project particularly rewarding.",
-    published: true,
   },
   {
     id: "camera-2",
@@ -360,7 +322,6 @@ export const mockProjects = [
     video_url: "https://www.youtube.com/watch?v=lmnopqrstuv",
     description: "Served as 2nd AC for this popular TV series, handling equipment and supporting the camera team.",
     special_notes: "Working with a seasoned DP taught me invaluable lessons about lighting and composition.",
-    published: true,
   },
 
   // Production Projects
@@ -374,7 +335,6 @@ export const mockProjects = [
     video_url: "https://youtube.com/watch?v=-fgtd87ywuw",
     description: "Provided essential support as a PA on this award-winning short film production.",
     special_notes: "Being part of such a collaborative and creative team was an incredible learning experience.",
-    published: true,
   },
   {
     id: "production-2",
@@ -386,7 +346,6 @@ export const mockProjects = [
     video_url: "https://youtube.com/watch?v=Oix719dXXb8",
     description: "Assisted with various aspects of production for this innovative music video.",
     special_notes: "The fast-paced production schedule taught me how to work efficiently under pressure.",
-    published: true,
   },
 
   // Photography Projects
@@ -400,7 +359,6 @@ export const mockProjects = [
     description: "A series of landscape photographs capturing the beauty of natural environments.",
     special_notes:
       "Spending weeks in remote locations to capture these images gave me a deeper appreciation for nature's beauty.",
-    published: true,
   },
   {
     id: "photo-2",
@@ -412,7 +370,6 @@ export const mockProjects = [
     description: "A collection of portrait photographs exploring human expression and identity.",
     special_notes:
       "Creating an environment where subjects felt comfortable enough to express their authentic selves was the key to these portraits.",
-    published: true,
   },
   {
     id: "ai-1",
@@ -425,7 +382,6 @@ export const mockProjects = [
       "A collection of AI-generated artwork exploring the intersection of human creativity and machine learning.",
     special_notes:
       "This project uses cutting-edge AI models to create unique visual experiences that challenge our perception of art and creativity.",
-    published: true,
   },
 ]
 

@@ -6,21 +6,12 @@ export const dynamic = "force-dynamic"
 
 export async function POST(request: Request) {
   try {
-    // Parse the request body with error handling
-    let requestData
-    try {
-      requestData = await request.json()
-    } catch (error) {
-      return NextResponse.json({ error: "Invalid JSON in request body" }, { status: 400 })
-    }
+    const requestData = await request.json()
+    const { tables } = requestData
 
-    // Validate the tables parameter
-    const { tables } = requestData || {}
-    if (!tables || !Array.isArray(tables) || tables.length === 0) {
-      return NextResponse.json({ error: "Tables array is required" }, { status: 400 })
+    if (!tables || !Array.isArray(tables)) {
+      return NextResponse.json({ error: "Invalid tables parameter" }, { status: 400 })
     }
-
-    console.log("Checking tables: ", tables)
 
     const supabase = createRouteHandlerClient({ cookies })
 
@@ -32,7 +23,7 @@ export async function POST(request: Request) {
         // Use a simple query to check if the table exists
         const { error } = await supabase.from(tableName).select("*").limit(1)
 
-        if (error && (error.code === "PGRST116" || error.message?.includes("does not exist"))) {
+        if (error && error.code === "PGRST116") {
           // PGRST116 is the error code for "relation does not exist"
           missingTables.push(tableName)
         }
@@ -49,12 +40,6 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Error in direct-table-check:", error)
-    return NextResponse.json(
-      {
-        error: "Unknown error checking tables",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

@@ -66,52 +66,18 @@ export async function POST(request: NextRequest) {
       filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
     }
 
-    // Upload file to Supabase with retry logic
-    let uploadError = null
-    let retries = 3
-
-    while (retries > 0) {
-      try {
-        const { error } = await supabase.storage.from("media").upload(filePath, processedBuffer, {
-          contentType: contentType,
-          cacheControl: "3600",
-          upsert: false,
-        })
-
-        if (!error) {
-          uploadError = null
-          break
-        }
-
-        uploadError = error
-        console.warn(`Upload attempt failed (${retries} retries left):`, error.message)
-        retries--
-
-        if (retries > 0) {
-          // Wait before retrying (exponential backoff)
-          await new Promise((resolve) => setTimeout(resolve, (3 - retries) * 1000))
-        }
-      } catch (err) {
-        uploadError = err
-        console.warn(`Upload attempt exception (${retries} retries left):`, err)
-        retries--
-
-        if (retries > 0) {
-          // Wait before retrying (exponential backoff)
-          await new Promise((resolve) => setTimeout(resolve, (3 - retries) * 1000))
-        }
-      }
-    }
+    // Upload file to Supabase
+    const { error: uploadError, data: uploadData } = await supabase.storage
+      .from("media")
+      .upload(filePath, processedBuffer, {
+        contentType: contentType,
+        cacheControl: "3600",
+        upsert: false,
+      })
 
     if (uploadError) {
-      console.error("Supabase upload error after retries:", uploadError)
-      return NextResponse.json(
-        {
-          error: uploadError.message || "Failed to upload file after multiple attempts",
-          success: false,
-        },
-        { status: 500 },
-      )
+      console.error("Supabase upload error:", uploadError)
+      return NextResponse.json({ error: uploadError.message }, { status: 500 })
     }
 
     // Get public URL
@@ -125,64 +91,66 @@ export async function POST(request: NextRequest) {
       thumbnailUrl = publicUrl
     }
 
-    // Save to media table with retry logic
-    let dbError = null
-    retries = 3
+    // Check if media table exists before trying to insert
+    const { error: tableCheckError } = await supabase.from("media").select("id").limit(1).maybeSingle()
 
-    while (retries > 0) {
-      try {
-        const { error } = await supabase.from("media").insert({
-          filename: isConvertibleImage ? `${originalName}.webp` : file.name,
-          filepath: filePath,
-          filesize: processedBuffer.byteLength,
-          filetype: fileType,
-          public_url: publicUrl,
-          thumbnail_url: thumbnailUrl,
-          tags: [fileType],
-          metadata: {
-            contentType: contentType,
-            originalType: file.type,
-            originalName: file.name,
-            uploadedAt: new Date().toISOString(),
-            uploadedBy: "admin", // Since we're using the admin client
-            convertedToWebP: isConvertibleImage,
-          },
-        })
+    if (tableCheckError && tableCheckError.code === "PGRST116") {
+      // Table doesn't exist, create it
+      const { error: createTableError } = await supabase.rpc("exec_sql", {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS media (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            filesize BIGINT NOT NULL DEFAULT 0,
+            filetype TEXT NOT NULL,
+            public_url TEXT NOT NULL,
+            thumbnail_url TEXT,
+            tags TEXT[] DEFAULT '{}',
+            metadata JSONB DEFAULT '{}',
+            usage_locations JSONB DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+        `,
+      })
 
-        if (!error) {
-          dbError = null
-          break
-        }
-
-        dbError = error
-        console.warn(`Database insert attempt failed (${retries} retries left):`, error.message)
-        retries--
-
-        if (retries > 0) {
-          // Wait before retrying (exponential backoff)
-          await new Promise((resolve) => setTimeout(resolve, (3 - retries) * 1000))
-        }
-      } catch (err) {
-        dbError = err
-        console.warn(`Database insert exception (${retries} retries left):`, err)
-        retries--
-
-        if (retries > 0) {
-          // Wait before retrying (exponential backoff)
-          await new Promise((resolve) => setTimeout(resolve, (3 - retries) * 1000))
-        }
+      if (createTableError) {
+        console.error("Error creating media table:", createTableError)
+        // Continue anyway, as the upload was successful
       }
     }
 
+    // Save to media table
+    const { error: dbError } = await supabase.from("media").insert({
+      filename: isConvertibleImage ? `${originalName}.webp` : file.name,
+      filepath: filePath,
+      filesize: processedBuffer.byteLength,
+      filetype: fileType,
+      public_url: publicUrl,
+      thumbnail_url: thumbnailUrl,
+      tags: [fileType],
+      metadata: {
+        contentType: contentType,
+        originalType: file.type,
+        originalName: file.name,
+        uploadedAt: new Date().toISOString(),
+        uploadedBy: "admin", // Since we're using the admin client
+        convertedToWebP: isConvertibleImage,
+      },
+    })
+
     if (dbError) {
-      console.error("Database error after retries:", dbError)
-      return NextResponse.json(
-        {
-          error: dbError.message || "Failed to save file metadata after multiple attempts",
-          success: false,
-        },
-        { status: 500 },
-      )
+      console.error("Database error:", dbError)
+      // Return success anyway since the file was uploaded
+      return NextResponse.json({
+        success: true,
+        warning: "File uploaded but database entry failed: " + dbError.message,
+        filename: isConvertibleImage ? `${originalName}.webp` : file.name,
+        filepath: filePath,
+        filesize: processedBuffer.byteLength,
+        publicUrl,
+        convertedToWebP: isConvertibleImage,
+      })
     }
 
     return NextResponse.json({
@@ -196,10 +164,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Error processing upload:", error)
     return NextResponse.json(
-      {
-        error: `Failed to process upload: ${error instanceof Error ? error.message : String(error)}`,
-        success: false,
-      },
+      { error: `Failed to process upload: ${error instanceof Error ? error.message : String(error)}` },
       { status: 500 },
     )
   }

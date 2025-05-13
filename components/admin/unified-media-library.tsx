@@ -97,6 +97,15 @@ export default function UnifiedMediaLibrary() {
   const [editingTags, setEditingTags] = useState<string[]>([])
   const [imageLoadError, setImageLoadError] = useState<Record<string, boolean>>({})
 
+  const [checking, setChecking] = useState(false)
+  const [missingTables, setMissingTables] = useState<string[]>([])
+  const [selectedTables, setSelectedTables] = useState<string[]>([])
+  const [open, setOpen] = useState(false)
+  const [success, setSuccess] = useState<string | null>(null)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const [isAdminPage, setIsAdminPage] = useState(true)
+  const [onSetupComplete, setOnSetupComplete] = useState<(() => void) | null>(null)
+
   useEffect(() => {
     fetchMedia()
   }, [])
@@ -111,26 +120,129 @@ export default function UnifiedMediaLibrary() {
     }
   }, [uploadQueue, isProcessingQueue])
 
+  const checkTables = async (shouldOpenPopup = true) => {
+    if (checking) return // Prevent multiple simultaneous checks
+
+    setChecking(true)
+    // Don't show error during background checks
+    if (shouldOpenPopup) {
+      setError(null)
+    }
+    setLastRefreshTime(new Date())
+
+    try {
+      // Simplified table check - just check if media table exists
+      const { data, error } = await supabase.from("media").select("id").limit(1).maybeSingle()
+
+      // If we get a PGRST116 error, the table doesn't exist
+      if (error && error.code === "PGRST116") {
+        setMissingTables(["media"])
+        setSelectedTables(["media"])
+
+        if (isAdminPage && shouldOpenPopup) {
+          setOpen(true)
+        }
+        return
+      }
+
+      // If we get here, the table exists
+      setMissingTables([])
+      setSelectedTables([])
+
+      if (open) {
+        setSuccess("All required tables exist!")
+        setTimeout(() => {
+          setOpen(false)
+          if (onSetupComplete) {
+            onSetupComplete()
+          }
+        }, 1500)
+      } else if (onSetupComplete) {
+        onSetupComplete()
+      }
+    } catch (error) {
+      console.error("Error checking tables:", error)
+      // Only show errors for user-initiated checks
+      if (shouldOpenPopup) {
+        setError("Failed to check database tables. Please try again.")
+      }
+    } finally {
+      setChecking(false)
+    }
+  }
+
   const setupDatabase = async () => {
     setSetupInProgress(true)
     setError(null)
 
     try {
-      // First try the comprehensive setup
-      const setupResponse = await fetch("/api/setup-all")
+      // Create the media table directly
+      const { error } = await supabase.rpc("exec_sql", {
+        sql_query: `
+          CREATE TABLE IF NOT EXISTS media (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            filesize BIGINT NOT NULL DEFAULT 0,
+            filetype TEXT NOT NULL,
+            public_url TEXT NOT NULL,
+            thumbnail_url TEXT,
+            tags TEXT[] DEFAULT '{}',
+            metadata JSONB DEFAULT '{}',
+            usage_locations JSONB DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          
+          -- Add RLS policies
+          ALTER TABLE media ENABLE ROW LEVEL SECURITY;
+          
+          -- Allow public read access
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_policies WHERE tablename = 'media' AND policyname = 'public_read_media'
+            ) THEN
+              CREATE POLICY "public_read_media"
+              ON media
+              FOR SELECT
+              TO public
+              USING (true);
+            END IF;
+          EXCEPTION WHEN OTHERS THEN
+            -- Policy already exists or other error
+          END $$;
+          
+          -- Allow authenticated users with admin role to manage media
+          DO $$
+          BEGIN
+            IF NOT EXISTS (
+              SELECT 1 FROM pg_policies WHERE tablename = 'media' AND policyname = 'admins_manage_media'
+            ) THEN
+              CREATE POLICY "admins_manage_media"
+              ON media
+              FOR ALL
+              TO authenticated
+              USING (
+                EXISTS (
+                  SELECT 1 FROM user_roles
+                  WHERE user_id = auth.uid() 
+                  AND role = 'admin'
+                )
+              );
+            END IF;
+          EXCEPTION WHEN OTHERS THEN
+            -- Policy already exists or other error
+          END $$;
+        `,
+      })
 
-      if (!setupResponse.ok) {
-        // If that fails, try the specific media table setup
-        const mediaSetupResponse = await fetch("/api/setup-media-table")
-
-        if (!mediaSetupResponse.ok) {
-          throw new Error("Failed to set up media table")
-        }
+      if (error) {
+        throw new Error(`Failed to create media table: ${error.message}`)
       }
 
       toast({
         title: "Setup complete",
-        description: "Database tables have been created successfully",
+        description: "Media table has been created successfully",
       })
 
       // Refresh media after setup
@@ -148,7 +260,6 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
-  // Update the fetchMedia function to better handle network errors
   const fetchMedia = async () => {
     setLoading(true)
     setError(null)
@@ -156,53 +267,35 @@ export default function UnifiedMediaLibrary() {
     try {
       console.log("Fetching media from database...")
 
-      // Set up timeout handling
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 10000) // 10 second timeout
+      // Use direct query instead of RPC
+      const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
 
-      try {
-        // Use direct query instead of RPC
-        const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
-
-        clearTimeout(timeoutId)
-
-        if (error) {
-          if (error.code === "42P01") {
-            setError("Media table does not exist. Please set up the database.")
-            return
-          }
-          throw error
+      if (error) {
+        if (error.code === "42P01") {
+          setError("Media table does not exist. Please set up the database.")
+          return
         }
-
-        console.log("Media items fetched:", data?.length || 0)
-        setMediaItems(data || [])
-
-        // Extract all unique tags
-        const tags = new Set<string>()
-        data?.forEach((item) => {
-          if (item.tags) {
-            item.tags.forEach((tag: string) => tags.add(tag))
-          }
-        })
-
-        setAllTags(Array.from(tags))
-
-        // Reset image load errors
-        setImageLoadError({})
-      } catch (fetchError) {
-        clearTimeout(timeoutId)
-        console.error("Fetch error getting media:", fetchError)
-
-        // Handle AbortError specifically
-        if (fetchError.name === "AbortError") {
-          throw new Error("Request timed out. Server may be busy.")
-        }
-
-        throw fetchError
+        throw error
       }
+
+      console.log("Media items fetched:", data?.length || 0)
+      setMediaItems(data || [])
+
+      // Extract all unique tags
+      const tags = new Set<string>()
+      data?.forEach((item) => {
+        if (item.tags) {
+          item.tags.forEach((tag: string) => tags.add(tag))
+        }
+      })
+
+      setAllTags(Array.from(tags))
+
+      // Reset image load errors
+      setImageLoadError({})
     } catch (error) {
       console.error("Error fetching media:", error)
-      setError(`Failed to load media library: ${error.message || "Unknown error"}`)
+      setError("Failed to load media library. Please check console for details.")
       toast({
         title: "Error",
         description: "Failed to load media library",
@@ -213,7 +306,6 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
-  // Update the handleFileUpload function to better handle network errors
   const handleFileUpload = async (files: File[]) => {
     if (files.length === 0) return
 
@@ -227,56 +319,33 @@ export default function UnifiedMediaLibrary() {
         const formData = new FormData()
         formData.append("file", file)
 
-        // Set up timeout handling
+        // Upload the file directly with timeout
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout for uploads
+        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
 
-        try {
-          // Upload the file directly
-          const response = await fetch("/api/bulk-upload", {
-            method: "POST",
-            body: formData,
-            signal: controller.signal,
-          })
+        const response = await fetch("/api/bulk-upload", {
+          method: "POST",
+          body: formData,
+          signal: controller.signal,
+        })
 
-          clearTimeout(timeoutId)
+        clearTimeout(timeoutId)
 
-          if (!response.ok) {
-            const errorText = await response.text()
-            console.error("Error response from upload:", errorText)
-            throw new Error(`Server error: ${response.status}`)
-          }
-
-          let result
-          try {
-            result = await response.json()
-          } catch (parseError) {
-            console.error("Error parsing JSON response:", parseError)
-            throw new Error("Failed to parse server response")
-          }
-
-          if (!result.success) {
-            throw new Error(result.error || "Unknown error during upload")
-          }
-
-          toast({
-            title: "Success",
-            description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
-          })
-
-          // Refresh the media list
-          fetchMedia()
-        } catch (fetchError) {
-          clearTimeout(timeoutId)
-          console.error("Fetch error uploading file:", fetchError)
-
-          // Handle AbortError specifically
-          if (fetchError.name === "AbortError") {
-            throw new Error("Upload timed out. The file may be too large or the server is busy.")
-          }
-
-          throw fetchError
+        if (!response.ok) {
+          const result = await response.text()
+          console.error("Upload error response:", result)
+          throw new Error("Failed to upload file: " + (result || response.statusText))
         }
+
+        const result = await response.json()
+
+        toast({
+          title: "Success",
+          description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
+        })
+
+        // Refresh the media list
+        fetchMedia()
       } catch (error) {
         console.error("Error uploading file:", error)
         toast({
@@ -288,7 +357,7 @@ export default function UnifiedMediaLibrary() {
         setUploadingFile(false)
       }
     } else {
-      // Multiple files upload
+      // Multiple files upload - similar changes as above
       const newUploads: UploadStatus[] = Array.from(files).map((file) => ({
         file,
         status: "pending",
@@ -351,15 +420,14 @@ export default function UnifiedMediaLibrary() {
     }
   }, [])
 
-  // Update the processBulkUpload function to better handle network errors
   const processBulkUpload = async () => {
     if (isProcessingQueue || uploadQueue.length === 0) return
 
     console.log("Starting bulk upload process")
     setIsProcessingQueue(true)
 
-    // Process files in parallel with a limit (2 at a time instead of 3)
-    const batchSize = 2
+    // Process files in parallel with a limit (3 at a time)
+    const batchSize = 3
     const pendingUploads = uploadQueue.filter((item) => item.status === "pending")
 
     for (let i = 0; i < pendingUploads.length; i += batchSize) {
@@ -404,70 +472,38 @@ export default function UnifiedMediaLibrary() {
               })
             }, 800)
 
-            // Set up timeout handling
-            const controller = new AbortController()
-            const timeoutId = setTimeout(() => controller.abort(), 60000) // 60 second timeout for uploads
+            const response = await fetch("/api/bulk-upload", {
+              method: "POST",
+              body: formData,
+            })
 
-            try {
-              const response = await fetch("/api/bulk-upload", {
-                method: "POST",
-                body: formData,
-                signal: controller.signal,
-              })
+            // Clear the interval
+            clearInterval(progressUpdater)
 
-              clearTimeout(timeoutId)
+            // Update progress to 95%
+            setUploadQueue((prev) => {
+              const updated = [...prev]
+              updated[queueIndex] = { ...updated[queueIndex], progress: 95 }
+              return updated
+            })
 
-              // Clear the interval
-              clearInterval(progressUpdater)
+            const result = await response.json()
 
-              // Update progress to 95%
-              setUploadQueue((prev) => {
-                const updated = [...prev]
-                updated[queueIndex] = { ...updated[queueIndex], progress: 95 }
-                return updated
-              })
-
-              if (!response.ok) {
-                const errorText = await response.text()
-                console.error("Error response from upload:", errorText)
-                throw new Error(`Server error: ${response.status}`)
-              }
-
-              let result
-              try {
-                result = await response.json()
-              } catch (parseError) {
-                console.error("Error parsing JSON response:", parseError)
-                throw new Error("Failed to parse server response")
-              }
-
-              if (!result.success) {
-                throw new Error(result.error || "Upload failed")
-              }
-
-              // Success
-              setUploadQueue((prev) => {
-                const updated = [...prev]
-                updated[queueIndex] = {
-                  ...updated[queueIndex],
-                  status: "success",
-                  progress: 100,
-                  response: result,
-                }
-                return updated
-              })
-            } catch (fetchError) {
-              clearTimeout(timeoutId)
-              clearInterval(progressUpdater)
-              console.error("Fetch error uploading file:", fetchError)
-
-              // Handle AbortError specifically
-              if (fetchError.name === "AbortError") {
-                throw new Error("Upload timed out. The file may be too large or the server is busy.")
-              }
-
-              throw fetchError
+            if (!response.ok) {
+              throw new Error(result.error || "Upload failed")
             }
+
+            // Success
+            setUploadQueue((prev) => {
+              const updated = [...prev]
+              updated[queueIndex] = {
+                ...updated[queueIndex],
+                status: "success",
+                progress: 100,
+                response: result,
+              }
+              return updated
+            })
           } catch (error) {
             // Exception
             setUploadQueue((prev) => {

@@ -27,7 +27,7 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
         const controller = new AbortController()
         const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
 
-        const response = await fetch("/api/check-table?table=projects", {
+        const response = await fetch("/api/check-table", {
           signal: controller.signal,
         }).catch((err) => {
           // Handle network errors explicitly
@@ -48,7 +48,7 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
 
         const data = await response.json()
 
-        if (data?.exists) {
+        if (data?.success) {
           setIsDatabaseSetup(true)
         }
       } catch (err) {

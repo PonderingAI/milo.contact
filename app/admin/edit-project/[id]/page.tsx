@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, Trash2, Plus, X, Edit, Eye, EyeOff, Clock } from "lucide-react"
+import { Loader2, ArrowLeft, Save, Trash2, Plus, X, Edit } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -13,9 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { mockProjects } from "@/lib/project-data"
 import ImageUploader from "@/components/admin/image-uploader"
 import Link from "next/link"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent } from "@/components/ui/card"
 
 interface BtsImage {
   id?: string
@@ -40,11 +37,6 @@ export default function EditProjectPage() {
   const [showAddBtsForm, setShowAddBtsForm] = useState(false)
   const [editingBtsId, setEditingBtsId] = useState<string | null>(null)
 
-  // Visibility state
-  const [visibilityType, setVisibilityType] = useState<"public" | "private" | "scheduled">("public")
-  const [scheduledDate, setScheduledDate] = useState<string>("")
-  const [scheduledTime, setScheduledTime] = useState<string>("12:00")
-
   // New BTS image form state
   const [newBtsImage, setNewBtsImage] = useState<BtsImage>({
     project_id: id,
@@ -64,9 +56,6 @@ export default function EditProjectPage() {
     video_url: "",
     description: "",
     special_notes: "",
-    project_date: "",
-    published: true,
-    scheduled_publish_date: null as string | null,
   })
 
   useEffect(() => {
@@ -93,9 +82,6 @@ export default function EditProjectPage() {
               video_url: mockProject.video_url || "",
               description: mockProject.description || "",
               special_notes: mockProject.special_notes || "",
-              project_date: mockProject.project_date || "",
-              published: true,
-              scheduled_publish_date: null,
             })
 
             // Get mock BTS images
@@ -127,24 +113,7 @@ export default function EditProjectPage() {
             video_url: data.video_url || "",
             description: data.description || "",
             special_notes: data.special_notes || "",
-            project_date: data.project_date || "",
-            published: data.published !== false, // Default to true if not set
-            scheduled_publish_date: data.scheduled_publish_date || null,
           })
-
-          // Set visibility type based on project data
-          if (data.published === false) {
-            if (data.scheduled_publish_date) {
-              setVisibilityType("scheduled")
-              const date = new Date(data.scheduled_publish_date)
-              setScheduledDate(date.toISOString().split("T")[0])
-              setScheduledTime(date.toTimeString().substring(0, 5))
-            } else {
-              setVisibilityType("private")
-            }
-          } else {
-            setVisibilityType("public")
-          }
 
           try {
             // Fetch BTS images
@@ -177,33 +146,6 @@ export default function EditProjectPage() {
     }
   }, [id, supabase])
 
-  // Update form data when visibility type changes
-  useEffect(() => {
-    if (visibilityType === "public") {
-      setFormData((prev) => ({
-        ...prev,
-        published: true,
-        scheduled_publish_date: null,
-      }))
-    } else if (visibilityType === "private") {
-      setFormData((prev) => ({
-        ...prev,
-        published: false,
-        scheduled_publish_date: null,
-      }))
-    } else if (visibilityType === "scheduled") {
-      // Only update if we have a valid date and time
-      if (scheduledDate) {
-        const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}:00`)
-        setFormData((prev) => ({
-          ...prev,
-          published: false,
-          scheduled_publish_date: scheduledDateTime.toISOString(),
-        }))
-      }
-    }
-  }, [visibilityType, scheduledDate, scheduledTime])
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -233,22 +175,6 @@ export default function EditProjectPage() {
         setError("Image is required")
         setSaving(false)
         return
-      }
-
-      // Validate scheduled date if using scheduled visibility
-      if (visibilityType === "scheduled") {
-        if (!scheduledDate) {
-          setError("Please select a publication date")
-          setSaving(false)
-          return
-        }
-
-        const scheduledDateTime = new Date(`${scheduledDate}T${scheduledTime}:00`)
-        if (isNaN(scheduledDateTime.getTime())) {
-          setError("Invalid publication date or time")
-          setSaving(false)
-          return
-        }
       }
 
       // Update in Supabase
@@ -418,9 +344,6 @@ export default function EditProjectPage() {
     setBtsImages((images) => images.map((img) => (img.id === id ? { ...img, [field]: value } : img)))
   }
 
-  // Get min date for scheduled publishing (today)
-  const today = new Date().toISOString().split("T")[0]
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -541,88 +464,7 @@ export default function EditProjectPage() {
               />
               <p className="text-xs text-gray-500 mt-1">Supports YouTube and Vimeo links</p>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-400 mb-1">Project Date</label>
-              <Input
-                type="date"
-                name="project_date"
-                value={formData.project_date}
-                onChange={handleChange}
-                placeholder="Project date"
-              />
-            </div>
           </div>
-        </div>
-
-        {/* Visibility section */}
-        <div className="mb-12">
-          <h2 className="text-xl font-medium mb-4">Visibility</h2>
-          <Card>
-            <CardContent className="pt-6">
-              <RadioGroup
-                value={visibilityType}
-                onValueChange={(value) => setVisibilityType(value as "public" | "private" | "scheduled")}
-                className="space-y-3"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="public" id="visibility-public" />
-                  <Label htmlFor="visibility-public" className="flex items-center cursor-pointer">
-                    <Eye className="h-4 w-4 mr-2 text-green-500" />
-                    <span>Public (visible to everyone)</span>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="private" id="visibility-private" />
-                  <Label htmlFor="visibility-private" className="flex items-center cursor-pointer">
-                    <EyeOff className="h-4 w-4 mr-2 text-red-500" />
-                    <span>Private (only visible to admins)</span>
-                  </Label>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="scheduled" id="visibility-scheduled" />
-                  <Label htmlFor="visibility-scheduled" className="flex items-center cursor-pointer">
-                    <Clock className="h-4 w-4 mr-2 text-blue-500" />
-                    <span>Scheduled publication</span>
-                  </Label>
-                </div>
-              </RadioGroup>
-
-              {visibilityType === "scheduled" && (
-                <div className="pt-4 mt-4 border-t border-gray-800">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Publication Date</label>
-                      <Input
-                        type="date"
-                        value={scheduledDate}
-                        onChange={(e) => setScheduledDate(e.target.value)}
-                        min={today}
-                        className="border-gray-700"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-400 mb-1">Publication Time</label>
-                      <Input
-                        type="time"
-                        value={scheduledTime}
-                        onChange={(e) => setScheduledTime(e.target.value)}
-                        className="border-gray-700"
-                      />
-                    </div>
-                  </div>
-
-                  {scheduledDate && scheduledTime && (
-                    <div className="mt-2 text-xs text-gray-400">
-                      Project will be published on {new Date(`${scheduledDate}T${scheduledTime}:00`).toLocaleString()}
-                    </div>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
         </div>
 
         {/* Cover image */}
