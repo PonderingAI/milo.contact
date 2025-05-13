@@ -44,10 +44,80 @@ export const DATABASE_TABLES: TableDefinition[] = [
     name: "projects",
     displayName: "Projects",
     description: "Stores project information and metadata",
-    category: "content",
-    required: false,
+    sql: `
+CREATE TABLE IF NOT EXISTS projects (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  title TEXT NOT NULL,
+  description TEXT,
+  content TEXT,
+  image TEXT,
+  thumbnail_url TEXT,
+  category TEXT,
+  type TEXT,
+  role TEXT,
+  date DATE,
+  project_date DATE,
+  client TEXT,
+  url TEXT,
+  featured BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Add project_date column if it doesn't exist (for existing tables)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'projects' AND column_name = 'project_date'
+  ) THEN
+    ALTER TABLE projects ADD COLUMN project_date DATE;
+  END IF;
+END $$;
+
+-- Add RLS policies
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'projects' AND policyname = 'public_read_projects'
+  ) THEN
+    CREATE POLICY "public_read_projects"
+    ON projects
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage projects
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'projects' AND policyname = 'admins_manage_projects'
+  ) THEN
+    CREATE POLICY "admins_manage_projects"
+    ON projects
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;`,
     dependencies: ["user_roles"],
-    sqlFile: "docs/setup/content-tables.sql",
+    required: false,
+    category: "content",
   },
   {
     name: "bts_images",

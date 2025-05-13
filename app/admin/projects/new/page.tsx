@@ -5,7 +5,7 @@ import type React from "react"
 import { useState, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, ArrowRight } from "lucide-react"
+import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, ArrowRight, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -30,13 +30,16 @@ export default function NewProjectPage() {
   // Form state
   const [formData, setFormData] = useState({
     title: "",
-    category: "",
-    type: "directed",
-    role: "",
-    image: "",
-    video_url: "",
     description: "",
-    special_notes: "",
+    content: "",
+    category: "",
+    type: "",
+    role: "",
+    date: "",
+    project_date: new Date().toISOString().split("T")[0], // Default to today
+    client: "",
+    url: "",
+    featured: false,
   })
 
   // Media state
@@ -44,6 +47,55 @@ export default function NewProjectPage() {
   const [btsVideos, setBtsVideos] = useState<string[]>([])
   const [mainImages, setMainImages] = useState<string[]>([])
   const [mainVideos, setMainVideos] = useState<string[]>([])
+
+  // Helper function to format date for input field
+  function formatDateForInput(date: Date): string {
+    return date.toISOString().split("T")[0]
+  }
+
+  // Helper function to extract date from file metadata
+  async function extractDateFromMedia(url: string, type: "image" | "video"): Promise<Date | null> {
+    try {
+      if (type === "video") {
+        const videoInfo = extractVideoInfo(url)
+        if (!videoInfo) return null
+
+        if (videoInfo.platform === "vimeo") {
+          // Get video metadata from Vimeo
+          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+          if (response.ok) {
+            const videoData = await response.json()
+            const video = videoData[0]
+            if (video.upload_date) {
+              return new Date(video.upload_date)
+            }
+          }
+        } else if (videoInfo.platform === "youtube") {
+          // YouTube doesn't provide easy access to upload date via API without a key
+          // We could potentially fetch the page and parse it, but that's complex
+          return null
+        }
+      } else if (type === "image") {
+        // For images in Supabase, check if we have metadata
+        const { data } = await supabase.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
+
+        if (data) {
+          // Try to get date from metadata
+          if (data.metadata && data.metadata.dateTaken) {
+            return new Date(data.metadata.dateTaken)
+          }
+          // Fall back to created_at
+          if (data.created_at) {
+            return new Date(data.created_at)
+          }
+        }
+      }
+      return null
+    } catch (error) {
+      console.error("Error extracting date from media:", error)
+      return null
+    }
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -55,12 +107,12 @@ export default function NewProjectPage() {
   }
 
   // Handler for main media selection
-  const handleMainMediaSelect = (url: string | string[]) => {
+  const handleMainMediaSelect = async (url: string | string[]) => {
     // Handle both single and multiple selections
     const urls = Array.isArray(url) ? url : [url]
 
-    urls.forEach((mediaUrl) => {
-      if (!mediaUrl) return
+    for (const mediaUrl of urls) {
+      if (!mediaUrl) continue
 
       // Determine if it's an image or video based on extension or URL
       const isVideo =
@@ -76,6 +128,14 @@ export default function NewProjectPage() {
         // Set as main video if none is set
         if (!formData.video_url) {
           setFormData((prev) => ({ ...prev, video_url: mediaUrl }))
+
+          // Try to extract date if project_date is empty
+          if (!formData.project_date) {
+            const date = await extractDateFromMedia(mediaUrl, "video")
+            if (date) {
+              setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+            }
+          }
         }
       } else {
         if (!mainImages.includes(mediaUrl)) {
@@ -84,6 +144,14 @@ export default function NewProjectPage() {
         // Set as cover image if none is set
         if (!formData.image) {
           setFormData((prev) => ({ ...prev, image: mediaUrl }))
+
+          // Try to extract date if project_date is empty
+          if (!formData.project_date) {
+            const date = await extractDateFromMedia(mediaUrl, "image")
+            if (date) {
+              setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+            }
+          }
         }
       }
 
@@ -98,7 +166,7 @@ export default function NewProjectPage() {
           setFormData((prev) => ({ ...prev, title }))
         }
       }
-    })
+    }
   }
 
   // Handler for BTS media selection
@@ -194,6 +262,7 @@ export default function NewProjectPage() {
       // Add to media library
       let thumbnailUrl = null
       let videoTitle = null
+      let uploadDate = null
 
       if (videoInfo.platform === "vimeo") {
         // Get video thumbnail and metadata from Vimeo
@@ -203,10 +272,16 @@ export default function NewProjectPage() {
           const video = videoData[0]
           thumbnailUrl = video.thumbnail_large
           videoTitle = video.title || `Vimeo ${videoInfo.id}`
+          uploadDate = video.upload_date ? new Date(video.upload_date) : null
 
           // If project title is empty, use video title
           if (!formData.title && videoTitle) {
             setFormData((prev) => ({ ...prev, title: videoTitle }))
+          }
+
+          // If project date is empty and we have an upload date, use it
+          if (!formData.project_date && uploadDate) {
+            setFormData((prev) => ({ ...prev, project_date: formatDateForInput(uploadDate) }))
           }
         }
       } else if (videoInfo.platform === "youtube") {
@@ -247,6 +322,7 @@ export default function NewProjectPage() {
         metadata: {
           [videoInfo.platform + "Id"]: videoInfo.id,
           uploadedBy: userId,
+          uploadDate: uploadDate ? uploadDate.toISOString() : null,
         },
       })
 
@@ -293,6 +369,7 @@ export default function NewProjectPage() {
 
       let thumbnailUrl = null
       let videoTitle = null
+      let uploadDate = null
 
       if (videoInfo.platform === "vimeo") {
         // Get video thumbnail and metadata from Vimeo
@@ -302,6 +379,7 @@ export default function NewProjectPage() {
           const video = videoData[0]
           thumbnailUrl = video.thumbnail_large
           videoTitle = video.title || `Vimeo ${videoInfo.id}`
+          uploadDate = video.upload_date ? new Date(video.upload_date) : null
         }
       } else if (videoInfo.platform === "youtube") {
         thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
@@ -319,6 +397,7 @@ export default function NewProjectPage() {
           [videoInfo.platform + "Id"]: videoInfo.id,
           uploadedBy: userId,
           isBts: true,
+          uploadDate: uploadDate ? uploadDate.toISOString() : null,
         },
       })
 
@@ -341,12 +420,59 @@ export default function NewProjectPage() {
     }
   }
 
+  const extractDateFromFile = async (file) => {
+    if (!file || formData.project_date) return // Don't override if date is already set
+
+    try {
+      // For images, try to extract EXIF data
+      if (file.type.startsWith("image/")) {
+        // This is a simple approach - in a production app, you might want to use a library like exif-js
+        const reader = new FileReader()
+        reader.onload = (e) => {
+          // For now, we'll just use the file's last modified date as a fallback
+          if (file.lastModified) {
+            const fileDate = new Date(file.lastModified)
+            setFormData((prev) => ({
+              ...prev,
+              project_date: fileDate.toISOString().split("T")[0],
+            }))
+          }
+        }
+        reader.readAsArrayBuffer(file)
+      }
+      // For videos, use the file's last modified date
+      else if (file.type.startsWith("video/")) {
+        if (file.lastModified) {
+          const fileDate = new Date(file.lastModified)
+          setFormData((prev) => ({
+            ...prev,
+            project_date: fileDate.toISOString().split("T")[0],
+          }))
+        }
+      }
+    } catch (error) {
+      console.error("Error extracting date from file:", error)
+    }
+  }
+
   const handleFileUpload = async (files: FileList, target: "main" | "bts") => {
     if (!files || files.length === 0) return
 
     try {
       for (let i = 0; i < files.length; i++) {
         const file = files[i]
+
+        // Try to extract date from file metadata
+        let fileDate = null
+        if (file.type.startsWith("image/") && !formData.project_date) {
+          try {
+            // This is a simplified approach - in a real app, you'd use a library like exif-js
+            // to properly extract EXIF data including the date the photo was taken
+            fileDate = file.lastModified ? new Date(file.lastModified) : null
+          } catch (err) {
+            console.error("Error extracting date from file:", err)
+          }
+        }
 
         // Create a FormData object
         const formData = new FormData()
@@ -375,11 +501,21 @@ export default function NewProjectPage() {
                 if (!formData.image) {
                   setFormData((prev) => ({ ...prev, image: result.publicUrl }))
                 }
+
+                // Set project date from file date if available and project_date is empty
+                if (fileDate && !formData.project_date) {
+                  setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
+                }
               }
             } else if (file.type.startsWith("video/")) {
               if (!mainVideos.includes(result.publicUrl)) {
                 setMainVideos((prev) => [...prev, result.publicUrl])
                 setFormData((prev) => ({ ...prev, video_url: result.publicUrl }))
+
+                // Set project date from file date if available and project_date is empty
+                if (fileDate && !formData.project_date) {
+                  setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
+                }
               }
             }
           } else {
@@ -701,6 +837,20 @@ export default function NewProjectPage() {
                       <SelectItem value="photography">Photography</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Date</label>
+                  <div className="relative">
+                    <Input
+                      type="date"
+                      name="project_date"
+                      value={formData.project_date}
+                      onChange={handleChange}
+                      className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
+                    />
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  </div>
                 </div>
               </CardContent>
             </Card>

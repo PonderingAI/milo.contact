@@ -211,12 +211,24 @@ CREATE TABLE IF NOT EXISTS projects (
   type TEXT,
   role TEXT,
   date DATE,
+  project_date DATE,
   client TEXT,
   url TEXT,
   featured BOOLEAN DEFAULT false,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Add project_date column if it doesn't exist (for existing tables)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'projects' AND column_name = 'project_date'
+  ) THEN
+    ALTER TABLE projects ADD COLUMN project_date DATE;
+  END IF;
+END $$;
 
 -- Add RLS policies
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
