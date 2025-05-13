@@ -131,11 +131,12 @@ export default function UnifiedMediaLibrary() {
     setLastRefreshTime(new Date())
 
     try {
-      // Simplified table check - just check if media table exists
+      // Use direct Supabase query instead of fetch API
       const { data, error } = await supabase.from("media").select("id").limit(1).maybeSingle()
 
       // If we get a PGRST116 error, the table doesn't exist
       if (error && error.code === "PGRST116") {
+        console.log("Media table doesn't exist")
         setMissingTables(["media"])
         setSelectedTables(["media"])
 
@@ -146,6 +147,7 @@ export default function UnifiedMediaLibrary() {
       }
 
       // If we get here, the table exists
+      console.log("Media table exists")
       setMissingTables([])
       setSelectedTables([])
 
@@ -176,9 +178,21 @@ export default function UnifiedMediaLibrary() {
     setError(null)
 
     try {
-      // Create the media table directly
-      const { error } = await supabase.rpc("exec_sql", {
-        sql_query: `
+      // First try to use the dedicated API endpoint
+      const response = await fetch("/api/setup-media-table", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+      })
+
+      if (!response.ok) {
+        // If that fails, try using direct Supabase RPC
+        console.log("API endpoint failed, trying direct Supabase RPC")
+
+        // Create the media table directly
+        const { error } = await supabase.rpc("exec_sql", {
+          sql_query: `
           CREATE TABLE IF NOT EXISTS media (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             filename TEXT NOT NULL,
@@ -234,10 +248,11 @@ export default function UnifiedMediaLibrary() {
             -- Policy already exists or other error
           END $$;
         `,
-      })
+        })
 
-      if (error) {
-        throw new Error(`Failed to create media table: ${error.message}`)
+        if (error) {
+          throw new Error(`Failed to create media table: ${error.message}`)
+        }
       }
 
       toast({
@@ -267,14 +282,20 @@ export default function UnifiedMediaLibrary() {
     try {
       console.log("Fetching media from database...")
 
-      // Use direct query instead of RPC
+      // First check if the media table exists
+      const { data: checkData, error: checkError } = await supabase.from("media").select("id").limit(1).maybeSingle()
+
+      // If the table doesn't exist, show setup option
+      if (checkError && checkError.code === "PGRST116") {
+        setError("Media table does not exist. Please set up the database.")
+        setMediaItems([])
+        return
+      }
+
+      // Use direct query to get media items
       const { data, error } = await supabase.from("media").select("*").order("created_at", { ascending: false })
 
       if (error) {
-        if (error.code === "42P01") {
-          setError("Media table does not exist. Please set up the database.")
-          return
-        }
         throw error
       }
 
@@ -308,6 +329,19 @@ export default function UnifiedMediaLibrary() {
 
   const handleFileUpload = async (files: File[]) => {
     if (files.length === 0) return
+
+    // First check if the media table exists
+    try {
+      const { data, error } = await supabase.from("media").select("id").limit(1).maybeSingle()
+
+      // If the table doesn't exist, set it up automatically
+      if (error && error.code === "PGRST116") {
+        await setupDatabase()
+      }
+    } catch (err) {
+      console.warn("Error checking media table:", err)
+      // Continue anyway, the upload might still work
+    }
 
     if (files.length === 1) {
       // Single file upload

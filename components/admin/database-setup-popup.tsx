@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, Copy, Check, Database, RefreshCw, X, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/use-toast"
+import { getSupabaseBrowserClient } from "@/lib/supabase/supabase-browser"
 
 // Define the table configuration type
 interface TableConfig {
@@ -66,6 +67,7 @@ export function DatabaseSetupPopup({
   const [isAdminPage, setIsAdminPage] = useState(false)
   const [generatedSQL, setGeneratedSQL] = useState<string>("")
   const [initialCheckDone, setInitialCheckDone] = useState(false)
+  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
 
   // Use a ref to prevent multiple simultaneous checks
   const isCheckingRef = useRef(false)
@@ -873,6 +875,8 @@ ON user_widgets(position);`,
     },
   ]
 
+  const requiredTables = allTables.filter((table) => table.required).map((table) => table.name)
+
   // Check if we're on an admin page
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -963,124 +967,61 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
   }, [selectedTables, tablesToDelete, generateSQL])
 
   // Function to check if tables exist - using our direct-table-check API
-  const checkTables = useCallback(async () => {
-    // Prevent multiple simultaneous checks
-    if (isCheckingRef.current) return
-    isCheckingRef.current = true
-
-    if (forceClose || setupCompleted || (adminOnly && !isAdminPage)) {
-      isCheckingRef.current = false
-      return
-    }
+  const checkTables = async (shouldOpenPopup = true) => {
+    if (checking) return // Prevent multiple simultaneous checks
 
     setChecking(true)
     setError(null)
+    setLastRefreshTime(new Date())
 
     try {
-      // Get all table names to check
-      const allTableNames = allTables.map((table) => table.name)
+      // Use direct Supabase query to check tables
+      const supabase = getSupabaseBrowserClient()
+      const missingTablesList: string[] = []
 
-      console.log("Checking tables:", allTableNames)
+      // Check each required table
+      for (const table of requiredTables) {
+        try {
+          const { data, error } = await supabase.from(table).select("id").limit(1).maybeSingle()
 
-      // Try to check tables using our API
-      const response = await fetch("/api/direct-table-check", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          tables: allTableNames,
-        }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || `HTTP error! status: ${response.status}`)
-      }
-
-      const data = await response.json()
-
-      if (!data.success) {
-        throw new Error(data.error || "Unknown error checking tables")
-      }
-
-      // data.missingTables contains the list of tables that don't exist
-      const missingTablesList = data.missingTables || []
-      const existingTablesList = data.existingTables || []
-
-      setMissingTables(missingTablesList)
-      setExistingTables(existingTablesList)
-
-      // Only set selected tables on initial load
-      if (!initialCheckDone) {
-        setSelectedTables(missingTablesList)
-        setInitialCheckDone(true)
-      }
-
-      setTablesToDelete([]) // Reset tables to delete
-
-      console.log("Tables check result:", {
-        missing: missingTablesList,
-        existing: existingTablesList,
-      })
-
-      // Set the initial active tab based on what we found
-      if (!initialCheckDone) {
-        if (missingTables.length > 0) {
-          setActiveTab("create")
-        } else if (existingTables.length > 0) {
-          setActiveTab("manage")
+          // If we get a PGRST116 error, the table doesn't exist
+          if (error && error.code === "PGRST116") {
+            missingTablesList.push(table)
+          }
+        } catch (err) {
+          console.warn(`Error checking table ${table}:`, err)
+          // If we can't check, assume it's missing
+          missingTablesList.push(table)
         }
       }
 
-      // Only open the popup if there are missing tables and we're on an admin page
-      if (missingTablesList.length > 0 && (isAdminPage || isStationary)) {
-        setOpen(true)
-      } else if (!isStationary) {
-        setOpen(false)
-        setSetupCompleted(true)
-        if (onSetupComplete) {
+      setMissingTables(missingTablesList)
+      setSelectedTables(missingTablesList)
+
+      if (missingTablesList.length > 0) {
+        if (shouldOpenPopup) {
+          setOpen(true)
+        }
+      } else {
+        if (open) {
+          setSuccess("All required tables exist!")
+          setTimeout(() => {
+            setOpen(false)
+            if (onSetupComplete) {
+              onSetupComplete()
+            }
+          }, 1500)
+        } else if (onSetupComplete) {
           onSetupComplete()
         }
       }
     } catch (error) {
       console.error("Error checking tables:", error)
-      setError(
-        `Failed to check database tables: ${error instanceof Error ? error.message : "Unknown error"}. Please try again or use the Skip Setup button.`,
-      )
-
-      // If we can't check tables, don't show the popup on non-admin pages
-      if (!isAdminPage && adminOnly) {
-        setForceClose(true)
-      }
-
-      // In stationary mode, we still want to show the component even if there's an error
-      if (isStationary) {
-        // Show all tables as missing so the user can create them
-        const allTableNames = allTables.map((table) => table.name)
-        setMissingTables(allTableNames)
-        if (!initialCheckDone) {
-          setSelectedTables(allTableNames)
-          setInitialCheckDone(true)
-        }
-        setExistingTables([])
-        setOpen(true)
-      }
+      setError("Failed to check database tables. Please try again.")
     } finally {
       setChecking(false)
-      isCheckingRef.current = false
     }
-  }, [
-    forceClose,
-    setupCompleted,
-    onSetupComplete,
-    adminOnly,
-    isAdminPage,
-    allTables,
-    isStationary,
-    initialCheckDone,
-    missingTables.length,
-  ])
+  }
 
   // Function to copy SQL to clipboard
   const copyToClipboard = () => {
@@ -1216,6 +1157,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     // For stationary mode, always check tables
     if (isStationary && !initialCheckDone) {
       checkTables()
+      setInitialCheckDone(true)
       return
     }
 
@@ -1234,8 +1176,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     // Only run the check if we're on an admin page and adminOnly is true
     if ((!adminOnly || (adminOnly && isAdminPage)) && !initialCheckDone) {
       checkTables()
+      setInitialCheckDone(true)
     }
-  }, [checkTables, adminOnly, isAdminPage, isStationary, initialCheckDone])
+  }, [adminOnly, isAdminPage, isStationary, initialCheckDone, checkTables])
 
   // If force closed, setup completed, or not on admin page when adminOnly is true, don't render
   if (forceClose || (setupCompleted && !open && !isStationary) || (adminOnly && !isAdminPage && !isStationary)) {
@@ -1251,7 +1194,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             <Database className="h-5 w-5 mr-2" />
             <h2 className="text-xl font-semibold">{title}</h2>
           </div>
-          <Button variant="outline" size="sm" onClick={checkTables} disabled={checking}>
+          <Button variant="outline" size="sm" onClick={() => checkTables(false)} disabled={checking}>
             <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -1457,7 +1400,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">Missing Tables</h3>
-            <Button variant="outline" size="sm" onClick={checkTables} disabled={checking}>
+            <Button variant="outline" size="sm" onClick={() => checkTables(false)} disabled={checking}>
               <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
               Refresh
             </Button>

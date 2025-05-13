@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 interface DatabaseSetupAlertProps {
   isSetup: boolean
@@ -13,6 +14,7 @@ interface DatabaseSetupAlertProps {
 export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps) {
   const [dismissed, setDismissed] = useState(false)
   const [isDatabaseSetup, setIsDatabaseSetup] = useState(isSetup)
+  const [isChecking, setIsChecking] = useState(false)
 
   // Check local storage on mount to see if the alert has been dismissed
   useEffect(() => {
@@ -22,45 +24,36 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
 
   useEffect(() => {
     const checkTables = async () => {
+      if (isSetup || isChecking) return
+
+      setIsChecking(true)
+
       try {
-        // Add a timeout to the fetch request
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+        // Use Supabase client directly instead of fetch API
+        const supabase = getSupabaseBrowserClient()
 
-        const response = await fetch("/api/check-table", {
-          signal: controller.signal,
-        }).catch((err) => {
-          // Handle network errors explicitly
-          console.warn("Network error checking tables:", err)
-          // Return a fake response to continue execution
-          return {
-            ok: false,
-            json: async () => ({ success: false, message: "Network error" }),
-          }
-        })
+        // Try to query the projects table - if it exists, we consider the database set up
+        const { data, error } = await supabase.from("projects").select("id").limit(1).maybeSingle()
 
-        clearTimeout(timeoutId)
-
-        if (!response?.ok) {
-          console.warn("Error checking tables:", response)
-          return
-        }
-
-        const data = await response.json()
-
-        if (data?.success) {
+        // If there's no error, the table exists
+        if (!error) {
           setIsDatabaseSetup(true)
+          localStorage.setItem("dbSetupAlertDismissed", "true")
+          setDismissed(true)
         }
       } catch (err) {
-        console.warn("Error checking tables:", err)
-        // Handle error gracefully
+        // Silently handle errors - we'll just keep showing the alert
+        console.warn("Error checking database setup:", err)
+      } finally {
+        setIsChecking(false)
       }
     }
 
-    if (!isSetup) {
+    // Only check if not already set up and not dismissed
+    if (!isSetup && !dismissed) {
       checkTables()
     }
-  }, [isSetup])
+  }, [isSetup, dismissed])
 
   const handleDismiss = () => {
     localStorage.setItem("dbSetupAlertDismissed", "true")
