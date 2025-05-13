@@ -30,16 +30,14 @@ export default function NewProjectPage() {
   // Form state
   const [formData, setFormData] = useState({
     title: "",
-    description: "",
-    content: "",
     category: "",
-    type: "",
+    type: "directed",
     role: "",
-    date: "",
+    image: "",
+    video_url: "",
+    description: "",
+    special_notes: "",
     project_date: new Date().toISOString().split("T")[0], // Default to today
-    client: "",
-    url: "",
-    featured: false,
   })
 
   // Media state
@@ -420,41 +418,6 @@ export default function NewProjectPage() {
     }
   }
 
-  const extractDateFromFile = async (file) => {
-    if (!file || formData.project_date) return // Don't override if date is already set
-
-    try {
-      // For images, try to extract EXIF data
-      if (file.type.startsWith("image/")) {
-        // This is a simple approach - in a production app, you might want to use a library like exif-js
-        const reader = new FileReader()
-        reader.onload = (e) => {
-          // For now, we'll just use the file's last modified date as a fallback
-          if (file.lastModified) {
-            const fileDate = new Date(file.lastModified)
-            setFormData((prev) => ({
-              ...prev,
-              project_date: fileDate.toISOString().split("T")[0],
-            }))
-          }
-        }
-        reader.readAsArrayBuffer(file)
-      }
-      // For videos, use the file's last modified date
-      else if (file.type.startsWith("video/")) {
-        if (file.lastModified) {
-          const fileDate = new Date(file.lastModified)
-          setFormData((prev) => ({
-            ...prev,
-            project_date: fileDate.toISOString().split("T")[0],
-          }))
-        }
-      }
-    } catch (error) {
-      console.error("Error extracting date from file:", error)
-    }
-  }
-
   const handleFileUpload = async (files: FileList, target: "main" | "bts") => {
     if (!files || files.length === 0) return
 
@@ -475,13 +438,13 @@ export default function NewProjectPage() {
         }
 
         // Create a FormData object
-        const formData = new FormData()
-        formData.append("file", file)
+        const formDataUpload = new FormData()
+        formDataUpload.append("file", file)
 
         // Upload the file using the bulk-upload endpoint which handles WebP conversion
         const response = await fetch("/api/bulk-upload", {
           method: "POST",
-          body: formData,
+          body: formDataUpload,
         })
 
         if (!response.ok) {
@@ -674,6 +637,7 @@ export default function NewProjectPage() {
                         if (e.key === "Enter") {
                           const input = e.target as HTMLInputElement
                           if (input.value.trim()) {
+                            e.preventDefault() // Prevent form submission
                             addMainVideoUrl(input.value)
                             input.value = ""
                           }
@@ -681,6 +645,7 @@ export default function NewProjectPage() {
                       }}
                     />
                     <button
+                      type="button" // Explicitly set button type to prevent form submission
                       onClick={(e) => {
                         const input = e.currentTarget.previousSibling as HTMLInputElement
                         if (input.value.trim()) {
@@ -740,6 +705,7 @@ export default function NewProjectPage() {
                         if (e.key === "Enter") {
                           const input = e.target as HTMLInputElement
                           if (input.value.trim()) {
+                            e.preventDefault() // Prevent form submission
                             addBtsVideoUrl(input.value)
                             input.value = ""
                           }
@@ -747,6 +713,7 @@ export default function NewProjectPage() {
                       }}
                     />
                     <button
+                      type="button" // Explicitly set button type to prevent form submission
                       onClick={(e) => {
                         const input = e.currentTarget.previousSibling as HTMLInputElement
                         if (input.value.trim()) {
