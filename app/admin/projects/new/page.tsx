@@ -14,7 +14,6 @@ import { extractVideoInfo } from "@/lib/project-data"
 import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import MediaSelector from "@/components/admin/media-selector"
 
 export default function NewProjectPage() {
@@ -38,7 +37,6 @@ export default function NewProjectPage() {
     video_url: "",
     description: "",
     special_notes: "",
-    crew: "",
   })
 
   // Media state
@@ -710,7 +708,7 @@ export default function NewProjectPage() {
         </div>
 
         {/* Bottom row */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div className="mt-4">
           {/* Description */}
           <Card className="border-gray-800 bg-[#070a10]">
             <CardHeader className="pb-2">
@@ -726,238 +724,215 @@ export default function NewProjectPage() {
               />
             </CardContent>
           </Card>
-
-          {/* Crew */}
-          <Card className="border-gray-800 bg-[#070a10]">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-xl text-gray-200">Crew</CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              <Textarea
-                name="crew"
-                value={formData.crew}
-                onChange={handleChange}
-                placeholder="Enter Names"
-                className="min-h-[180px] border-gray-800 bg-[#0f1520] text-gray-200"
-              />
-            </CardContent>
-          </Card>
         </div>
 
         {/* Media Overview Section */}
         <div className="mt-8">
           <h2 className="text-xl font-medium mb-4 text-gray-200">Media Overview</h2>
 
-          <Tabs defaultValue="main" className="w-full">
-            <TabsList className="bg-[#0f1520] border-b border-gray-800 w-full justify-start mb-4">
-              <TabsTrigger value="main" className="data-[state=active]:bg-[#131a2a]">
-                Main Media
-              </TabsTrigger>
-              <TabsTrigger value="bts" className="data-[state=active]:bg-[#131a2a]">
-                BTS Media
-              </TabsTrigger>
-            </TabsList>
+          <div className="space-y-6">
+            {/* Main Media Section */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-300 border-b border-gray-800 pb-2">Main Footage</h3>
 
-            <TabsContent value="main">
-              <div className="space-y-4">
-                {/* Main Images */}
-                {mainImages.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-2 text-gray-400">Images</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                      {mainImages.map((image, index) => (
-                        <div key={`main-image-${index}`} className="relative group">
-                          <div
-                            className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden ${formData.image === image ? "ring-2 ring-blue-500" : ""}`}
+              {/* Main Images */}
+              {mainImages.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 text-gray-400">Images</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {mainImages.map((image, index) => (
+                      <div key={`main-image-${index}`} className="relative group">
+                        <div
+                          className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden ${formData.image === image ? "ring-2 ring-blue-500" : ""}`}
+                        >
+                          <img
+                            src={image || "/placeholder.svg"}
+                            alt={`Main image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => setCoverImage(image)}
+                            className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
+                            title="Set as cover image"
                           >
+                            <ImageIcon size={14} />
+                          </button>
+                          <button
+                            onClick={() => removeMainImage(index)}
+                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                            title="Remove image"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {formData.image === image && (
+                          <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
+                            Cover
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Main Videos */}
+              {mainVideos.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {mainVideos.map((video, index) => (
+                      <div key={`main-video-${index}`} className="relative group">
+                        <div
+                          className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${formData.video_url === video ? "ring-2 ring-blue-500" : ""}`}
+                        >
+                          {video.includes("youtube.com") ? (
                             <img
-                              src={image || "/placeholder.svg"}
-                              alt={`Main image ${index + 1}`}
+                              src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
+                              alt={`YouTube video ${index + 1}`}
                               className="w-full h-full object-cover"
                             />
-                          </div>
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => setCoverImage(image)}
-                              className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
-                              title="Set as cover image"
-                            >
-                              <ImageIcon size={14} />
-                            </button>
-                            <button
-                              onClick={() => removeMainImage(index)}
-                              className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                              title="Remove image"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                          {formData.image === image && (
-                            <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
-                              Cover
+                          ) : video.includes("youtu.be") ? (
+                            <img
+                              src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
+                              alt={`YouTube video ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : video.includes("vimeo.com") ? (
+                            <div className="text-gray-400 flex flex-col items-center">
+                              <Film size={24} />
+                              <span className="text-xs mt-1">Vimeo Video</span>
+                            </div>
+                          ) : (
+                            <div className="text-gray-400 flex flex-col items-center">
+                              <Film size={24} />
+                              <span className="text-xs mt-1">Video</span>
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Main Videos */}
-                {mainVideos.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-2 text-gray-400">Videos</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {mainVideos.map((video, index) => (
-                        <div key={`main-video-${index}`} className="relative group">
-                          <div
-                            className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${formData.video_url === video ? "ring-2 ring-blue-500" : ""}`}
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <button
+                            onClick={() => setMainVideo(video)}
+                            className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
+                            title="Set as main video"
                           >
-                            {video.includes("youtube.com") ? (
-                              <img
-                                src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
-                                alt={`YouTube video ${index + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : video.includes("youtu.be") ? (
-                              <img
-                                src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
-                                alt={`YouTube video ${index + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : video.includes("vimeo.com") ? (
-                              <div className="text-gray-400 flex flex-col items-center">
-                                <Film size={24} />
-                                <span className="text-xs mt-1">Vimeo Video</span>
-                              </div>
-                            ) : (
-                              <div className="text-gray-400 flex flex-col items-center">
-                                <Film size={24} />
-                                <span className="text-xs mt-1">Video</span>
-                              </div>
-                            )}
+                            <Film size={14} />
+                          </button>
+                          <button
+                            onClick={() => removeMainVideo(index)}
+                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                            title="Remove video"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {formData.video_url === video && (
+                          <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
+                            Main
                           </div>
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                            <button
-                              onClick={() => setMainVideo(video)}
-                              className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
-                              title="Set as main video"
-                            >
-                              <Film size={14} />
-                            </button>
-                            <button
-                              onClick={() => removeMainVideo(index)}
-                              className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                              title="Remove video"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                          {formData.video_url === video && (
-                            <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
-                              Main
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {mainImages.length === 0 && mainVideos.length === 0 && (
+                <div className="text-center py-4 text-gray-400">
+                  <p>No main media added yet</p>
+                </div>
+              )}
+            </div>
+
+            {/* BTS Media Section */}
+            <div className="space-y-4 pt-4">
+              <h3 className="text-lg font-medium text-gray-300 border-b border-gray-800 pb-2">Behind the Scenes</h3>
+
+              {/* BTS Images */}
+              {btsImages.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 text-gray-400">Images</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {btsImages.map((image, index) => (
+                      <div key={`bts-image-${index}`} className="relative group">
+                        <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden">
+                          <img
+                            src={image || "/placeholder.svg"}
+                            alt={`BTS image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        </div>
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button
+                            onClick={() => removeBtsImage(index)}
+                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                            title="Remove image"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* BTS Videos */}
+              {btsVideos.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {btsVideos.map((video, index) => (
+                      <div key={`bts-video-${index}`} className="relative group">
+                        <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center">
+                          {video.includes("youtube.com") ? (
+                            <img
+                              src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
+                              alt={`YouTube video ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : video.includes("youtu.be") ? (
+                            <img
+                              src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
+                              alt={`YouTube video ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : video.includes("vimeo.com") ? (
+                            <div className="text-gray-400 flex flex-col items-center">
+                              <Film size={24} />
+                              <span className="text-xs mt-1">Vimeo Video</span>
+                            </div>
+                          ) : (
+                            <div className="text-gray-400 flex flex-col items-center">
+                              <Film size={24} />
+                              <span className="text-xs mt-1">Video</span>
                             </div>
                           )}
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {mainImages.length === 0 && mainVideos.length === 0 && (
-                  <div className="text-center py-8 text-gray-400">
-                    <p>No main media added yet</p>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-
-            <TabsContent value="bts">
-              <div className="space-y-4">
-                {/* BTS Images */}
-                {btsImages.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-2 text-gray-400">Images</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                      {btsImages.map((image, index) => (
-                        <div key={`bts-image-${index}`} className="relative group">
-                          <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden">
-                            <img
-                              src={image || "/placeholder.svg"}
-                              alt={`BTS image ${index + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          </div>
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button
-                              onClick={() => removeBtsImage(index)}
-                              className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                              title="Remove image"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button
+                            onClick={() => removeBtsVideo(index)}
+                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                            title="Remove video"
+                          >
+                            <X size={14} />
+                          </button>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ))}
                   </div>
-                )}
+                </div>
+              )}
 
-                {/* BTS Videos */}
-                {btsVideos.length > 0 && (
-                  <div>
-                    <h3 className="text-sm font-medium mb-2 text-gray-400">Videos</h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {btsVideos.map((video, index) => (
-                        <div key={`bts-video-${index}`} className="relative group">
-                          <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center">
-                            {video.includes("youtube.com") ? (
-                              <img
-                                src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
-                                alt={`YouTube video ${index + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : video.includes("youtu.be") ? (
-                              <img
-                                src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
-                                alt={`YouTube video ${index + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : video.includes("vimeo.com") ? (
-                              <div className="text-gray-400 flex flex-col items-center">
-                                <Film size={24} />
-                                <span className="text-xs mt-1">Vimeo Video</span>
-                              </div>
-                            ) : (
-                              <div className="text-gray-400 flex flex-col items-center">
-                                <Film size={24} />
-                                <span className="text-xs mt-1">Video</span>
-                              </div>
-                            )}
-                          </div>
-                          <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                            <button
-                              onClick={() => removeBtsVideo(index)}
-                              className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                              title="Remove video"
-                            >
-                              <X size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {btsImages.length === 0 && btsVideos.length === 0 && (
-                  <div className="text-center py-8 text-gray-400">
-                    <p>No BTS media added yet</p>
-                  </div>
-                )}
-              </div>
-            </TabsContent>
-          </Tabs>
+              {btsImages.length === 0 && btsVideos.length === 0 && (
+                <div className="text-center py-4 text-gray-400">
+                  <p>No BTS media added yet</p>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Bottom save button */}
