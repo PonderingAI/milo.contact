@@ -218,6 +218,8 @@ CREATE TABLE IF NOT EXISTS projects (
   client TEXT,
   url TEXT,
   featured BOOLEAN DEFAULT false,
+  is_public BOOLEAN DEFAULT true,
+  publish_date TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -233,10 +235,36 @@ BEGIN
   END IF;
 END $$;
 
+-- Add is_public column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'projects' AND column_name = 'is_public'
+  ) THEN
+    ALTER TABLE projects ADD COLUMN is_public BOOLEAN DEFAULT true;
+  END IF;
+END $$;
+
+-- Add publish_date column if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'projects' AND column_name = 'publish_date'
+  ) THEN
+    ALTER TABLE projects ADD COLUMN publish_date TIMESTAMP WITH TIME ZONE;
+  END IF;
+END $$;
+
+-- Create indexes for faster filtering
+CREATE INDEX IF NOT EXISTS idx_projects_is_public ON projects(is_public);
+CREATE INDEX IF NOT EXISTS idx_projects_publish_date ON projects(publish_date);
+
 -- Add RLS policies
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 
--- Allow public read access
+-- Allow public read access only for public projects
 DO $$
 BEGIN
   IF NOT EXISTS (
@@ -246,7 +274,7 @@ BEGIN
     ON projects
     FOR SELECT
     TO public
-    USING (true);
+    USING (is_public = true OR auth.uid() IS NOT NULL);
   END IF;
 EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error
@@ -985,9 +1013,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       for (const tableName of allTableNames) {
         try {
           // Try to select a single row from the table
-          const { data, error } = await supabase.from(tableName).select("id").limit(1)
+          const { error } = await supabase.from(tableName).select("count").limit(1).single()
 
-          if (error && error.code === "PGRST116") {
+          if (error && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
             // Table doesn't exist
             missingTablesList.push(tableName)
           } else {

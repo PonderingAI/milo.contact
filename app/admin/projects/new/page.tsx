@@ -38,6 +38,8 @@ export default function NewProjectPage() {
     description: "",
     special_notes: "",
     project_date: new Date().toISOString().split("T")[0], // Default to today
+    is_public: true, // Default to public
+    publish_date: null, // No scheduled publish date by default
   })
 
   // Media state
@@ -100,7 +102,7 @@ export default function NewProjectPage() {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleSelectChange = (name: string, value: string) => {
+  const handleSelectChange = (name: string, value: any) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
@@ -857,6 +859,41 @@ export default function NewProjectPage() {
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   </div>
                 </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Visibility</label>
+                  <Select
+                    value={formData.is_public ? "true" : "false"}
+                    onValueChange={(value) => handleSelectChange("is_public", value === "true")}
+                  >
+                    <SelectTrigger className="border-gray-800 bg-[#0f1520] text-gray-200">
+                      <SelectValue placeholder="Select visibility" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#070a10] border-gray-800 text-gray-200">
+                      <SelectItem value="true">Public</SelectItem>
+                      <SelectItem value="false">Private</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {!formData.is_public && (
+                  <div>
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Publish Date</label>
+                    <div className="relative">
+                      <Input
+                        type="datetime-local"
+                        name="publish_date"
+                        value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ""}
+                        onChange={(e) => {
+                          const value = e.target.value ? new Date(e.target.value).toISOString() : null
+                          setFormData((prev) => ({ ...prev, publish_date: value }))
+                        }}
+                        className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
+                      />
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>

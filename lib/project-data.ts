@@ -24,6 +24,9 @@ export interface Project {
   special_notes?: string
   created_at?: string
   updated_at?: string
+  project_date?: string
+  is_public?: boolean
+  publish_date?: string
 }
 
 /**
@@ -80,7 +83,22 @@ export async function getProjects(): Promise<Project[]> {
     }
 
     const supabase = createServerClient()
-    const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: false })
+
+    // Check if user is authenticated and has admin role
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    const isAdmin = session?.user ? await checkUserIsAdmin(session.user.id) : false
+
+    let query = supabase.from("projects").select("*")
+
+    // If not admin, only show public projects or those with publish_date in the past
+    if (!isAdmin) {
+      const now = new Date().toISOString()
+      query = query.or(`is_public.eq.true,publish_date.lt.${now}`)
+    }
+
+    const { data, error } = await query.order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching projects:", error)
@@ -91,6 +109,29 @@ export async function getProjects(): Promise<Project[]> {
   } catch (error) {
     console.error("Error in getProjects:", error)
     return mockProjects
+  }
+}
+
+// Helper function to check if a user has admin role
+async function checkUserIsAdmin(userId: string): Promise<boolean> {
+  try {
+    const supabase = createServerClient()
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .eq("role", "admin")
+      .maybeSingle()
+
+    if (error) {
+      console.error("Error checking admin status:", error)
+      return false
+    }
+
+    return !!data
+  } catch (error) {
+    console.error("Error in checkUserIsAdmin:", error)
+    return false
   }
 }
 

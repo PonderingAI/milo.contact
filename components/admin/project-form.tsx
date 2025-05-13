@@ -29,6 +29,8 @@ interface ProjectFormProps {
     video_url?: string
     description?: string
     special_notes?: string
+    is_public: boolean
+    publish_date: string | null
   }
   mode: "create" | "edit"
 }
@@ -43,6 +45,8 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     video_url: project?.video_url || "",
     description: project?.description || "",
     special_notes: project?.special_notes || "",
+    is_public: project?.is_public ?? true,
+    publish_date: project?.publish_date || null,
   })
 
   const [error, setError] = useState<string | null>(null)
@@ -58,7 +62,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleSelectChange = (name: string, value: string) => {
+  const handleSelectChange = (name: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
@@ -418,6 +422,51 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           placeholder="Any special notes about this project..."
           className="bg-gray-800 border-gray-700 min-h-[100px]"
         />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div>
+          <Label htmlFor="is_public" className="flex items-center space-x-2 mb-2">
+            <span>Visibility</span>
+          </Label>
+          <Select
+            name="is_public"
+            value={formData.is_public ? "true" : "false"}
+            onValueChange={(value) => handleSelectChange("is_public", value === "true")}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select visibility" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="true">Public</SelectItem>
+              <SelectItem value="false">Private</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-gray-500 mt-1">
+            {formData.is_public ? "This project is visible to everyone" : "This project is only visible to admins"}
+          </p>
+        </div>
+
+        <div>
+          <Label htmlFor="publish_date" className="mb-2">
+            Scheduled Publish Date
+          </Label>
+          <Input
+            type="datetime-local"
+            id="publish_date"
+            name="publish_date"
+            value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ""}
+            onChange={(e) => {
+              const value = e.target.value ? new Date(e.target.value).toISOString() : null
+              setFormData((prev) => ({ ...prev, publish_date: value }))
+            }}
+            className="w-full"
+            disabled={formData.is_public}
+          />
+          <p className="text-sm text-gray-500 mt-1">
+            {formData.is_public ? "Project is already public" : "When to automatically make this project public"}
+          </p>
+        </div>
       </div>
 
       <div className="flex justify-end gap-4">
