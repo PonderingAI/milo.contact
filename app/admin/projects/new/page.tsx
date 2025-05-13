@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, ArrowRight, Calendar } from "lucide-react"
+import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, Calendar } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,7 +14,7 @@ import { extractVideoInfo } from "@/lib/project-data"
 import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import MediaSelector from "@/components/admin/media-selector"
+import ProjectMediaUploader from "@/components/admin/project-media-uploader"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -24,8 +24,6 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null)
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
-  const fileInputMainRef = useRef<HTMLInputElement>(null)
-  const fileInputBtsRef = useRef<HTMLInputElement>(null)
 
   // Form state
   const [formData, setFormData] = useState({
@@ -242,129 +240,6 @@ export default function NewProjectPage() {
 
   const setMainVideo = (url: string) => {
     setFormData((prev) => ({ ...prev, video_url: url }))
-  }
-
-  const handleFileUpload = async (files: FileList, target: "main" | "bts") => {
-    if (!files || files.length === 0) return
-
-    try {
-      // Show upload in progress toast
-      const toastId = toast({
-        title: "Upload in progress",
-        description: `Uploading ${files.length} file(s)...`,
-      }).id
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-
-        // Try to extract date from file metadata
-        let fileDate = null
-        if (file.type.startsWith("image/") && !formData.project_date) {
-          try {
-            fileDate = file.lastModified ? new Date(file.lastModified) : null
-          } catch (err) {
-            console.error("Error extracting date from file:", err)
-          }
-        }
-
-        // Create a FormData object
-        const formDataUpload = new FormData()
-        formDataUpload.append("file", file)
-
-        // Upload the file using the bulk-upload endpoint which handles WebP conversion
-        const response = await fetch("/api/bulk-upload", {
-          method: "POST",
-          body: formDataUpload,
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to upload file")
-        }
-
-        const result = await response.json()
-        console.log("Upload result:", result) // Debug log
-
-        if (result.success) {
-          // Add the uploaded file to the appropriate target
-          if (target === "main") {
-            if (file.type.startsWith("image/")) {
-              console.log("Adding image to main images:", result.publicUrl)
-              setMainImages((prev) => {
-                const newImages = [...prev]
-                if (!newImages.includes(result.publicUrl)) {
-                  newImages.push(result.publicUrl)
-                }
-                return newImages
-              })
-
-              // Set as cover image if none is set
-              if (!formData.image) {
-                setFormData((prev) => ({ ...prev, image: result.publicUrl }))
-              }
-
-              // Set project date from file date if available and project_date is empty
-              if (fileDate && !formData.project_date) {
-                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
-              }
-            } else if (file.type.startsWith("video/")) {
-              console.log("Adding video to main videos:", result.publicUrl)
-              setMainVideos((prev) => {
-                const newVideos = [...prev]
-                if (!newVideos.includes(result.publicUrl)) {
-                  newVideos.push(result.publicUrl)
-                }
-                return newVideos
-              })
-
-              if (!formData.video_url) {
-                setFormData((prev) => ({ ...prev, video_url: result.publicUrl }))
-              }
-
-              // Set project date from file date if available and project_date is empty
-              if (fileDate && !formData.project_date) {
-                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(fileDate) }))
-              }
-            }
-          } else {
-            // BTS
-            if (file.type.startsWith("image/")) {
-              console.log("Adding image to BTS images:", result.publicUrl)
-              setBtsImages((prev) => {
-                const newImages = [...prev]
-                if (!newImages.includes(result.publicUrl)) {
-                  newImages.push(result.publicUrl)
-                }
-                return newImages
-              })
-            } else if (file.type.startsWith("video/")) {
-              console.log("Adding video to BTS videos:", result.publicUrl)
-              setBtsVideos((prev) => {
-                const newVideos = [...prev]
-                if (!newVideos.includes(result.publicUrl)) {
-                  newVideos.push(result.publicUrl)
-                }
-                return newVideos
-              })
-            }
-          }
-
-          toast({
-            title: "Upload successful",
-            description: `${file.name} uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
-          })
-        } else {
-          throw new Error(result.error || "Unknown error during upload")
-        }
-      }
-    } catch (error) {
-      console.error("Error uploading file:", error)
-      toast({
-        title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload file",
-        variant: "destructive",
-      })
-    }
   }
 
   const addMainVideoUrl = async (url: string) => {
@@ -654,141 +529,22 @@ export default function NewProjectPage() {
           {/* Left column - Upload areas */}
           <div className="space-y-4">
             {/* Main upload area */}
-            <div>
-              <h2 className="text-sm font-medium mb-2 text-gray-400">Main</h2>
-              <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
-                <div className="space-y-2">
-                  {/* Direct MediaSelector component for MAIN media */}
-                  <MediaSelector
-                    onSelect={handleMainMediaSelect}
-                    currentValue={[...mainImages, ...mainVideos]}
-                    mediaType="all"
-                    multiple={true}
-                    buttonLabel="Browse Media Library"
-                  />
-
-                  {/* URL input */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Enter video URL..."
-                      className={`w-full py-2 px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 text-sm`}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const input = e.target as HTMLInputElement
-                          if (input.value.trim()) {
-                            e.preventDefault() // Prevent form submission
-                            addMainVideoUrl(input.value)
-                            input.value = ""
-                          }
-                        }
-                      }}
-                    />
-                    <button
-                      type="button" // Explicitly set button type to prevent form submission
-                      onClick={(e) => {
-                        const input = e.currentTarget.previousSibling as HTMLInputElement
-                        if (input.value.trim()) {
-                          addMainVideoUrl(input.value)
-                          input.value = ""
-                        }
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                    >
-                      <ArrowRight size={18} />
-                    </button>
-                  </div>
-
-                  {/* Browse Device button */}
-                  <label
-                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm cursor-pointer block`}
-                  >
-                    Browse Device
-                    <input
-                      type="file"
-                      ref={fileInputMainRef}
-                      className="hidden"
-                      accept="image/*,video/*"
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          handleFileUpload(e.target.files, "main")
-                          e.target.value = "" // Reset input
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
+            <ProjectMediaUploader
+              title="Main"
+              onMediaSelect={handleMainMediaSelect}
+              onVideoUrlSubmit={addMainVideoUrl}
+              mediaType="all"
+              folder="projects"
+            />
 
             {/* BTS upload area */}
-            <div>
-              <h2 className="text-sm font-medium mb-2 text-gray-400">BTS</h2>
-              <div className={`rounded-xl bg-[#070a10] p-4 text-sm`}>
-                <div className="space-y-2">
-                  {/* Direct MediaSelector component for BTS media */}
-                  <MediaSelector
-                    onSelect={handleBtsMediaSelect}
-                    currentValue={[...btsImages, ...btsVideos]}
-                    mediaType="all"
-                    multiple={true}
-                    buttonLabel="Browse Media Library"
-                  />
-
-                  {/* URL input */}
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Enter video URL..."
-                      className={`w-full py-2 px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 text-sm`}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          const input = e.target as HTMLInputElement
-                          if (input.value.trim()) {
-                            e.preventDefault() // Prevent form submission
-                            addBtsVideoUrl(input.value)
-                            input.value = ""
-                          }
-                        }
-                      }}
-                    />
-                    <button
-                      type="button" // Explicitly set button type to prevent form submission
-                      onClick={(e) => {
-                        const input = e.currentTarget.previousSibling as HTMLInputElement
-                        if (input.value.trim()) {
-                          addBtsVideoUrl(input.value)
-                          input.value = ""
-                        }
-                      }}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                    >
-                      <ArrowRight size={18} />
-                    </button>
-                  </div>
-
-                  {/* Browse Device button */}
-                  <label
-                    className={`w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm cursor-pointer block`}
-                  >
-                    Browse Device
-                    <input
-                      type="file"
-                      ref={fileInputBtsRef}
-                      className="hidden"
-                      accept="image/*,video/*"
-                      multiple
-                      onChange={(e) => {
-                        if (e.target.files && e.target.files.length > 0) {
-                          handleFileUpload(e.target.files, "bts")
-                          e.target.value = "" // Reset input
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-            </div>
+            <ProjectMediaUploader
+              title="BTS"
+              onMediaSelect={handleBtsMediaSelect}
+              onVideoUrlSubmit={addBtsVideoUrl}
+              mediaType="all"
+              folder="bts"
+            />
           </div>
 
           {/* Right column - Project details */}
