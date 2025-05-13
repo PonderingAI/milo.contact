@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -85,7 +85,7 @@ export default function UnifiedMediaLibrary() {
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
-  const supabase = getSupabaseBrowserClient()
+  const supabase = createClientComponentClient()
 
   // Reference to track if we need to process the queue
   const pendingQueueRef = useRef(false)
@@ -96,15 +96,6 @@ export default function UnifiedMediaLibrary() {
   const [newTag, setNewTag] = useState("")
   const [editingTags, setEditingTags] = useState<string[]>([])
   const [imageLoadError, setImageLoadError] = useState<Record<string, boolean>>({})
-
-  const [checking, setChecking] = useState(false)
-  const [missingTables, setMissingTables] = useState<string[]>([])
-  const [selectedTables, setSelectedTables] = useState<string[]>([])
-  const [open, setOpen] = useState(false)
-  const [success, setSuccess] = useState<string | null>(null)
-  const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
-  const [isAdminPage, setIsAdminPage] = useState(true)
-  const [onSetupComplete, setOnSetupComplete] = useState<(() => void) | null>(null)
 
   useEffect(() => {
     fetchMedia()
@@ -120,56 +111,20 @@ export default function UnifiedMediaLibrary() {
     }
   }, [uploadQueue, isProcessingQueue])
 
-  const checkTables = async (shouldOpenPopup = true) => {
-    if (checking) return // Prevent multiple simultaneous checks
-
-    setChecking(true)
-    // Don't show error during background checks
-    if (shouldOpenPopup) {
-      setError(null)
-    }
-    setLastRefreshTime(new Date())
-
+  const checkMediaTable = async () => {
     try {
-      // Use direct Supabase query instead of fetch API
-      const { data, error } = await supabase.from("media").select("id").limit(1).maybeSingle()
+      // Try to query the media table
+      const { data, error } = await supabase.from("media").select("id").limit(1)
 
-      // If we get a PGRST116 error, the table doesn't exist
+      // If there's an error with code PGRST116, the table doesn't exist
       if (error && error.code === "PGRST116") {
-        console.log("Media table doesn't exist")
-        setMissingTables(["media"])
-        setSelectedTables(["media"])
-
-        if (isAdminPage && shouldOpenPopup) {
-          setOpen(true)
-        }
-        return
+        return false
       }
 
-      // If we get here, the table exists
-      console.log("Media table exists")
-      setMissingTables([])
-      setSelectedTables([])
-
-      if (open) {
-        setSuccess("All required tables exist!")
-        setTimeout(() => {
-          setOpen(false)
-          if (onSetupComplete) {
-            onSetupComplete()
-          }
-        }, 1500)
-      } else if (onSetupComplete) {
-        onSetupComplete()
-      }
-    } catch (error) {
-      console.error("Error checking tables:", error)
-      // Only show errors for user-initiated checks
-      if (shouldOpenPopup) {
-        setError("Failed to check database tables. Please try again.")
-      }
-    } finally {
-      setChecking(false)
+      return true
+    } catch (err) {
+      console.warn("Error checking media table:", err)
+      return false
     }
   }
 
@@ -178,21 +133,9 @@ export default function UnifiedMediaLibrary() {
     setError(null)
 
     try {
-      // First try to use the dedicated API endpoint
-      const response = await fetch("/api/setup-media-table", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-      })
-
-      if (!response.ok) {
-        // If that fails, try using direct Supabase RPC
-        console.log("API endpoint failed, trying direct Supabase RPC")
-
-        // Create the media table directly
-        const { error } = await supabase.rpc("exec_sql", {
-          sql_query: `
+      // Create the media table directly using Supabase RPC
+      const { error } = await supabase.rpc("exec_sql", {
+        sql_query: `
           CREATE TABLE IF NOT EXISTS media (
             id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
             filename TEXT NOT NULL,
@@ -248,11 +191,10 @@ export default function UnifiedMediaLibrary() {
             -- Policy already exists or other error
           END $$;
         `,
-        })
+      })
 
-        if (error) {
-          throw new Error(`Failed to create media table: ${error.message}`)
-        }
+      if (error) {
+        throw new Error(`Failed to create media table: ${error.message}`)
       }
 
       toast({
@@ -283,12 +225,12 @@ export default function UnifiedMediaLibrary() {
       console.log("Fetching media from database...")
 
       // First check if the media table exists
-      const { data: checkData, error: checkError } = await supabase.from("media").select("id").limit(1).maybeSingle()
+      const tableExists = await checkMediaTable()
 
-      // If the table doesn't exist, show setup option
-      if (checkError && checkError.code === "PGRST116") {
+      if (!tableExists) {
         setError("Media table does not exist. Please set up the database.")
         setMediaItems([])
+        setLoading(false)
         return
       }
 
@@ -331,16 +273,11 @@ export default function UnifiedMediaLibrary() {
     if (files.length === 0) return
 
     // First check if the media table exists
-    try {
-      const { data, error } = await supabase.from("media").select("id").limit(1).maybeSingle()
+    const tableExists = await checkMediaTable()
 
-      // If the table doesn't exist, set it up automatically
-      if (error && error.code === "PGRST116") {
-        await setupDatabase()
-      }
-    } catch (err) {
-      console.warn("Error checking media table:", err)
-      // Continue anyway, the upload might still work
+    // If the table doesn't exist, set it up automatically
+    if (!tableExists) {
+      await setupDatabase()
     }
 
     if (files.length === 1) {
@@ -620,6 +557,14 @@ export default function UnifiedMediaLibrary() {
     const processedUrls = new Set() // Track processed URLs to avoid duplicates
 
     try {
+      // First check if the media table exists
+      const tableExists = await checkMediaTable()
+
+      // If the table doesn't exist, set it up automatically
+      if (!tableExists) {
+        await setupDatabase()
+      }
+
       // Split the input by common delimiters to handle multiple URLs
       const urls = videoUrls.split(/[\r\n\s,;]+/).filter((url) => url.trim().length > 0)
 
@@ -820,26 +765,18 @@ export default function UnifiedMediaLibrary() {
         tags: editingTags,
       })
 
-      // Use a direct API call instead of Supabase client
-      const response = await fetch("/api/media/update", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id: editingItem.id,
+      // Use direct Supabase update
+      const { error } = await supabase
+        .from("media")
+        .update({
           filename: newFilename,
           tags: editingTags,
-        }),
-      })
+        })
+        .eq("id", editingItem.id)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to update media")
+      if (error) {
+        throw new Error(error.message || "Failed to update media")
       }
-
-      const result = await response.json()
-      console.log("Update result:", result)
 
       // Update local state
       setMediaItems(
@@ -894,26 +831,12 @@ export default function UnifiedMediaLibrary() {
     if (!confirm("Are you sure you want to delete this media item?")) return
 
     try {
-      // Use a direct API call instead of Supabase client
-      const response = await fetch("/api/media/delete", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          id,
-          filepath,
-          filetype,
-        }),
-      })
+      // Use direct Supabase delete
+      const { error } = await supabase.from("media").delete().eq("id", id)
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to delete media")
+      if (error) {
+        throw new Error(error.message || "Failed to delete media")
       }
-
-      const result = await response.json()
-      console.log("Delete result:", result)
 
       toast({
         title: "Success",

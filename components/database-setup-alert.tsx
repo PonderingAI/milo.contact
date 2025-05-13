@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 interface DatabaseSetupAlertProps {
   isSetup: boolean
@@ -30,7 +30,7 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
 
       try {
         // Use Supabase client directly instead of fetch API
-        const supabase = getSupabaseBrowserClient()
+        const supabase = createClientComponentClient()
 
         // Try to query the projects table - if it exists, we consider the database set up
         const { data, error } = await supabase.from("projects").select("id").limit(1).maybeSingle()
@@ -53,7 +53,7 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
     if (!isSetup && !dismissed) {
       checkTables()
     }
-  }, [isSetup, dismissed])
+  }, [isSetup, dismissed, isChecking])
 
   const handleDismiss = () => {
     localStorage.setItem("dbSetupAlertDismissed", "true")

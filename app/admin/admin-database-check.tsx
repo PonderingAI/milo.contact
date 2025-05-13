@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import DatabaseSetupPopup from "@/components/admin/database-setup-popup"
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 interface AdminDatabaseCheckProps {
   children: React.ReactNode
@@ -37,7 +37,7 @@ export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps
     setIsChecking(true)
 
     try {
-      const supabase = getSupabaseBrowserClient()
+      const supabase = createClientComponentClient()
 
       // Check if user_roles table exists (core table)
       const { data, error } = await supabase.from("user_roles").select("id").limit(1).maybeSingle()

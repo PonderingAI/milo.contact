@@ -18,7 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertCircle, Copy, Check, Database, RefreshCw, X, Trash2 } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/use-toast"
-import { getSupabaseBrowserClient } from "@/lib/supabase/supabase-browser"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 // Define the table configuration type
 interface TableConfig {
@@ -53,7 +53,7 @@ export function DatabaseSetupPopup({
 }: DatabaseSetupPopupProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [checking, setChecking] = useState(true)
+  const [checking, setChecking] = useState(false)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -68,6 +68,7 @@ export function DatabaseSetupPopup({
   const [generatedSQL, setGeneratedSQL] = useState<string>("")
   const [initialCheckDone, setInitialCheckDone] = useState(false)
   const [lastRefreshTime, setLastRefreshTime] = useState<Date | null>(null)
+  const supabase = createClientComponentClient()
 
   // Use a ref to prevent multiple simultaneous checks
   const isCheckingRef = useRef(false)
@@ -875,8 +876,6 @@ ON user_widgets(position);`,
     },
   ]
 
-  const requiredTables = allTables.filter((table) => table.required).map((table) => table.name)
-
   // Check if we're on an admin page
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -966,8 +965,8 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     setGeneratedSQL(sql)
   }, [selectedTables, tablesToDelete, generateSQL])
 
-  // Function to check if tables exist - using our direct-table-check API
-  const checkTables = async (shouldOpenPopup = true) => {
+  // Function to check if tables exist - using direct Supabase queries
+  const checkTablesWithSupabase = useCallback(async () => {
     if (checking) return // Prevent multiple simultaneous checks
 
     setChecking(true)
@@ -975,53 +974,88 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     setLastRefreshTime(new Date())
 
     try {
-      // Use direct Supabase query to check tables
-      const supabase = getSupabaseBrowserClient()
+      // Get all table names to check
+      const allTableNames = allTables.map((table) => table.name)
+
+      // Track missing and existing tables
       const missingTablesList: string[] = []
+      const existingTablesList: string[] = []
 
-      // Check each required table
-      for (const table of requiredTables) {
+      // Check each table individually
+      for (const tableName of allTableNames) {
         try {
-          const { data, error } = await supabase.from(table).select("id").limit(1).maybeSingle()
+          // Try to select a single row from the table
+          const { data, error } = await supabase.from(tableName).select("id").limit(1)
 
-          // If we get a PGRST116 error, the table doesn't exist
           if (error && error.code === "PGRST116") {
-            missingTablesList.push(table)
+            // Table doesn't exist
+            missingTablesList.push(tableName)
+          } else {
+            // Table exists
+            existingTablesList.push(tableName)
           }
         } catch (err) {
-          console.warn(`Error checking table ${table}:`, err)
-          // If we can't check, assume it's missing
-          missingTablesList.push(table)
+          // If there's an error, assume the table doesn't exist
+          console.warn(`Error checking table ${tableName}:`, err)
+          missingTablesList.push(tableName)
         }
       }
 
       setMissingTables(missingTablesList)
-      setSelectedTables(missingTablesList)
+      setExistingTables(existingTablesList)
 
-      if (missingTablesList.length > 0) {
-        if (shouldOpenPopup) {
-          setOpen(true)
+      // Only set selected tables on initial load
+      if (!initialCheckDone) {
+        setSelectedTables(missingTablesList)
+        setInitialCheckDone(true)
+      }
+
+      // Set the initial active tab based on what we found
+      if (!initialCheckDone) {
+        if (missingTablesList.length > 0) {
+          setActiveTab("create")
+        } else if (existingTablesList.length > 0) {
+          setActiveTab("manage")
         }
-      } else {
-        if (open) {
-          setSuccess("All required tables exist!")
-          setTimeout(() => {
-            setOpen(false)
-            if (onSetupComplete) {
-              onSetupComplete()
-            }
-          }, 1500)
-        } else if (onSetupComplete) {
+      }
+
+      // Only open the popup if there are missing tables and we're on an admin page
+      if (missingTablesList.length > 0 && (isAdminPage || isStationary)) {
+        setOpen(true)
+      } else if (!isStationary) {
+        setOpen(false)
+        setSetupCompleted(true)
+        if (onSetupComplete) {
           onSetupComplete()
         }
       }
     } catch (error) {
       console.error("Error checking tables:", error)
-      setError("Failed to check database tables. Please try again.")
+      setError(
+        `Failed to check database tables: ${error instanceof Error ? error.message : "Unknown error"}. Please try again or use the Skip Setup button.`,
+      )
+
+      // If we can't check tables, don't show the popup on non-admin pages
+      if (!isAdminPage && adminOnly) {
+        setForceClose(true)
+      }
+
+      // In stationary mode, we still want to show the component even if there's an error
+      if (isStationary) {
+        // Show all tables as missing so the user can create them
+        const allTableNames = allTables.map((table) => table.name)
+        setMissingTables(allTableNames)
+        if (!initialCheckDone) {
+          setSelectedTables(allTableNames)
+          setInitialCheckDone(true)
+        }
+        setExistingTables([])
+        setOpen(true)
+      }
     } finally {
       setChecking(false)
     }
-  }
+  }, [allTables, checking, initialCheckDone, isAdminPage, isStationary, adminOnly, onSetupComplete, supabase])
 
   // Function to copy SQL to clipboard
   const copyToClipboard = () => {
@@ -1041,18 +1075,13 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
     setSuccess(null)
 
     try {
-      const response = await fetch("/api/execute-sql", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ sql: generatedSQL }),
+      // Use Supabase RPC to execute SQL directly
+      const { error } = await supabase.rpc("exec_sql", {
+        sql_query: generatedSQL,
       })
 
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to execute SQL")
+      if (error) {
+        throw new Error(error.message || "Failed to execute SQL")
       }
 
       setSuccess("Database changes applied successfully!")
@@ -1064,7 +1093,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
       // Wait a moment before refreshing
       setTimeout(() => {
         // Refresh the table list
-        checkTables()
+        checkTablesWithSupabase()
       }, 1500)
     } catch (error) {
       console.error("Error executing SQL:", error)
@@ -1156,8 +1185,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
   useEffect(() => {
     // For stationary mode, always check tables
     if (isStationary && !initialCheckDone) {
-      checkTables()
-      setInitialCheckDone(true)
+      checkTablesWithSupabase()
       return
     }
 
@@ -1175,10 +1203,9 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
     // Only run the check if we're on an admin page and adminOnly is true
     if ((!adminOnly || (adminOnly && isAdminPage)) && !initialCheckDone) {
-      checkTables()
-      setInitialCheckDone(true)
+      checkTablesWithSupabase()
     }
-  }, [adminOnly, isAdminPage, isStationary, initialCheckDone, checkTables])
+  }, [checkTablesWithSupabase, adminOnly, isAdminPage, isStationary, initialCheckDone])
 
   // If force closed, setup completed, or not on admin page when adminOnly is true, don't render
   if (forceClose || (setupCompleted && !open && !isStationary) || (adminOnly && !isAdminPage && !isStationary)) {
@@ -1194,7 +1221,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
             <Database className="h-5 w-5 mr-2" />
             <h2 className="text-xl font-semibold">{title}</h2>
           </div>
-          <Button variant="outline" size="sm" onClick={() => checkTables(false)} disabled={checking}>
+          <Button variant="outline" size="sm" onClick={checkTablesWithSupabase} disabled={checking}>
             <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
             Refresh
           </Button>
@@ -1400,7 +1427,7 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
         <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-medium">Missing Tables</h3>
-            <Button variant="outline" size="sm" onClick={() => checkTables(false)} disabled={checking}>
+            <Button variant="outline" size="sm" onClick={checkTablesWithSupabase} disabled={checking}>
               <RefreshCw className={`h-4 w-4 mr-2 ${checking ? "animate-spin" : ""}`} />
               Refresh
             </Button>
