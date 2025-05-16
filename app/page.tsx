@@ -11,20 +11,24 @@ import { createAdminClient } from "@/lib/supabase-server"
 async function getLatestProject() {
   try {
     const supabase = createAdminClient()
+
+    // Get the latest project with a video_url
     const { data, error } = await supabase
       .from("projects")
       .select("*")
+      .not("video_url", "is", null)
       .order("created_at", { ascending: false })
       .limit(1)
 
-    // Don't use .single() as it throws an error when no rows are found
     if (error) {
       console.error("Error fetching latest project:", error)
       return null
     }
 
     // Return the first item if it exists, otherwise null
-    return data && data.length > 0 ? data[0] : null
+    const project = data && data.length > 0 ? data[0] : null
+    console.log("Latest project with video:", project)
+    return project
   } catch (error) {
     console.error("Error in getLatestProject:", error)
     return null
@@ -38,8 +42,9 @@ export default async function Home() {
   // Get projects - this will return mock data if the database isn't set up
   const projects = await getProjects()
 
-  // Get the latest project safely
+  // Get the latest project with video
   const latestProject = await getLatestProject()
+  console.log("Latest project from server:", latestProject)
 
   return (
     <main className="min-h-screen bg-black text-white">

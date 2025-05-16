@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect } from "react"
 
 interface VideoBackgroundProps {
   platform: string
@@ -9,42 +9,52 @@ interface VideoBackgroundProps {
 }
 
 export default function VideoBackground({ platform, videoId, fallbackImage }: VideoBackgroundProps) {
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [isLoaded, setIsLoaded] = useState(false)
+  const [hasError, setHasError] = useState(false)
+
+  // Log props for debugging
+  console.log("VideoBackground props:", { platform, videoId, fallbackImage })
 
   useEffect(() => {
-    // Set a timeout to show fallback if video doesn't load in 8 seconds
+    // Reset states when video changes
+    setIsLoaded(false)
+    setHasError(false)
+
+    // Set a timeout to show fallback if video doesn't load
     const timer = setTimeout(() => {
-      if (loading) {
+      if (!isLoaded) {
         console.log("Video load timeout - showing fallback")
-        setError(true)
+        setHasError(true)
       }
-    }, 8000)
+    }, 5000)
 
     return () => clearTimeout(timer)
-  }, [loading])
+  }, [platform, videoId])
 
   const handleLoad = () => {
     console.log("Video loaded successfully")
-    setLoading(false)
+    setIsLoaded(true)
   }
 
   const handleError = () => {
     console.error("Error loading video")
-    setError(true)
-    setLoading(false)
+    setHasError(true)
   }
 
-  // Determine the video URL based on the platform
-  let videoSrc = ""
-  if (platform === "youtube") {
-    videoSrc = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}&modestbranding=1`
-  } else if (platform === "vimeo") {
-    videoSrc = `https://player.vimeo.com/video/${videoId}?background=1&autoplay=1&loop=1&byline=0&title=0`
+  // Get video embed URL
+  const getVideoSrc = () => {
+    if (platform === "youtube") {
+      return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}`
+    } else if (platform === "vimeo") {
+      return `https://player.vimeo.com/video/${videoId}?background=1&autoplay=1&loop=1&byline=0&title=0`
+    }
+    return ""
   }
 
-  if (error || !videoSrc) {
+  const videoSrc = getVideoSrc()
+
+  // If error or no valid video source, show fallback image
+  if (hasError || !videoSrc) {
     return (
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -54,37 +64,37 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
   }
 
   return (
-    <div ref={containerRef} className="absolute inset-0 overflow-hidden bg-black">
-      {loading && (
+    <div className="absolute inset-0 overflow-hidden bg-black">
+      {/* Fallback image shown until video loads */}
+      {!isLoaded && (
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
           style={{ backgroundImage: `url(${fallbackImage})` }}
         />
       )}
 
-      {/* Video container with aspect ratio preservation */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        <div className="relative w-full h-full">
-          <iframe
-            src={videoSrc}
-            className={`absolute w-full h-full object-contain transition-opacity duration-700 ${
-              loading ? "opacity-0" : "opacity-100"
-            }`}
-            style={{
-              position: "absolute",
-              width: "100vw",
-              height: "100vh",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              objectFit: "contain",
-            }}
-            frameBorder="0"
-            allow="autoplay"
-            onLoad={handleLoad}
-            onError={handleError}
-          ></iframe>
-        </div>
+      {/* Video iframe */}
+      <div className="absolute inset-0 w-full h-full">
+        <iframe
+          src={videoSrc}
+          className={`absolute w-full h-full transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+          style={{
+            position: "absolute",
+            top: "50%",
+            left: "50%",
+            transform: "translate(-50%, -50%)",
+            minWidth: "100%",
+            minHeight: "100%",
+            width: "auto",
+            height: "auto",
+            aspectRatio: "16/9",
+            objectFit: "contain",
+          }}
+          frameBorder="0"
+          allow="autoplay"
+          onLoad={handleLoad}
+          onError={handleError}
+        ></iframe>
       </div>
     </div>
   )

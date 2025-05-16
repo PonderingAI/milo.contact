@@ -17,75 +17,48 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
     hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
     image_hero_bg: "/images/hero-bg.jpg",
     hero_bg_type: "image", // "image", "video", or "latest_project"
-    background_color: "#000000",
   })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function loadSettings() {
       try {
-        setLoading(true)
         const supabase = getSupabaseBrowserClient()
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
-          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type", "background_color"])
+          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type"])
 
-        if (error) {
-          console.error("Error loading hero settings:", error)
-          setError("Failed to load hero settings")
-          return
-        }
-
-        if (data && data.length > 0) {
+        if (!error && data) {
           const newSettings = { ...settings }
           data.forEach((item) => {
             // @ts-ignore
             newSettings[item.key] = item.value
           })
+          console.log("Loaded settings:", newSettings)
           setSettings(newSettings)
-          console.log("Hero settings loaded:", newSettings) // Debug log
         }
       } catch (err) {
-        console.error("Error in loadSettings:", err)
-        setError("An unexpected error occurred")
-      } finally {
-        setLoading(false)
+        console.error("Error loading hero settings:", err)
       }
     }
 
     loadSettings()
   }, [])
 
-  // Determine background media
-  let backgroundMedia = settings.image_hero_bg
-  let isVideo = false
-  let videoInfo = null
+  // Force using latest project video if available
+  const useLatestProjectVideo = settings.hero_bg_type === "latest_project" && latestProject?.video_url
 
-  console.log("Hero background type:", settings.hero_bg_type)
+  // Debug logs
+  console.log("Hero bg type:", settings.hero_bg_type)
   console.log("Latest project:", latestProject)
+  console.log("Latest project video:", latestProject?.video_url)
+  console.log("Using latest project video:", useLatestProjectVideo)
 
-  // If hero_bg_type is "latest_project" and we have a latest project with video
-  if (settings.hero_bg_type === "latest_project" && latestProject?.video_url) {
-    backgroundMedia = latestProject.video_url
-    isVideo = true
+  // Extract video info if using latest project video
+  let videoInfo = null
+  if (useLatestProjectVideo && latestProject?.video_url) {
     videoInfo = extractVideoInfo(latestProject.video_url)
-    console.log("Using latest project video:", backgroundMedia, videoInfo)
-  }
-  // Otherwise check if the current background is a video URL
-  else if (
-    settings.hero_bg_type === "video" ||
-    (settings.image_hero_bg &&
-      (settings.image_hero_bg.includes("vimeo.com") ||
-        settings.image_hero_bg.includes("youtube.com") ||
-        settings.image_hero_bg.includes("youtu.be")))
-  ) {
-    isVideo = true
-    videoInfo = extractVideoInfo(settings.image_hero_bg)
-    console.log("Using video background:", backgroundMedia, videoInfo)
-  } else {
-    console.log("Using image background:", backgroundMedia)
+    console.log("Video info extracted:", videoInfo)
   }
 
   const scrollToProjects = () => {
@@ -95,35 +68,21 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
     }
   }
 
-  if (loading) {
-    return (
-      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-black">
-        <div className="text-white">Loading...</div>
-      </section>
-    )
-  }
-
-  if (error) {
-    return (
-      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-black">
-        <div className="text-white">Error: {error}</div>
-      </section>
-    )
-  }
-
   return (
     <section className="relative h-screen flex items-center justify-center overflow-hidden">
       {/* Background */}
-      {isVideo && videoInfo ? (
+      {useLatestProjectVideo && videoInfo ? (
+        // Use latest project video
         <VideoBackground
           platform={videoInfo.platform}
           videoId={videoInfo.id}
           fallbackImage={latestProject?.image || settings.image_hero_bg}
         />
       ) : (
+        // Use image background
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${backgroundMedia})` }}
+          style={{ backgroundImage: `url(${settings.image_hero_bg})` }}
         />
       )}
 
