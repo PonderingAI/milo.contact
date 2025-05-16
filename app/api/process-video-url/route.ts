@@ -24,18 +24,31 @@ export async function POST(request: NextRequest) {
     let uploadDate = null
 
     if (videoInfo.platform === "vimeo") {
-      // Get video thumbnail and metadata from Vimeo
-      const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-      if (response.ok) {
-        const videoData = await response.json()
-        const video = videoData[0]
-        thumbnailUrl = video.thumbnail_large
-        videoTitle = video.title || `Vimeo ${videoInfo.id}`
-        uploadDate = video.upload_date ? new Date(video.upload_date).toISOString() : null
+      try {
+        // Get video thumbnail and metadata from Vimeo
+        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+        if (response.ok) {
+          const videoData = await response.json()
+          const video = videoData[0]
+          thumbnailUrl = video.thumbnail_large
+          videoTitle = video.title || `Vimeo ${videoInfo.id}`
+          uploadDate = video.upload_date ? new Date(video.upload_date).toISOString() : null
+        } else {
+          console.warn(`Failed to fetch Vimeo metadata: ${response.status} ${response.statusText}`)
+          thumbnailUrl = null
+          videoTitle = `Vimeo Video ${videoInfo.id}`
+        }
+      } catch (error) {
+        console.error("Error fetching Vimeo metadata:", error)
+        thumbnailUrl = null
+        videoTitle = `Vimeo Video ${videoInfo.id}`
       }
     } else if (videoInfo.platform === "youtube") {
       thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
       videoTitle = `YouTube Video ${videoInfo.id}`
+    } else if (videoInfo.platform === "linkedin") {
+      thumbnailUrl = "/generic-icon.png"
+      videoTitle = `LinkedIn Post ${videoInfo.id}`
     }
 
     // Add to media library using admin client
@@ -71,6 +84,7 @@ export async function POST(request: NextRequest) {
       platform: videoInfo.platform,
       id: videoInfo.id,
       uploadDate,
+      data,
     })
   } catch (error) {
     console.error("Error processing video URL:", error)

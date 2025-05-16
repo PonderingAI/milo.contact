@@ -705,18 +705,24 @@ export default function UnifiedMediaLibrary() {
           videoMetadata.uploadedBy = userId
 
           // Save to media table
-          const { error: dbError } = await supabase.from("media").insert({
-            filename: videoTitle,
-            filepath: url,
-            filesize: 0, // Not applicable for external videos
-            filetype: videoInfo.platform,
-            public_url: url,
-            thumbnail_url: thumbnailUrl,
-            tags: ["video", videoInfo.platform],
-            metadata: videoMetadata,
+          // Use the API endpoint instead of direct database access
+          const response = await fetch("/api/process-video-url", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url,
+              isBts: false,
+            }),
           })
 
-          if (dbError) throw dbError
+          if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.error || "Failed to process video URL")
+          }
+
+          const result = await response.json()
           successCount++
         } catch (err) {
           console.error("Error processing video URL:", url, err)
