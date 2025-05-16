@@ -109,7 +109,7 @@ export default function ProjectsClientPage() {
                       <span className="sr-only">View</span>
                     </Button>
                   </Link>
-                  <Link href={`/admin/edit-project/${project.id}`}>
+                  <Link href={`/admin/edit-project/${project.id}`} className="...">
                     <Button variant="outline" size="sm">
                       <Edit size={16} className="mr-1" />
                       Edit
