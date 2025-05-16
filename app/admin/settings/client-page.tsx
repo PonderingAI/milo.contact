@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import AppIconsUploader from "@/components/admin/app-icons-uploader"
 import SiteInformationForm from "@/components/admin/site-information-form"
 import FeaturedProjectSelector from "@/components/admin/featured-project-selector"
+import TagOrderManager from "@/components/admin/tag-order-manager"
 
 export default function SettingsClientPage() {
   return (
@@ -14,6 +15,7 @@ export default function SettingsClientPage() {
         <TabsList className="mb-4">
           <TabsTrigger value="site-info">Site Information</TabsTrigger>
           <TabsTrigger value="featured">Featured Content</TabsTrigger>
+          <TabsTrigger value="tags">Tag Order</TabsTrigger>
           <TabsTrigger value="app-icons">App Icons</TabsTrigger>
         </TabsList>
 
@@ -39,6 +41,10 @@ export default function SettingsClientPage() {
               <FeaturedProjectSelector />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="tags">
+          <TagOrderManager />
         </TabsContent>
 
         <TabsContent value="app-icons">

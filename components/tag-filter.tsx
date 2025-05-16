@@ -10,6 +10,12 @@ interface TagFilterProps {
   selectedTags: string[]
 }
 
+interface TagOrder {
+  tag_type: string
+  tag_name: string
+  display_order: number
+}
+
 export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps) {
   const [categories, setCategories] = useState<string[]>([])
   const [roles, setRoles] = useState<string[]>([])
@@ -47,13 +53,88 @@ export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps)
         // Extract unique roles
         const uniqueRoles = new Set<string>()
         roleData?.forEach((item) => {
-          if (item.role) uniqueRoles.add(item.role)
+          if (item.role) {
+            // Split roles by comma and add each one
+            item.role.split(",").forEach((role: string) => {
+              const trimmedRole = role.trim()
+              if (trimmedRole) uniqueRoles.add(trimmedRole)
+            })
+          }
         })
 
-        setCategories(Array.from(uniqueCategories).sort())
-        setRoles(Array.from(uniqueRoles).sort())
+        // Try to fetch custom tag order
+        let orderedCategories: string[] = []
+        let orderedRoles: string[] = []
+
+        try {
+          const response = await fetch("/api/tag-order")
+
+          if (response.ok) {
+            const orderData: TagOrder[] = await response.json()
+
+            // Create maps for quick lookup
+            const categoryOrderMap = new Map<string, number>()
+            const roleOrderMap = new Map<string, number>()
+
+            // Get all ordered tags
+            const orderedCategoryNames = new Set<string>()
+            const orderedRoleNames = new Set<string>()
+
+            orderData.forEach((item) => {
+              if (item.tag_type === "category") {
+                categoryOrderMap.set(item.tag_name, item.display_order)
+                orderedCategoryNames.add(item.tag_name)
+              } else if (item.tag_type === "role") {
+                roleOrderMap.set(item.tag_name, item.display_order)
+                orderedRoleNames.add(item.tag_name)
+              }
+            })
+
+            // Sort categories based on saved order
+            orderedCategories = Array.from(uniqueCategories).sort((a, b) => {
+              // If both have custom order, use it
+              if (categoryOrderMap.has(a) && categoryOrderMap.has(b)) {
+                return categoryOrderMap.get(a)! - categoryOrderMap.get(b)!
+              }
+              // If only a has custom order, it comes first
+              if (categoryOrderMap.has(a)) return -1
+              // If only b has custom order, it comes first
+              if (categoryOrderMap.has(b)) return 1
+              // If neither has custom order, sort alphabetically
+              return a.localeCompare(b)
+            })
+
+            // Sort roles based on saved order
+            orderedRoles = Array.from(uniqueRoles).sort((a, b) => {
+              // If both have custom order, use it
+              if (roleOrderMap.has(a) && roleOrderMap.has(b)) {
+                return roleOrderMap.get(a)! - roleOrderMap.get(b)!
+              }
+              // If only a has custom order, it comes first
+              if (roleOrderMap.has(a)) return -1
+              // If only b has custom order, it comes first
+              if (roleOrderMap.has(b)) return 1
+              // If neither has custom order, sort alphabetically
+              return a.localeCompare(b)
+            })
+          } else {
+            // If no order exists yet, just sort alphabetically
+            orderedCategories = Array.from(uniqueCategories).sort()
+            orderedRoles = Array.from(uniqueRoles).sort()
+          }
+        } catch (error) {
+          console.error("Error fetching tag order:", error)
+          // If error, just sort alphabetically
+          orderedCategories = Array.from(uniqueCategories).sort()
+          orderedRoles = Array.from(uniqueRoles).sort()
+        }
+
+        setCategories(orderedCategories)
+        setRoles(orderedRoles)
       } catch (error) {
         console.error("Error in fetchTags:", error)
+        setCategories([])
+        setRoles([])
       } finally {
         setLoading(false)
       }
