@@ -12,18 +12,18 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Loader2 } from "lucide-react"
+import { AlertCircle, Loader2, X } from "lucide-react"
 import ImageUploader from "@/components/admin/image-uploader"
 import MediaSelector from "@/components/admin/media-selector"
 import { toast } from "@/components/ui/use-toast"
 import Image from "next/image"
+import { Badge } from "@/components/ui/badge"
 
 interface ProjectFormProps {
   project?: {
     id: string
     title: string
     category: string
-    type: string
     role: string
     image: string
     video_url?: string
@@ -31,6 +31,8 @@ interface ProjectFormProps {
     special_notes?: string
     is_public: boolean
     publish_date: string | null
+    tags?: string[]
+    project_date?: string | null
   }
   mode: "create" | "edit"
 }
@@ -39,7 +41,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [formData, setFormData] = useState({
     title: project?.title || "",
     category: project?.category || "",
-    type: project?.type || "directed",
     role: project?.role || "",
     image: project?.image || "",
     video_url: project?.video_url || "",
@@ -47,6 +48,8 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     special_notes: project?.special_notes || "",
     is_public: project?.is_public ?? true,
     publish_date: project?.publish_date || null,
+    tags: project?.tags || [],
+    project_date: project?.project_date || null,
   })
 
   const [error, setError] = useState<string | null>(null)
@@ -54,8 +57,26 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [isUsingVideoThumbnail, setIsUsingVideoThumbnail] = useState(false)
+  const [parsedTags, setParsedTags] = useState<string[]>([])
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
+
+  // Parse tags from role field
+  useEffect(() => {
+    if (formData.role) {
+      // Split by commas and trim whitespace
+      const roleTags = formData.role
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0)
+
+      // Combine with existing tags, remove duplicates
+      const allTags = [...new Set([...roleTags, ...formData.tags])]
+      setParsedTags(allTags)
+    } else {
+      setParsedTags(formData.tags)
+    }
+  }, [formData.role, formData.tags])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -69,6 +90,13 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const handleImageUpload = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
     setIsUsingVideoThumbnail(false)
+  }
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      tags: prev.tags.filter((tag) => tag !== tagToRemove),
+    }))
   }
 
   // Process video URL and extract thumbnail
@@ -192,7 +220,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const validateForm = () => {
     if (!formData.title) return "Title is required"
     if (!formData.category) return "Category is required"
-    if (!formData.type) return "Type is required"
     if (!formData.role) return "Role is required"
     if (!formData.image) return "Image is required"
 
@@ -219,9 +246,24 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setError(null)
 
     try {
+      // Extract tags from role field
+      const roleTags = formData.role
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0)
+
+      // Combine with existing tags, remove duplicates
+      const allTags = [...new Set([...roleTags, ...formData.tags])]
+
+      // Prepare data for submission
+      const dataToSubmit = {
+        ...formData,
+        tags: allTags,
+      }
+
       if (mode === "create") {
         // Create new project
-        const { data, error } = await supabase.from("projects").insert([formData]).select()
+        const { data, error } = await supabase.from("projects").insert([dataToSubmit]).select()
 
         if (error) throw error
 
@@ -229,7 +271,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         router.push(`/admin/projects/${data[0].id}/edit`)
       } else {
         // Update existing project
-        const { error } = await supabase.from("projects").update(formData).eq("id", project?.id)
+        const { error } = await supabase.from("projects").update(dataToSubmit).eq("id", project?.id)
 
         if (error) throw error
 
@@ -286,33 +328,35 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="type">Type *</Label>
-          <Select value={formData.type} onValueChange={(value) => handleSelectChange("type", value)}>
-            <SelectTrigger className="bg-gray-800 border-gray-700">
-              <SelectValue placeholder="Select type" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-800 border-gray-700">
-              <SelectItem value="directed">Directed</SelectItem>
-              <SelectItem value="camera">Camera</SelectItem>
-              <SelectItem value="production">Production</SelectItem>
-              <SelectItem value="photography">Photography</SelectItem>
-              <SelectItem value="ai">AI</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="role">Role *</Label>
+        <div className="space-y-2 md:col-span-2">
+          <Label htmlFor="role">Roles/Tags *</Label>
           <Input
             id="role"
             name="role"
             value={formData.role}
             onChange={handleChange}
-            placeholder="e.g. Director, 1st AC, etc."
+            placeholder="e.g. Director, 1st AC, Drone Operator (separate with commas)"
             className="bg-gray-800 border-gray-700"
             required
           />
+          <p className="text-xs text-gray-400 mt-1">
+            Separate multiple roles with commas. These will be used as tags for filtering.
+          </p>
+
+          {parsedTags.length > 0 && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              {parsedTags.map((tag, index) => (
+                <Badge key={index} variant="secondary" className="flex items-center gap-1">
+                  {tag}
+                  {formData.tags.includes(tag) && (
+                    <button type="button" onClick={() => removeTag(tag)} className="text-gray-400 hover:text-gray-200">
+                      <X className="h-3 w-3" />
+                    </button>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
@@ -398,6 +442,22 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             />
           </div>
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="project_date">Project Date</Label>
+        <Input
+          type="date"
+          id="project_date"
+          name="project_date"
+          value={formData.project_date ? new Date(formData.project_date).toISOString().split("T")[0] : ""}
+          onChange={(e) => {
+            const value = e.target.value ? new Date(e.target.value).toISOString() : null
+            setFormData((prev) => ({ ...prev, project_date: value }))
+          }}
+          className="bg-gray-800 border-gray-700"
+        />
+        <p className="text-xs text-gray-400">When was this project completed?</p>
       </div>
 
       <div className="space-y-2">

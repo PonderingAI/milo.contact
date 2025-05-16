@@ -495,13 +495,15 @@ export default function SiteInformationForm() {
   const [tableExists, setTableExists] = useState(true)
   const [settings, setSettings] = useState({
     // Hero section
-    hero_heading: "Film Production & Photography",
+    hero_heading: "Milo Presedo",
     hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
     image_hero_bg: "/images/hero-bg.jpg",
-    hero_bg_type: "image", // "image", "video", or "latest_project"
+    hero_bg_type: "latest_project", // "image", "video", or "latest_project"
+    background_color: "#000000",
 
     // Projects section
     projects_per_page: "20",
+    project_gap: "4", // Gap between projects in pixels
 
     // About section
     about_heading: "About Me",
@@ -682,6 +684,7 @@ export default function SiteInformationForm() {
         <Tabs defaultValue="hero">
           <TabsList className="mb-4">
             <TabsTrigger value="hero">Hero</TabsTrigger>
+            <TabsTrigger value="appearance">Appearance</TabsTrigger>
             <TabsTrigger value="projects">Projects</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
@@ -723,6 +726,40 @@ export default function SiteInformationForm() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="appearance">
+            <Card>
+              <CardHeader>
+                <CardTitle>Appearance</CardTitle>
+                <CardDescription>Customize the look and feel of your site.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="background_color">Background Color</Label>
+                  <div className="flex items-center gap-4">
+                    <Input
+                      id="background_color"
+                      name="background_color"
+                      type="color"
+                      value={settings.background_color}
+                      onChange={handleChange}
+                      className="w-16 h-10 p-1"
+                    />
+                    <Input
+                      id="background_color_text"
+                      name="background_color"
+                      type="text"
+                      value={settings.background_color}
+                      onChange={handleChange}
+                      className="flex-1"
+                      placeholder="#000000"
+                    />
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">This color will be used for the background of your site</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="projects">
             <Card>
               <CardHeader>
@@ -750,6 +787,26 @@ export default function SiteInformationForm() {
                   <p className="text-xs text-gray-400 mt-1">
                     Number of projects to show before the "View More" button appears
                   </p>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="project_gap">Gap Between Projects</Label>
+                  <Select
+                    value={settings.project_gap}
+                    onValueChange={(value) => handleSelectChange("project_gap", value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select gap size" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="2">Very Small (8px)</SelectItem>
+                      <SelectItem value="4">Small (16px)</SelectItem>
+                      <SelectItem value="6">Medium (24px)</SelectItem>
+                      <SelectItem value="8">Large (32px)</SelectItem>
+                      <SelectItem value="12">Very Large (48px)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-400 mt-1">The amount of space between projects in the grid</p>
                 </div>
               </CardContent>
             </Card>

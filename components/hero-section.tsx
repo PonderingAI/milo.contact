@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ArrowDown } from "lucide-react"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { extractVideoInfo } from "@/lib/project-data"
 import VideoBackground from "./video-background"
@@ -13,10 +12,11 @@ interface HeroSectionProps {
 
 export default function HeroSection({ latestProject }: HeroSectionProps) {
   const [settings, setSettings] = useState({
-    hero_heading: "Film Production & Photography",
+    hero_heading: "Milo Presedo",
     hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
     image_hero_bg: "/images/hero-bg.jpg",
-    hero_bg_type: "image", // "image", "video", or "latest_project"
+    hero_bg_type: "latest_project", // "image", "video", or "latest_project"
+    background_color: "#000000",
   })
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
-          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type"])
+          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type", "background_color"])
 
         if (!error && data) {
           const newSettings = { ...settings }
@@ -74,7 +74,10 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
   }
 
   return (
-    <section className="relative h-screen flex items-center justify-center overflow-hidden">
+    <section
+      className="relative h-screen flex items-center justify-center overflow-hidden"
+      style={{ backgroundColor: settings.background_color }}
+    >
       {/* Background */}
       {isVideo && videoInfo ? (
         <VideoBackground
@@ -89,19 +92,12 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
         />
       )}
 
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50" />
+      {/* Overlay - removed to make video the star */}
 
-      {/* Content */}
-      <div className="relative z-10 text-center px-4 max-w-4xl">
-        <h1 className="text-4xl md:text-6xl lg:text-7xl font-serif mb-6">{settings.hero_heading}</h1>
-        <p className="text-xl md:text-2xl text-gray-200 mb-12 max-w-3xl mx-auto">{settings.hero_subheading}</p>
-        <button
-          onClick={scrollToProjects}
-          className="flex items-center gap-2 mx-auto text-gray-300 hover:text-white transition-colors"
-        >
-          View My Work <ArrowDown className="w-4 h-4 animate-bounce" />
-        </button>
+      {/* Content - moved to bottom left */}
+      <div className="absolute bottom-12 left-12 z-10 text-left px-4 max-w-md">
+        <h1 className="text-3xl md:text-4xl font-serif mb-2">{settings.hero_heading}</h1>
+        <p className="text-sm md:text-base text-gray-200">{settings.hero_subheading}</p>
       </div>
     </section>
   )
