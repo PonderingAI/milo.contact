@@ -95,3 +95,10 @@ export async function isCurrentUserAdmin(): Promise<boolean> {
   if (!userId) return false
   return isAdmin(userId)
 }
+
+/**
+ * Checks if a user is an admin
+ */
+export async function checkUserIsAdmin(userId: string): Promise<boolean> {
+  return hasRole(userId, "admin")
+}
