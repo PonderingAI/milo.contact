@@ -11,7 +11,8 @@ interface TagFilterProps {
 }
 
 export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps) {
-  const [tags, setTags] = useState<string[]>([])
+  const [categories, setCategories] = useState<string[]>([])
+  const [roles, setRoles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -37,18 +38,20 @@ export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps)
           return
         }
 
-        // Extract unique tags
-        const uniqueTags = new Set<string>()
-
+        // Extract unique categories
+        const uniqueCategories = new Set<string>()
         categoryData?.forEach((item) => {
-          if (item.category) uniqueTags.add(item.category)
+          if (item.category) uniqueCategories.add(item.category)
         })
 
+        // Extract unique roles
+        const uniqueRoles = new Set<string>()
         roleData?.forEach((item) => {
-          if (item.role) uniqueTags.add(item.role)
+          if (item.role) uniqueRoles.add(item.role)
         })
 
-        setTags(Array.from(uniqueTags).sort())
+        setCategories(Array.from(uniqueCategories).sort())
+        setRoles(Array.from(uniqueRoles).sort())
       } catch (error) {
         console.error("Error in fetchTags:", error)
       } finally {
@@ -75,39 +78,68 @@ export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps)
 
   if (loading) {
     return (
-      <div className="flex flex-wrap gap-2 mb-8">
-        {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-8 w-20 bg-gray-800 animate-pulse rounded-full"></div>
-        ))}
+      <div className="space-y-4 mb-8">
+        <div className="flex flex-wrap gap-2">
+          {[1, 2, 3].map((i) => (
+            <div key={`cat-${i}`} className="h-8 w-20 bg-gray-800 animate-pulse rounded-full"></div>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={`role-${i}`} className="h-8 w-20 bg-gray-800 animate-pulse rounded-full"></div>
+          ))}
+        </div>
       </div>
     )
   }
 
   return (
-    <div className="mb-8">
-      <div className="flex flex-wrap gap-2 items-center">
-        {tags.map((tag) => (
-          <Button
-            key={tag}
-            variant={selectedTags.includes(tag) ? "default" : "outline"}
-            size="sm"
-            className="rounded-full"
-            onClick={() => handleTagClick(tag)}
-          >
-            {tag}
-          </Button>
-        ))}
+    <div className="mb-8 space-y-4">
+      {/* Categories row */}
+      <div>
+        <div className="text-sm text-gray-400 mb-2">Categories</div>
+        <div className="flex flex-wrap gap-2 items-center">
+          {categories.map((category) => (
+            <Button
+              key={category}
+              variant={selectedTags.includes(category) ? "default" : "outline"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => handleTagClick(category)}
+            >
+              {category}
+            </Button>
+          ))}
+        </div>
+      </div>
 
-        {selectedTags.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-gray-400 hover:text-white">
-            <X className="h-4 w-4 mr-1" />
-            Clear filters
-          </Button>
-        )}
+      {/* Roles row */}
+      <div>
+        <div className="text-sm text-gray-400 mb-2">Roles</div>
+        <div className="flex flex-wrap gap-2 items-center">
+          {roles.map((role) => (
+            <Button
+              key={role}
+              variant={selectedTags.includes(role) ? "default" : "outline"}
+              size="sm"
+              className="rounded-full"
+              onClick={() => handleTagClick(role)}
+            >
+              {role}
+            </Button>
+          ))}
+
+          {selectedTags.length > 0 && (
+            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-gray-400 hover:text-white">
+              <X className="h-4 w-4 mr-1" />
+              Clear filters
+            </Button>
+          )}
+        </div>
       </div>
 
       {selectedTags.length > 0 && (
-        <div className="mt-2 text-sm text-gray-400">Showing projects matching any of: {selectedTags.join(", ")}</div>
+        <div className="text-sm text-gray-400">Showing projects matching any of: {selectedTags.join(", ")}</div>
       )}
     </div>
   )
