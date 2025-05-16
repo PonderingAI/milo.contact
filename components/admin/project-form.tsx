@@ -297,18 +297,37 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       console.log("Saving project with data:", cleanData)
 
       if (mode === "create") {
-        // Create new project
-        const { data, error } = await supabase.from("projects").insert([cleanData]).select()
+        // Create new project using API route
+        const response = await fetch("/api/projects/create", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(cleanData),
+        })
 
-        if (error) throw error
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to create project")
+        }
 
+        const result = await response.json()
         // Redirect to the project edit page
-        router.push(`/admin/projects/${data[0].id}/edit`)
+        router.push(`/admin/projects/${result.data[0].id}/edit`)
       } else {
-        // Update existing project
-        const { error } = await supabase.from("projects").update(cleanData).eq("id", project?.id)
+        // Update existing project - we'll need to create an update API route
+        const response = await fetch(`/api/projects/update/${project?.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(cleanData),
+        })
 
-        if (error) throw error
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Failed to update project")
+        }
 
         // Refresh the page
         router.refresh()

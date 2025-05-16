@@ -448,28 +448,42 @@ export default function NewProjectPage() {
       // Log the data being sent to the server
       console.log("Saving project with data:", cleanData)
 
-      // Create in Supabase
-      const { data, error: projectError } = await supabase.from("projects").insert([cleanData]).select()
+      // Use the API route instead of direct Supabase client
+      const response = await fetch("/api/projects/create", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(cleanData),
+      })
 
-      if (projectError) {
-        throw projectError
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to create project")
       }
 
-      const projectId = data[0].id
+      const result = await response.json()
+      const projectId = result.data[0].id
 
       // Save BTS images if any
       if (btsImages.length > 0) {
-        const btsImagesData = btsImages.map((imageUrl, index) => ({
-          project_id: projectId,
-          image_url: imageUrl,
-          caption: `BTS Image ${index + 1}`,
-          size: "medium",
-          aspect_ratio: "landscape",
-        }))
+        try {
+          const btsResponse = await fetch("/api/projects/bts-images", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              projectId,
+              images: btsImages,
+            }),
+          })
 
-        const { error: btsError } = await supabase.from("bts_images").insert(btsImagesData)
-
-        if (btsError) {
+          if (!btsResponse.ok) {
+            console.error("Error saving BTS images:", await btsResponse.json())
+            // Continue anyway, we've already created the project
+          }
+        } catch (btsError) {
           console.error("Error saving BTS images:", btsError)
           // Continue anyway, we've already created the project
         }
