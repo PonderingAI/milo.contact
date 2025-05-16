@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { getSupabaseBrowserClient } from "@/lib/supabase"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -71,7 +71,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [schemaColumns, setSchemaColumns] = useState<string[]>([])
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const router = useRouter()
-  const supabase = getSupabaseBrowserClient()
+  const supabase = createClientComponentClient()
 
   // Fetch the actual schema columns when the component mounts
   useEffect(() => {
@@ -129,8 +129,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   useEffect(() => {
     async function fetchExistingValues() {
       try {
-        const supabase = getSupabaseBrowserClient()
-
         // Fetch categories
         const { data: categoryData } = await supabase.from("projects").select("category")
 
@@ -155,7 +153,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     }
 
     fetchExistingValues()
-  }, [])
+  }, [supabase])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -332,24 +330,27 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setError(null)
 
     try {
-      // Create a clean data object with only the columns that exist in the database
-      const cleanData: Record<string, any> = {}
-
-      // Add all fields from formData that exist in the schema
-      Object.entries(formData).forEach(([key, value]) => {
-        if (schemaColumns.includes(key)) {
-          cleanData[key] = value
-        }
-      })
-
-      // Ensure required fields are present and not empty
+      // Log the form data for debugging
       console.log("Form data before submission:", formData)
-      console.log("Clean data being sent to API:", cleanData)
 
-      // Make sure role is properly formatted
-      if (roleInput && !cleanData.role) {
-        cleanData.role = roleInput
+      // Create a clean data object with only the required fields
+      const projectData = {
+        title: formData.title.trim(),
+        category: formData.category.trim(),
+        role: formData.role.trim(),
+        image: formData.image.trim(),
+        description: formData.description,
+        is_public: formData.is_public,
+        project_date: formData.project_date || new Date().toISOString().split("T")[0],
       }
+
+      // Add thumbnail_url if it exists and is not empty
+      if (formData.thumbnail_url) {
+        projectData.thumbnail_url = formData.thumbnail_url.trim()
+      }
+
+      // Log the data being sent to the API
+      console.log("Sending project data to API:", projectData)
 
       if (mode === "create") {
         // Create new project using API route
@@ -358,15 +359,21 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(cleanData),
+          body: JSON.stringify(projectData),
         })
 
         const responseData = await response.json()
 
         if (!response.ok) {
           console.error("API error response:", responseData)
-          throw new Error(responseData.error || "Failed to create project")
+          throw new Error(responseData.error || responseData.details || "Failed to create project")
         }
+
+        // Show success message
+        toast({
+          title: "Project created",
+          description: "Project created successfully!",
+        })
 
         // Redirect to the project edit page
         router.push(`/admin/projects/${responseData.data[0].id}/edit`)
@@ -377,25 +384,25 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(cleanData),
+          body: JSON.stringify(projectData),
         })
 
         const responseData = await response.json()
 
         if (!response.ok) {
           console.error("API error response:", responseData)
-          throw new Error(responseData.error || "Failed to update project")
+          throw new Error(responseData.error || responseData.details || "Failed to update project")
         }
+
+        // Show success message
+        toast({
+          title: "Project updated",
+          description: "Project updated successfully!",
+        })
 
         // Refresh the page
         router.refresh()
       }
-
-      // Show success message
-      toast({
-        title: mode === "create" ? "Project created" : "Project updated",
-        description: mode === "create" ? "Project created successfully!" : "Project updated successfully!",
-      })
     } catch (error: any) {
       console.error("Error saving project:", error)
       setError(error.message || "Failed to save project")

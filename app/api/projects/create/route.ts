@@ -3,46 +3,36 @@ import { createAdminClient } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
-    const projectData = await request.json()
+    const supabase = createAdminClient()
+    const formData = await request.json()
 
-    console.log("Received project data:", projectData)
+    // Log the received data for debugging
+    console.log("Received project data:", formData)
 
-    // Validate required fields
+    // Check for required fields
     const requiredFields = ["title", "image", "category", "role"]
-    const missingFields = requiredFields.filter((field) => {
-      const value = projectData[field]
-      return value === undefined || value === null || value === ""
-    })
+    const missingFields = requiredFields.filter((field) => !formData[field])
 
     if (missingFields.length > 0) {
-      console.error(`Missing required fields: ${missingFields.join(", ")}`, {
-        receivedData: projectData,
-      })
-
+      console.error("Missing required fields:", missingFields)
       return NextResponse.json(
         {
-          success: false,
           error: `Missing required fields: ${missingFields.join(", ")}`,
-          details: "Please fill in all required fields before submitting.",
-          receivedData: projectData,
+          receivedData: formData,
         },
         { status: 400 },
       )
     }
 
-    // Use the admin client to bypass RLS
-    const supabase = createAdminClient()
-
     // Insert the project
-    const { data, error } = await supabase.from("projects").insert([projectData]).select()
+    const { data, error } = await supabase.from("projects").insert([formData]).select()
 
     if (error) {
-      console.error("Error creating project:", error)
+      console.error("Error inserting project:", error)
       return NextResponse.json(
         {
-          success: false,
-          error: error.message,
-          details: "This could be due to missing required fields or database constraints.",
+          error: `Error inserting project: ${error.message}`,
+          details: error,
         },
         { status: 500 },
       )
@@ -50,16 +40,13 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      data,
-      message: "Project created successfully",
+      project: data[0],
     })
   } catch (error) {
     console.error("Unexpected error creating project:", error)
     return NextResponse.json(
       {
-        success: false,
-        error: error instanceof Error ? error.message : "Unknown error occurred",
-        details: "There was an unexpected error processing your request.",
+        error: `Unexpected error: ${error instanceof Error ? error.message : "Unknown error"}`,
       },
       { status: 500 },
     )
