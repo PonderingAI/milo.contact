@@ -1,12 +1,11 @@
-import { createAdminClient } from "@/lib/supabase-server"
 import { type NextRequest, NextResponse } from "next/server"
+import { createAdminClient } from "@/lib/supabase-server"
 
-// GET handler to fetch all settings
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient()
 
-    const { data, error } = await supabase.from("site_settings").select("key, value")
+    const { data, error } = await supabase.from("site_settings").select("*")
 
     if (error) {
       console.error("Error fetching settings:", error)
@@ -16,37 +15,44 @@ export async function GET() {
     return NextResponse.json(data)
   } catch (error: any) {
     console.error("Error in GET /api/settings:", error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message || "An unknown error occurred" }, { status: 500 })
   }
 }
 
-// POST handler to save settings
 export async function POST(request: NextRequest) {
   try {
-    const settingsArray = await request.json()
+    const settings = await request.json()
 
-    if (!Array.isArray(settingsArray)) {
-      return NextResponse.json({ error: "Invalid request format. Expected an array of settings." }, { status: 400 })
+    if (!Array.isArray(settings)) {
+      return NextResponse.json({ error: "Invalid settings format" }, { status: 400 })
     }
 
     const supabase = createAdminClient()
 
-    // Log the settings being saved for debugging
-    console.log("Saving settings:", settingsArray)
+    // Process each setting
+    for (const setting of settings) {
+      const { key, value } = setting
 
-    // Use upsert to insert or update settings
-    const { error } = await supabase.from("site_settings").upsert(settingsArray, {
-      onConflict: "key",
-    })
+      // Special handling for background_color to ensure it has a # prefix
+      let processedValue = value
+      if (key === "background_color" && value && !value.startsWith("#")) {
+        processedValue = `#${value}`
+      }
 
-    if (error) {
-      console.error("Error saving settings:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      // Upsert the setting
+      const { error } = await supabase
+        .from("site_settings")
+        .upsert({ key, value: processedValue }, { onConflict: "key" })
+
+      if (error) {
+        console.error(`Error upserting setting ${key}:`, error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
     }
 
-    return NextResponse.json({ success: true, message: "Settings saved successfully" })
+    return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error in POST /api/settings:", error)
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ error: error.message || "An unknown error occurred" }, { status: 500 })
   }
 }

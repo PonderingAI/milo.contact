@@ -10,7 +10,8 @@ import CookieConsent from "@/components/cookie-consent"
 import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
 import { initErrorTracking } from "@/lib/error-tracking"
-import { createAdminClient } from "@/lib/supabase-server"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -30,24 +31,37 @@ export const metadata = {
     generator: 'v0.dev'
 }
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Initialize error tracking
-  initErrorTracking()
-
-  // Fetch background color from site settings
-  let backgroundColor = "#000000" // Default black
+async function getBackgroundColor() {
   try {
-    const supabase = createAdminClient()
+    const cookieStore = cookies()
+    const supabase = createClientComponentClient({ cookies: () => cookieStore })
+
     const { data, error } = await supabase.from("site_settings").select("value").eq("key", "background_color").single()
 
     if (error) {
       console.error("Error fetching background color:", error)
-    } else if (data && data.value) {
-      backgroundColor = data.value.startsWith("#") ? data.value : `#${data.value}`
+      return "#000000" // Default black
     }
+
+    if (data && data.value) {
+      // Ensure the color has a # prefix
+      const color = data.value.startsWith("#") ? data.value : `#${data.value}`
+      return color
+    }
+
+    return "#000000" // Default black
   } catch (error) {
-    console.error("Error fetching background color:", error)
+    console.error("Error in getBackgroundColor:", error)
+    return "#000000" // Default black
   }
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Initialize error tracking
+  initErrorTracking()
+
+  // Get background color
+  const backgroundColor = await getBackgroundColor()
 
   return (
     <ClerkProvider>
