@@ -92,15 +92,15 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
       {/* Overlay */}
       <div className="absolute inset-0 bg-black/50" />
 
-      {/* Content */}
-      <div className="relative z-10 px-4 absolute bottom-10 left-10">
-        <h1 className="text-4xl md:text-5xl lg:text-6xl font-serif mb-3">{settings.hero_heading}</h1>
-        <p className="text-lg md:text-xl text-gray-200 mb-6 max-w-3xl">{settings.hero_subheading}</p>
+      {/* Content - positioned at bottom left */}
+      <div className="absolute bottom-10 left-10 z-10 text-left">
+        <h1 className="text-2xl md:text-3xl lg:text-4xl font-serif mb-2">{settings.hero_heading}</h1>
+        <p className="text-sm md:text-base text-gray-200 mb-4 max-w-md">{settings.hero_subheading}</p>
         <button
           onClick={scrollToProjects}
-          className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors text-sm"
         >
-          View My Work <ArrowDown className="w-4 h-4 animate-bounce" />
+          View My Work <ArrowDown className="w-3 h-3 animate-bounce" />
         </button>
       </div>
     </section>

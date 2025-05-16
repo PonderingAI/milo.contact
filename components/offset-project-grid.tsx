@@ -61,8 +61,7 @@ export default function OffsetProjectGrid({ projects, searchQuery = "", selected
       filtered = filtered.filter(
         (project) =>
           project.category?.toLowerCase() === selectedTag.toLowerCase() ||
-          project.role?.toLowerCase() === selectedTag.toLowerCase() ||
-          project.tags?.some((tag) => tag.toLowerCase() === selectedTag.toLowerCase()),
+          project.role?.toLowerCase() === selectedTag.toLowerCase(),
       )
     }
 
@@ -89,17 +88,16 @@ export default function OffsetProjectGrid({ projects, searchQuery = "", selected
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-12">
         {filteredProjects.slice(0, visibleProjects).map((project, index) => {
-          // Calculate offset for each project - vertical offset pattern
+          // Calculate offset for each project - horizontal offset pattern
+          const row = Math.floor(index / 3)
           const col = index % 3
+
           let offsetClass = ""
 
-          // First column: no offset
-          // Second column: offset down
-          // Third column: offset up
-          if (col === 1) {
-            offsetClass = "md:mt-12"
-          } else if (col === 2) {
-            offsetClass = "md:-mt-12"
+          if (row % 2 === 1) {
+            // Second row
+            if (col === 1) offsetClass = "md:translate-x-8"
+            else if (col === 2) offsetClass = "md:translate-x-16"
           }
 
           return (

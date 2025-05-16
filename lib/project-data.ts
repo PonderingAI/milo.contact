@@ -28,6 +28,7 @@ export interface Project {
   publish_date?: string
   // type is deprecated - use category or tags instead
   type?: string
+  // Virtual property for tags - not stored in database
   tags?: string[]
 }
 
@@ -73,6 +74,17 @@ export async function isDatabaseSetup(): Promise<boolean> {
 }
 
 /**
+ * Extract tags from role field
+ */
+export function extractTagsFromRole(role: string | null | undefined): string[] {
+  if (!role) return []
+  return role
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean)
+}
+
+/**
  * Get all projects from the database or fallback to mock data
  */
 export async function getProjects(): Promise<Project[]> {
@@ -109,16 +121,17 @@ export async function getProjects(): Promise<Project[]> {
 
     // Process projects to extract tags from categories and roles
     const processedProjects = data.map((project) => {
-      const tags = []
-      if (project.category) tags.push(project.category)
-      if (project.role) tags.push(project.role)
+      // Extract tags from role field
+      const roleTags = extractTagsFromRole(project.role)
+
       // If project has type but no category, use type as category (for backward compatibility)
       if (project.type && !project.category) {
         project.category = project.type
       }
+
       return {
         ...project,
-        tags,
+        tags: [project.category, ...roleTags].filter(Boolean),
       }
     })
 
@@ -197,10 +210,9 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       console.error("Error fetching BTS images:", btsError)
     }
 
-    // Process project to extract tags
-    const tags = []
-    if (project.category) tags.push(project.category)
-    if (project.role) tags.push(project.role)
+    // Extract tags from role field
+    const roleTags = extractTagsFromRole(project.role)
+
     // If project has type but no category, use type as category (for backward compatibility)
     if (project.type && !project.category) {
       project.category = project.type
@@ -208,7 +220,7 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
 
     return {
       ...project,
-      tags,
+      tags: [project.category, ...roleTags].filter(Boolean),
       bts_images: btsImages || [],
     } as Project & { bts_images: BtsImage[] }
   } catch (error) {
@@ -250,12 +262,12 @@ export async function getProjectsByCategory(category: string): Promise<Project[]
 
     // Process projects to extract tags
     const processedProjects = data.map((project) => {
-      const tags = []
-      if (project.category) tags.push(project.category)
-      if (project.role) tags.push(project.role)
+      // Extract tags from role field
+      const roleTags = extractTagsFromRole(project.role)
+
       return {
         ...project,
-        tags,
+        tags: [project.category, ...roleTags].filter(Boolean),
       }
     })
 
@@ -287,9 +299,12 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
     let query = supabase.from("projects").select("*")
 
     if (Array.isArray(role)) {
-      query = query.in("role", role)
+      // For multiple roles, we need to use OR conditions
+      const conditions = role.map((r) => `role.ilike.%${r}%`).join(",")
+      query = query.or(conditions)
     } else {
-      query = query.eq("role", role)
+      // For single role, we can use ILIKE to match partial roles (comma-separated)
+      query = query.ilike("role", `%${role}%`)
     }
 
     const { data, error } = await query.order("created_at", { ascending: false })
@@ -304,16 +319,17 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
 
     // Process projects to extract tags
     const processedProjects = data.map((project) => {
-      const tags = []
-      if (project.category) tags.push(project.category)
-      if (project.role) tags.push(project.role)
+      // Extract tags from role field
+      const roleTags = extractTagsFromRole(project.role)
+
       // If project has type but no category, use type as category (for backward compatibility)
       if (project.type && !project.category) {
         project.category = project.type
       }
+
       return {
         ...project,
-        tags,
+        tags: [project.category, ...roleTags].filter(Boolean),
       }
     })
 
@@ -350,7 +366,7 @@ export async function getProjectsByTag(tag: string): Promise<Project[]> {
     const { data, error } = await supabase
       .from("projects")
       .select("*")
-      .or(`category.eq.${tag},role.eq.${tag}`)
+      .or(`category.eq.${tag},role.ilike.%${tag}%`)
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -360,16 +376,17 @@ export async function getProjectsByTag(tag: string): Promise<Project[]> {
 
     // Process projects to extract tags
     const processedProjects = data.map((project) => {
-      const tags = []
-      if (project.category) tags.push(project.category)
-      if (project.role) tags.push(project.role)
+      // Extract tags from role field
+      const roleTags = extractTagsFromRole(project.role)
+
       // If project has type but no category, use type as category (for backward compatibility)
       if (project.type && !project.category) {
         project.category = project.type
       }
+
       return {
         ...project,
-        tags,
+        tags: [project.category, ...roleTags].filter(Boolean),
       }
     })
 

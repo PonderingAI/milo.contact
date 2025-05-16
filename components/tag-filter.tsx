@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { extractTagsFromRole } from "@/lib/project-data"
 
 interface TagFilterProps {
   onTagSelect: (tag: string | null) => void
@@ -10,7 +11,7 @@ interface TagFilterProps {
 }
 
 export default function TagFilter({ onTagSelect, selectedTag }: TagFilterProps) {
-  const [tags, setTags] = useState<{ name: string; count: number }[]>([])
+  const [tags, setTags] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -19,49 +20,30 @@ export default function TagFilter({ onTagSelect, selectedTag }: TagFilterProps) 
         setLoading(true)
         const supabase = getSupabaseBrowserClient()
 
-        // Get all projects
-        const { data: projects, error } = await supabase.from("projects").select("category, role, tags")
+        // Fetch all projects to extract unique categories and roles
+        const { data, error } = await supabase.from("projects").select("category, role")
 
         if (error) {
-          console.error("Error fetching projects for tags:", error)
+          console.error("Error fetching tags:", error)
           return
         }
 
-        // Extract and count tags
-        const tagCounts: Record<string, number> = {}
+        // Extract unique categories
+        const categories = [...new Set(data.map((project) => project.category).filter(Boolean))]
 
-        projects?.forEach((project) => {
-          if (project.category) {
-            tagCounts[project.category] = (tagCounts[project.category] || 0) + 1
-          }
-
-          // Handle role as a comma-separated string
+        // Extract unique roles from comma-separated values
+        const allRoles: string[] = []
+        data.forEach((project) => {
           if (project.role) {
-            const roles = project.role
-              .split(",")
-              .map((r) => r.trim())
-              .filter((r) => r)
-            roles.forEach((role) => {
-              tagCounts[role] = (tagCounts[role] || 0) + 1
-            })
-          }
-
-          // Handle tags array
-          if (project.tags && Array.isArray(project.tags)) {
-            project.tags.forEach((tag) => {
-              if (tag) {
-                tagCounts[tag] = (tagCounts[tag] || 0) + 1
-              }
-            })
+            const roleTags = extractTagsFromRole(project.role)
+            allRoles.push(...roleTags)
           }
         })
+        const roles = [...new Set(allRoles)]
 
-        // Convert to array and sort by count (descending)
-        const sortedTags = Object.entries(tagCounts)
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count)
-
-        setTags(sortedTags)
+        // Combine categories and roles, remove duplicates
+        const uniqueTags = [...new Set([...categories, ...roles])].sort()
+        setTags(uniqueTags)
       } catch (err) {
         console.error("Error in fetchTags:", err)
       } finally {
@@ -76,7 +58,7 @@ export default function TagFilter({ onTagSelect, selectedTag }: TagFilterProps) 
     return (
       <div className="flex flex-wrap gap-2 mb-8">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-6 w-16 bg-gray-800 rounded-full animate-pulse" />
+          <div key={i} className="h-6 w-16 bg-gray-800 animate-pulse rounded-full"></div>
         ))}
       </div>
     )
@@ -91,15 +73,14 @@ export default function TagFilter({ onTagSelect, selectedTag }: TagFilterProps) 
       >
         All
       </Badge>
-
       {tags.map((tag) => (
         <Badge
-          key={tag.name}
-          variant={selectedTag === tag.name ? "default" : "outline"}
+          key={tag}
+          variant={selectedTag === tag ? "default" : "outline"}
           className="cursor-pointer"
-          onClick={() => onTagSelect(tag.name)}
+          onClick={() => onTagSelect(tag)}
         >
-          {tag.name} ({tag.count})
+          {tag}
         </Badge>
       ))}
     </div>

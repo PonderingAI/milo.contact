@@ -31,6 +31,9 @@ export async function POST(request: NextRequest) {
 
     const supabase = createAdminClient()
 
+    // Log the settings being saved for debugging
+    console.log("Saving settings:", settingsArray)
+
     // Use upsert to insert or update settings
     const { error } = await supabase.from("site_settings").upsert(settingsArray, {
       onConflict: "key",
