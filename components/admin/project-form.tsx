@@ -157,47 +157,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     fetchExistingValues()
   }, [])
 
-  // Handle input focus/blur for autocomplete
-  const handleInputFocus = (field: "category" | "role") => {
-    if (field === "category") {
-      setIsCategoryOpen(true)
-    } else {
-      setIsRoleOpen(true)
-    }
-  }
-
-  const handleInputBlur = (field: "category" | "role") => {
-    // Use a timeout to allow clicks on dropdown items to register
-    setTimeout(() => {
-      if (field === "category") {
-        setIsCategoryOpen(false)
-      } else {
-        setIsRoleOpen(false)
-      }
-    }, 200)
-  }
-
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
-
-    // If changing category or role, show autocomplete
-    if (name === "category") {
-      setIsCategoryOpen(true)
-    } else if (name === "role") {
-      setRoleInput(value)
-      setIsRoleOpen(true)
-    }
   }
 
   const handleSelectChange = (name: string, value: string | boolean) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
-  const handleRoleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
+  const handleRoleChange = (value: string) => {
     setRoleInput(value)
-    setIsRoleOpen(true)
 
     // Update role in form data
     setFormData((prev) => ({
@@ -206,13 +176,8 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     }))
   }
 
-  const handleCategorySelect = (selected: string) => {
-    setFormData((prev) => ({ ...prev, category: selected }))
-  }
-
-  const handleRoleSelect = (selected: string) => {
-    setRoleInput(selected)
-    setFormData((prev) => ({ ...prev, role: selected }))
+  const handleCategoryChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, category: value }))
   }
 
   const handleImageUpload = (url: string) => {
@@ -471,62 +436,38 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
         <div className="space-y-2">
           <Label htmlFor="category">Category *</Label>
-          <div className="relative">
-            <Input
-              id="category"
-              name="category"
-              value={formData.category}
-              onChange={handleChange}
-              onFocus={() => handleInputFocus("category")}
-              onBlur={() => handleInputBlur("category")}
-              placeholder="e.g. Short Film, Music Video, etc."
-              className="bg-gray-800 border-gray-700"
-              required
-              ref={categoryInputRef}
-            />
-            {isCategoryOpen && (
-              <SimpleAutocomplete
-                inputRef={categoryInputRef}
-                options={categoryOptions}
-                value={formData.category}
-                onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
-                onSelect={handleCategorySelect}
-                isOpen={isCategoryOpen}
-                setIsOpen={setIsCategoryOpen}
-              />
-            )}
-          </div>
+          <SimpleAutocomplete
+            options={categoryOptions}
+            value={formData.category}
+            onInputChange={handleCategoryChange}
+            onSelect={handleCategoryChange}
+            placeholder="e.g. Short Film, Music Video, etc."
+            className="bg-gray-800 border-gray-700"
+            allowCustomValues={true}
+            isOpen={isCategoryOpen}
+            onOpenChange={setIsCategoryOpen}
+            onFocus={() => setIsCategoryOpen(true)}
+            onBlur={() => setTimeout(() => setIsCategoryOpen(false), 100)}
+          />
         </div>
 
         <div className="space-y-2">
           <Label htmlFor="role">Role/Tags *</Label>
-          <div className="relative">
-            <Input
-              id="role"
-              name="role"
-              value={roleInput}
-              onChange={handleRoleChange}
-              onFocus={() => handleInputFocus("role")}
-              onBlur={() => handleInputBlur("role")}
-              placeholder="e.g. Director, 1st AC, etc. (comma-separated)"
-              className="bg-gray-800 border-gray-700"
-              required
-              ref={roleInputRef}
-            />
-            {isRoleOpen && (
-              <SimpleAutocomplete
-                inputRef={roleInputRef}
-                options={roleOptions}
-                value={roleInput}
-                onChange={setRoleInput}
-                onSelect={handleRoleSelect}
-                isOpen={isRoleOpen}
-                setIsOpen={setIsRoleOpen}
-                isMultiple={true}
-                separator=","
-              />
-            )}
-          </div>
+          <SimpleAutocomplete
+            options={roleOptions}
+            value={roleInput}
+            onInputChange={handleRoleChange}
+            onSelect={handleRoleChange}
+            placeholder="e.g. Director, 1st AC, etc. (comma-separated)"
+            className="bg-gray-800 border-gray-700"
+            allowCustomValues={true}
+            multiple={true}
+            separator=","
+            isOpen={isRoleOpen}
+            onOpenChange={setIsRoleOpen}
+            onFocus={() => setIsRoleOpen(true)}
+            onBlur={() => setTimeout(() => setIsRoleOpen(false), 100)}
+          />
           <p className="text-xs text-gray-400">Separate multiple roles/tags with commas</p>
 
           {roleInput && (
