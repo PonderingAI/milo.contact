@@ -6,13 +6,45 @@ export async function GET(request: Request, { params }: { params: { id: string }
   try {
     const id = params.id
 
+    // Check if the ID is a valid UUID
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+    const isValidUUID = uuidRegex.test(id)
+
+    // If not a valid UUID, return mock data if available
+    if (!isValidUUID) {
+      // Import mock data dynamically to avoid circular dependencies
+      const { mockProjects, mockBtsImages } = await import("@/lib/project-data")
+
+      const mockProject = mockProjects.find((p) => p.id === id)
+      if (mockProject) {
+        // Process video URL if present
+        if (mockProject.video_url && (!mockProject.video_platform || !mockProject.video_id)) {
+          const videoInfo = extractVideoInfo(mockProject.video_url)
+          if (videoInfo) {
+            mockProject.video_platform = videoInfo.platform
+            mockProject.video_id = videoInfo.id
+          }
+        }
+
+        return NextResponse.json({
+          ...mockProject,
+          bts_images: mockBtsImages.filter((img) => img.project_id === id),
+        })
+      }
+
+      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+    }
+
     const supabase = createServerClient()
 
     // Get the project
     const { data: project, error: projectError } = await supabase.from("projects").select("*").eq("id", id).single()
 
     if (projectError) {
-      return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      if (projectError.code === "PGRST116") {
+        return NextResponse.json({ error: "Project not found" }, { status: 404 })
+      }
+      return NextResponse.json({ error: "Error fetching project" }, { status: 500 })
     }
 
     // Process video URL if present

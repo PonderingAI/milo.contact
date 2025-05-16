@@ -176,14 +176,27 @@ async function checkUserIsAdmin(userId: string): Promise<boolean> {
 }
 
 /**
+ * Check if a string is a valid UUID
+ */
+export function isValidUUID(id: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+  return uuidRegex.test(id)
+}
+
+/**
  * Get a project by ID with its BTS images
  */
 export async function getProjectById(id: string): Promise<(Project & { bts_images: BtsImage[] }) | null> {
   try {
     // First check if database is set up
     const isDbSetup = await isDatabaseSetup()
-    if (!isDbSetup) {
-      console.log("Database not set up, returning mock project")
+
+    // Check if the ID is a mock ID (not a UUID)
+    const isMockId = !isValidUUID(id)
+
+    // If database isn't set up or we have a mock ID, use mock data
+    if (!isDbSetup || isMockId) {
+      console.log(`Using mock data for project ID: ${id} (${isMockId ? "non-UUID format" : "database not set up"})`)
       const mockProject = mockProjects.find((p) => p.id === id)
       if (mockProject) {
         // Process video URL if present
@@ -195,6 +208,19 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
           }
         }
 
+        return {
+          ...mockProject,
+          bts_images: mockBtsImages.filter((img) => img.project_id === id),
+        }
+      }
+      return null
+    }
+
+    // Only try to fetch from database if ID is a valid UUID
+    if (!isValidUUID(id)) {
+      console.warn(`Invalid UUID format for project ID: ${id}, falling back to mock data`)
+      const mockProject = mockProjects.find((p) => p.id === id)
+      if (mockProject) {
         return {
           ...mockProject,
           bts_images: mockBtsImages.filter((img) => img.project_id === id),
@@ -311,6 +337,11 @@ export async function getProjectsByCategory(category: string): Promise<Project[]
       // Extract tags from role field
       const roleTags = extractTagsFromRole(project.role)
 
+      // If project has type but no category, use type as category (for backward compatibility)
+      if (project.type && !project.category) {
+        project.category = project.type
+      }
+
       // Process video URL if present
       if (project.video_url && (!project.video_platform || !project.video_id)) {
         const videoInfo = extractVideoInfo(project.video_url)
@@ -417,65 +448,6 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
 }
 
 /**
- * Get projects filtered by tag
- */
-export async function getProjectsByTag(tag: string): Promise<Project[]> {
-  try {
-    // First check if database is set up
-    const isDbSetup = await isDatabaseSetup()
-    if (!isDbSetup) {
-      console.log("Database not set up, returning filtered mock data")
-      return mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
-    }
-
-    const supabase = createServerClient()
-    const { data, error } = await supabase
-      .from("projects")
-      .select("*")
-      .or(`category.eq.${tag},role.ilike.%${tag}%`)
-      .order("created_at", { ascending: false })
-
-    if (error) {
-      console.error("Error fetching projects by tag:", error)
-      return mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
-    }
-
-    // Process projects to extract tags
-    const processedProjects = data.map((project) => {
-      // Extract tags from role field
-      const roleTags = extractTagsFromRole(project.role)
-
-      // If project has type but no category, use type as category (for backward compatibility)
-      if (project.type && !project.category) {
-        project.category = project.type
-      }
-
-      // Process video URL if present
-      if (project.video_url && (!project.video_platform || !project.video_id)) {
-        const videoInfo = extractVideoInfo(project.video_url)
-        if (videoInfo) {
-          project.video_platform = videoInfo.platform
-          project.video_id = videoInfo.id
-        }
-      }
-
-      return {
-        ...project,
-        tags: [project.category, ...roleTags].filter(Boolean),
-      }
-    })
-
-    // Only return mock projects if no real projects exist
-    return processedProjects.length > 0
-      ? processedProjects
-      : mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
-  } catch (error) {
-    console.error("Error in getProjectsByTag:", error)
-    return mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
-  }
-}
-
-/**
  * Extract video platform and ID from a video URL
  */
 export function extractVideoInfo(url: string): { platform: string; id: string } | null {
@@ -498,6 +470,12 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
       /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
     ]
 
+    // LinkedIn URL patterns
+    const linkedinPatterns = [
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/feed\/update\/urn:li:activity:([0-9a-zA-Z-]+)/i,
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/posts\/[^/]+-([0-9a-zA-Z-]+)/i,
+    ]
+
     // Check YouTube patterns
     for (const pattern of youtubePatterns) {
       const match = url.match(pattern)
@@ -511,6 +489,14 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
       const match = url.match(pattern)
       if (match && match[1]) {
         return { platform: "vimeo", id: match[1] }
+      }
+    }
+
+    // Check LinkedIn patterns
+    for (const pattern of linkedinPatterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        return { platform: "linkedin", id: match[1] }
       }
     }
 
