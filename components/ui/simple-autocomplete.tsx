@@ -1,8 +1,12 @@
 "use client"
 
 import * as React from "react"
+import { Check, ChevronsUpDown } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
-import { CommandList, CommandGroup, CommandItem, Command } from "@/components/ui/command"
 
 interface SimpleAutocompleteProps {
   options: string[]
@@ -10,12 +14,13 @@ interface SimpleAutocompleteProps {
   onInputChange: (value: string) => void
   onSelect: (value: string) => void
   placeholder?: string
+  emptyMessage?: string
   className?: string
   allowCustomValues?: boolean
   multiple?: boolean
   separator?: string
-  isOpen: boolean
-  onOpenChange: (open: boolean) => void
+  isOpen?: boolean
+  onOpenChange?: (open: boolean) => void
   onFocus?: () => void
   onBlur?: () => void
 }
@@ -27,9 +32,10 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
       value,
       onInputChange,
       onSelect,
-      placeholder,
+      placeholder = "Search...",
+      emptyMessage = "No results found.",
       className,
-      allowCustomValues = false,
+      allowCustomValues = true,
       multiple = false,
       separator = ",",
       isOpen,
@@ -39,112 +45,132 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
     },
     ref,
   ) => {
-    // Get current input value
-    const currentValue = multiple ? value.split(separator).pop()?.trim() || "" : value
+    const [open, setOpen] = React.useState(false)
+    const [inputValue, setInputValue] = React.useState(value)
+    const [filteredOptions, setFilteredOptions] = React.useState<string[]>(options)
 
-    // Filter and sort options
-    const filteredSortedOptions = React.useMemo(() => {
-      if (!currentValue) return []
+    // Use controlled open state if provided
+    const isOpenState = isOpen !== undefined ? isOpen : open
+    const setOpenState = (newOpen: boolean) => {
+      setOpen(newOpen)
+      onOpenChange?.(newOpen)
+    }
 
-      const searchTerm = currentValue.toLowerCase()
+    // For multiple values
+    const values = React.useMemo(() => {
+      if (!multiple) return [value]
+      return value
+        .split(separator)
+        .map((v) => v.trim())
+        .filter(Boolean)
+    }, [value, multiple, separator])
 
-      // Count occurrences to sort by frequency
-      const counts = options.reduce(
-        (acc, curr) => {
-          acc[curr.toLowerCase()] = (acc[curr.toLowerCase()] || 0) + 1
-          return acc
-        },
-        {} as Record<string, number>,
-      )
+    // Filter options based on input
+    React.useEffect(() => {
+      if (!inputValue.trim()) {
+        setFilteredOptions(options)
+        return
+      }
 
-      // Filter options that include the search term
-      const filtered = [...new Set(options)]
-        .filter((option) => option.toLowerCase().includes(searchTerm))
-        // Sort by: 1) exact match, 2) starts with, 3) frequency
-        .sort((a, b) => {
-          const aLower = a.toLowerCase()
-          const bLower = b.toLowerCase()
+      const searchTerm = inputValue.toLowerCase()
+      const filtered = options.filter((option) => option.toLowerCase().includes(searchTerm))
+      setFilteredOptions(filtered)
+    }, [inputValue, options])
 
-          // Exact matches first
-          if (aLower === searchTerm && bLower !== searchTerm) return -1
-          if (bLower === searchTerm && aLower !== searchTerm) return 1
-
-          // Starts with search term next
-          if (aLower.startsWith(searchTerm) && !bLower.startsWith(searchTerm)) return -1
-          if (bLower.startsWith(searchTerm) && !aLower.startsWith(searchTerm)) return 1
-
-          // Then by frequency
-          return (counts[bLower] || 0) - (counts[aLower] || 0)
-        })
-        // Limit to 10 suggestions for performance
-        .slice(0, 10)
-
-      return filtered
-    }, [currentValue, options])
-
-    // Handle selection
-    const handleSelect = (selected: string) => {
+    const handleSelect = (selectedValue: string) => {
       if (multiple) {
-        // For multiple values, replace the last part
-        const parts = value.split(separator)
-        parts[parts.length - 1] = selected
-        onSelect(parts.join(`${separator} `))
+        // For multiple selection, append the new value
+        const currentValues = values.filter((v) => v !== selectedValue)
+        const newValues = [...currentValues, selectedValue]
+        onSelect(newValues.join(`${separator} `))
       } else {
-        onSelect(selected)
+        // For single selection
+        onSelect(selectedValue)
       }
-      onOpenChange(false)
+
+      setInputValue("")
+      if (!multiple) setOpenState(false)
     }
 
-    // Handle input change
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      onInputChange(e.target.value)
-      if (e.target.value) {
-        onOpenChange(true)
+      const newValue = e.target.value
+      setInputValue(newValue)
+
+      if (allowCustomValues) {
+        if (multiple) {
+          // For multiple values, only update the current "active" value
+          const parts = value.split(separator)
+          parts[parts.length - 1] = newValue
+          onInputChange(parts.join(`${separator} `))
+        } else {
+          onInputChange(newValue)
+        }
       }
     }
 
-    // Handle keyboard navigation
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Tab" && isOpen && filteredSortedOptions.length > 0) {
+      if (e.key === "Tab" && inputValue && filteredOptions.length > 0) {
         e.preventDefault()
-        handleSelect(filteredSortedOptions[0])
+        handleSelect(filteredOptions[0])
+      }
+
+      if (multiple && e.key === separator) {
+        e.preventDefault()
+        if (inputValue.trim()) {
+          handleSelect(inputValue.trim())
+        }
       }
     }
 
     return (
-      <div className="relative w-full">
-        <Input
-          ref={ref}
-          value={value}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className={className}
-          onFocus={onFocus}
-          onBlur={onBlur}
-        />
-
-        {isOpen && filteredSortedOptions.length > 0 && (
-          <div className="absolute z-50 w-full left-0 top-[calc(100%+4px)]">
-            <Command className="border border-gray-700 rounded-md bg-gray-800 shadow-md overflow-hidden">
-              <CommandList className="max-h-[200px] overflow-y-auto">
-                <CommandGroup>
-                  {filteredSortedOptions.map((option) => (
-                    <CommandItem
-                      key={option}
-                      value={option}
-                      onSelect={() => handleSelect(option)}
-                      className="cursor-pointer hover:bg-gray-700"
-                    >
-                      {option}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
+      <Popover open={isOpenState} onOpenChange={setOpenState}>
+        <PopoverTrigger asChild>
+          <div className="flex w-full relative">
+            <Input
+              ref={ref}
+              value={inputValue}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={placeholder}
+              className={cn("w-full", className)}
+              onClick={() => setOpenState(true)}
+              onFocus={() => {
+                onFocus?.()
+                setOpenState(true)
+              }}
+              onBlur={() => {
+                onBlur?.()
+              }}
+            />
+            <Button
+              variant="outline"
+              role="combobox"
+              aria-expanded={isOpenState}
+              className="absolute right-0 px-3 focus:ring-0 focus:ring-offset-0"
+              onClick={() => setOpenState(!isOpenState)}
+              tabIndex={-1}
+            >
+              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
+            </Button>
           </div>
-        )}
-      </div>
+        </PopoverTrigger>
+        <PopoverContent className="w-full p-0" align="start">
+          <Command>
+            <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
+            <CommandList>
+              <CommandEmpty>{emptyMessage}</CommandEmpty>
+              <CommandGroup className="max-h-60 overflow-auto">
+                {filteredOptions.map((option) => (
+                  <CommandItem key={option} value={option} onSelect={() => handleSelect(option)}>
+                    <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
+                    {option}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            </CommandList>
+          </Command>
+        </PopoverContent>
+      </Popover>
     )
   },
 )

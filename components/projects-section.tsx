@@ -12,14 +12,14 @@ interface ProjectsSectionProps {
 
 export default function ProjectsSection({ projects }: ProjectsSectionProps) {
   const [searchQuery, setSearchQuery] = useState("")
-  const [selectedTag, setSelectedTag] = useState<string | null>(null)
+  const [selectedTags, setSelectedTags] = useState<string[] | null>(null)
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
   }
 
-  const handleTagSelect = (tag: string | null) => {
-    setSelectedTag(tag)
+  const handleTagSelect = (tags: string[] | null) => {
+    setSelectedTags(tags)
   }
 
   return (
@@ -27,8 +27,8 @@ export default function ProjectsSection({ projects }: ProjectsSectionProps) {
       <h2 className="text-5xl md:text-7xl font-serif mb-12">My Work</h2>
 
       <ProjectSearch onSearch={handleSearch} />
-      <TagFilter onTagSelect={handleTagSelect} selectedTag={selectedTag} />
-      <OffsetProjectGrid projects={projects} searchQuery={searchQuery} selectedTag={selectedTag} />
+      <TagFilter onTagSelect={handleTagSelect} selectedTags={selectedTags} />
+      <OffsetProjectGrid projects={projects} searchQuery={searchQuery} selectedTags={selectedTags} />
     </section>
   )
 }

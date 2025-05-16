@@ -2,87 +2,96 @@
 
 import { useState, useEffect } from "react"
 import { Badge } from "@/components/ui/badge"
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
-import { extractTagsFromRole } from "@/lib/project-data"
+import { getSupabaseBrowserClient } from "@/lib/supabase"
 
 interface TagFilterProps {
-  onTagSelect: (tag: string | null) => void
-  selectedTag: string | null
+  onTagSelect: (tags: string[] | null) => void
+  selectedTags: string[] | null
 }
 
-export default function TagFilter({ onTagSelect, selectedTag }: TagFilterProps) {
+export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps) {
   const [tags, setTags] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     async function fetchTags() {
+      setIsLoading(true)
       try {
-        setLoading(true)
         const supabase = getSupabaseBrowserClient()
+        const { data } = await supabase.from("projects").select("role")
 
-        // Fetch all projects to extract unique categories and roles
-        const { data, error } = await supabase.from("projects").select("category, role")
+        if (data) {
+          // Extract all tags from the role field (comma-separated)
+          const allTags = data
+            .flatMap((project) => project.role?.split(",").map((tag) => tag.trim()) || [])
+            .filter(Boolean)
 
-        if (error) {
-          console.error("Error fetching tags:", error)
-          return
+          // Count occurrences of each tag
+          const tagCounts: Record<string, number> = {}
+          allTags.forEach((tag) => {
+            tagCounts[tag] = (tagCounts[tag] || 0) + 1
+          })
+
+          // Sort tags by frequency (most common first)
+          const sortedTags = Object.keys(tagCounts).sort((a, b) => tagCounts[b] - tagCounts[a])
+          setTags(sortedTags)
         }
-
-        // Extract unique categories
-        const categories = [...new Set(data.map((project) => project.category).filter(Boolean))]
-
-        // Extract unique roles from comma-separated values
-        const allRoles: string[] = []
-        data.forEach((project) => {
-          if (project.role) {
-            const roleTags = extractTagsFromRole(project.role)
-            allRoles.push(...roleTags)
-          }
-        })
-        const roles = [...new Set(allRoles)]
-
-        // Combine categories and roles, remove duplicates
-        const uniqueTags = [...new Set([...categories, ...roles])].sort()
-        setTags(uniqueTags)
-      } catch (err) {
-        console.error("Error in fetchTags:", err)
+      } catch (error) {
+        console.error("Error fetching tags:", error)
       } finally {
-        setLoading(false)
+        setIsLoading(false)
       }
     }
 
     fetchTags()
   }, [])
 
-  if (loading) {
+  const handleTagClick = (tag: string) => {
+    if (!selectedTags) {
+      // If no tags are selected, select this one
+      onTagSelect([tag])
+    } else if (selectedTags.includes(tag)) {
+      // If this tag is already selected, remove it
+      const newTags = selectedTags.filter((t) => t !== tag)
+      onTagSelect(newTags.length > 0 ? newTags : null)
+    } else {
+      // Add this tag to the selection
+      onTagSelect([...selectedTags, tag])
+    }
+  }
+
+  const clearFilters = () => {
+    onTagSelect(null)
+  }
+
+  if (isLoading) {
     return (
-      <div className="flex flex-wrap gap-2 mb-8">
+      <div className="flex gap-2 mb-8 animate-pulse">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div key={i} className="h-6 w-16 bg-gray-800 animate-pulse rounded-full"></div>
+          <div key={i} className="h-6 w-16 bg-gray-700 rounded-full"></div>
         ))}
       </div>
     )
   }
 
   return (
-    <div className="flex flex-wrap gap-2 mb-8">
-      <Badge
-        variant={selectedTag === null ? "default" : "outline"}
-        className="cursor-pointer"
-        onClick={() => onTagSelect(null)}
-      >
-        All
-      </Badge>
-      {tags.map((tag) => (
-        <Badge
-          key={tag}
-          variant={selectedTag === tag ? "default" : "outline"}
-          className="cursor-pointer"
-          onClick={() => onTagSelect(tag)}
-        >
-          {tag}
+    <div className="mb-8">
+      <div className="flex flex-wrap gap-2 items-center">
+        <Badge variant={!selectedTags ? "default" : "outline"} className="cursor-pointer" onClick={clearFilters}>
+          All
         </Badge>
-      ))}
+
+        {tags.map((tag) => (
+          <Badge
+            key={tag}
+            variant={selectedTags?.includes(tag) ? "default" : "outline"}
+            className="cursor-pointer"
+            onClick={() => handleTagClick(tag)}
+          >
+            {tag}
+          </Badge>
+        ))}
+      </div>
     </div>
   )
 }
