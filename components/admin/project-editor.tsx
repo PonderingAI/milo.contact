@@ -429,7 +429,15 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       } else if (videoInfo.platform === "youtube") {
         // Use YouTube thumbnail URL format
         thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-        videoTitle = `YouTube Video: ${videoInfo.id}`
+
+        // Fetch the actual YouTube title
+        try {
+          const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
+          videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
+        } catch (error) {
+          console.error("Error fetching YouTube title:", error)
+          videoTitle = `YouTube Video: ${videoInfo.id}`
+        }
       }
 
       // Set thumbnail if available
@@ -1388,4 +1396,19 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       </div>
     </div>
   )
+}
+
+async function fetchYouTubeTitle(videoId: string): Promise<string | null> {
+  try {
+    const response = await fetch(`/api/youtube-title?videoId=${videoId}`)
+    if (!response.ok) {
+      console.error("Failed to fetch YouTube title:", response.status, response.statusText)
+      return null
+    }
+    const data = await response.json()
+    return data.title || null
+  } catch (error) {
+    console.error("Error fetching YouTube title:", error)
+    return null
+  }
 }

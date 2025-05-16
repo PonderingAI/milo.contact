@@ -402,7 +402,23 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     }
   }
 
-  // Helper function to process video URL and extract metadata
+  // Helper function to fetch YouTube title
+  const fetchYouTubeTitle = async (videoId: string): Promise<string | null> => {
+    try {
+      const response = await fetch(`/api/youtube-title?videoId=${videoId}`)
+      if (!response.ok) {
+        console.error("Failed to fetch YouTube title:", response.status, response.statusText)
+        return null
+      }
+      const data = await response.json()
+      return data.title || null
+    } catch (error) {
+      console.error("Error fetching YouTube title:", error)
+      return null
+    }
+  }
+
+  // Update the processVideoUrl function in the project form component to fetch YouTube titles
   const processVideoUrl = async (url: string) => {
     const videoInfo = extractVideoInfo(url)
     if (!videoInfo) return
@@ -428,7 +444,15 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       } else if (videoInfo.platform === "youtube") {
         // Use YouTube thumbnail URL format
         thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-        videoTitle = `YouTube Video: ${videoInfo.id}`
+
+        // Fetch the actual YouTube title
+        try {
+          const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
+          videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
+        } catch (error) {
+          console.error("Error fetching YouTube title:", error)
+          videoTitle = `YouTube Video: ${videoInfo.id}`
+        }
       }
 
       // Set thumbnail if available

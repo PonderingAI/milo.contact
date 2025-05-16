@@ -508,6 +508,26 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
   }
 }
 
+// Add this new function to fetch YouTube video titles using the oEmbed API
+export async function fetchYouTubeTitle(videoId: string): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+    )
+
+    if (!response.ok) {
+      console.error(`Failed to fetch YouTube title: ${response.status} ${response.statusText}`)
+      return null
+    }
+
+    const data = await response.json()
+    return data.title || null
+  } catch (error) {
+    console.error("Error fetching YouTube title:", error)
+    return null
+  }
+}
+
 // Mock data for development - will be replaced by Supabase data in production
 export const mockProjects = [
   // Directed Projects

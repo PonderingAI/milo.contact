@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase-server"
-import { extractVideoInfo } from "@/lib/project-data"
+import { extractVideoInfo, fetchYouTubeTitle } from "@/lib/project-data"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -67,7 +67,15 @@ export async function POST(request: NextRequest) {
       }
     } else if (videoInfo.platform === "youtube") {
       thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-      videoTitle = `YouTube Video ${videoInfo.id}`
+
+      // Fetch the actual YouTube title
+      try {
+        const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
+        videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
+      } catch (error) {
+        console.error("Error fetching YouTube title:", error)
+        videoTitle = `YouTube Video: ${videoInfo.id}`
+      }
     } else if (videoInfo.platform === "linkedin") {
       thumbnailUrl = "/generic-icon.png"
       videoTitle = `LinkedIn Post ${videoInfo.id}`
@@ -90,6 +98,7 @@ export async function POST(request: NextRequest) {
           isBts: isBts,
           uploadDate: uploadDate,
           originalUrl: url,
+          title: videoTitle,
         },
       })
       .select()
