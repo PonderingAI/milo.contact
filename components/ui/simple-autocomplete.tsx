@@ -43,12 +43,10 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
     ref,
   ) => {
     const [open, setOpen] = React.useState(false)
-    const [inputValue, setInputValue] = React.useState("")
-    const [activeValue, setActiveValue] = React.useState(value)
     const inputRef = React.useRef<HTMLInputElement>(null)
     const [filteredOptions, setFilteredOptions] = React.useState<string[]>([])
     const [highlightedIndex, setHighlightedIndex] = React.useState(-1)
-    const [internalValue, setValue] = React.useState(value)
+    const [selectionComplete, setSelectionComplete] = React.useState(false)
 
     // Use controlled open state if provided
     const isOpenState = isOpen !== undefined ? isOpen : open
@@ -63,16 +61,23 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
         .filter(Boolean)
     }, [value, multiple, separator])
 
+    // Get the current tag being typed (for multiple mode)
+    const getCurrentTag = React.useCallback(() => {
+      if (!multiple) return value
+
+      const lastSeparatorIndex = value.lastIndexOf(separator)
+      if (lastSeparatorIndex >= 0) {
+        return value.substring(lastSeparatorIndex + 1).trim()
+      }
+      return value.trim()
+    }, [value, multiple, separator])
+
     // Determine if we should show suggestions
     const shouldShowSuggestions = filteredOptions.length > 0
 
     const handleSelect = (option: string) => {
       if (multiple) {
         // For multiple selection mode (tags)
-        const currentValues = value
-          .split(separator)
-          .map((v) => v.trim())
-          .filter(Boolean)
         const lastTagIndex = value.lastIndexOf(separator)
 
         // Replace just the current tag being typed, not the entire value
@@ -88,16 +93,18 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
         // Add a separator at the end to prepare for the next tag
         newValue += separator + " "
 
-        setValue(newValue)
-        onInputChange?.(newValue)
-        onSelect?.(newValue)
+        onInputChange(newValue)
+        onSelect(newValue)
       } else {
         // For single selection mode
-        setValue(option)
-        onInputChange?.(option)
-        onSelect?.(option)
-        setIsOpenState(false)
+        onInputChange(option)
+        onSelect(option)
       }
+
+      // Clear suggestions and mark selection as complete
+      setFilteredOptions([])
+      setIsOpenState(false)
+      setSelectionComplete(true)
 
       // Keep focus on the input
       inputRef.current?.focus()
@@ -105,22 +112,14 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
       const newValue = e.target.value
-      setInputValue(newValue)
 
-      if (allowCustomValues) {
-        if (multiple) {
-          // For multiple values, only update the current "active" value
-          const parts = value.split(separator)
-          parts[parts.length - 1] = newValue
-          onInputChange(parts.join(`${separator} `))
-        } else {
-          onInputChange(newValue)
-        }
-      }
+      // Reset selection complete flag when user types
+      setSelectionComplete(false)
 
-      // Auto-open dropdown if we have suggestions
-      if (newValue.trim().length >= 1) {
-        // We'll check for suggestions in useEffect
+      onInputChange(newValue)
+
+      // Auto-open dropdown if we have text
+      if (getCurrentTag().length >= 1) {
         setIsOpenState(true)
       } else {
         setIsOpenState(false)
@@ -128,6 +127,11 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      // Reset selection complete flag on any key press except Tab
+      if (e.key !== "Tab") {
+        setSelectionComplete(false)
+      }
+
       // Handle keyboard navigation
       if (e.key === "ArrowDown" && filteredOptions.length > 0) {
         e.preventDefault()
@@ -138,58 +142,44 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
       } else if (e.key === "Enter" && highlightedIndex !== -1 && isOpenState) {
         e.preventDefault()
         handleSelect(filteredOptions[highlightedIndex])
-      } else if (e.key === "Tab" && highlightedIndex !== -1 && isOpenState) {
+      } else if (e.key === "Tab" && highlightedIndex !== -1 && isOpenState && !selectionComplete) {
         e.preventDefault()
         handleSelect(filteredOptions[highlightedIndex])
       } else if (e.key === "Escape") {
         setIsOpenState(false)
       }
-
-      // No special handling for backspace - let it behave normally
-      // This allows backspace to delete one character at a time
     }
-
-    // Update inputValue when value changes externally
-    React.useEffect(() => {
-      if (multiple) {
-        const parts = value.split(separator)
-        const lastPart = parts[parts.length - 1].trim()
-        setInputValue(lastPart)
-      } else {
-        setActiveValue(value)
-      }
-    }, [value, multiple, separator])
 
     // Forward the ref
     React.useImperativeHandle(ref, () => inputRef.current as HTMLInputElement)
 
+    // Update filtered options when value changes
     React.useEffect(() => {
-      if (!value) {
-        setFilteredOptions([])
+      // Skip filtering if selection was just completed
+      if (selectionComplete) {
         return
       }
 
-      let searchTerm = value
-
-      // For multiple selection, only search with the current tag being typed
-      if (multiple) {
-        const lastSeparatorIndex = value.lastIndexOf(separator)
-        if (lastSeparatorIndex >= 0) {
-          searchTerm = value.substring(lastSeparatorIndex + 1).trim()
-        }
-      }
+      const currentTag = getCurrentTag()
 
       // Only show suggestions if we have at least one character
-      if (searchTerm.length < 1) {
+      if (currentTag.length < 1) {
         setFilteredOptions([])
         return
       }
 
-      // Filter options based on the search term
-      const filtered = options.filter((option) => option.toLowerCase().includes(searchTerm.toLowerCase()))
+      // Filter options based on the current tag
+      const filtered = options.filter((option) => option.toLowerCase().includes(currentTag.toLowerCase()))
 
-      // Remove duplicates
-      const uniqueFiltered = [...new Set(filtered)]
+      // Remove duplicates and already selected tags
+      const selectedTags = multiple
+        ? value
+            .split(separator)
+            .map((v) => v.trim())
+            .filter(Boolean)
+        : [value.trim()].filter(Boolean)
+
+      const uniqueFiltered = [...new Set(filtered)].filter((option) => !selectedTags.includes(option))
 
       setFilteredOptions(uniqueFiltered)
       setHighlightedIndex(uniqueFiltered.length > 0 ? 0 : -1)
@@ -200,7 +190,7 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
       } else {
         setIsOpenState(false)
       }
-    }, [value, options, multiple, separator])
+    }, [value, options, multiple, separator, getCurrentTag, selectionComplete])
 
     return (
       <div className="relative w-full">
@@ -213,7 +203,7 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
           className={cn("w-full", className)}
           onFocus={() => {
             // Check if we should show suggestions on focus
-            if (value.trim().length >= 1) {
+            if (getCurrentTag().length >= 1) {
               setIsOpenState(true)
             }
             onFocus?.()
