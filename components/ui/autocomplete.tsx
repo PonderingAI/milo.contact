@@ -3,8 +3,6 @@
 import * as React from "react"
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 
 interface AutocompleteProps {
@@ -32,6 +30,7 @@ export function Autocomplete({
 }: AutocompleteProps) {
   const [open, setOpen] = React.useState(false)
   const [inputValue, setInputValue] = React.useState(value)
+  const inputRef = React.useRef<HTMLInputElement>(null)
 
   // For multiple values
   const values = React.useMemo(() => {
@@ -140,38 +139,51 @@ export function Autocomplete({
   }
 
   return (
-    <Popover open={open && shouldShowSuggestions} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <Input
-          value={inputValue}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          className={cn("w-full", className)}
-          onFocus={() => {
-            if (shouldShowSuggestions && inputValue.trim().length >= 1) {
-              setOpen(true)
+    <div className="relative w-full">
+      <Input
+        ref={inputRef}
+        value={inputValue}
+        onChange={handleInputChange}
+        onKeyDown={handleKeyDown}
+        placeholder={placeholder}
+        className={cn("w-full", className)}
+        onFocus={() => {
+          if (inputValue.trim().length >= 1) {
+            setOpen(true)
+          }
+        }}
+        onBlur={(e) => {
+          // Delay closing to allow for selection
+          setTimeout(() => {
+            if (!e.currentTarget.contains(document.activeElement)) {
+              setOpen(false)
             }
-          }}
-        />
-      </PopoverTrigger>
-      {shouldShowSuggestions && (
-        <PopoverContent className="w-full p-0 border-t-0 rounded-t-none shadow-md" align="start" sideOffset={0}>
-          <Command>
-            <CommandList>
-              <CommandEmpty>{emptyMessage}</CommandEmpty>
-              <CommandGroup className="max-h-60 overflow-auto">
+          }, 100)
+        }}
+      />
+
+      {open && shouldShowSuggestions && (
+        <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 shadow-lg">
+          <div className="max-h-60 overflow-auto">
+            {sortedFilteredOptions.length === 0 ? (
+              <div className="px-2 py-1.5 text-sm text-gray-500 dark:text-gray-400">{emptyMessage}</div>
+            ) : (
+              <div className="py-1">
                 {sortedFilteredOptions.map((option) => (
-                  <CommandItem key={option} value={option} onSelect={() => handleSelect(option)}>
+                  <div
+                    key={option}
+                    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                    onClick={() => handleSelect(option)}
+                  >
                     <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
                     {option}
-                  </CommandItem>
+                  </div>
                 ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
+              </div>
+            )}
+          </div>
+        </div>
       )}
-    </Popover>
+    </div>
   )
 }

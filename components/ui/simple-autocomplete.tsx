@@ -3,8 +3,6 @@
 import * as React from "react"
 import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 
 interface SimpleAutocompleteProps {
@@ -122,6 +120,7 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
 
       // Auto-open dropdown if we have suggestions
       if (newValue.trim().length >= 1) {
+        // We'll check for suggestions in useEffect
         setIsOpenState(true)
       } else {
         setIsOpenState(false)
@@ -157,42 +156,51 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
     React.useImperativeHandle(ref, () => inputRef.current as HTMLInputElement)
 
     return (
-      <Popover open={isOpenState && shouldShowSuggestions} onOpenChange={setIsOpenState}>
-        <PopoverTrigger asChild>
-          <Input
-            ref={inputRef}
-            value={multiple ? inputValue : activeValue}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={placeholder}
-            className={cn("w-full", className)}
-            onFocus={() => {
-              if (shouldShowSuggestions) {
-                setIsOpenState(true)
+      <div className="relative w-full">
+        <Input
+          ref={inputRef}
+          value={multiple ? inputValue : activeValue}
+          onChange={handleInputChange}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className={cn("w-full", className)}
+          onFocus={() => {
+            // Check if we should show suggestions on focus
+            if ((multiple ? inputValue : activeValue).trim().length >= 1) {
+              setIsOpenState(true)
+            }
+            onFocus?.()
+          }}
+          onBlur={(e) => {
+            // Delay closing to allow for selection
+            setTimeout(() => {
+              if (!e.currentTarget.contains(document.activeElement)) {
+                setIsOpenState(false)
               }
-              onFocus?.()
-            }}
-            onBlur={onBlur}
-          />
-        </PopoverTrigger>
-        {shouldShowSuggestions && (
-          <PopoverContent className="w-full p-0 border-t-0 rounded-t-none shadow-md" align="start" sideOffset={0}>
-            <Command>
-              <CommandList>
-                <CommandEmpty>{emptyMessage}</CommandEmpty>
-                <CommandGroup className="max-h-60 overflow-auto">
-                  {sortedFilteredOptions.map((option) => (
-                    <CommandItem key={option} value={option} onSelect={() => handleSelect(option)}>
-                      <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
-                      {option}
-                    </CommandItem>
-                  ))}
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          </PopoverContent>
+            }, 100)
+            onBlur?.()
+          }}
+        />
+
+        {isOpenState && shouldShowSuggestions && (
+          <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700 shadow-lg">
+            <div className="max-h-60 overflow-auto">
+              <div className="py-1">
+                {sortedFilteredOptions.map((option) => (
+                  <div
+                    key={option}
+                    className="px-2 py-1.5 text-sm cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
+                    onClick={() => handleSelect(option)}
+                  >
+                    <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
+                    {option}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         )}
-      </Popover>
+      </div>
     )
   },
 )
