@@ -58,11 +58,26 @@ export function Autocomplete({
 
   // Filter options based on current input
   const filteredOptions = React.useMemo(() => {
-    if (!inputValue) return sortedOptions
+    if (!inputValue.trim()) return sortedOptions
 
     const searchTerm = inputValue.toLowerCase()
     return sortedOptions.filter((option) => option.toLowerCase().includes(searchTerm))
   }, [inputValue, sortedOptions])
+
+  // Sort filtered options to prioritize those that start with the input value
+  const sortedFilteredOptions = React.useMemo(() => {
+    if (!inputValue.trim()) return filteredOptions
+
+    const searchTerm = inputValue.toLowerCase()
+    return [...filteredOptions].sort((a, b) => {
+      const aStartsWith = a.toLowerCase().startsWith(searchTerm)
+      const bStartsWith = b.toLowerCase().startsWith(searchTerm)
+
+      if (aStartsWith && !bStartsWith) return -1
+      if (!aStartsWith && bStartsWith) return 1
+      return a.localeCompare(b)
+    })
+  }, [filteredOptions, inputValue])
 
   const handleSelect = (selectedValue: string) => {
     if (multiple) {
@@ -94,9 +109,9 @@ export function Autocomplete({
   }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Tab" && inputValue && filteredOptions.length > 0) {
+    if (e.key === "Tab" && inputValue && sortedFilteredOptions.length > 0) {
       e.preventDefault()
-      handleSelect(filteredOptions[0])
+      handleSelect(sortedFilteredOptions[0])
     }
 
     if (multiple && e.key === separator) {
@@ -137,7 +152,7 @@ export function Autocomplete({
           <CommandList>
             <CommandEmpty>{emptyMessage}</CommandEmpty>
             <CommandGroup className="max-h-60 overflow-auto">
-              {filteredOptions.map((option) => (
+              {sortedFilteredOptions.map((option) => (
                 <CommandItem key={option} value={option} onSelect={() => handleSelect(option)}>
                   <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
                   {option}
