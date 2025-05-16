@@ -135,14 +135,14 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
       } else if (e.key === "ArrowUp" && filteredOptions.length > 0) {
         e.preventDefault()
         setHighlightedIndex((prevIndex) => (prevIndex - 1 + filteredOptions.length) % filteredOptions.length)
-      } else if (e.key === "Enter" && highlightedIndex !== -1 && isOpen) {
+      } else if (e.key === "Enter" && highlightedIndex !== -1 && isOpenState) {
         e.preventDefault()
         handleSelect(filteredOptions[highlightedIndex])
-      } else if (e.key === "Tab" && highlightedIndex !== -1 && isOpen) {
+      } else if (e.key === "Tab" && highlightedIndex !== -1 && isOpenState) {
         e.preventDefault()
         handleSelect(filteredOptions[highlightedIndex])
       } else if (e.key === "Escape") {
-        setIsOpen(false)
+        setIsOpenState(false)
       }
 
       // No special handling for backspace - let it behave normally
@@ -196,9 +196,9 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
 
       // Only open dropdown if we have options and the input has focus
       if (uniqueFiltered.length > 0 && document.activeElement === inputRef.current) {
-        setIsOpen(true)
+        setIsOpenState(true)
       } else {
-        setIsOpen(false)
+        setIsOpenState(false)
       }
     }, [value, options, multiple, separator])
 
@@ -206,14 +206,14 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
       <div className="relative w-full">
         <Input
           ref={inputRef}
-          value={multiple ? inputValue : activeValue}
+          value={value}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className={cn("w-full", className)}
           onFocus={() => {
             // Check if we should show suggestions on focus
-            if ((multiple ? inputValue : activeValue).trim().length >= 1) {
+            if (value.trim().length >= 1) {
               setIsOpenState(true)
             }
             onFocus?.()
