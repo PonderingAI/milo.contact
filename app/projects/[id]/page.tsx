@@ -42,6 +42,16 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
     notFound()
   }
 
+  // Debug log to see what's being passed to the component
+  console.log("Project data for rendering:", {
+    id: project.id,
+    title: project.title,
+    hasVideo: !!project.video_url,
+    videoPlatform: project.video_platform,
+    videoId: project.video_id,
+    btsImagesCount: project.bts_images?.length || 0,
+  })
+
   return (
     <main className="min-h-screen bg-black text-white">
       <div className="container mx-auto px-4 py-12">
@@ -51,4 +61,11 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
       </div>
     </main>
   )
+}
+
+// Generate static params for all mock projects to ensure they work in production
+export async function generateStaticParams() {
+  return mockProjects.map((project) => ({
+    id: project.id,
+  }))
 }

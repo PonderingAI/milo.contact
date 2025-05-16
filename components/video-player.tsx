@@ -13,7 +13,9 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
   const [hasError, setHasError] = useState(false)
 
   // Log props for debugging
-  console.log("VideoPlayer props:", { platform, videoId })
+  useEffect(() => {
+    console.log("VideoPlayer mounted with props:", { platform, videoId })
+  }, [platform, videoId])
 
   useEffect(() => {
     // Reset states when props change
@@ -31,9 +33,9 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
       }
 
       if (platform.toLowerCase() === "youtube") {
-        return `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1`
+        return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`
       } else if (platform.toLowerCase() === "vimeo") {
-        return `https://player.vimeo.com/video/${videoId}?color=ffffff&title=0&byline=0&portrait=0`
+        return `https://player.vimeo.com/video/${videoId}?autoplay=1&color=ffffff&title=0&byline=0&portrait=0`
       }
 
       console.error("Unsupported platform", platform)
@@ -49,6 +51,7 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
   }
 
   const embedUrl = getEmbedUrl()
+  console.log("Generated embed URL:", embedUrl)
 
   const handleError = () => {
     console.error("Error loading video iframe")
@@ -82,7 +85,10 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           title="Embedded video"
-          onLoad={() => setIsLoaded(true)}
+          onLoad={() => {
+            console.log("Video iframe loaded successfully")
+            setIsLoaded(true)
+          }}
           onError={handleError}
         ></iframe>
       )}

@@ -1,77 +1,86 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { getProjectById } from "@/lib/project-data"
+import { NextResponse } from "next/server"
+import { getProjectById, extractVideoInfo } from "@/lib/project-data"
+import { createServerClient } from "@/lib/supabase-server"
 
-export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
-    // Get the project using the utility function
-    const project = await getProjectById(params.id)
+    const id = params.id
+
+    // Get the project data
+    const project = await getProjectById(id)
 
     if (!project) {
       return NextResponse.json({ error: "Project not found" }, { status: 404 })
     }
 
-    // Return detailed information about the project for debugging
+    // Extract video info if available
+    let extractedVideoInfo = null
+    if (project.video_url) {
+      extractedVideoInfo = extractVideoInfo(project.video_url)
+    }
+
+    // Get direct database info for comparison
+    let dbInfo = null
+    try {
+      const supabase = createServerClient()
+      const { data, error } = await supabase.from("projects").select("*").eq("id", id).single()
+
+      if (!error && data) {
+        dbInfo = {
+          id: data.id,
+          title: data.title,
+          video_url: data.video_url,
+          video_platform: data.video_platform,
+          video_id: data.video_id,
+        }
+      }
+    } catch (e) {
+      console.error("Error fetching direct DB info:", e)
+    }
+
+    // Get BTS images directly
+    let btsImages = []
+    try {
+      const supabase = createServerClient()
+      const { data, error } = await supabase.from("bts_images").select("*").eq("project_id", id)
+
+      if (!error && data) {
+        btsImages = data
+      }
+    } catch (e) {
+      console.error("Error fetching BTS images:", e)
+    }
+
+    // Return diagnostic information
     return NextResponse.json({
-      project,
-      debug: {
+      project: {
+        id: project.id,
+        title: project.title,
         hasVideoUrl: !!project.video_url,
+        videoUrl: project.video_url,
         hasVideoPlatform: !!project.video_platform,
+        videoPlatform: project.video_platform,
         hasVideoId: !!project.video_id,
+        videoId: project.video_id,
         btsImagesCount: project.bts_images?.length || 0,
-        extractedVideoInfo: project.video_url ? extractVideoInfo(project.video_url) : null,
+        btsImages: project.bts_images?.map((img) => ({
+          id: img.id,
+          imageUrl: img.image_url,
+          hasCaption: !!img.caption,
+        })),
+      },
+      extractedVideoInfo,
+      dbInfo,
+      directBtsImages: {
+        count: btsImages.length,
+        images: btsImages.map((img) => ({
+          id: img.id,
+          imageUrl: img.image_url,
+        })),
       },
     })
   } catch (error) {
-    console.error("Error in debug project API:", error)
-    return NextResponse.json(
-      {
-        error: "Internal server error",
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    )
-  }
-}
-
-// Helper function to extract video info
-function extractVideoInfo(url: string): { platform: string; id: string } | null {
-  try {
-    if (!url || typeof url !== "string") {
-      return null
-    }
-
-    // YouTube URL patterns
-    const youtubePatterns = [
-      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
-      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
-      /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
-    ]
-
-    // Vimeo URL patterns
-    const vimeoPatterns = [
-      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
-      /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
-    ]
-
-    // Check YouTube patterns
-    for (const pattern of youtubePatterns) {
-      const match = url.match(pattern)
-      if (match && match[1]) {
-        return { platform: "youtube", id: match[1] }
-      }
-    }
-
-    // Check Vimeo patterns
-    for (const pattern of vimeoPatterns) {
-      const match = url.match(pattern)
-      if (match && match[1]) {
-        return { platform: "vimeo", id: match[1] }
-      }
-    }
-
-    return null
-  } catch (error) {
-    console.error("Error extracting video info:", error)
-    return null
+    console.error("Error in debug endpoint:", error)
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

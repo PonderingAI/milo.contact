@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react"
 import Link from "next/link"
 import Image from "next/image"
-import { ArrowLeft, ExternalLink } from "lucide-react"
+import { ArrowLeft, ExternalLink, Play } from "lucide-react"
 import { extractVideoInfo } from "@/lib/project-data"
 import VideoPlayer from "@/components/video-player"
 
@@ -38,6 +38,19 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const descriptionRef = useRef<HTMLDivElement>(null)
   const [isScrolled, setIsScrolled] = useState(false)
   const [videoError, setVideoError] = useState(false)
+  const [showVideo, setShowVideo] = useState(false)
+
+  // Debug log to see what props we're receiving
+  useEffect(() => {
+    console.log("ProjectDetailContent received props:", {
+      id: project.id,
+      title: project.title,
+      hasVideo: !!project.video_url,
+      videoPlatform: project.video_platform,
+      videoId: project.video_id,
+      btsImagesCount: project.bts_images?.length || 0,
+    })
+  }, [project])
 
   useEffect(() => {
     const handleScroll = () => {
@@ -64,15 +77,6 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     }
   }
 
-  // Log video information for debugging
-  console.log("Video info:", {
-    url: project.video_url,
-    platform: videoPlatform,
-    id: videoId,
-    directPlatform: project.video_platform,
-    directId: project.video_id,
-  })
-
   // Get BTS images or use empty array if none
   const btsImages = project.bts_images || []
 
@@ -85,6 +89,8 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     console.error("Video failed to load")
     setVideoError(true)
   }
+
+  const hasVideo = !videoError && videoPlatform && videoId
 
   return (
     <>
@@ -103,8 +109,28 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
 
       {/* Main video/image section - almost full screen */}
       <div className="w-full max-w-5xl mx-auto mb-16">
-        {!videoError && videoPlatform && videoId ? (
-          <VideoPlayer platform={videoPlatform} videoId={videoId} onError={handleVideoError} />
+        {hasVideo ? (
+          showVideo ? (
+            <VideoPlayer platform={videoPlatform!} videoId={videoId!} onError={handleVideoError} />
+          ) : (
+            <div
+              className="relative w-full aspect-video rounded-lg overflow-hidden group cursor-pointer"
+              onClick={() => setShowVideo(true)}
+            >
+              <Image
+                src={project.image || "/placeholder.svg"}
+                alt={project.title}
+                fill
+                className="object-cover transition-transform group-hover:scale-105"
+                priority
+              />
+              <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-90 group-hover:opacity-100 transition-opacity">
+                <div className="w-20 h-20 rounded-full bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                  <Play className="w-10 h-10 text-white fill-white" />
+                </div>
+              </div>
+            </div>
+          )
         ) : (
           <div className="relative w-full aspect-video rounded-lg overflow-hidden">
             <Image
@@ -149,21 +175,21 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
       )}
 
       {/* BTS Gallery - clustered around with proper aspect ratios */}
-      {btsImages.length > 0 && (
+      {btsImages && btsImages.length > 0 && (
         <div className="mb-16">
           <h3 className="text-2xl font-serif mb-6 text-center">Behind the Scenes</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {btsImages.map((image) => (
               <div
                 key={image.id}
-                className="relative aspect-video cursor-pointer rounded-lg overflow-hidden"
+                className="relative aspect-video cursor-pointer rounded-lg overflow-hidden group"
                 onClick={() => setSelectedBtsImage(image.image_url)}
               >
                 <Image
                   src={image.image_url || "/placeholder.svg"}
                   alt={image.caption || "Behind the scenes"}
                   fill
-                  className="object-cover rounded-lg"
+                  className="object-cover rounded-lg transition-transform group-hover:scale-105"
                 />
                 {image.caption && (
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
