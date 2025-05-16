@@ -59,13 +59,3 @@ export function getSupabaseBrowserClient(): SupabaseClient {
     },
   })
 }
-
-/**
- * @deprecated Use createServerClient, createAdminClient, or getSupabaseBrowserClient instead
- */
-export function createClient(): SupabaseClient {
-  console.warn(
-    "Direct usage of createClient is deprecated. Please use createServerClient, createAdminClient, or getSupabaseBrowserClient instead.",
-  )
-  return createServerClient()
-}
