@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, Calendar } from "lucide-react"
+import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, Calendar, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -15,6 +15,7 @@ import { toast } from "@/components/ui/use-toast"
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import ProjectMediaUploader from "@/components/admin/project-media-uploader"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -24,19 +25,18 @@ export default function NewProjectPage() {
   const [error, setError] = useState<string | null>(null)
   const [processingVideo, setProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
+  const [schemaColumns, setSchemaColumns] = useState<string[]>([])
+  const [isLoadingSchema, setIsLoadingSchema] = useState(true)
 
-  // Form state
+  // Form state - only include basic fields initially
   const [formData, setFormData] = useState({
     title: "",
+    description: "",
+    image: "",
     category: "",
     role: "",
-    image: "",
-    video_url: "",
-    description: "",
-    // Removed special_notes field as it doesn't exist in the database
-    project_date: new Date().toISOString().split("T")[0], // Default to today
-    is_public: true, // Default to public
-    publish_date: null, // No scheduled publish date by default
+    project_date: new Date().toISOString().split("T")[0],
+    is_public: true,
   })
 
   // State to track the role input for tag extraction
@@ -47,6 +47,59 @@ export default function NewProjectPage() {
   const [btsVideos, setBtsVideos] = useState<string[]>([])
   const [mainImages, setMainImages] = useState<string[]>([])
   const [mainVideos, setMainVideos] = useState<string[]>([])
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>("")
+
+  // Fetch the actual schema columns when the component mounts
+  useEffect(() => {
+    async function fetchSchema() {
+      try {
+        setIsLoadingSchema(true)
+        // First try to get the schema from our API
+        const response = await fetch("/api/check-projects-schema")
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.columns && Array.isArray(data.columns)) {
+            const columnNames = data.columns.map((col: any) => col.column_name)
+            setSchemaColumns(columnNames)
+            console.log("Available columns in projects table:", columnNames)
+          }
+        } else {
+          // Fallback: direct query to get columns
+          const { data, error } = await supabase.from("projects").select("*").limit(1)
+
+          if (!error && data) {
+            // Extract column names from the first row
+            const sampleRow = data[0] || {}
+            const columnNames = Object.keys(sampleRow)
+            setSchemaColumns(columnNames)
+            console.log("Available columns in projects table (fallback):", columnNames)
+          } else {
+            console.error("Error fetching schema:", error)
+            // Set some default columns as a last resort
+            setSchemaColumns([
+              "id",
+              "title",
+              "description",
+              "image",
+              "category",
+              "role",
+              "project_date",
+              "is_public",
+              "created_at",
+              "updated_at",
+            ])
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching schema:", err)
+      } finally {
+        setIsLoadingSchema(false)
+      }
+    }
+
+    fetchSchema()
+  }, [supabase])
 
   // Helper function to format date for input field
   function formatDateForInput(date: Date): string {
@@ -70,10 +123,6 @@ export default function NewProjectPage() {
               return new Date(video.upload_date)
             }
           }
-        } else if (videoInfo.platform === "youtube") {
-          // YouTube doesn't provide easy access to upload date via API without a key
-          // We could potentially fetch the page and parse it, but that's complex
-          return null
         }
       } else if (type === "image") {
         // For images in Supabase, check if we have metadata
@@ -137,17 +186,9 @@ export default function NewProjectPage() {
         if (!mainVideos.includes(mediaUrl)) {
           setMainVideos((prev) => [...prev, mediaUrl])
         }
-        // Set as main video if none is set
-        if (!formData.video_url) {
-          setFormData((prev) => ({ ...prev, video_url: mediaUrl }))
-
-          // Try to extract date if project_date is empty
-          if (!formData.project_date) {
-            const date = await extractDateFromMedia(mediaUrl, "video")
-            if (date) {
-              setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
-            }
-          }
+        // Store video URL in thumbnail_url if that column exists
+        if (schemaColumns.includes("thumbnail_url")) {
+          setThumbnailUrl(mediaUrl)
         }
       } else {
         if (!mainImages.includes(mediaUrl)) {
@@ -226,13 +267,9 @@ export default function NewProjectPage() {
     const removedVideo = newVideos.splice(index, 1)[0]
     setMainVideos(newVideos)
 
-    // If the removed video was the main video, set a new one if available
-    if (formData.video_url === removedVideo) {
-      if (newVideos.length > 0) {
-        setFormData((prev) => ({ ...prev, video_url: newVideos[0] }))
-      } else {
-        setFormData((prev) => ({ ...prev, video_url: "" }))
-      }
+    // If the removed video was the main video, clear the thumbnail_url
+    if (thumbnailUrl === removedVideo) {
+      setThumbnailUrl("")
     }
   }
 
@@ -253,7 +290,7 @@ export default function NewProjectPage() {
   }
 
   const setMainVideo = (url: string) => {
-    setFormData((prev) => ({ ...prev, video_url: url }))
+    setThumbnailUrl(url)
   }
 
   const addMainVideoUrl = async (url: string) => {
@@ -286,7 +323,7 @@ export default function NewProjectPage() {
       // Add to mainVideos if not already in the list
       if (!mainVideos.includes(url)) {
         setMainVideos((prev) => [...prev, url])
-        setFormData((prev) => ({ ...prev, video_url: url }))
+        setThumbnailUrl(url)
       }
 
       // If we have a thumbnail and no image is set, use the thumbnail
@@ -393,11 +430,26 @@ export default function NewProjectPage() {
         return
       }
 
+      // Create a clean data object with only the columns that exist in the database
+      const cleanData: Record<string, any> = {}
+
+      // Add all fields from formData that exist in the schema
+      Object.entries(formData).forEach(([key, value]) => {
+        if (schemaColumns.includes(key)) {
+          cleanData[key] = value
+        }
+      })
+
+      // Add thumbnail_url if it exists in the schema and we have a video
+      if (schemaColumns.includes("thumbnail_url") && thumbnailUrl) {
+        cleanData.thumbnail_url = thumbnailUrl
+      }
+
       // Log the data being sent to the server
-      console.log("Saving project with data:", formData)
+      console.log("Saving project with data:", cleanData)
 
       // Create in Supabase
-      const { data, error: projectError } = await supabase.from("projects").insert([formData]).select()
+      const { data, error: projectError } = await supabase.from("projects").insert([cleanData]).select()
 
       if (projectError) {
         throw projectError
@@ -450,7 +502,7 @@ export default function NewProjectPage() {
         <div className="flex gap-2">
           <Button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || isLoadingSchema}
             size="sm"
             variant="outline"
             className="border-gray-700 text-gray-300 hover:bg-[#131a2a]"
@@ -459,6 +511,11 @@ export default function NewProjectPage() {
               <>
                 <Loader2 size={16} className="mr-1 animate-spin" />
                 Creating...
+              </>
+            ) : isLoadingSchema ? (
+              <>
+                <Loader2 size={16} className="mr-1 animate-spin" />
+                Loading...
               </>
             ) : (
               <>
@@ -470,10 +527,18 @@ export default function NewProjectPage() {
         </div>
       </div>
 
+      {isLoadingSchema && (
+        <Alert className="mb-4 max-w-7xl mx-auto bg-blue-900/20 border-blue-800">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          <AlertDescription>Loading database schema...</AlertDescription>
+        </Alert>
+      )}
+
       {error && (
-        <div className="bg-red-900/20 border border-red-800 rounded-lg p-3 mb-4 max-w-7xl mx-auto">
-          <p className="text-red-400">{error}</p>
-        </div>
+        <Alert variant="destructive" className="mb-4 max-w-7xl mx-auto bg-red-900/20 border-red-800">
+          <AlertCircle className="h-4 w-4 mr-2" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
       )}
 
       {/* Project form */}
@@ -584,14 +649,13 @@ export default function NewProjectPage() {
                   </Select>
                 </div>
 
-                {!formData.is_public && (
+                {!formData.is_public && schemaColumns.includes("publish_date") && (
                   <div>
                     <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Publish Date</label>
                     <div className="relative">
                       <Input
                         type="datetime-local"
                         name="publish_date"
-                        value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ""}
                         onChange={(e) => {
                           const value = e.target.value ? new Date(e.target.value).toISOString() : null
                           setFormData((prev) => ({ ...prev, publish_date: value }))
@@ -686,7 +750,7 @@ export default function NewProjectPage() {
                     {mainVideos.map((video, index) => (
                       <div key={`main-video-${index}`} className="relative group">
                         <div
-                          className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${formData.video_url === video ? "ring-2 ring-blue-500" : ""}`}
+                          className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${thumbnailUrl === video ? "ring-2 ring-blue-500" : ""}`}
                         >
                           {video.includes("youtube.com") ? (
                             <img
@@ -728,7 +792,7 @@ export default function NewProjectPage() {
                             <X size={14} />
                           </button>
                         </div>
-                        {formData.video_url === video && (
+                        {thumbnailUrl === video && (
                           <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
                             Main
                           </div>
@@ -847,7 +911,7 @@ export default function NewProjectPage() {
 
           <Button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || isLoadingSchema}
             variant="outline"
             className="border-gray-700 bg-[#0f1520] text-gray-200 hover:bg-[#131a2a]"
           >
@@ -855,6 +919,11 @@ export default function NewProjectPage() {
               <>
                 <Loader2 size={16} className="mr-2 animate-spin" />
                 Creating...
+              </>
+            ) : isLoadingSchema ? (
+              <>
+                <Loader2 size={16} className="mr-2 animate-spin" />
+                Loading...
               </>
             ) : (
               <>

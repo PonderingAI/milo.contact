@@ -26,9 +26,8 @@ interface ProjectFormProps {
     type: string
     role: string
     image: string
-    video_url?: string
+    thumbnail_url?: string
     description?: string
-    special_notes?: string
     is_public: boolean
     publish_date: string | null
     tags: string[]
@@ -42,12 +41,10 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     category: project?.category || "",
     role: project?.role || "",
     image: project?.image || "",
-    video_url: project?.video_url || "",
+    thumbnail_url: project?.thumbnail_url || "",
     description: project?.description || "",
-    special_notes: project?.special_notes || "",
     is_public: project?.is_public ?? true,
     publish_date: project?.publish_date || null,
-    tags: project?.tags || [],
   })
 
   // State to track the role input for tag extraction
@@ -58,8 +55,62 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [isUsingVideoThumbnail, setIsUsingVideoThumbnail] = useState(false)
+  const [schemaColumns, setSchemaColumns] = useState<string[]>([])
+  const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
+
+  // Fetch the actual schema columns when the component mounts
+  useEffect(() => {
+    async function fetchSchema() {
+      try {
+        setIsLoadingSchema(true)
+        // First try to get the schema from our API
+        const response = await fetch("/api/check-projects-schema")
+
+        if (response.ok) {
+          const data = await response.json()
+          if (data.columns && Array.isArray(data.columns)) {
+            const columnNames = data.columns.map((col: any) => col.column_name)
+            setSchemaColumns(columnNames)
+            console.log("Available columns in projects table:", columnNames)
+          }
+        } else {
+          // Fallback: direct query to get columns
+          const { data, error } = await supabase.from("projects").select("*").limit(1)
+
+          if (!error && data) {
+            // Extract column names from the first row
+            const sampleRow = data[0] || {}
+            const columnNames = Object.keys(sampleRow)
+            setSchemaColumns(columnNames)
+            console.log("Available columns in projects table (fallback):", columnNames)
+          } else {
+            console.error("Error fetching schema:", error)
+            // Set some default columns as a last resort
+            setSchemaColumns([
+              "id",
+              "title",
+              "description",
+              "image",
+              "category",
+              "role",
+              "project_date",
+              "is_public",
+              "created_at",
+              "updated_at",
+            ])
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching schema:", err)
+      } finally {
+        setIsLoadingSchema(false)
+      }
+    }
+
+    fetchSchema()
+  }, [supabase])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -74,17 +125,10 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     const value = e.target.value
     setRoleInput(value)
 
-    // Extract tags from comma-separated role input
-    const tags = value
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter((tag) => tag)
-
-    // Update both role and tags
+    // Update role in form data
     setFormData((prev) => ({
       ...prev,
       role: value,
-      tags: tags,
     }))
   }
 
@@ -96,7 +140,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   // Process video URL and extract thumbnail
   useEffect(() => {
     const processVideoUrl = async () => {
-      const url = formData.video_url.trim()
+      const url = formData.thumbnail_url?.trim()
       if (!url || isProcessingVideo) return
 
       const videoInfo = extractVideoInfo(url)
@@ -193,12 +237,12 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       }
     }
 
-    if (formData.video_url) {
+    if (formData.thumbnail_url) {
       processVideoUrl()
     } else {
       setVideoThumbnail(null)
     }
-  }, [formData.video_url, formData.image, supabase])
+  }, [formData.thumbnail_url, formData.image, supabase])
 
   const useVideoThumbnail = () => {
     if (videoThumbnail) {
@@ -218,8 +262,8 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     if (!formData.image) return "Image is required"
 
     // Validate video URL if provided
-    if (formData.video_url) {
-      const videoInfo = extractVideoInfo(formData.video_url)
+    if (formData.thumbnail_url) {
+      const videoInfo = extractVideoInfo(formData.thumbnail_url)
       if (!videoInfo) return "Invalid video URL. Please use a YouTube, Vimeo, or LinkedIn link."
     }
 
@@ -240,9 +284,21 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setError(null)
 
     try {
+      // Create a clean data object with only the columns that exist in the database
+      const cleanData: Record<string, any> = {}
+
+      // Add all fields from formData that exist in the schema
+      Object.entries(formData).forEach(([key, value]) => {
+        if (schemaColumns.includes(key)) {
+          cleanData[key] = value
+        }
+      })
+
+      console.log("Saving project with data:", cleanData)
+
       if (mode === "create") {
         // Create new project
-        const { data, error } = await supabase.from("projects").insert([formData]).select()
+        const { data, error } = await supabase.from("projects").insert([cleanData]).select()
 
         if (error) throw error
 
@@ -250,7 +306,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         router.push(`/admin/projects/${data[0].id}/edit`)
       } else {
         // Update existing project
-        const { error } = await supabase.from("projects").update(formData).eq("id", project?.id)
+        const { error } = await supabase.from("projects").update(cleanData).eq("id", project?.id)
 
         if (error) throw error
 
@@ -273,6 +329,13 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">
+      {isLoadingSchema && (
+        <Alert className="bg-blue-900/20 border-blue-800">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+          <AlertDescription>Loading database schema...</AlertDescription>
+        </Alert>
+      )}
+
       {error && (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -320,53 +383,58 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           />
           <p className="text-xs text-gray-400">Separate multiple roles/tags with commas</p>
 
-          {formData.tags.length > 0 && (
+          {roleInput && (
             <div className="flex flex-wrap gap-2 mt-2">
-              {formData.tags.map((tag, index) => (
-                <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
-                  {tag}
-                </span>
-              ))}
+              {roleInput.split(",").map(
+                (tag, index) =>
+                  tag.trim() && (
+                    <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
+                      {tag.trim()}
+                    </span>
+                  ),
+              )}
             </div>
           )}
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label>Video URL (YouTube, Vimeo, or LinkedIn)</Label>
-        <div className="flex items-center gap-2">
-          <div className="flex-grow">
-            <Input
-              id="video_url"
-              name="video_url"
-              value={formData.video_url}
-              onChange={handleChange}
-              placeholder="https://www.youtube.com/watch?v=..."
-              className="bg-gray-800 border-gray-700"
-            />
+      {schemaColumns.includes("thumbnail_url") && (
+        <div className="space-y-2">
+          <Label>Video URL (YouTube, Vimeo, or LinkedIn)</Label>
+          <div className="flex items-center gap-2">
+            <div className="flex-grow">
+              <Input
+                id="thumbnail_url"
+                name="thumbnail_url"
+                value={formData.thumbnail_url}
+                onChange={handleChange}
+                placeholder="https://www.youtube.com/watch?v=..."
+                className="bg-gray-800 border-gray-700"
+              />
+            </div>
+            <div className="flex-shrink-0">
+              <MediaSelector
+                type="video"
+                onSelect={(url) => setFormData((prev) => ({ ...prev, thumbnail_url: url }))}
+                buttonLabel="Browse Videos"
+                currentUrl={formData.thumbnail_url}
+              />
+            </div>
           </div>
-          <div className="flex-shrink-0">
-            <MediaSelector
-              type="video"
-              onSelect={(url) => setFormData((prev) => ({ ...prev, video_url: url }))}
-              buttonLabel="Browse Videos"
-              currentUrl={formData.video_url}
-            />
-          </div>
+          {isProcessingVideo && (
+            <p className="text-sm text-blue-500 flex items-center gap-1 mt-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Processing video...
+            </p>
+          )}
+          {formData.thumbnail_url && extractVideoInfo(formData.thumbnail_url) && (
+            <p className="text-sm text-green-500">Valid video URL</p>
+          )}
+          {formData.thumbnail_url && !extractVideoInfo(formData.thumbnail_url) && (
+            <p className="text-sm text-red-500">Invalid video URL. Please use a YouTube, Vimeo, or LinkedIn link.</p>
+          )}
         </div>
-        {isProcessingVideo && (
-          <p className="text-sm text-blue-500 flex items-center gap-1 mt-1">
-            <Loader2 className="h-3 w-3 animate-spin" />
-            Processing video...
-          </p>
-        )}
-        {formData.video_url && extractVideoInfo(formData.video_url) && (
-          <p className="text-sm text-green-500">Valid video URL</p>
-        )}
-        {formData.video_url && !extractVideoInfo(formData.video_url) && (
-          <p className="text-sm text-red-500">Invalid video URL. Please use a YouTube, Vimeo, or LinkedIn link.</p>
-        )}
-      </div>
+      )}
 
       <div className="space-y-2">
         <Label>Cover Image *</Label>
@@ -428,18 +496,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="special_notes">Special Notes</Label>
-        <Textarea
-          id="special_notes"
-          name="special_notes"
-          value={formData.special_notes}
-          onChange={handleChange}
-          placeholder="Any special notes about this project..."
-          className="bg-gray-800 border-gray-700 min-h-[100px]"
-        />
-      </div>
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         <div>
           <Label htmlFor="is_public" className="flex items-center space-x-2 mb-2">
@@ -463,33 +519,39 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           </p>
         </div>
 
-        <div>
-          <Label htmlFor="publish_date" className="mb-2">
-            Scheduled Publish Date
-          </Label>
-          <Input
-            type="datetime-local"
-            id="publish_date"
-            name="publish_date"
-            value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ""}
-            onChange={(e) => {
-              const value = e.target.value ? new Date(e.target.value).toISOString() : null
-              setFormData((prev) => ({ ...prev, publish_date: value }))
-            }}
-            className="w-full"
-            disabled={formData.is_public}
-          />
-          <p className="text-sm text-gray-500 mt-1">
-            {formData.is_public ? "Project is already public" : "When to automatically make this project public"}
-          </p>
-        </div>
+        {schemaColumns.includes("publish_date") && !formData.is_public && (
+          <div>
+            <Label htmlFor="publish_date" className="mb-2">
+              Scheduled Publish Date
+            </Label>
+            <Input
+              type="datetime-local"
+              id="publish_date"
+              name="publish_date"
+              value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ""}
+              onChange={(e) => {
+                const value = e.target.value ? new Date(e.target.value).toISOString() : null
+                setFormData((prev) => ({ ...prev, publish_date: value }))
+              }}
+              className="w-full"
+              disabled={formData.is_public}
+            />
+            <p className="text-sm text-gray-500 mt-1">
+              {formData.is_public ? "Project is already public" : "When to automatically make this project public"}
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="flex justify-end gap-4">
         <Button type="button" variant="outline" onClick={() => router.push("/admin/projects")}>
           Cancel
         </Button>
-        <Button type="submit" disabled={isSubmitting} className="bg-white text-black hover:bg-gray-200">
+        <Button
+          type="submit"
+          disabled={isSubmitting || isLoadingSchema}
+          className="bg-white text-black hover:bg-gray-200"
+        >
           {isSubmitting ? "Saving..." : mode === "create" ? "Create Project" : "Update Project"}
         </Button>
       </div>
