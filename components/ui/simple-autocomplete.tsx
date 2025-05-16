@@ -1,10 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
+import { Check } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Input } from "@/components/ui/input"
 
@@ -63,18 +62,19 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
         .filter(Boolean)
     }, [value, multiple, separator])
 
-    // Filter options based on current input
+    // Filter options based on current input and remove duplicates
     const filteredOptions = React.useMemo(() => {
       // Only show suggestions after at least one character is typed
       if (!inputValue.trim() || inputValue.length < 1) return []
 
       const searchTerm = inputValue.toLowerCase()
-      return options.filter((option) => option.toLowerCase().includes(searchTerm))
+      // Use Set to ensure unique options
+      return [...new Set(options.filter((option) => option.toLowerCase().includes(searchTerm)))]
     }, [inputValue, options])
 
     // Sort filtered options to prioritize those that start with the input value
     const sortedFilteredOptions = React.useMemo(() => {
-      if (!inputValue.trim()) return filteredOptions
+      if (!inputValue.trim() || filteredOptions.length === 0) return []
 
       const searchTerm = inputValue.toLowerCase()
       return [...filteredOptions].sort((a, b) => {
@@ -86,6 +86,9 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
         return a.localeCompare(b)
       })
     }, [filteredOptions, inputValue])
+
+    // Determine if we should show suggestions
+    const shouldShowSuggestions = sortedFilteredOptions.length > 0
 
     const handleSelect = (selectedValue: string) => {
       if (multiple) {
@@ -99,7 +102,7 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
       }
 
       setInputValue("")
-      if (!multiple) setIsOpenState(false)
+      setIsOpenState(false)
     }
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,10 +119,17 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
           onInputChange(newValue)
         }
       }
+
+      // Auto-open dropdown if we have suggestions
+      if (newValue.trim().length >= 1) {
+        setIsOpenState(true)
+      } else {
+        setIsOpenState(false)
+      }
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Tab" && inputValue && sortedFilteredOptions.length > 0) {
+      if (e.key === "Tab" && isOpenState && sortedFilteredOptions.length > 0) {
         e.preventDefault()
         handleSelect(sortedFilteredOptions[0])
       }
@@ -147,72 +157,41 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
     React.useImperativeHandle(ref, () => inputRef.current as HTMLInputElement)
 
     return (
-      <Popover open={isOpenState} onOpenChange={setIsOpenState}>
+      <Popover open={isOpenState && shouldShowSuggestions} onOpenChange={setIsOpenState}>
         <PopoverTrigger asChild>
-          <div className="flex w-full relative">
-            <Input
-              ref={inputRef}
-              value={multiple ? inputValue : activeValue}
-              onChange={(e) => {
-                handleInputChange(e)
-                // Only open dropdown if there's text and options available
-                if (e.target.value.trim().length >= 1) {
-                  setIsOpenState(true)
-                }
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              className={cn("w-full", className)}
-              onClick={() => {
-                // Only open if there's text
-                if ((multiple ? inputValue : activeValue).trim().length >= 1) {
-                  setIsOpenState(true)
-                }
-              }}
-              onFocus={() => {
-                // Only open if there's text
-                if ((multiple ? inputValue : activeValue).trim().length >= 1) {
-                  setIsOpenState(true)
-                }
-                onFocus?.()
-              }}
-              onBlur={() => {
-                onBlur?.()
-              }}
-            />
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={isOpenState}
-              className="absolute right-0 px-3 focus:ring-0 focus:ring-offset-0"
-              onClick={() => {
-                // Only toggle if there's text
-                if ((multiple ? inputValue : activeValue).trim().length >= 1) {
-                  setIsOpenState(!isOpenState)
-                }
-              }}
-              tabIndex={-1}
-            >
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-            </Button>
-          </div>
+          <Input
+            ref={inputRef}
+            value={multiple ? inputValue : activeValue}
+            onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            className={cn("w-full", className)}
+            onFocus={() => {
+              if (shouldShowSuggestions) {
+                setIsOpenState(true)
+              }
+              onFocus?.()
+            }}
+            onBlur={onBlur}
+          />
         </PopoverTrigger>
-        <PopoverContent className="w-full p-0 border-t-0 rounded-t-none shadow-md" align="start" sideOffset={0}>
-          <Command>
-            <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
-            <CommandList>
-              <CommandEmpty>{emptyMessage}</CommandEmpty>
-              <CommandGroup className="max-h-60 overflow-auto">
-                {sortedFilteredOptions.map((option) => (
-                  <CommandItem key={option} value={option} onSelect={() => handleSelect(option)}>
-                    <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
-                    {option}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
+        {shouldShowSuggestions && (
+          <PopoverContent className="w-full p-0 border-t-0 rounded-t-none shadow-md" align="start" sideOffset={0}>
+            <Command>
+              <CommandList>
+                <CommandEmpty>{emptyMessage}</CommandEmpty>
+                <CommandGroup className="max-h-60 overflow-auto">
+                  {sortedFilteredOptions.map((option) => (
+                    <CommandItem key={option} value={option} onSelect={() => handleSelect(option)}>
+                      <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
+                      {option}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
+          </PopoverContent>
+        )}
       </Popover>
     )
   },
