@@ -107,7 +107,7 @@ export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps)
       </div>
 
       {selectedTags.length > 0 && (
-        <div className="mt-2 text-sm text-gray-400">Filtering by: {selectedTags.join(", ")}</div>
+        <div className="mt-2 text-sm text-gray-400">Showing projects matching any of: {selectedTags.join(", ")}</div>
       )}
     </div>
   )

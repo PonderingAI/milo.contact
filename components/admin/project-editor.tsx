@@ -328,6 +328,48 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         if (schemaColumns.includes("thumbnail_url")) {
           setThumbnailUrl(mediaUrl)
           setFormData((prev) => ({ ...prev, thumbnail_url: mediaUrl }))
+
+          // Process video to extract metadata
+          try {
+            // For videos from media library, try to get metadata from the library
+            const supabase = getSupabaseBrowserClient()
+            const { data: mediaData } = await supabase
+              .from("media")
+              .select("filename, metadata, thumbnail_url")
+              .eq("public_url", mediaUrl)
+              .maybeSingle()
+
+            if (mediaData) {
+              // If we have media data, use it
+              console.log("Found video in media library:", mediaData)
+
+              // Set title if empty
+              if (!formData.title && mediaData.filename) {
+                setFormData((prev) => ({ ...prev, title: mediaData.filename }))
+              }
+
+              // Use thumbnail if available
+              if (mediaData.thumbnail_url && !formData.image) {
+                setFormData((prev) => ({ ...prev, image: mediaData.thumbnail_url }))
+                if (!mainImages.includes(mediaData.thumbnail_url)) {
+                  setMainImages((prev) => [...prev, mediaData.thumbnail_url])
+                }
+              }
+
+              // Extract date if available
+              if (mediaData.metadata?.uploadDate && !formData.project_date) {
+                const date = new Date(mediaData.metadata.uploadDate)
+                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+              }
+            } else {
+              // If not in media library, process as external video
+              await processVideoUrl(mediaUrl)
+            }
+          } catch (error) {
+            console.error("Error processing video from media library:", error)
+            // Fall back to regular processing
+            await processVideoUrl(mediaUrl)
+          }
         }
       } else {
         if (!mainImages.includes(mediaUrl)) {
@@ -358,6 +400,58 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           setFormData((prev) => ({ ...prev, title }))
         }
       }
+    }
+  }
+
+  // Helper function to process video URL and extract metadata
+  const processVideoUrl = async (url: string) => {
+    const videoInfo = extractVideoInfo(url)
+    if (!videoInfo) return
+
+    try {
+      let thumbnailUrl = null
+      let videoTitle = null
+      let uploadDate = null
+
+      if (videoInfo.platform === "vimeo") {
+        // Get video thumbnail from Vimeo API
+        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+
+        if (!response.ok) {
+          throw new Error("Failed to fetch Vimeo video info")
+        }
+
+        const videoData = await response.json()
+        const video = videoData[0]
+        thumbnailUrl = video.thumbnail_large
+        videoTitle = video.title
+        uploadDate = video.upload_date
+      } else if (videoInfo.platform === "youtube") {
+        // Use YouTube thumbnail URL format
+        thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
+        videoTitle = `YouTube Video: ${videoInfo.id}`
+      }
+
+      // Set thumbnail if available
+      if (thumbnailUrl && !formData.image) {
+        setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
+        if (!mainImages.includes(thumbnailUrl)) {
+          setMainImages((prev) => [...prev, thumbnailUrl])
+        }
+      }
+
+      // Set title if available
+      if (videoTitle && !formData.title) {
+        setFormData((prev) => ({ ...prev, title: videoTitle }))
+      }
+
+      // Set date if available
+      if (uploadDate && !formData.project_date) {
+        const date = new Date(uploadDate)
+        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+      }
+    } catch (error) {
+      console.error("Error processing video URL:", error)
     }
   }
 

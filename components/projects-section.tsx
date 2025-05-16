@@ -22,13 +22,33 @@ export default function ProjectsSection({ projects }: ProjectsSectionProps) {
     setSelectedTags(tags)
   }
 
+  // Filter projects based on search term and selected tags
+  const filteredProjects = projects.filter((project) => {
+    // Filter by search term
+    const matchesSearch =
+      searchQuery === "" ||
+      project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (project.description && project.description.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (project.category && project.category.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (project.role && project.role.toLowerCase().includes(searchQuery.toLowerCase()))
+
+    // Filter by selected tags - use OR logic (match any selected tag)
+    const matchesTags =
+      selectedTags.length === 0 ||
+      selectedTags.some((tag) => {
+        return (project.category && project.category.includes(tag)) || (project.role && project.role.includes(tag))
+      })
+
+    return matchesSearch && matchesTags
+  })
+
   return (
     <section id="projects" className="mb-24">
       <h2 className="text-5xl md:text-7xl font-serif mb-12">My Work</h2>
 
       <ProjectSearch onSearch={handleSearch} />
       <TagFilter onTagSelect={handleTagSelect} selectedTags={selectedTags} />
-      <OffsetProjectGrid projects={projects} searchQuery={searchQuery} selectedTags={selectedTags} />
+      <OffsetProjectGrid projects={filteredProjects} searchQuery={searchQuery} selectedTags={selectedTags} />
     </section>
   )
 }
