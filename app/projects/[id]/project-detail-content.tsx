@@ -21,10 +21,12 @@ interface ProjectDetailContentProps {
     id: string
     title: string
     category: string
-    type: string
+    type?: string
     role: string
     image: string
     video_url?: string
+    video_platform?: string
+    video_id?: string
     description?: string
     special_notes?: string
     bts_images?: BtsImage[]
@@ -35,6 +37,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const [selectedBtsImage, setSelectedBtsImage] = useState<string | null>(null)
   const descriptionRef = useRef<HTMLDivElement>(null)
   const [isScrolled, setIsScrolled] = useState(false)
+  const [videoError, setVideoError] = useState(false)
 
   useEffect(() => {
     const handleScroll = () => {
@@ -48,8 +51,27 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     return () => window.removeEventListener("scroll", handleScroll)
   }, [])
 
-  // Extract video ID from YouTube or Vimeo URL
-  const videoInfo = project.video_url ? extractVideoInfo(project.video_url) : null
+  // Determine video information - check both direct properties and extract from URL if needed
+  let videoPlatform = project.video_platform
+  let videoId = project.video_id
+
+  // If we don't have platform/id directly but have a URL, extract them
+  if ((!videoPlatform || !videoId) && project.video_url) {
+    const extractedInfo = extractVideoInfo(project.video_url)
+    if (extractedInfo) {
+      videoPlatform = extractedInfo.platform
+      videoId = extractedInfo.id
+    }
+  }
+
+  // Log video information for debugging
+  console.log("Video info:", {
+    url: project.video_url,
+    platform: videoPlatform,
+    id: videoId,
+    directPlatform: project.video_platform,
+    directId: project.video_id,
+  })
 
   // Get BTS images or use empty array if none
   const btsImages = project.bts_images || []
@@ -59,12 +81,17 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const hasSpecialNotes = project.special_notes && project.special_notes.trim().length > 0
   const hasAboutSection = hasDescription || hasSpecialNotes
 
+  const handleVideoError = () => {
+    console.error("Video failed to load")
+    setVideoError(true)
+  }
+
   return (
     <>
       <div className="flex items-center gap-4 mb-8">
-        <Link href="/" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+        <Link href="/projects" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
           <ArrowLeft className="w-5 h-5" />
-          Back to Home
+          Back to Projects
         </Link>
       </div>
 
@@ -76,11 +103,17 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
 
       {/* Main video/image section - almost full screen */}
       <div className="w-full max-w-5xl mx-auto mb-16">
-        {project.video_url && videoInfo ? (
-          <VideoPlayer platform={videoInfo.platform} videoId={videoInfo.id} />
+        {!videoError && videoPlatform && videoId ? (
+          <VideoPlayer platform={videoPlatform} videoId={videoId} onError={handleVideoError} />
         ) : (
           <div className="relative w-full aspect-video rounded-lg overflow-hidden">
-            <Image src={project.image || "/placeholder.svg"} alt={project.title} fill className="object-cover" />
+            <Image
+              src={project.image || "/placeholder.svg"}
+              alt={project.title}
+              fill
+              className="object-cover"
+              priority
+            />
           </div>
         )}
       </div>
@@ -119,11 +152,11 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
       {btsImages.length > 0 && (
         <div className="mb-16">
           <h3 className="text-2xl font-serif mb-6 text-center">Behind the Scenes</h3>
-          <div className="bts-gallery-cluster">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {btsImages.map((image) => (
               <div
                 key={image.id}
-                className={`bts-item ${image.size || "medium"} ${image.aspect_ratio || "landscape"}`}
+                className="relative aspect-video cursor-pointer rounded-lg overflow-hidden"
                 onClick={() => setSelectedBtsImage(image.image_url)}
               >
                 <Image
@@ -132,6 +165,11 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                   fill
                   className="object-cover rounded-lg"
                 />
+                {image.caption && (
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-3">
+                    <p className="text-white text-sm">{image.caption}</p>
+                  </div>
+                )}
               </div>
             ))}
           </div>

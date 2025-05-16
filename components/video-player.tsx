@@ -5,11 +5,15 @@ import { useState, useEffect } from "react"
 interface VideoPlayerProps {
   platform: string
   videoId: string
+  onError?: () => void
 }
 
-export default function VideoPlayer({ platform, videoId }: VideoPlayerProps) {
+export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
+
+  // Log props for debugging
+  console.log("VideoPlayer props:", { platform, videoId })
 
   useEffect(() => {
     // Reset states when props change
@@ -20,26 +24,37 @@ export default function VideoPlayer({ platform, videoId }: VideoPlayerProps) {
   const getEmbedUrl = () => {
     try {
       if (!platform || !videoId) {
+        console.error("Missing platform or videoId", { platform, videoId })
         setHasError(true)
+        onError?.()
         return ""
       }
 
-      if (platform === "youtube") {
+      if (platform.toLowerCase() === "youtube") {
         return `https://www.youtube.com/embed/${videoId}?autoplay=0&rel=0&modestbranding=1`
-      } else if (platform === "vimeo") {
+      } else if (platform.toLowerCase() === "vimeo") {
         return `https://player.vimeo.com/video/${videoId}?color=ffffff&title=0&byline=0&portrait=0`
       }
 
+      console.error("Unsupported platform", platform)
       setHasError(true)
+      onError?.()
       return ""
     } catch (error) {
       console.error("Error generating embed URL:", error)
       setHasError(true)
+      onError?.()
       return ""
     }
   }
 
   const embedUrl = getEmbedUrl()
+
+  const handleError = () => {
+    console.error("Error loading video iframe")
+    setHasError(true)
+    onError?.()
+  }
 
   if (hasError) {
     return (
@@ -68,7 +83,7 @@ export default function VideoPlayer({ platform, videoId }: VideoPlayerProps) {
           allowFullScreen
           title="Embedded video"
           onLoad={() => setIsLoaded(true)}
-          onError={() => setHasError(true)}
+          onError={handleError}
         ></iframe>
       )}
     </div>

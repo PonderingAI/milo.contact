@@ -129,6 +129,15 @@ export async function getProjects(): Promise<Project[]> {
         project.category = project.type
       }
 
+      // If project has video_url but no video_platform/video_id, extract them
+      if (project.video_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.video_url)
+        if (videoInfo) {
+          project.video_platform = videoInfo.platform
+          project.video_id = videoInfo.id
+        }
+      }
+
       return {
         ...project,
         tags: [project.category, ...roleTags].filter(Boolean),
@@ -177,6 +186,15 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       console.log("Database not set up, returning mock project")
       const mockProject = mockProjects.find((p) => p.id === id)
       if (mockProject) {
+        // Process video URL if present
+        if (mockProject.video_url && (!mockProject.video_platform || !mockProject.video_id)) {
+          const videoInfo = extractVideoInfo(mockProject.video_url)
+          if (videoInfo) {
+            mockProject.video_platform = videoInfo.platform
+            mockProject.video_id = videoInfo.id
+          }
+        }
+
         return {
           ...mockProject,
           bts_images: mockBtsImages.filter((img) => img.project_id === id),
@@ -192,12 +210,30 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       console.error("Error fetching project:", projectError)
       const mockProject = mockProjects.find((p) => p.id === id)
       if (mockProject) {
+        // Process video URL if present
+        if (mockProject.video_url && (!mockProject.video_platform || !mockProject.video_id)) {
+          const videoInfo = extractVideoInfo(mockProject.video_url)
+          if (videoInfo) {
+            mockProject.video_platform = videoInfo.platform
+            mockProject.video_id = videoInfo.id
+          }
+        }
+
         return {
           ...mockProject,
           bts_images: mockBtsImages.filter((img) => img.project_id === id),
         }
       }
       return null
+    }
+
+    // Process video URL if present
+    if (project.video_url && (!project.video_platform || !project.video_id)) {
+      const videoInfo = extractVideoInfo(project.video_url)
+      if (videoInfo) {
+        project.video_platform = videoInfo.platform
+        project.video_id = videoInfo.id
+      }
     }
 
     // Get BTS images for the project
@@ -228,6 +264,15 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
     console.error("Error in getProjectById:", error)
     const mockProject = mockProjects.find((p) => p.id === id)
     if (mockProject) {
+      // Process video URL if present
+      if (mockProject.video_url && (!mockProject.video_platform || !mockProject.video_id)) {
+        const videoInfo = extractVideoInfo(mockProject.video_url)
+        if (videoInfo) {
+          mockProject.video_platform = videoInfo.platform
+          mockProject.video_id = videoInfo.id
+        }
+      }
+
       return {
         ...mockProject,
         bts_images: mockBtsImages.filter((img) => img.project_id === id),
@@ -265,6 +310,15 @@ export async function getProjectsByCategory(category: string): Promise<Project[]
     const processedProjects = data.map((project) => {
       // Extract tags from role field
       const roleTags = extractTagsFromRole(project.role)
+
+      // Process video URL if present
+      if (project.video_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.video_url)
+        if (videoInfo) {
+          project.video_platform = videoInfo.platform
+          project.video_id = videoInfo.id
+        }
+      }
 
       return {
         ...project,
@@ -329,6 +383,15 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
         project.category = project.type
       }
 
+      // Process video URL if present
+      if (project.video_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.video_url)
+        if (videoInfo) {
+          project.video_platform = videoInfo.platform
+          project.video_id = videoInfo.id
+        }
+      }
+
       return {
         ...project,
         tags: [project.category, ...roleTags].filter(Boolean),
@@ -385,6 +448,15 @@ export async function getProjectsByTag(tag: string): Promise<Project[]> {
       // If project has type but no category, use type as category (for backward compatibility)
       if (project.type && !project.category) {
         project.category = project.type
+      }
+
+      // Process video URL if present
+      if (project.video_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.video_url)
+        if (videoInfo) {
+          project.video_platform = videoInfo.platform
+          project.video_id = videoInfo.id
+        }
       }
 
       return {

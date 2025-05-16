@@ -101,8 +101,8 @@ export default function ProjectsClientPage() {
                   <div className="text-xs text-gray-400 mt-1 capitalize">{project.type}</div>
                 </div>
 
-                {/* Action buttons at bottom right */}
-                <div className="absolute bottom-4 right-4 flex gap-2">
+                {/* Action buttons at top right */}
+                <div className="absolute top-2 right-2 flex gap-2">
                   <Link href={`/projects/${project.id}`} target="_blank">
                     <Button variant="secondary" size="icon" className="bg-gray-800/80 hover:bg-gray-700/80">
                       <ExternalLink size={16} />
