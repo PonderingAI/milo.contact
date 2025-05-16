@@ -3,13 +3,23 @@ import { createAdminClient } from "@/lib/supabase-server"
 
 export async function POST(request: Request) {
   try {
-    const { projectId, images } = await request.json()
+    const { projectId, images, caption = "", category = "general" } = await request.json()
 
-    if (!projectId || !images || !Array.isArray(images) || images.length === 0) {
+    if (!projectId) {
       return NextResponse.json(
         {
           success: false,
-          error: "Invalid request. Project ID and images array are required.",
+          error: "Project ID is required",
+        },
+        { status: 400 },
+      )
+    }
+
+    if (!images || !Array.isArray(images) || images.length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "At least one image URL is required",
         },
         { status: 400 },
       )
@@ -18,25 +28,24 @@ export async function POST(request: Request) {
     // Use the admin client to bypass RLS
     const supabase = createAdminClient()
 
-    // Format the BTS images data
+    // Prepare the data for insertion
     const btsImagesData = images.map((imageUrl, index) => ({
       project_id: projectId,
       image_url: imageUrl,
-      caption: `BTS Image ${index + 1}`,
-      size: "medium",
-      aspect_ratio: "landscape",
+      caption: caption || `BTS Image ${index + 1}`,
+      category: category || "general",
+      sort_order: index,
     }))
 
     // Insert the BTS images
     const { data, error } = await supabase.from("bts_images").insert(btsImagesData).select()
 
     if (error) {
-      console.error("Error saving BTS images:", error)
+      console.error("Error adding BTS images:", error)
       return NextResponse.json(
         {
           success: false,
           error: error.message,
-          details: "Failed to save behind-the-scenes images.",
         },
         { status: 500 },
       )
@@ -45,15 +54,14 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       data,
-      message: "BTS images saved successfully",
+      message: "BTS images added successfully",
     })
   } catch (error) {
-    console.error("Unexpected error saving BTS images:", error)
+    console.error("Unexpected error adding BTS images:", error)
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error occurred",
-        details: "There was an unexpected error processing your request.",
       },
       { status: 500 },
     )

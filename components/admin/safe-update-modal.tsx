@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, CheckCircle, XCircle, RefreshCw } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
 interface SafeUpdateModalProps {
   dependencies: any[]
@@ -17,6 +18,7 @@ export function SafeUpdateModal({ dependencies, onClose, onUpdateComplete }: Saf
   const [dryRun, setDryRun] = useState<boolean>(true)
   const [result, setResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
+  const [isDialogOpen, setIsDialogOpen] = useState<boolean>(true)
 
   const updateModes = [
     {
@@ -110,13 +112,27 @@ export function SafeUpdateModal({ dependencies, onClose, onUpdateComplete }: Saf
     }
   }
 
+  const handleClose = () => {
+    setIsDialogOpen(false)
+    onClose()
+  }
+
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-800 rounded-lg max-w-4xl w-full max-h-[90vh] overflow-auto">
+    <Dialog
+      open={isDialogOpen}
+      onOpenChange={(open) => {
+        setIsDialogOpen(open)
+        if (!open) onClose()
+      }}
+    >
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-auto">
+        <DialogHeader>
+          <DialogTitle>Safe Dependency Updates</DialogTitle>
+        </DialogHeader>
         <div className="p-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-2xl font-bold">Safe Dependency Updates</h2>
-            <Button variant="ghost" size="icon" onClick={onClose}>
+            <Button variant="ghost" size="icon" onClick={handleClose}>
               <XCircle className="h-6 w-6" />
             </Button>
           </div>
@@ -296,7 +312,7 @@ export function SafeUpdateModal({ dependencies, onClose, onUpdateComplete }: Saf
 
           {/* Action Buttons */}
           <div className="flex justify-end gap-3 mt-6">
-            <Button variant="outline" onClick={onClose} disabled={updating}>
+            <Button variant="outline" onClick={handleClose} disabled={updating}>
               Cancel
             </Button>
             <Button onClick={handleUpdate} disabled={updating || selectedDeps.length === 0}>
@@ -313,7 +329,7 @@ export function SafeUpdateModal({ dependencies, onClose, onUpdateComplete }: Saf
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   )
 }

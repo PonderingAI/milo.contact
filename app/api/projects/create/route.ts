@@ -5,6 +5,21 @@ export async function POST(request: Request) {
   try {
     const projectData = await request.json()
 
+    // Validate required fields
+    const requiredFields = ["title", "image", "category", "role"]
+    const missingFields = requiredFields.filter((field) => !projectData[field])
+
+    if (missingFields.length > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Missing required fields: ${missingFields.join(", ")}`,
+          details: "Please fill in all required fields before submitting.",
+        },
+        { status: 400 },
+      )
+    }
+
     // Use the admin client to bypass RLS
     const supabase = createAdminClient()
 
