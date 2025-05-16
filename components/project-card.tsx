@@ -21,14 +21,14 @@ export default function ProjectCard({ id, title, category, role, image, link }: 
           className="object-cover transition-transform duration-500 group-hover:scale-105"
         />
         <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors"></div>
+      </div>
 
-        {/* Text overlay positioned at bottom left */}
-        <div className="absolute bottom-0 left-0 p-4 w-full bg-gradient-to-t from-black/80 to-transparent">
-          <h3 className="text-xl font-serif text-white mb-1 group-hover:text-gray-200 transition-colors">{title}</h3>
-          <div className="flex flex-wrap gap-2">
-            <span className="text-sm text-gray-300">{category}</span>
-            <span className="text-sm text-gray-300 before:content-['•'] before:mr-2">{role}</span>
-          </div>
+      {/* Text content below image, aligned with left edge */}
+      <div className="mt-4">
+        <h3 className="text-xl font-serif mb-1 group-hover:text-gray-300 transition-colors">{title}</h3>
+        <div className="flex flex-wrap gap-2">
+          <span className="text-sm text-gray-400">{category}</span>
+          <span className="text-sm text-gray-400 before:content-['•'] before:mr-2">{role}</span>
         </div>
       </div>
     </Link>

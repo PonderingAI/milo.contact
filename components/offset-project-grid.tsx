@@ -56,10 +56,10 @@ export default function OffsetProjectGrid({ projects, searchQuery = "", selected
       )
     }
 
-    // Filter by selected tags (match ANY of the selected tags)
+    // Filter by selected tags (match ALL of the selected tags)
     if (selectedTags && selectedTags.length > 0) {
       filtered = filtered.filter((project) => {
-        return selectedTags.some(
+        return selectedTags.every(
           (tag) =>
             project.category?.toLowerCase() === tag.toLowerCase() || project.role?.toLowerCase() === tag.toLowerCase(),
         )
@@ -87,7 +87,7 @@ export default function OffsetProjectGrid({ projects, searchQuery = "", selected
 
   return (
     <div className="space-y-8">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-12">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-12">
         {filteredProjects.slice(0, visibleProjects).map((project, index) => {
           // Calculate offset for each project - horizontal offset pattern
           const row = Math.floor(index / 3)
