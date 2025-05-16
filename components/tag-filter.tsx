@@ -78,13 +78,13 @@ export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps)
 
   if (loading) {
     return (
-      <div className="space-y-4 mb-8">
+      <div className="mb-8">
         <div className="flex flex-wrap gap-2">
           {[1, 2, 3].map((i) => (
             <div key={`cat-${i}`} className="h-8 w-20 bg-gray-800 animate-pulse rounded-full"></div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 mt-2">
           {[1, 2, 3, 4].map((i) => (
             <div key={`role-${i}`} className="h-8 w-20 bg-gray-800 animate-pulse rounded-full"></div>
           ))}
@@ -94,52 +94,46 @@ export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps)
   }
 
   return (
-    <div className="mb-8 space-y-4">
+    <div className="mb-8">
       {/* Categories row */}
-      <div>
-        <div className="text-sm text-gray-400 mb-2">Categories</div>
-        <div className="flex flex-wrap gap-2 items-center">
-          {categories.map((category) => (
-            <Button
-              key={category}
-              variant={selectedTags.includes(category) ? "default" : "outline"}
-              size="sm"
-              className="rounded-full"
-              onClick={() => handleTagClick(category)}
-            >
-              {category}
-            </Button>
-          ))}
-        </div>
+      <div className="flex flex-wrap gap-2 items-center">
+        {categories.map((category) => (
+          <Button
+            key={category}
+            variant={selectedTags.includes(category) ? "default" : "outline"}
+            size="sm"
+            className="rounded-full"
+            onClick={() => handleTagClick(category)}
+          >
+            {category}
+          </Button>
+        ))}
       </div>
 
       {/* Roles row */}
-      <div>
-        <div className="text-sm text-gray-400 mb-2">Roles</div>
-        <div className="flex flex-wrap gap-2 items-center">
-          {roles.map((role) => (
-            <Button
-              key={role}
-              variant={selectedTags.includes(role) ? "default" : "outline"}
-              size="sm"
-              className="rounded-full"
-              onClick={() => handleTagClick(role)}
-            >
-              {role}
-            </Button>
-          ))}
+      <div className="flex flex-wrap gap-2 items-center mt-2">
+        {roles.map((role) => (
+          <Button
+            key={role}
+            variant={selectedTags.includes(role) ? "default" : "outline"}
+            size="sm"
+            className="rounded-full"
+            onClick={() => handleTagClick(role)}
+          >
+            {role}
+          </Button>
+        ))}
 
-          {selectedTags.length > 0 && (
-            <Button variant="ghost" size="sm" onClick={clearFilters} className="text-gray-400 hover:text-white">
-              <X className="h-4 w-4 mr-1" />
-              Clear filters
-            </Button>
-          )}
-        </div>
+        {selectedTags.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-gray-400 hover:text-white">
+            <X className="h-4 w-4 mr-1" />
+            Clear filters
+          </Button>
+        )}
       </div>
 
       {selectedTags.length > 0 && (
-        <div className="text-sm text-gray-400">Showing projects matching any of: {selectedTags.join(", ")}</div>
+        <div className="mt-2 text-sm text-gray-400">Showing projects matching all of: {selectedTags.join(", ")}</div>
       )}
     </div>
   )
