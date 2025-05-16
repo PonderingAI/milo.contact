@@ -3,6 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import AppIconsUploader from "@/components/admin/app-icons-uploader"
 import SiteInformationForm from "@/components/admin/site-information-form"
+import FeaturedProjectSelector from "@/components/admin/featured-project-selector"
 
 export default function SettingsClientPage() {
   return (
@@ -12,6 +13,7 @@ export default function SettingsClientPage() {
       <Tabs defaultValue="site-info">
         <TabsList className="mb-4">
           <TabsTrigger value="site-info">Site Information</TabsTrigger>
+          <TabsTrigger value="featured">Featured Content</TabsTrigger>
           <TabsTrigger value="app-icons">App Icons</TabsTrigger>
         </TabsList>
 
@@ -23,6 +25,18 @@ export default function SettingsClientPage() {
             </CardHeader>
             <CardContent>
               <SiteInformationForm />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="featured">
+          <Card>
+            <CardHeader>
+              <CardTitle>Featured Content</CardTitle>
+              <CardDescription>Select which content should be featured on your homepage.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FeaturedProjectSelector />
             </CardContent>
           </Card>
         </TabsContent>

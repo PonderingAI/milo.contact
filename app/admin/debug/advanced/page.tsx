@@ -3,7 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
-import { Terminal, Network, Database, FileCode, AlertTriangle, Cpu, Shield } from "lucide-react"
+import { Terminal, Network, Database, FileCode, AlertTriangle, Cpu, Shield, Zap } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
@@ -13,6 +13,7 @@ import AssetDebugger from "@/components/admin/debug/asset-debugger"
 import ErrorLogger from "@/components/admin/debug/error-logger"
 import SystemInfo from "@/components/admin/debug/system-info"
 import SecurityDebugger from "@/components/admin/debug/security-debugger"
+import AutoFix from "@/components/admin/debug/auto-fix"
 
 export default function AdvancedDebugPage() {
   const [activeTab, setActiveTab] = useState("terminal")
@@ -66,6 +67,7 @@ export default function AdvancedDebugPage() {
         { type: "response", content: "  check-assets - Check static assets" },
         { type: "response", content: "  check-network - Run network diagnostics" },
         { type: "response", content: "  system-info - Show system information" },
+        { type: "response", content: "  fix-all - Run all automatic fixes" },
       ])
     } else if (command === "clear") {
       setTerminalHistory([{ type: "system", content: "Terminal cleared" }])
@@ -146,7 +148,7 @@ export default function AdvancedDebugPage() {
     } else if (command === "system-info") {
       setTerminalHistory((prev) => [...prev, { type: "system", content: "Gathering system information..." }])
       try {
-        const response = await fetch("/api/system-info")
+        const response = await fetch("/api/debug/system-info")
         const data = await response.json()
         setTerminalHistory((prev) => [
           ...prev,
@@ -164,6 +166,13 @@ export default function AdvancedDebugPage() {
           },
         ])
       }
+    } else if (command === "fix-all") {
+      setTerminalHistory((prev) => [...prev, { type: "system", content: "Running all automatic fixes..." }])
+      setActiveTab("auto-fix")
+      toast({
+        title: "Auto-fix initiated",
+        description: "Running all automatic fixes. Please wait...",
+      })
     } else {
       setTerminalHistory((prev) => [
         ...prev,
@@ -186,6 +195,7 @@ export default function AdvancedDebugPage() {
             size="sm"
             className="border-green-700 text-green-400 hover:bg-green-900/20"
             onClick={() => {
+              setActiveTab("auto-fix")
               toast({
                 title: "Diagnostic scan initiated",
                 description: "Running full system scan...",
@@ -198,7 +208,7 @@ export default function AdvancedDebugPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid grid-cols-7 mb-4 bg-black border border-green-500/30">
+        <TabsList className="grid grid-cols-8 mb-4 bg-black border border-green-500/30">
           <TabsTrigger
             value="terminal"
             className="data-[state=active]:bg-green-900/20 data-[state=active]:text-green-400"
@@ -247,6 +257,13 @@ export default function AdvancedDebugPage() {
           >
             <Shield className="h-4 w-4 mr-2" />
             Security
+          </TabsTrigger>
+          <TabsTrigger
+            value="auto-fix"
+            className="data-[state=active]:bg-green-900/20 data-[state=active]:text-green-400"
+          >
+            <Zap className="h-4 w-4 mr-2" />
+            Auto-Fix
           </TabsTrigger>
         </TabsList>
 
@@ -308,6 +325,10 @@ export default function AdvancedDebugPage() {
 
         <TabsContent value="security" className="border border-green-500/30 rounded-md p-4 bg-black">
           <SecurityDebugger />
+        </TabsContent>
+
+        <TabsContent value="auto-fix" className="border border-green-500/30 rounded-md p-4 bg-black">
+          <AutoFix />
         </TabsContent>
       </Tabs>
 

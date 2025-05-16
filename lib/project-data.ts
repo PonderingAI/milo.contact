@@ -14,7 +14,6 @@ export interface Project {
   id: string
   title: string
   category: string
-  type: string
   role: string
   image: string
   video_url?: string
@@ -27,6 +26,9 @@ export interface Project {
   project_date?: string
   is_public?: boolean
   publish_date?: string
+  // type is deprecated - use category or tags instead
+  type?: string
+  tags?: string[]
 }
 
 /**
@@ -105,7 +107,22 @@ export async function getProjects(): Promise<Project[]> {
       return mockProjects
     }
 
-    return data.length > 0 ? data : mockProjects
+    // Process projects to extract tags from categories and roles
+    const processedProjects = data.map((project) => {
+      const tags = []
+      if (project.category) tags.push(project.category)
+      if (project.role) tags.push(project.role)
+      // If project has type but no category, use type as category (for backward compatibility)
+      if (project.type && !project.category) {
+        project.category = project.type
+      }
+      return {
+        ...project,
+        tags,
+      }
+    })
+
+    return processedProjects.length > 0 ? processedProjects : mockProjects
   } catch (error) {
     console.error("Error in getProjects:", error)
     return mockProjects
@@ -180,8 +197,18 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       console.error("Error fetching BTS images:", btsError)
     }
 
+    // Process project to extract tags
+    const tags = []
+    if (project.category) tags.push(project.category)
+    if (project.role) tags.push(project.role)
+    // If project has type but no category, use type as category (for backward compatibility)
+    if (project.type && !project.category) {
+      project.category = project.type
+    }
+
     return {
       ...project,
+      tags,
       bts_images: btsImages || [],
     } as Project & { bts_images: BtsImage[] }
   } catch (error) {
@@ -198,33 +225,46 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
 }
 
 /**
- * Get projects filtered by type
+ * Get projects filtered by category
  */
-export async function getProjectsByType(type: string): Promise<Project[]> {
+export async function getProjectsByCategory(category: string): Promise<Project[]> {
   try {
     // First check if database is set up
     const isDbSetup = await isDatabaseSetup()
     if (!isDbSetup) {
       console.log("Database not set up, returning filtered mock data")
-      return mockProjects.filter((p) => p.type === type)
+      return mockProjects.filter((p) => p.category === category || p.type === category)
     }
 
     const supabase = createServerClient()
     const { data, error } = await supabase
       .from("projects")
       .select("*")
-      .eq("type", type)
+      .eq("category", category)
       .order("created_at", { ascending: false })
 
     if (error) {
-      console.error("Error fetching projects by type:", error)
-      return mockProjects.filter((p) => p.type === type)
+      console.error("Error fetching projects by category:", error)
+      return mockProjects.filter((p) => p.category === category || p.type === category)
     }
 
-    return data.length > 0 ? data : mockProjects.filter((p) => p.type === type)
+    // Process projects to extract tags
+    const processedProjects = data.map((project) => {
+      const tags = []
+      if (project.category) tags.push(project.category)
+      if (project.role) tags.push(project.role)
+      return {
+        ...project,
+        tags,
+      }
+    })
+
+    return processedProjects.length > 0
+      ? processedProjects
+      : mockProjects.filter((p) => p.category === category || p.type === category)
   } catch (error) {
-    console.error("Error in getProjectsByType:", error)
-    return mockProjects.filter((p) => p.type === type)
+    console.error("Error in getProjectsByCategory:", error)
+    return mockProjects.filter((p) => p.category === category || p.type === category)
   }
 }
 
@@ -262,20 +302,83 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
       return mockProjects.filter((p) => p.role === role)
     }
 
-    if (data.length === 0) {
+    // Process projects to extract tags
+    const processedProjects = data.map((project) => {
+      const tags = []
+      if (project.category) tags.push(project.category)
+      if (project.role) tags.push(project.role)
+      // If project has type but no category, use type as category (for backward compatibility)
+      if (project.type && !project.category) {
+        project.category = project.type
+      }
+      return {
+        ...project,
+        tags,
+      }
+    })
+
+    if (processedProjects.length === 0) {
       if (Array.isArray(role)) {
         return mockProjects.filter((p) => role.includes(p.role))
       }
       return mockProjects.filter((p) => p.role === role)
     }
 
-    return data
+    return processedProjects
   } catch (error) {
     console.error("Error in getProjectsByRole:", error)
     if (Array.isArray(role)) {
       return mockProjects.filter((p) => role.includes(p.role))
     }
     return mockProjects.filter((p) => p.role === role)
+  }
+}
+
+/**
+ * Get projects filtered by tag
+ */
+export async function getProjectsByTag(tag: string): Promise<Project[]> {
+  try {
+    // First check if database is set up
+    const isDbSetup = await isDatabaseSetup()
+    if (!isDbSetup) {
+      console.log("Database not set up, returning filtered mock data")
+      return mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
+    }
+
+    const supabase = createServerClient()
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .or(`category.eq.${tag},role.eq.${tag}`)
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching projects by tag:", error)
+      return mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
+    }
+
+    // Process projects to extract tags
+    const processedProjects = data.map((project) => {
+      const tags = []
+      if (project.category) tags.push(project.category)
+      if (project.role) tags.push(project.role)
+      // If project has type but no category, use type as category (for backward compatibility)
+      if (project.type && !project.category) {
+        project.category = project.type
+      }
+      return {
+        ...project,
+        tags,
+      }
+    })
+
+    return processedProjects.length > 0
+      ? processedProjects
+      : mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
+  } catch (error) {
+    console.error("Error in getProjectsByTag:", error)
+    return mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
   }
 }
 
@@ -319,25 +422,25 @@ export const mockProjects = [
     id: "directed-1",
     title: "Short Film Title",
     category: "Short Film",
-    type: "directed",
     role: "Director",
     image: "/images/project1.jpg",
     video_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
     description: "A compelling short film exploring themes of identity and belonging in a post-digital world.",
     special_notes:
       "This project was particularly special because we shot it entirely during golden hour over three consecutive days, creating a consistent and dreamlike visual atmosphere.",
+    tags: ["Short Film", "Director"],
   },
   {
     id: "directed-2",
     title: "Music Video Project",
     category: "Music Video",
-    type: "directed",
     role: "Director",
     image: "/images/project2.jpg",
     video_url: "https://vimeo.com/123456789",
     description: "An experimental music video featuring innovative visual techniques and storytelling.",
     special_notes:
       "Working with the artist to develop a visual language that complemented the music was a rewarding creative challenge.",
+    tags: ["Music Video", "Director"],
   },
 
   // Camera Work Projects
@@ -345,24 +448,24 @@ export const mockProjects = [
     id: "camera-1",
     title: "Feature Film",
     category: "Feature Film",
-    type: "camera",
     role: "1st AC",
     image: "/images/project5.jpg",
     video_url: "https://youtube.com/watch?v=i_HtDNSxCnE",
     description: "Worked as 1st AC on this award-winning feature film, managing focus and camera operations.",
     special_notes:
       "The challenging lighting conditions and complex camera movements made this project particularly rewarding.",
+    tags: ["Feature Film", "1st AC"],
   },
   {
     id: "camera-2",
     title: "TV Series",
     category: "Television",
-    type: "camera",
     role: "2nd AC",
     image: "/images/project6.jpg",
     video_url: "https://www.youtube.com/watch?v=lmnopqrstuv",
     description: "Served as 2nd AC for this popular TV series, handling equipment and supporting the camera team.",
     special_notes: "Working with a seasoned DP taught me invaluable lessons about lighting and composition.",
+    tags: ["Television", "2nd AC"],
   },
 
   // Production Projects
@@ -370,23 +473,23 @@ export const mockProjects = [
     id: "production-1",
     title: "Short Film",
     category: "Short Film",
-    type: "production",
     role: "Production Assistant",
     image: "/images/project2.jpg",
     video_url: "https://youtube.com/watch?v=-fgtd87ywuw",
     description: "Provided essential support as a PA on this award-winning short film production.",
     special_notes: "Being part of such a collaborative and creative team was an incredible learning experience.",
+    tags: ["Short Film", "Production Assistant"],
   },
   {
     id: "production-2",
     title: "Music Video",
     category: "Music Video",
-    type: "production",
     role: "Production Assistant",
     image: "/images/project3.jpg",
     video_url: "https://youtube.com/watch?v=Oix719dXXb8",
     description: "Assisted with various aspects of production for this innovative music video.",
     special_notes: "The fast-paced production schedule taught me how to work efficiently under pressure.",
+    tags: ["Music Video", "Production Assistant"],
   },
 
   // Photography Projects
@@ -394,35 +497,35 @@ export const mockProjects = [
     id: "photo-1",
     title: "Landscape Series",
     category: "Landscape",
-    type: "photography",
     role: "Photographer",
     image: "/images/project6.jpg",
     description: "A series of landscape photographs capturing the beauty of natural environments.",
     special_notes:
       "Spending weeks in remote locations to capture these images gave me a deeper appreciation for nature's beauty.",
+    tags: ["Landscape", "Photographer"],
   },
   {
     id: "photo-2",
     title: "Portrait Collection",
     category: "Portrait",
-    type: "photography",
     role: "Photographer",
     image: "/images/project7.jpg",
     description: "A collection of portrait photographs exploring human expression and identity.",
     special_notes:
       "Creating an environment where subjects felt comfortable enough to express their authentic selves was the key to these portraits.",
+    tags: ["Portrait", "Photographer"],
   },
   {
     id: "ai-1",
     title: "AI Generated Art",
     category: "AI",
-    type: "ai",
     role: "AI Artist",
     image: "/images/project4.jpg",
     description:
       "A collection of AI-generated artwork exploring the intersection of human creativity and machine learning.",
     special_notes:
       "This project uses cutting-edge AI models to create unique visual experiences that challenge our perception of art and creativity.",
+    tags: ["AI", "AI Artist"],
   },
 ]
 
