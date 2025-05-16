@@ -6,11 +6,11 @@ import ProjectsSection from "@/components/projects-section"
 import { getProjects, isDatabaseSetup } from "@/lib/project-data"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { createAdminClient } from "@/lib/supabase-server"
+import { createServerClient } from "@/lib/supabase-server"
 
 async function getLatestProject() {
   try {
-    const supabase = createAdminClient()
+    const supabase = createServerClient()
 
     // Get the latest project with a thumbnail_url instead of video_url
     const { data, error } = await supabase
@@ -27,7 +27,6 @@ async function getLatestProject() {
 
     // Return the first item if it exists, otherwise null
     const project = data && data.length > 0 ? data[0] : null
-    console.log("Latest project with video:", project)
     return project
   } catch (error) {
     console.error("Error in getLatestProject:", error)
@@ -44,7 +43,9 @@ export default async function Home() {
 
   // Get the latest project with video
   const latestProject = await getLatestProject()
-  console.log("Latest project from server:", latestProject)
+
+  // Check if we have real projects from the database
+  const hasRealProjects = dbSetup && projects.length > 0
 
   return (
     <main className="min-h-screen bg-black text-white">

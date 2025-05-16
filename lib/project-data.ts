@@ -135,6 +135,7 @@ export async function getProjects(): Promise<Project[]> {
       }
     })
 
+    // Only return mock projects if no real projects exist
     return processedProjects.length > 0 ? processedProjects : mockProjects
   } catch (error) {
     console.error("Error in getProjects:", error)
@@ -271,6 +272,7 @@ export async function getProjectsByCategory(category: string): Promise<Project[]
       }
     })
 
+    // Only return mock projects if no real projects exist
     return processedProjects.length > 0
       ? processedProjects
       : mockProjects.filter((p) => p.category === category || p.type === category)
@@ -333,6 +335,7 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
       }
     })
 
+    // Only return mock projects if no real projects exist
     if (processedProjects.length === 0) {
       if (Array.isArray(role)) {
         return mockProjects.filter((p) => role.includes(p.role))
@@ -390,6 +393,7 @@ export async function getProjectsByTag(tag: string): Promise<Project[]> {
       }
     })
 
+    // Only return mock projects if no real projects exist
     return processedProjects.length > 0
       ? processedProjects
       : mockProjects.filter((p) => p.category === tag || p.role === tag || p.type === tag)
