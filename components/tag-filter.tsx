@@ -1,65 +1,114 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { cn } from "@/lib/utils"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { X } from "lucide-react"
 
 interface TagFilterProps {
-  tags: string[]
-  onFilterChange: (selectedTags: string[]) => void
-  className?: string
+  onTagSelect: (tags: string[]) => void
+  selectedTags: string[]
 }
 
-export default function TagFilter({ tags, onFilterChange, className }: TagFilterProps) {
-  const [selectedTags, setSelectedTags] = useState<string[]>([])
+export default function TagFilter({ onTagSelect, selectedTags }: TagFilterProps) {
+  const [tags, setTags] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
 
-  const handleTagClick = (tag: string) => {
-    let newSelectedTags: string[]
+  useEffect(() => {
+    async function fetchTags() {
+      try {
+        setLoading(true)
+        const supabase = getSupabaseBrowserClient()
 
-    if (tag === "all") {
-      // Clear all filters
-      newSelectedTags = []
-    } else {
-      // Toggle the selected tag
-      if (selectedTags.includes(tag)) {
-        newSelectedTags = selectedTags.filter((t) => t !== tag)
-      } else {
-        newSelectedTags = [...selectedTags, tag]
+        // Get unique categories
+        const { data: categoryData, error: categoryError } = await supabase
+          .from("projects")
+          .select("category")
+          .not("category", "is", null)
+
+        // Get unique roles
+        const { data: roleData, error: roleError } = await supabase
+          .from("projects")
+          .select("role")
+          .not("role", "is", null)
+
+        if (categoryError || roleError) {
+          console.error("Error fetching tags:", categoryError || roleError)
+          return
+        }
+
+        // Extract unique tags
+        const uniqueTags = new Set<string>()
+
+        categoryData?.forEach((item) => {
+          if (item.category) uniqueTags.add(item.category)
+        })
+
+        roleData?.forEach((item) => {
+          if (item.role) uniqueTags.add(item.role)
+        })
+
+        setTags(Array.from(uniqueTags).sort())
+      } catch (error) {
+        console.error("Error in fetchTags:", error)
+      } finally {
+        setLoading(false)
       }
     }
 
-    setSelectedTags(newSelectedTags)
-    onFilterChange(newSelectedTags)
+    fetchTags()
+  }, [])
+
+  const handleTagClick = (tag: string) => {
+    if (selectedTags.includes(tag)) {
+      // Remove tag if already selected
+      onTagSelect(selectedTags.filter((t) => t !== tag))
+    } else {
+      // Add tag to selection
+      onTagSelect([...selectedTags, tag])
+    }
+  }
+
+  const clearFilters = () => {
+    onTagSelect([])
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-wrap gap-2 mb-8">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-8 w-20 bg-gray-800 animate-pulse rounded-full"></div>
+        ))}
+      </div>
+    )
   }
 
   return (
-    <div className={cn("flex flex-wrap gap-2", className)}>
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={() => handleTagClick("all")}
-        className={cn(
-          "text-sm rounded-full px-4 py-1 h-auto bg-transparent hover:bg-gray-800 border border-gray-700",
-          selectedTags.length === 0 ? "bg-white text-black hover:bg-gray-200 hover:text-black" : "text-gray-400",
-        )}
-      >
-        All
-      </Button>
+    <div className="mb-8">
+      <div className="flex flex-wrap gap-2 items-center">
+        {tags.map((tag) => (
+          <Button
+            key={tag}
+            variant={selectedTags.includes(tag) ? "default" : "outline"}
+            size="sm"
+            className="rounded-full"
+            onClick={() => handleTagClick(tag)}
+          >
+            {tag}
+          </Button>
+        ))}
 
-      {tags.map((tag) => (
-        <Button
-          key={tag}
-          variant="outline"
-          size="sm"
-          onClick={() => handleTagClick(tag)}
-          className={cn(
-            "text-sm rounded-full px-4 py-1 h-auto bg-transparent hover:bg-gray-800 border border-gray-700",
-            selectedTags.includes(tag) ? "bg-white text-black hover:bg-gray-200 hover:text-black" : "text-gray-400",
-          )}
-        >
-          {tag}
-        </Button>
-      ))}
+        {selectedTags.length > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearFilters} className="text-gray-400 hover:text-white">
+            <X className="h-4 w-4 mr-1" />
+            Clear filters
+          </Button>
+        )}
+      </div>
+
+      {selectedTags.length > 0 && (
+        <div className="mt-2 text-sm text-gray-400">Filtering by: {selectedTags.join(", ")}</div>
+      )}
     </div>
   )
 }

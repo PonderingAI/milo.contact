@@ -1,9 +1,8 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useRef, forwardRef } from "react"
+import * as React from "react"
 import { Input } from "@/components/ui/input"
-import { cn } from "@/lib/utils"
+import { CommandList, CommandGroup, CommandItem, Command } from "@/components/ui/command"
 
 interface SimpleAutocompleteProps {
   options: string[]
@@ -15,13 +14,13 @@ interface SimpleAutocompleteProps {
   allowCustomValues?: boolean
   multiple?: boolean
   separator?: string
-  isOpen?: boolean
-  onOpenChange?: (isOpen: boolean) => void
+  isOpen: boolean
+  onOpenChange: (open: boolean) => void
   onFocus?: () => void
   onBlur?: () => void
 }
 
-export const SimpleAutocomplete = forwardRef<HTMLInputElement, SimpleAutocompleteProps>(
+export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutocompleteProps>(
   (
     {
       options,
@@ -33,153 +32,116 @@ export const SimpleAutocomplete = forwardRef<HTMLInputElement, SimpleAutocomplet
       allowCustomValues = false,
       multiple = false,
       separator = ",",
-      isOpen: controlledIsOpen,
+      isOpen,
       onOpenChange,
       onFocus,
       onBlur,
     },
     ref,
   ) => {
-    const [isOpen, setIsOpen] = useState(false)
-    const [filteredOptions, setFilteredOptions] = useState<string[]>([])
-    const [highlightedIndex, setHighlightedIndex] = useState(-1)
-    const dropdownRef = useRef<HTMLDivElement>(null)
-    const inputRef = useRef<HTMLInputElement>(null)
+    // Get current input value
+    const currentValue = multiple ? value.split(separator).pop()?.trim() || "" : value
 
-    // Use controlled or uncontrolled open state
-    const open = controlledIsOpen !== undefined ? controlledIsOpen : isOpen
-    const setOpen = (value: boolean) => {
-      if (onOpenChange) onOpenChange(value)
-      setIsOpen(value)
+    // Filter and sort options
+    const filteredSortedOptions = React.useMemo(() => {
+      if (!currentValue) return []
+
+      const searchTerm = currentValue.toLowerCase()
+
+      // Count occurrences to sort by frequency
+      const counts = options.reduce(
+        (acc, curr) => {
+          acc[curr.toLowerCase()] = (acc[curr.toLowerCase()] || 0) + 1
+          return acc
+        },
+        {} as Record<string, number>,
+      )
+
+      // Filter options that include the search term
+      const filtered = [...new Set(options)]
+        .filter((option) => option.toLowerCase().includes(searchTerm))
+        // Sort by: 1) exact match, 2) starts with, 3) frequency
+        .sort((a, b) => {
+          const aLower = a.toLowerCase()
+          const bLower = b.toLowerCase()
+
+          // Exact matches first
+          if (aLower === searchTerm && bLower !== searchTerm) return -1
+          if (bLower === searchTerm && aLower !== searchTerm) return 1
+
+          // Starts with search term next
+          if (aLower.startsWith(searchTerm) && !bLower.startsWith(searchTerm)) return -1
+          if (bLower.startsWith(searchTerm) && !aLower.startsWith(searchTerm)) return 1
+
+          // Then by frequency
+          return (counts[bLower] || 0) - (counts[aLower] || 0)
+        })
+        // Limit to 10 suggestions for performance
+        .slice(0, 10)
+
+      return filtered
+    }, [currentValue, options])
+
+    // Handle selection
+    const handleSelect = (selected: string) => {
+      if (multiple) {
+        // For multiple values, replace the last part
+        const parts = value.split(separator)
+        parts[parts.length - 1] = selected
+        onSelect(parts.join(`${separator} `))
+      } else {
+        onSelect(selected)
+      }
+      onOpenChange(false)
     }
 
-    // Filter options based on input value
-    useEffect(() => {
-      if (!value.trim()) {
-        setFilteredOptions(options)
-        return
+    // Handle input change
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      onInputChange(e.target.value)
+      if (e.target.value) {
+        onOpenChange(true)
       }
-
-      // For multiple values, only filter based on the current part being typed
-      let currentInput = value
-      if (multiple) {
-        const parts = value.split(separator)
-        currentInput = parts[parts.length - 1].trim()
-      }
-
-      // Filter options that include the current input (case insensitive)
-      const filtered = options.filter((option) => option.toLowerCase().includes(currentInput.toLowerCase()))
-
-      setFilteredOptions(filtered)
-    }, [value, options, multiple, separator])
+    }
 
     // Handle keyboard navigation
     const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "ArrowDown") {
+      if (e.key === "Tab" && isOpen && filteredSortedOptions.length > 0) {
         e.preventDefault()
-        setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : 0))
-        setOpen(true)
-      } else if (e.key === "ArrowUp") {
-        e.preventDefault()
-        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredOptions.length - 1))
-        setOpen(true)
-      } else if (e.key === "Enter" && highlightedIndex >= 0) {
-        e.preventDefault()
-        handleOptionSelect(filteredOptions[highlightedIndex])
-      } else if (e.key === "Escape") {
-        setOpen(false)
-      } else if (e.key === "Tab") {
-        setOpen(false)
+        handleSelect(filteredSortedOptions[0])
       }
     }
-
-    const handleOptionSelect = (option: string) => {
-      if (multiple) {
-        const parts = value.split(separator)
-        parts[parts.length - 1] = option
-        const newValue = [...parts.slice(0, -1), option, ""].join(separator + " ")
-        onSelect(newValue)
-      } else {
-        onSelect(option)
-      }
-      setOpen(false)
-      setHighlightedIndex(-1)
-      inputRef.current?.focus()
-    }
-
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      onInputChange(e.target.value)
-      if (!open) setOpen(true)
-      setHighlightedIndex(-1)
-    }
-
-    const handleInputFocus = () => {
-      if (onFocus) onFocus()
-      setOpen(true)
-    }
-
-    const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
-      // Check if the related target is inside the dropdown
-      if (dropdownRef.current?.contains(e.relatedTarget as Node)) {
-        return
-      }
-
-      if (onBlur) onBlur()
-    }
-
-    // Close dropdown when clicking outside
-    useEffect(() => {
-      const handleClickOutside = (event: MouseEvent) => {
-        if (
-          dropdownRef.current &&
-          !dropdownRef.current.contains(event.target as Node) &&
-          inputRef.current &&
-          !inputRef.current.contains(event.target as Node)
-        ) {
-          setOpen(false)
-        }
-      }
-
-      document.addEventListener("mousedown", handleClickOutside)
-      return () => {
-        document.removeEventListener("mousedown", handleClickOutside)
-      }
-    }, [])
 
     return (
-      <div className="relative">
+      <div className="relative w-full">
         <Input
-          ref={ref || inputRef}
-          type="text"
+          ref={ref}
           value={value}
           onChange={handleInputChange}
-          onFocus={handleInputFocus}
-          onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className={className}
-          autoComplete="off"
+          onFocus={onFocus}
+          onBlur={onBlur}
         />
-        {open && filteredOptions.length > 0 && (
-          <div
-            ref={dropdownRef}
-            className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto"
-          >
-            <ul className="py-1">
-              {filteredOptions.map((option, index) => (
-                <li
-                  key={option}
-                  onClick={() => handleOptionSelect(option)}
-                  onMouseEnter={() => setHighlightedIndex(index)}
-                  className={cn(
-                    "px-3 py-2 cursor-pointer text-sm",
-                    highlightedIndex === index ? "bg-gray-800 text-white" : "hover:bg-gray-800 text-gray-300",
-                  )}
-                >
-                  {option}
-                </li>
-              ))}
-            </ul>
+
+        {isOpen && filteredSortedOptions.length > 0 && (
+          <div className="absolute z-50 w-full left-0 top-[calc(100%+4px)]">
+            <Command className="border border-gray-700 rounded-md bg-gray-800 shadow-md overflow-hidden">
+              <CommandList className="max-h-[200px] overflow-y-auto">
+                <CommandGroup>
+                  {filteredSortedOptions.map((option) => (
+                    <CommandItem
+                      key={option}
+                      value={option}
+                      onSelect={() => handleSelect(option)}
+                      className="cursor-pointer hover:bg-gray-700"
+                    >
+                      {option}
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </CommandList>
+            </Command>
           </div>
         )}
       </div>

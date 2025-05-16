@@ -310,10 +310,34 @@ export default function UnifiedMediaLibrary() {
 
         const result = await response.json()
 
-        toast({
-          title: "Success",
-          description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
-        })
+        // Check if the file was a duplicate
+        if (result.duplicate) {
+          toast({
+            title: "Duplicate file",
+            description: `${result.message}. The existing file will be used.`,
+            variant: "warning",
+          })
+
+          // Highlight the duplicate file in the grid by scrolling to it
+          const duplicateId = result.existingFile?.id
+          if (duplicateId) {
+            setTimeout(() => {
+              const element = document.getElementById(`media-item-${duplicateId}`)
+              if (element) {
+                element.scrollIntoView({ behavior: "smooth", block: "center" })
+                element.classList.add("ring-2", "ring-yellow-500", "ring-offset-2", "ring-offset-black")
+                setTimeout(() => {
+                  element.classList.remove("ring-2", "ring-yellow-500", "ring-offset-2", "ring-offset-black")
+                }, 3000)
+              }
+            }, 500)
+          }
+        } else {
+          toast({
+            title: "Success",
+            description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
+          })
+        }
 
         // Refresh the media list
         fetchMedia()
@@ -400,6 +424,7 @@ export default function UnifiedMediaLibrary() {
     // Process files in parallel with a limit (3 at a time)
     const batchSize = 3
     const pendingUploads = uploadQueue.filter((item) => item.status === "pending")
+    const duplicates = []
 
     for (let i = 0; i < pendingUploads.length; i += batchSize) {
       const batch = pendingUploads.slice(i, i + batchSize)
@@ -464,17 +489,37 @@ export default function UnifiedMediaLibrary() {
               throw new Error(result.error || "Upload failed")
             }
 
-            // Success
-            setUploadQueue((prev) => {
-              const updated = [...prev]
-              updated[queueIndex] = {
-                ...updated[queueIndex],
-                status: "success",
-                progress: 100,
-                response: result,
-              }
-              return updated
-            })
+            // Check if the file was a duplicate
+            if (result.duplicate) {
+              duplicates.push({
+                filename: item.file.name,
+                existingFile: result.existingFile,
+              })
+
+              // Mark as success but with duplicate flag
+              setUploadQueue((prev) => {
+                const updated = [...prev]
+                updated[queueIndex] = {
+                  ...updated[queueIndex],
+                  status: "success",
+                  progress: 100,
+                  response: { ...result, isDuplicate: true },
+                }
+                return updated
+              })
+            } else {
+              // Success
+              setUploadQueue((prev) => {
+                const updated = [...prev]
+                updated[queueIndex] = {
+                  ...updated[queueIndex],
+                  status: "success",
+                  progress: 100,
+                  response: result,
+                }
+                return updated
+              })
+            }
           } catch (error) {
             // Exception
             setUploadQueue((prev) => {
@@ -497,16 +542,26 @@ export default function UnifiedMediaLibrary() {
     setIsProcessingQueue(false)
 
     // Count results
-    const successful = uploadQueue.filter((item) => item.status === "success").length
+    const successful = uploadQueue.filter((item) => item.status === "success" && !item.response?.isDuplicate).length
     const converted = uploadQueue.filter((item) => item.status === "success" && item.response?.convertedToWebP).length
     const failed = uploadQueue.filter((item) => item.status === "error").length
     const pending = uploadQueue.filter((item) => item.status === "pending").length
+    const duplicateCount = duplicates.length
 
     toast({
       title: "Bulk upload progress",
-      description: `${successful} files uploaded successfully${converted > 0 ? ` (${converted} converted to WebP)` : ""}, ${failed} files failed, ${pending} files pending`,
+      description: `${successful} files uploaded successfully${converted > 0 ? ` (${converted} converted to WebP)` : ""}${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ""}, ${failed} files failed, ${pending} files pending`,
       variant: successful > 0 ? "default" : "destructive",
     })
+
+    // If there were duplicates, show a separate toast with details
+    if (duplicateCount > 0) {
+      toast({
+        title: `${duplicateCount} duplicate files detected`,
+        description: "Duplicate files were skipped. The existing files will be used.",
+        variant: "warning",
+      })
+    }
 
     console.log("Bulk upload process completed")
   }
@@ -894,7 +949,7 @@ export default function UnifiedMediaLibrary() {
     const hasImageError = imageLoadError[item.id]
 
     return (
-      <div key={item.id} className="bg-gray-900 rounded-lg overflow-hidden">
+      <div key={item.id} id={`media-item-${item.id}`} className="bg-gray-900 rounded-lg overflow-hidden">
         <div className="relative h-40 cursor-pointer" onClick={() => (isImage ? setSelectedImage(item) : null)}>
           {item.thumbnail_url && !hasImageError ? (
             <Image

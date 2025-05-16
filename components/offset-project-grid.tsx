@@ -1,60 +1,128 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import ProjectCard from "@/components/project-card"
+import ProjectCard from "./project-card"
+import { Button } from "@/components/ui/button"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import type { Project } from "@/lib/project-data"
 
 interface OffsetProjectGridProps {
   projects: Project[]
-  searchQuery: string
-  selectedTags: string[] | null
+  searchQuery?: string
+  selectedTags?: string[]
 }
 
-export default function OffsetProjectGrid({ projects, searchQuery, selectedTags }: OffsetProjectGridProps) {
+export default function OffsetProjectGrid({ projects, searchQuery = "", selectedTags = [] }: OffsetProjectGridProps) {
+  const [projectsPerPage, setProjectsPerPage] = useState(20)
+  const [visibleProjects, setVisibleProjects] = useState(projectsPerPage)
   const [filteredProjects, setFilteredProjects] = useState<Project[]>(projects)
 
+  // Load projects per page setting
   useEffect(() => {
-    let result = [...projects]
+    async function loadSettings() {
+      try {
+        const supabase = getSupabaseBrowserClient()
+        const { data, error } = await supabase
+          .from("site_settings")
+          .select("value")
+          .eq("key", "projects_per_page")
+          .single()
+
+        if (!error && data && data.value) {
+          setProjectsPerPage(Number.parseInt(data.value, 10))
+          setVisibleProjects(Number.parseInt(data.value, 10))
+        }
+      } catch (err) {
+        console.error("Error loading projects per page setting:", err)
+      }
+    }
+
+    loadSettings()
+  }, [])
+
+  // Filter projects based on search query and selected tags
+  useEffect(() => {
+    let filtered = [...projects]
 
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
-      result = result.filter(
+      filtered = filtered.filter(
         (project) =>
-          project.title.toLowerCase().includes(query) ||
-          project.category.toLowerCase().includes(query) ||
-          project.role.toLowerCase().includes(query) ||
-          (project.description && project.description.toLowerCase().includes(query)),
+          project.title?.toLowerCase().includes(query) ||
+          project.category?.toLowerCase().includes(query) ||
+          project.role?.toLowerCase().includes(query) ||
+          project.description?.toLowerCase().includes(query),
       )
     }
 
-    // Filter by selected tags
+    // Filter by selected tags (match ANY of the selected tags)
     if (selectedTags && selectedTags.length > 0) {
-      result = result.filter((project) => {
-        const projectTags = project.role.split(",").map((tag) => tag.trim())
-        // Check if any of the selected tags match any of the project's tags
-        return selectedTags.some((tag) => projectTags.includes(tag))
+      filtered = filtered.filter((project) => {
+        return selectedTags.some(
+          (tag) =>
+            project.category?.toLowerCase() === tag.toLowerCase() || project.role?.toLowerCase() === tag.toLowerCase(),
+        )
       })
     }
 
-    setFilteredProjects(result)
-  }, [projects, searchQuery, selectedTags])
+    setFilteredProjects(filtered)
+    // Reset visible projects when filters change
+    setVisibleProjects(projectsPerPage)
+  }, [projects, searchQuery, selectedTags, projectsPerPage])
 
+  const loadMoreProjects = () => {
+    setVisibleProjects((prev) => prev + projectsPerPage)
+  }
+
+  // No projects found
   if (filteredProjects.length === 0) {
     return (
       <div className="text-center py-12">
-        <p className="text-gray-400">No projects found matching your criteria.</p>
+        <h3 className="text-xl mb-2">No projects found</h3>
+        <p className="text-gray-400">Try adjusting your search or filters</p>
       </div>
     )
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-12">
-      {filteredProjects.map((project, index) => (
-        <div key={project.id} className={`${index % 3 === 1 ? "md:mt-12" : index % 3 === 2 ? "md:mt-24" : ""}`}>
-          <ProjectCard project={project} />
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-12">
+        {filteredProjects.slice(0, visibleProjects).map((project, index) => {
+          // Calculate offset for each project - horizontal offset pattern
+          const row = Math.floor(index / 3)
+          const col = index % 3
+
+          let offsetClass = ""
+
+          if (row % 2 === 1) {
+            // Second row
+            if (col === 1) offsetClass = "md:translate-x-8"
+            else if (col === 2) offsetClass = "md:translate-x-16"
+          }
+
+          return (
+            <div key={project.id} className={offsetClass}>
+              <ProjectCard
+                id={project.id}
+                title={project.title}
+                category={project.category}
+                role={project.role}
+                image={project.image}
+                link={`/projects/${project.id}`}
+              />
+            </div>
+          )
+        })}
+      </div>
+
+      {filteredProjects.length > visibleProjects && (
+        <div className="flex justify-center mt-12">
+          <Button onClick={loadMoreProjects} variant="outline" size="lg">
+            View More
+          </Button>
         </div>
-      ))}
+      )}
     </div>
   )
 }

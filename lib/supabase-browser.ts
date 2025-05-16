@@ -13,14 +13,22 @@ let browserClient: SupabaseClient | null = null
 let adminClient: SupabaseClient | null = null
 
 /**
+ * Create a Supabase client (compatibility export for existing code)
+ * @deprecated Use getSupabaseBrowserClient instead
+ */
+export const createClient = (options = {}): SupabaseClient => {
+  return getSupabaseBrowserClient()
+}
+
+/**
  * Get a Supabase client for browser usage
  * Uses singleton pattern to prevent multiple instances
  */
 export function getSupabaseBrowserClient(): SupabaseClient {
-  // For SSR, return a minimal client that won't cause errors during build
+  // For SSR, create a temporary non-persistent client
   if (typeof window === "undefined") {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
     return supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -48,13 +56,6 @@ export function getSupabaseBrowserClient(): SupabaseClient {
 }
 
 /**
- * Create a Supabase client (compatibility export for existing code)
- */
-export const createClient = (options = {}): SupabaseClient => {
-  return getSupabaseBrowserClient()
-}
-
-/**
  * Create a Supabase client with admin privileges
  * This should only be used in secure server contexts
  */
@@ -67,12 +68,11 @@ export function createAdminClient(): SupabaseClient {
 
   // For server-side, use the singleton pattern
   if (!adminClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
     if (!supabaseServiceRoleKey) {
-      console.warn("SUPABASE_SERVICE_ROLE_KEY is not defined")
-      return getSupabaseBrowserClient()
+      throw new Error("SUPABASE_SERVICE_ROLE_KEY is not defined")
     }
 
     adminClient = supabaseCreateClient(supabaseUrl, supabaseServiceRoleKey, {

@@ -5,7 +5,7 @@
  * It handles fetching projects from Supabase and provides fallback to mock data.
  */
 
-import { createServerClient } from "@/lib/supabase"
+import { createServerClient } from "./supabase-server"
 
 /**
  * Project interface representing a portfolio project

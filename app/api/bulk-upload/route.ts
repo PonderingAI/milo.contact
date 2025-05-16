@@ -1,12 +1,14 @@
-import { createAdminClient } from "@/lib/supabase-server"
-import { type NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
+import { createServerClient } from "@/lib/supabase-server"
 import sharp from "sharp"
+import { v4 as uuidv4 } from "uuid"
+import crypto from "crypto"
 
-export async function POST(request: NextRequest) {
+export const maxDuration = 60 // Set max duration to 60 seconds
+
+export async function POST(request: Request) {
   try {
-    // Get the Supabase client
-    const supabase = createAdminClient()
-
+    // Get the file from the request
     const formData = await request.formData()
     const file = formData.get("file") as File
 
@@ -14,166 +16,145 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 })
     }
 
-    // Get file buffer
-    const arrayBuffer = await file.arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
+    // Get file details
+    const filename = file.name
+    const filesize = file.size
+    const fileBuffer = Buffer.from(await file.arrayBuffer())
 
-    // Create safe filename base (without extension)
-    const originalName = file.name.split(".")[0]
-    const safeFilenameBase = originalName.replace(/[^a-z0-9]/gi, "-")
+    // Calculate file hash for duplicate detection
+    const fileHash = crypto.createHash("md5").update(fileBuffer).digest("hex")
 
-    // Determine file type category
-    let fileType = "other"
-    let filePath = ""
-    let processedBuffer = buffer
-    let contentType = file.type || "application/octet-stream"
+    // Create Supabase client
+    const supabase = createServerClient()
 
-    // Check if it's an image that can be converted to WebP
-    const isConvertibleImage =
-      file.type && ["image/jpeg", "image/png", "image/gif", "image/jpg"].includes(file.type.toLowerCase())
+    // Check for duplicates by hash
+    const { data: existingFiles, error: queryError } = await supabase
+      .from("media")
+      .select("id, filename, public_url")
+      .eq("metadata->fileHash", fileHash)
+      .limit(1)
 
-    if (isConvertibleImage) {
-      fileType = "image"
-      filePath = `uploads/${safeFilenameBase}-${Date.now()}.webp`
-      contentType = "image/webp"
-
-      try {
-        // Convert to WebP
-        processedBuffer = await sharp(buffer).webp({ quality: 85 }).toBuffer()
-
-        console.log(`Converted ${file.name} to WebP format`)
-      } catch (conversionError) {
-        console.error("WebP conversion error:", conversionError)
-        // Fallback to original format if conversion fails
-        const fileExt = file.name.split(".").pop()?.toLowerCase() || "bin"
-        filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
-        processedBuffer = buffer
-        contentType = file.type || "application/octet-stream"
-
-        console.log(`Falling back to original format for ${file.name}`)
-      }
-    } else if (file.type && file.type.startsWith("video/")) {
-      fileType = "video"
-      const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp4"
-      filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
-    } else if (file.type && file.type.startsWith("audio/")) {
-      fileType = "audio"
-      const fileExt = file.name.split(".").pop()?.toLowerCase() || "mp3"
-      filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
-    } else {
-      // Other file types
-      const fileExt = file.name.split(".").pop()?.toLowerCase() || "bin"
-      filePath = `uploads/${safeFilenameBase}-${Date.now()}.${fileExt}`
+    if (queryError) {
+      console.error("Error checking for duplicates:", queryError)
+    } else if (existingFiles && existingFiles.length > 0) {
+      // Duplicate found
+      return NextResponse.json(
+        {
+          duplicate: true,
+          existingFile: existingFiles[0],
+          message: `File already exists as "${existingFiles[0].filename}"`,
+        },
+        { status: 200 },
+      )
     }
 
-    // Upload file to Supabase
-    const { error: uploadError, data: uploadData } = await supabase.storage
-      .from("media")
-      .upload(filePath, processedBuffer, {
-        contentType: contentType,
-        cacheControl: "3600",
+    // Determine file type and handle accordingly
+    const fileType = file.type.split("/")[0]
+    const fileExtension = filename.split(".").pop()?.toLowerCase() || ""
+
+    let uploadPath = ""
+    let publicUrl = ""
+    const thumbnailUrl = null
+    let convertedToWebP = false
+
+    // Handle image files - convert to WebP for better performance
+    if (fileType === "image" && ["jpg", "jpeg", "png", "gif"].includes(fileExtension)) {
+      try {
+        // Generate a unique filename for the WebP version
+        const webpFilename = `${uuidv4()}.webp`
+        uploadPath = `media/${webpFilename}`
+
+        // Convert to WebP format
+        const webpBuffer = await sharp(fileBuffer).webp({ quality: 85 }).toBuffer()
+
+        // Upload the WebP file
+        const { error: uploadError, data } = await supabase.storage.from("public").upload(uploadPath, webpBuffer, {
+          contentType: "image/webp",
+          upsert: false,
+        })
+
+        if (uploadError) {
+          throw new Error(`WebP upload failed: ${uploadError.message}`)
+        }
+
+        // Get the public URL
+        const {
+          data: { publicUrl: url },
+        } = supabase.storage.from("public").getPublicUrl(uploadPath)
+
+        publicUrl = url
+        convertedToWebP = true
+      } catch (error) {
+        console.error("WebP conversion failed:", error)
+
+        // Fallback to original format if WebP conversion fails
+        uploadPath = `media/${uuidv4()}-${filename}`
+
+        const { error: uploadError } = await supabase.storage.from("public").upload(uploadPath, fileBuffer, {
+          contentType: file.type,
+          upsert: false,
+        })
+
+        if (uploadError) {
+          throw new Error(`Original upload failed: ${uploadError.message}`)
+        }
+
+        const {
+          data: { publicUrl: url },
+        } = supabase.storage.from("public").getPublicUrl(uploadPath)
+
+        publicUrl = url
+      }
+    } else {
+      // Handle other file types without conversion
+      uploadPath = `media/${uuidv4()}-${filename}`
+
+      const { error: uploadError } = await supabase.storage.from("public").upload(uploadPath, fileBuffer, {
+        contentType: file.type,
         upsert: false,
       })
 
-    if (uploadError) {
-      console.error("Supabase upload error:", uploadError)
-      return NextResponse.json({ error: uploadError.message }, { status: 500 })
-    }
-
-    // Get public URL
-    const {
-      data: { publicUrl },
-    } = supabase.storage.from("media").getPublicUrl(filePath)
-
-    // Generate thumbnail for images
-    let thumbnailUrl = null
-    if (fileType === "image") {
-      thumbnailUrl = publicUrl
-    }
-
-    // Check if media table exists before trying to insert
-    const { error: tableCheckError } = await supabase.from("media").select("id").limit(1).maybeSingle()
-
-    if (tableCheckError && tableCheckError.code === "PGRST116") {
-      // Table doesn't exist, create it
-      const { error: createTableError } = await supabase.rpc("exec_sql", {
-        sql_query: `
-          CREATE TABLE IF NOT EXISTS media (
-            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-            filename TEXT NOT NULL,
-            filepath TEXT NOT NULL,
-            filesize BIGINT NOT NULL DEFAULT 0,
-            filetype TEXT NOT NULL,
-            public_url TEXT NOT NULL,
-            thumbnail_url TEXT,
-            tags TEXT[] DEFAULT '{}',
-            metadata JSONB DEFAULT '{}',
-            usage_locations JSONB DEFAULT '{}',
-            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-          );
-          
-          -- Add RLS policy to allow all operations for authenticated users
-          ALTER TABLE media ENABLE ROW LEVEL SECURITY;
-          
-          DROP POLICY IF EXISTS "Allow all operations for authenticated users" ON media;
-          CREATE POLICY "Allow all operations for authenticated users" 
-          ON media 
-          USING (auth.role() = 'authenticated')
-          WITH CHECK (auth.role() = 'authenticated');
-        `,
-      })
-
-      if (createTableError) {
-        console.error("Error creating media table:", createTableError)
-        // Continue anyway, as the upload was successful
+      if (uploadError) {
+        throw new Error(`Upload failed: ${uploadError.message}`)
       }
+
+      const {
+        data: { publicUrl: url },
+      } = supabase.storage.from("public").getPublicUrl(uploadPath)
+
+      publicUrl = url
     }
 
-    // Save to media table using admin privileges
-    const { error: dbError } = await supabase.from("media").insert({
-      filename: isConvertibleImage ? `${originalName}.webp` : file.name,
-      filepath: filePath,
-      filesize: processedBuffer.byteLength,
+    // Add record to the media table
+    const { error: insertError } = await supabase.from("media").insert({
+      filename,
+      filepath: uploadPath,
+      filesize,
       filetype: fileType,
       public_url: publicUrl,
       thumbnail_url: thumbnailUrl,
       tags: [fileType],
       metadata: {
-        contentType: contentType,
         originalType: file.type,
-        originalName: file.name,
-        uploadedAt: new Date().toISOString(),
-        uploadedBy: "admin", // Since we're using the admin client
-        convertedToWebP: isConvertibleImage,
+        fileHash: fileHash,
+        convertedToWebP,
       },
     })
 
-    if (dbError) {
-      console.error("Database error:", dbError)
-      // Return success anyway since the file was uploaded
-      return NextResponse.json({
-        success: true,
-        warning: "File uploaded but database entry failed: " + dbError.message,
-        filename: isConvertibleImage ? `${originalName}.webp` : file.name,
-        filepath: filePath,
-        filesize: processedBuffer.byteLength,
-        publicUrl,
-        convertedToWebP: isConvertibleImage,
-      })
+    if (insertError) {
+      throw new Error(`Database insert failed: ${insertError.message}`)
     }
 
     return NextResponse.json({
       success: true,
-      filename: isConvertibleImage ? `${originalName}.webp` : file.name,
-      filepath: filePath,
-      filesize: processedBuffer.byteLength,
-      publicUrl, // Make sure this is the correct property name
-      convertedToWebP: isConvertibleImage,
+      filename,
+      publicUrl,
+      convertedToWebP,
     })
   } catch (error) {
-    console.error("Error processing upload:", error)
+    console.error("Upload error:", error)
     return NextResponse.json(
-      { error: `Failed to process upload: ${error instanceof Error ? error.message : String(error)}` },
+      { error: error instanceof Error ? error.message : "Unknown error occurred" },
       { status: 500 },
     )
   }

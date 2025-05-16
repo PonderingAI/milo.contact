@@ -6,7 +6,7 @@ import ProjectsSection from "@/components/projects-section"
 import { getProjects, isDatabaseSetup } from "@/lib/project-data"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { createServerClient } from "@/lib/supabase"
+import { createServerClient } from "@/lib/supabase-server"
 
 async function getLatestProject() {
   try {

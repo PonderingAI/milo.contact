@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { ArrowDown } from "lucide-react"
-import { getSupabaseBrowserClient } from "@/lib/supabase"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 import { extractVideoInfo } from "@/lib/project-data"
 import VideoBackground from "./video-background"
 import type { Project } from "@/lib/project-data"
@@ -34,6 +34,7 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
             // @ts-ignore
             newSettings[item.key] = item.value
           })
+          console.log("Loaded hero settings:", newSettings)
           setSettings(newSettings)
         }
       } catch (err) {
@@ -43,6 +44,10 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
 
     loadSettings()
   }, [])
+
+  // Debug logs
+  console.log("Hero section rendering with settings:", settings)
+  console.log("Latest project:", latestProject)
 
   // Determine what to show as background
   let backgroundType = "image"
@@ -54,15 +59,17 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
     backgroundType = "video"
     backgroundMedia = latestProject.video_url
     videoInfo = extractVideoInfo(latestProject.video_url)
+    console.log("Using latest project video:", backgroundMedia, videoInfo)
   }
   // Case 2: Video URL in settings
   else if (settings.hero_bg_type === "video" && settings.image_hero_bg) {
     backgroundType = "video"
     videoInfo = extractVideoInfo(settings.image_hero_bg)
+    console.log("Using video from settings:", backgroundMedia, videoInfo)
   }
   // Case 3: Image background (default)
   else {
-    // Default to image background
+    console.log("Using image background:", backgroundMedia)
   }
 
   const scrollToProjects = () => {
