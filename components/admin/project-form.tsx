@@ -8,30 +8,29 @@ import { getSupabaseBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Loader2 } from "lucide-react"
-import ImageUploader from "@/components/admin/image-uploader"
-import MediaSelector from "@/components/admin/media-selector"
+import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import Image from "next/image"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import ProjectMediaUploader from "@/components/admin/project-media-uploader"
 
 interface ProjectFormProps {
   project?: {
     id: string
     title: string
     category: string
-    type: string
+    type?: string
     role: string
     image: string
     thumbnail_url?: string
     description?: string
     is_public: boolean
     publish_date: string | null
-    tags: string[]
+    tags?: string[]
+    project_date?: string
   }
   mode: "create" | "edit"
 }
@@ -46,6 +45,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     description: project?.description || "",
     is_public: project?.is_public ?? true,
     publish_date: project?.publish_date || null,
+    project_date: project?.project_date || new Date().toISOString().split("T")[0],
   })
 
   // State to track the role input for tag extraction
@@ -59,6 +59,13 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [isCategoryOpen, setIsCategoryOpen] = useState(false)
   const [isRoleOpen, setIsRoleOpen] = useState(false)
 
+  // Media state
+  const [btsImages, setBtsImages] = useState<string[]>([])
+  const [btsVideos, setBtsVideos] = useState<string[]>([])
+  const [mainImages, setMainImages] = useState<string[]>([])
+  const [mainVideos, setMainVideos] = useState<string[]>([])
+  const [thumbnailUrl, setThumbnailUrl] = useState<string>(project?.thumbnail_url || "")
+
   // Refs for input elements
   const categoryInputRef = useRef<HTMLInputElement>(null)
   const roleInputRef = useRef<HTMLInputElement>(null)
@@ -70,6 +77,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [isUsingVideoThumbnail, setIsUsingVideoThumbnail] = useState(false)
   const [schemaColumns, setSchemaColumns] = useState<string[]>([])
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
+  const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
 
@@ -157,6 +165,66 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     fetchExistingValues()
   }, [])
 
+  // Fetch BTS images if in edit mode
+  useEffect(() => {
+    if (mode === "edit" && project?.id) {
+      async function fetchBtsImages() {
+        try {
+          setIsLoadingBtsImages(true)
+          const response = await fetch(`/api/projects/bts-images/${project.id}`)
+
+          if (response.ok) {
+            const data = await response.json()
+            if (data.images && Array.isArray(data.images)) {
+              // Separate images and videos
+              const images: string[] = []
+              const videos: string[] = []
+
+              data.images.forEach((url: string) => {
+                const isVideo =
+                  url.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+                  url.includes("youtube.com") ||
+                  url.includes("vimeo.com") ||
+                  url.includes("youtu.be")
+
+                if (isVideo) {
+                  videos.push(url)
+                } else {
+                  images.push(url)
+                }
+              })
+
+              setBtsImages(images)
+              setBtsVideos(videos)
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching BTS images:", err)
+        } finally {
+          setIsLoadingBtsImages(false)
+        }
+      }
+
+      fetchBtsImages()
+    }
+  }, [mode, project?.id])
+
+  // Fetch main images and videos if in edit mode
+  useEffect(() => {
+    if (mode === "edit" && project) {
+      // Set the main image
+      if (project.image) {
+        setMainImages([project.image])
+      }
+
+      // Set the main video if thumbnail_url exists
+      if (project.thumbnail_url) {
+        setMainVideos([project.thumbnail_url])
+        setThumbnailUrl(project.thumbnail_url)
+      }
+    }
+  }, [mode, project])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
@@ -183,6 +251,310 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const handleImageUpload = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
     setIsUsingVideoThumbnail(false)
+
+    // Add to mainImages if not already there
+    if (!mainImages.includes(url)) {
+      setMainImages((prev) => [...prev, url])
+    }
+  }
+
+  // Helper function to format date for input field
+  function formatDateForInput(date: Date): string {
+    return date.toISOString().split("T")[0]
+  }
+
+  // Helper function to extract date from file metadata
+  async function extractDateFromMedia(url: string, type: "image" | "video"): Promise<Date | null> {
+    try {
+      if (type === "video") {
+        const videoInfo = extractVideoInfo(url)
+        if (!videoInfo) return null
+
+        if (videoInfo.platform === "vimeo") {
+          // Get video metadata from Vimeo
+          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+          if (response.ok) {
+            const videoData = await response.json()
+            const video = videoData[0]
+            if (video.upload_date) {
+              return new Date(video.upload_date)
+            }
+          }
+        }
+      } else if (type === "image") {
+        // For images in Supabase, check if we have metadata
+        const { data } = await supabase.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
+
+        if (data) {
+          // Try to get date from metadata
+          if (data.metadata && data.metadata.dateTaken) {
+            return new Date(data.metadata.dateTaken)
+          }
+          // Fall back to created_at
+          if (data.created_at) {
+            return new Date(data.created_at)
+          }
+        }
+      }
+      return null
+    } catch (error) {
+      console.error("Error extracting date from media:", error)
+      return null
+    }
+  }
+
+  // Handler for main media selection
+  const handleMainMediaSelect = async (url: string | string[]) => {
+    // Handle both single and multiple selections
+    const urls = Array.isArray(url) ? url : [url]
+    console.log("handleMainMediaSelect received URLs:", urls)
+
+    for (const mediaUrl of urls) {
+      if (!mediaUrl) continue
+
+      // Determine if it's an image or video based on extension or URL
+      const isVideo =
+        mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+        mediaUrl.includes("youtube.com") ||
+        mediaUrl.includes("vimeo.com") ||
+        mediaUrl.includes("youtu.be")
+
+      if (isVideo) {
+        if (!mainVideos.includes(mediaUrl)) {
+          setMainVideos((prev) => [...prev, mediaUrl])
+        }
+        // Store video URL in thumbnail_url if that column exists
+        if (schemaColumns.includes("thumbnail_url")) {
+          setThumbnailUrl(mediaUrl)
+          setFormData((prev) => ({ ...prev, thumbnail_url: mediaUrl }))
+        }
+      } else {
+        if (!mainImages.includes(mediaUrl)) {
+          setMainImages((prev) => [...prev, mediaUrl])
+        }
+        // Set as cover image if none is set
+        if (!formData.image) {
+          setFormData((prev) => ({ ...prev, image: mediaUrl }))
+
+          // Try to extract date if project_date is empty
+          if (!formData.project_date) {
+            const date = await extractDateFromMedia(mediaUrl, "image")
+            if (date) {
+              setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+            }
+          }
+        }
+      }
+
+      // If title is empty, try to extract a title from the filename
+      if (!formData.title) {
+        const filename = mediaUrl.split("/").pop()
+        if (filename) {
+          // Remove extension and replace dashes/underscores with spaces
+          const nameWithoutExt = filename.split(".")[0]
+          const title = nameWithoutExt.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) // Capitalize first letter of each word
+
+          setFormData((prev) => ({ ...prev, title }))
+        }
+      }
+    }
+  }
+
+  // Handler for BTS media selection
+  const handleBtsMediaSelect = (url: string | string[]) => {
+    // Handle both single and multiple selections
+    const urls = Array.isArray(url) ? url : [url]
+
+    urls.forEach((mediaUrl) => {
+      // Determine if it's an image or video based on extension or URL
+      const isVideo =
+        mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
+        mediaUrl.includes("youtube.com") ||
+        mediaUrl.includes("vimeo.com") ||
+        mediaUrl.includes("youtu.be")
+
+      if (isVideo) {
+        if (!btsVideos.includes(mediaUrl)) {
+          setBtsVideos((prev) => [...prev, mediaUrl])
+        }
+      } else {
+        if (!btsImages.includes(mediaUrl)) {
+          setBtsImages((prev) => [...prev, mediaUrl])
+        }
+      }
+    })
+  }
+
+  const removeMainImage = (index: number) => {
+    const newImages = [...mainImages]
+    const removedImage = newImages.splice(index, 1)[0]
+    setMainImages(newImages)
+
+    // If the removed image was the cover image, set a new one if available
+    if (formData.image === removedImage) {
+      if (newImages.length > 0) {
+        setFormData((prev) => ({ ...prev, image: newImages[0] }))
+      } else {
+        setFormData((prev) => ({ ...prev, image: "" }))
+      }
+    }
+  }
+
+  const removeMainVideo = (index: number) => {
+    const newVideos = [...mainVideos]
+    const removedVideo = newVideos.splice(index, 1)[0]
+    setMainVideos(newVideos)
+
+    // If the removed video was the main video, clear the thumbnail_url
+    if (thumbnailUrl === removedVideo) {
+      setThumbnailUrl("")
+      setFormData((prev) => ({ ...prev, thumbnail_url: "" }))
+    }
+  }
+
+  const removeBtsImage = (index: number) => {
+    const newImages = [...btsImages]
+    newImages.splice(index, 1)
+    setBtsImages(newImages)
+  }
+
+  const removeBtsVideo = (index: number) => {
+    const newVideos = [...btsVideos]
+    newVideos.splice(index, 1)
+    setBtsVideos(newVideos)
+  }
+
+  const setCoverImage = (url: string) => {
+    setFormData((prev) => ({ ...prev, image: url }))
+  }
+
+  const setMainVideo = (url: string) => {
+    setThumbnailUrl(url)
+    setFormData((prev) => ({ ...prev, thumbnail_url: url }))
+  }
+
+  const addMainVideoUrl = async (url: string) => {
+    if (!url.trim()) return
+
+    setIsProcessingVideo(true)
+    const toastId = toast({
+      title: "Processing video",
+      description: "Fetching video information...",
+    }).id
+
+    try {
+      // Use the new API route to process the video URL
+      const response = await fetch("/api/process-video-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to process video URL")
+      }
+
+      const result = await response.json()
+      console.log("Video processing result:", result)
+
+      // Add to mainVideos if not already in the list
+      if (!mainVideos.includes(url)) {
+        setMainVideos((prev) => [...prev, url])
+        setThumbnailUrl(url)
+        setFormData((prev) => ({ ...prev, thumbnail_url: url }))
+      }
+
+      // If we have a thumbnail and no image is set, use the thumbnail
+      if (result.thumbnailUrl && !formData.image && !mainImages.includes(result.thumbnailUrl)) {
+        setFormData((prev) => ({ ...prev, image: result.thumbnailUrl }))
+        setVideoThumbnail(result.thumbnailUrl)
+        setMainImages((prev) => [...prev, result.thumbnailUrl])
+      }
+
+      // If project title is empty, use video title
+      if (!formData.title && result.title) {
+        setFormData((prev) => ({ ...prev, title: result.title }))
+      }
+
+      // If project date is empty and we have an upload date, use it
+      if (!formData.project_date && result.uploadDate) {
+        const date = new Date(result.uploadDate)
+        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+      }
+
+      toast({
+        id: toastId,
+        title: "Video added",
+        description: "Video has been added to the project and media library",
+      })
+    } catch (error) {
+      console.error("Error processing video:", error)
+      toast({
+        id: toastId,
+        title: "Error adding video",
+        description: error instanceof Error ? error.message : "Failed to process video URL",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingVideo(false)
+    }
+  }
+
+  const addBtsVideoUrl = async (url: string) => {
+    if (!url.trim()) return
+
+    const toastId = toast({
+      title: "Processing BTS video",
+      description: "Fetching video information...",
+    }).id
+
+    try {
+      // Use the new API route to process the video URL
+      const response = await fetch("/api/process-video-url", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url, isBts: true }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to process video URL")
+      }
+
+      const result = await response.json()
+      console.log("BTS video processing result:", result)
+
+      // Add to BTS videos if not already in the list
+      if (!btsVideos.includes(url)) {
+        setBtsVideos((prev) => [...prev, url])
+      }
+
+      // Add thumbnail to BTS images if available and not already in the list
+      if (result.thumbnailUrl && !btsImages.includes(result.thumbnailUrl)) {
+        setBtsImages((prev) => [...prev, result.thumbnailUrl])
+      }
+
+      toast({
+        id: toastId,
+        title: "BTS Video added",
+        description: "Behind the scenes video has been added to the project",
+      })
+    } catch (error) {
+      console.error("Error processing BTS video:", error)
+      toast({
+        id: toastId,
+        title: "Error adding BTS video",
+        description: error instanceof Error ? error.message : "Failed to process video URL",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingVideo(false)
+    }
   }
 
   // Process video URL and extract thumbnail
@@ -304,10 +676,10 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   }
 
   const validateForm = () => {
-    if (!formData.title) return "Title is required"
-    if (!formData.category) return "Category is required"
-    if (!formData.role) return "Role is required"
-    if (!formData.image) return "Image is required"
+    if (!formData.title.trim()) return "Title is required"
+    if (!formData.category.trim()) return "Category is required"
+    if (!formData.role.trim() && !roleInput.trim()) return "Role is required"
+    if (!formData.image.trim()) return "Image is required"
 
     // Validate video URL if provided
     if (formData.thumbnail_url) {
@@ -332,24 +704,20 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setError(null)
 
     try {
-      // Create a clean data object with only the columns that exist in the database
-      const cleanData: Record<string, any> = {}
-
-      // Add all fields from formData that exist in the schema
-      Object.entries(formData).forEach(([key, value]) => {
-        if (schemaColumns.includes(key)) {
-          cleanData[key] = value
-        }
-      })
-
-      // Ensure required fields are present and not empty
-      console.log("Form data before submission:", formData)
-      console.log("Clean data being sent to API:", cleanData)
-
-      // Make sure role is properly formatted
-      if (roleInput && !cleanData.role) {
-        cleanData.role = roleInput
+      // Prepare the data for submission
+      const projectData = {
+        title: formData.title.trim(),
+        description: formData.description,
+        image: formData.image.trim(),
+        category: formData.category.trim(),
+        role: roleInput.trim() || formData.role.trim(),
+        project_date: formData.project_date,
+        is_public: formData.is_public,
+        thumbnail_url: formData.thumbnail_url || thumbnailUrl || null,
       }
+
+      console.log("Form data before submission:", formData)
+      console.log("Project data being sent to API:", projectData)
 
       if (mode === "create") {
         // Create new project using API route
@@ -358,7 +726,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(cleanData),
+          body: JSON.stringify(projectData),
         })
 
         const responseData = await response.json()
@@ -366,6 +734,30 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         if (!response.ok) {
           console.error("API error response:", responseData)
           throw new Error(responseData.error || "Failed to create project")
+        }
+
+        // Save BTS images if any
+        if (btsImages.length > 0 && responseData.data && responseData.data[0]) {
+          const projectId = responseData.data[0].id
+
+          try {
+            const btsResponse = await fetch("/api/projects/bts-images", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                projectId,
+                images: btsImages,
+              }),
+            })
+
+            if (!btsResponse.ok) {
+              console.error("Error saving BTS images:", await btsResponse.json())
+            }
+          } catch (btsError) {
+            console.error("Error saving BTS images:", btsError)
+          }
         }
 
         // Redirect to the project edit page
@@ -377,7 +769,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(cleanData),
+          body: JSON.stringify(projectData),
         })
 
         const responseData = await response.json()
@@ -387,15 +779,37 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           throw new Error(responseData.error || "Failed to update project")
         }
 
+        // Update BTS images if any
+        if (project?.id) {
+          try {
+            const btsResponse = await fetch("/api/projects/bts-images", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                projectId: project.id,
+                images: [...btsImages, ...btsVideos],
+              }),
+            })
+
+            if (!btsResponse.ok) {
+              console.error("Error updating BTS images:", await btsResponse.json())
+            }
+          } catch (btsError) {
+            console.error("Error updating BTS images:", btsError)
+          }
+        }
+
+        // Show success message
+        toast({
+          title: "Project updated",
+          description: "Project updated successfully!",
+        })
+
         // Refresh the page
         router.refresh()
       }
-
-      // Show success message
-      toast({
-        title: mode === "create" ? "Project created" : "Project updated",
-        description: mode === "create" ? "Project created successfully!" : "Project updated successfully!",
-      })
     } catch (error: any) {
       console.error("Error saving project:", error)
       setError(error.message || "Failed to save project")
@@ -421,213 +835,387 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <Label htmlFor="title">Project Title *</Label>
-          <Input
-            id="title"
-            name="title"
-            value={formData.title}
-            onChange={handleChange}
-            placeholder="Enter project title"
-            className="bg-gray-800 border-gray-700"
-            required
+        {/* Left column - Upload areas */}
+        <div className="space-y-4">
+          {/* Main upload area */}
+          <ProjectMediaUploader
+            title="Main"
+            onMediaSelect={handleMainMediaSelect}
+            onVideoUrlSubmit={addMainVideoUrl}
+            mediaType="all"
+            folder="projects"
+          />
+
+          {/* BTS upload area */}
+          <ProjectMediaUploader
+            title="BTS"
+            onMediaSelect={handleBtsMediaSelect}
+            onVideoUrlSubmit={addBtsVideoUrl}
+            mediaType="all"
+            folder="bts"
+            isLoading={isLoadingBtsImages}
           />
         </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="category">Category *</Label>
-          <SimpleAutocomplete
-            options={categoryOptions}
-            value={formData.category}
-            onInputChange={handleCategoryChange}
-            onSelect={handleCategoryChange}
-            placeholder="e.g. Short Film, Music Video, etc."
-            className="bg-gray-800 border-gray-700"
-            allowCustomValues={true}
-            isOpen={isCategoryOpen}
-            onOpenChange={setIsCategoryOpen}
-            onFocus={() => setIsCategoryOpen(true)}
-            onBlur={() => setTimeout(() => setIsCategoryOpen(false), 100)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="role">Role/Tags *</Label>
-          <SimpleAutocomplete
-            options={roleOptions}
-            value={roleInput}
-            onInputChange={handleRoleChange}
-            onSelect={handleRoleChange}
-            placeholder="e.g. Director, 1st AC, etc. (comma-separated)"
-            className="bg-gray-800 border-gray-700"
-            allowCustomValues={true}
-            multiple={true}
-            separator=","
-            isOpen={isRoleOpen}
-            onOpenChange={setIsRoleOpen}
-            onFocus={() => setIsRoleOpen(true)}
-            onBlur={() => setTimeout(() => setIsRoleOpen(false), 100)}
-          />
-          <p className="text-xs text-gray-400">Separate multiple roles/tags with commas</p>
-
-          {roleInput && (
-            <div className="flex flex-wrap gap-2 mt-2">
-              {roleInput.split(",").map(
-                (tag, index) =>
-                  tag.trim() && (
-                    <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
-                      {tag.trim()}
-                    </span>
-                  ),
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {schemaColumns.includes("thumbnail_url") && (
-        <div className="space-y-2">
-          <Label>Video URL (YouTube, Vimeo, or LinkedIn)</Label>
-          <div className="flex items-center gap-2">
-            <div className="flex-grow">
-              <Input
-                id="thumbnail_url"
-                name="thumbnail_url"
-                value={formData.thumbnail_url}
-                onChange={handleChange}
-                placeholder="https://www.youtube.com/watch?v=..."
-                className="bg-gray-800 border-gray-700"
-              />
-            </div>
-            <div className="flex-shrink-0">
-              <MediaSelector
-                type="video"
-                onSelect={(url) => setFormData((prev) => ({ ...prev, thumbnail_url: url }))}
-                buttonLabel="Browse Videos"
-                currentUrl={formData.thumbnail_url}
-              />
-            </div>
-          </div>
-          {isProcessingVideo && (
-            <p className="text-sm text-blue-500 flex items-center gap-1 mt-1">
-              <Loader2 className="h-3 w-3 animate-spin" />
-              Processing video...
-            </p>
-          )}
-          {formData.thumbnail_url && extractVideoInfo(formData.thumbnail_url) && (
-            <p className="text-sm text-green-500">Valid video URL</p>
-          )}
-          {formData.thumbnail_url && !extractVideoInfo(formData.thumbnail_url) && (
-            <p className="text-sm text-red-500">Invalid video URL. Please use a YouTube, Vimeo, or LinkedIn link.</p>
-          )}
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label>Cover Image *</Label>
-
-        {/* Video thumbnail section */}
-        {videoThumbnail && (
-          <div className="mb-4 p-4 border border-gray-700 rounded-md bg-gray-800/50">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-              <div className="relative w-40 h-24 overflow-hidden rounded-md">
-                <Image
-                  src={videoThumbnail || "/placeholder.svg"}
-                  alt="Video thumbnail"
-                  fill
-                  className="object-cover"
-                  unoptimized
+        {/* Right column - Project details */}
+        <div>
+          <Card className="border-gray-800 bg-[#070a10]">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xl text-gray-200">Project Details</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 pt-0">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Title</label>
+                <Input
+                  name="title"
+                  value={formData.title}
+                  onChange={handleChange}
+                  className="border-gray-800 bg-[#0f1520] text-gray-200"
+                  placeholder="Project Title"
                 />
               </div>
-              <div className="flex-1">
-                <h4 className="text-sm font-medium mb-1">Video Thumbnail Available</h4>
-                <p className="text-xs text-gray-400 mb-2">
-                  {isUsingVideoThumbnail
-                    ? "You're currently using the video thumbnail as your project image."
-                    : "You can use this thumbnail as your project image."}
-                </p>
-                {!isUsingVideoThumbnail && (
-                  <Button type="button" variant="secondary" size="sm" onClick={useVideoThumbnail}>
-                    Use Video Thumbnail
-                  </Button>
+
+              {/* Category input with Autocomplete */}
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
+                <SimpleAutocomplete
+                  ref={categoryInputRef}
+                  options={categoryOptions}
+                  value={formData.category}
+                  onInputChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                  onSelect={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                  placeholder="e.g. Short Film, Music Video"
+                  className="border-gray-800 bg-[#0f1520] text-gray-200"
+                  allowCustomValues={true}
+                  isOpen={isCategoryOpen}
+                  onOpenChange={setIsCategoryOpen}
+                  onBlur={() => setTimeout(() => setIsCategoryOpen(false), 100)}
+                  onFocus={() => setIsCategoryOpen(true)}
+                />
+              </div>
+
+              {/* Role input with Autocomplete */}
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Role/Tags</label>
+                <SimpleAutocomplete
+                  ref={roleInputRef}
+                  options={roleOptions}
+                  value={roleInput}
+                  onInputChange={setRoleInput}
+                  onSelect={(value) => {
+                    setRoleInput(value)
+                    setFormData((prev) => ({
+                      ...prev,
+                      role: value,
+                    }))
+                  }}
+                  placeholder="e.g. Director, 1st AC (comma-separated)"
+                  className="border-gray-800 bg-[#0f1520] text-gray-200"
+                  allowCustomValues={true}
+                  multiple={true}
+                  separator=","
+                  isOpen={isRoleOpen}
+                  onOpenChange={setIsRoleOpen}
+                  onBlur={() => setTimeout(() => setIsRoleOpen(false), 100)}
+                  onFocus={() => setIsRoleOpen(true)}
+                />
+                <p className="text-xs text-gray-500 mt-1">Separate multiple roles/tags with commas</p>
+
+                {roleInput && (
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    {roleInput.split(",").map(
+                      (tag, index) =>
+                        tag.trim() && (
+                          <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
+                            {tag.trim()}
+                          </span>
+                        ),
+                    )}
+                  </div>
                 )}
               </div>
-            </div>
-          </div>
-        )}
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <ImageUploader currentImage={formData.image} onImageUploaded={handleImageUpload} folder="projects" />
-          </div>
-          <div>
-            <MediaSelector
-              type="image"
-              onSelect={handleImageUpload}
-              buttonLabel="Select from Media Library"
-              currentUrl={formData.image}
-            />
-          </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Date</label>
+                <div className="relative">
+                  <Input
+                    type="date"
+                    name="project_date"
+                    value={formData.project_date}
+                    onChange={handleChange}
+                    className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
+                  />
+                  <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Visibility</label>
+                <Select
+                  value={formData.is_public ? "true" : "false"}
+                  onValueChange={(value) => handleSelectChange("is_public", value === "true")}
+                >
+                  <SelectTrigger className="border-gray-800 bg-[#0f1520] text-gray-200">
+                    <SelectValue placeholder="Select visibility" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#070a10] border-gray-800 text-gray-200">
+                    <SelectItem value="true">Public</SelectItem>
+                    <SelectItem value="false">Private</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {!formData.is_public && schemaColumns.includes("publish_date") && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Publish Date</label>
+                  <div className="relative">
+                    <Input
+                      type="datetime-local"
+                      name="publish_date"
+                      onChange={(e) => {
+                        const value = e.target.value ? new Date(e.target.value).toISOString() : null
+                        setFormData((prev) => ({ ...prev, publish_date: value }))
+                      }}
+                      className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
+                    />
+                    <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Description */}
+          <Card className="border-gray-800 bg-[#070a10] mt-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-xl text-gray-200">Description</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <Textarea
+                name="description"
+                value={formData.description}
+                onChange={handleChange}
+                placeholder="Describe the project..."
+                className="min-h-[180px] border-gray-800 bg-[#0f1520] text-gray-200"
+              />
+            </CardContent>
+          </Card>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          name="description"
-          value={formData.description}
-          onChange={handleChange}
-          placeholder="Describe the project..."
-          className="bg-gray-800 border-gray-700 min-h-[100px]"
-        />
-      </div>
+      {/* Media Overview Section */}
+      <div className="mt-8">
+        <h2 className="text-xl font-medium mb-4 text-gray-200">Media Overview</h2>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-        <div>
-          <Label htmlFor="is_public" className="flex items-center space-x-2 mb-2">
-            <span>Visibility</span>
-          </Label>
-          <Select
-            name="is_public"
-            value={formData.is_public ? "true" : "false"}
-            onValueChange={(value) => handleSelectChange("is_public", value === "true")}
-          >
-            <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select visibility" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="true">Public</SelectItem>
-              <SelectItem value="false">Private</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-sm text-gray-500 mt-1">
-            {formData.is_public ? "This project is visible to everyone" : "This project is only visible to admins"}
-          </p>
-        </div>
+        <div className="space-y-6">
+          {/* Main Media Section */}
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium text-gray-300 border-b border-gray-800 pb-2">Main Footage</h3>
 
-        {schemaColumns.includes("publish_date") && !formData.is_public && (
-          <div>
-            <Label htmlFor="publish_date" className="mb-2">
-              Scheduled Publish Date
-            </Label>
-            <Input
-              type="datetime-local"
-              id="publish_date"
-              name="publish_date"
-              value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ""}
-              onChange={(e) => {
-                const value = e.target.value ? new Date(e.target.value).toISOString() : null
-                setFormData((prev) => ({ ...prev, publish_date: value }))
-              }}
-              className="w-full"
-              disabled={formData.is_public}
-            />
-            <p className="text-sm text-gray-500 mt-1">
-              {formData.is_public ? "Project is already public" : "When to automatically make this project public"}
-            </p>
+            {/* Main Images */}
+            {mainImages.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-gray-400">Images</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {mainImages.map((image, index) => (
+                    <div key={`main-image-${index}`} className="relative group">
+                      <div
+                        className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden ${formData.image === image ? "ring-2 ring-blue-500" : ""}`}
+                      >
+                        <img
+                          src={image || "/placeholder.svg"}
+                          alt={`Main image ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setCoverImage(image)}
+                          className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
+                          title="Set as cover image"
+                        >
+                          <ImageIcon size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeMainImage(index)}
+                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                          title="Remove image"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      {formData.image === image && (
+                        <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
+                          Cover
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Main Videos */}
+            {mainVideos.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {mainVideos.map((video, index) => (
+                    <div key={`main-video-${index}`} className="relative group">
+                      <div
+                        className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${thumbnailUrl === video ? "ring-2 ring-blue-500" : ""}`}
+                      >
+                        {video.includes("youtube.com") ? (
+                          <img
+                            src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
+                            alt={`YouTube video ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : video.includes("youtu.be") ? (
+                          <img
+                            src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
+                            alt={`YouTube video ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : video.includes("vimeo.com") ? (
+                          <div className="text-gray-400 flex flex-col items-center">
+                            <Film size={24} />
+                            <span className="text-xs mt-1">Vimeo Video</span>
+                          </div>
+                        ) : (
+                          <div className="text-gray-400 flex flex-col items-center">
+                            <Film size={24} />
+                            <span className="text-xs mt-1">Video</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setMainVideo(video)}
+                          className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
+                          title="Set as main video"
+                        >
+                          <Film size={14} />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removeMainVideo(index)}
+                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                          title="Remove video"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                      {thumbnailUrl === video && (
+                        <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
+                          Main
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {mainImages.length === 0 && mainVideos.length === 0 && (
+              <div className="text-center py-4 text-gray-400">
+                <p>No main media added yet</p>
+              </div>
+            )}
           </div>
-        )}
+
+          {/* BTS Media Section */}
+          <div className="space-y-4 pt-4">
+            <h3 className="text-lg font-medium text-gray-300 border-b border-gray-800 pb-2">Behind the Scenes</h3>
+
+            {/* BTS Images */}
+            {btsImages.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-gray-400">Images</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {btsImages.map((image, index) => (
+                    <div key={`bts-image-${index}`} className="relative group">
+                      <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden">
+                        <img
+                          src={image || "/placeholder.svg"}
+                          alt={`BTS image ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => removeBtsImage(index)}
+                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                          title="Remove image"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* BTS Videos */}
+            {btsVideos.length > 0 && (
+              <div>
+                <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {btsVideos.map((video, index) => (
+                    <div key={`bts-video-${index}`} className="relative group">
+                      <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center">
+                        {video.includes("youtube.com") ? (
+                          <img
+                            src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
+                            alt={`YouTube video ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : video.includes("youtu.be") ? (
+                          <img
+                            src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
+                            alt={`YouTube video ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : video.includes("vimeo.com") ? (
+                          <div className="text-gray-400 flex flex-col items-center">
+                            <Film size={24} />
+                            <span className="text-xs mt-1">Vimeo Video</span>
+                          </div>
+                        ) : (
+                          <div className="text-gray-400 flex flex-col items-center">
+                            <Film size={24} />
+                            <span className="text-xs mt-1">Video</span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <button
+                          type="button"
+                          onClick={() => removeBtsVideo(index)}
+                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                          title="Remove video"
+                        >
+                          <X size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {btsImages.length === 0 && btsVideos.length === 0 && (
+              <div className="text-center py-4 text-gray-400">
+                <p>No BTS media added yet</p>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       <div className="flex justify-end gap-4">

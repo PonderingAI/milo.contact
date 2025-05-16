@@ -1,7 +1,6 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import ProjectForm from "@/components/admin/project-form"
-import BtsImageManager from "@/components/admin/bts-image-manager"
 import { getProjectById } from "@/lib/project-data"
 
 export default async function EditProjectPage({ params }: { params: { id: string } }) {
@@ -33,7 +32,7 @@ export default async function EditProjectPage({ params }: { params: { id: string
     }
 
     return (
-      <div>
+      <div className="p-8">
         <div className="flex items-center gap-4 mb-8">
           <Link
             href="/admin/projects"
@@ -47,11 +46,6 @@ export default async function EditProjectPage({ params }: { params: { id: string
         <h1 className="text-3xl font-serif mb-8">Edit Project: {project.title}</h1>
 
         <ProjectForm project={project} mode="edit" />
-
-        <div className="mt-12 border-t border-gray-800 pt-8">
-          <h2 className="text-2xl font-serif mb-6">Behind the Scenes Images</h2>
-          <BtsImageManager projectId={params.id} />
-        </div>
       </div>
     )
   } catch (error) {
