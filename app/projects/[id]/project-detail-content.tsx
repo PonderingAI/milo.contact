@@ -62,9 +62,9 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   return (
     <>
       <div className="flex items-center gap-4 mb-8">
-        <Link href="/projects" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
+        <Link href="/" className="flex items-center gap-2 text-gray-400 hover:text-white transition-colors">
           <ArrowLeft className="w-5 h-5" />
-          Back to Projects
+          Back to Home
         </Link>
       </div>
 
