@@ -17,6 +17,7 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
     hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
     image_hero_bg: "/images/hero-bg.jpg",
     hero_bg_type: "image", // "image", "video", or "latest_project"
+    background_color: "#000000",
   })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -29,7 +30,7 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
-          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type"])
+          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type", "background_color"])
 
         if (error) {
           console.error("Error loading hero settings:", error)
@@ -62,25 +63,29 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
   let isVideo = false
   let videoInfo = null
 
+  console.log("Hero background type:", settings.hero_bg_type)
+  console.log("Latest project:", latestProject)
+
   // If hero_bg_type is "latest_project" and we have a latest project with video
   if (settings.hero_bg_type === "latest_project" && latestProject?.video_url) {
     backgroundMedia = latestProject.video_url
     isVideo = true
     videoInfo = extractVideoInfo(latestProject.video_url)
-    console.log("Using latest project video:", backgroundMedia) // Debug log
+    console.log("Using latest project video:", backgroundMedia, videoInfo)
   }
   // Otherwise check if the current background is a video URL
   else if (
-    settings.image_hero_bg &&
-    (settings.image_hero_bg.includes("vimeo.com") ||
-      settings.image_hero_bg.includes("youtube.com") ||
-      settings.image_hero_bg.includes("youtu.be"))
+    settings.hero_bg_type === "video" ||
+    (settings.image_hero_bg &&
+      (settings.image_hero_bg.includes("vimeo.com") ||
+        settings.image_hero_bg.includes("youtube.com") ||
+        settings.image_hero_bg.includes("youtu.be")))
   ) {
     isVideo = true
     videoInfo = extractVideoInfo(settings.image_hero_bg)
-    console.log("Using video background:", backgroundMedia) // Debug log
+    console.log("Using video background:", backgroundMedia, videoInfo)
   } else {
-    console.log("Using image background:", backgroundMedia) // Debug log
+    console.log("Using image background:", backgroundMedia)
   }
 
   const scrollToProjects = () => {
@@ -113,7 +118,7 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
         <VideoBackground
           platform={videoInfo.platform}
           videoId={videoInfo.id}
-          fallbackImage={latestProject?.image || "/images/hero-bg.jpg"}
+          fallbackImage={latestProject?.image || settings.image_hero_bg}
         />
       ) : (
         <div
