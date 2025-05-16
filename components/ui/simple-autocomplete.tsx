@@ -1,12 +1,9 @@
 "use client"
 
-import * as React from "react"
-import { Check, ChevronsUpDown } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import type React from "react"
+import { useState, useEffect, useRef, forwardRef } from "react"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 
 interface SimpleAutocompleteProps {
   options: string[]
@@ -14,163 +11,178 @@ interface SimpleAutocompleteProps {
   onInputChange: (value: string) => void
   onSelect: (value: string) => void
   placeholder?: string
-  emptyMessage?: string
   className?: string
   allowCustomValues?: boolean
   multiple?: boolean
   separator?: string
   isOpen?: boolean
-  onOpenChange?: (open: boolean) => void
+  onOpenChange?: (isOpen: boolean) => void
   onFocus?: () => void
   onBlur?: () => void
 }
 
-export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutocompleteProps>(
+export const SimpleAutocomplete = forwardRef<HTMLInputElement, SimpleAutocompleteProps>(
   (
     {
       options,
       value,
       onInputChange,
       onSelect,
-      placeholder = "Search...",
-      emptyMessage = "No results found.",
+      placeholder,
       className,
-      allowCustomValues = true,
+      allowCustomValues = false,
       multiple = false,
       separator = ",",
-      isOpen,
+      isOpen: controlledIsOpen,
       onOpenChange,
       onFocus,
       onBlur,
     },
     ref,
   ) => {
-    const [open, setOpen] = React.useState(false)
-    const [inputValue, setInputValue] = React.useState(value)
-    const [filteredOptions, setFilteredOptions] = React.useState<string[]>(options)
+    const [isOpen, setIsOpen] = useState(false)
+    const [filteredOptions, setFilteredOptions] = useState<string[]>([])
+    const [highlightedIndex, setHighlightedIndex] = useState(-1)
+    const dropdownRef = useRef<HTMLDivElement>(null)
+    const inputRef = useRef<HTMLInputElement>(null)
 
-    // Use controlled open state if provided
-    const isOpenState = isOpen !== undefined ? isOpen : open
-    const setOpenState = (newOpen: boolean) => {
-      setOpen(newOpen)
-      onOpenChange?.(newOpen)
+    // Use controlled or uncontrolled open state
+    const open = controlledIsOpen !== undefined ? controlledIsOpen : isOpen
+    const setOpen = (value: boolean) => {
+      if (onOpenChange) onOpenChange(value)
+      setIsOpen(value)
     }
 
-    // For multiple values
-    const values = React.useMemo(() => {
-      if (!multiple) return [value]
-      return value
-        .split(separator)
-        .map((v) => v.trim())
-        .filter(Boolean)
-    }, [value, multiple, separator])
-
-    // Filter options based on input
-    React.useEffect(() => {
-      if (!inputValue.trim()) {
+    // Filter options based on input value
+    useEffect(() => {
+      if (!value.trim()) {
         setFilteredOptions(options)
         return
       }
 
-      const searchTerm = inputValue.toLowerCase()
-      const filtered = options.filter((option) => option.toLowerCase().includes(searchTerm))
-      setFilteredOptions(filtered)
-    }, [inputValue, options])
-
-    const handleSelect = (selectedValue: string) => {
+      // For multiple values, only filter based on the current part being typed
+      let currentInput = value
       if (multiple) {
-        // For multiple selection, append the new value
-        const currentValues = values.filter((v) => v !== selectedValue)
-        const newValues = [...currentValues, selectedValue]
-        onSelect(newValues.join(`${separator} `))
-      } else {
-        // For single selection
-        onSelect(selectedValue)
+        const parts = value.split(separator)
+        currentInput = parts[parts.length - 1].trim()
       }
 
-      setInputValue("")
-      if (!multiple) setOpenState(false)
+      // Filter options that include the current input (case insensitive)
+      const filtered = options.filter((option) => option.toLowerCase().includes(currentInput.toLowerCase()))
+
+      setFilteredOptions(filtered)
+    }, [value, options, multiple, separator])
+
+    // Handle keyboard navigation
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        setHighlightedIndex((prev) => (prev < filteredOptions.length - 1 ? prev + 1 : 0))
+        setOpen(true)
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault()
+        setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : filteredOptions.length - 1))
+        setOpen(true)
+      } else if (e.key === "Enter" && highlightedIndex >= 0) {
+        e.preventDefault()
+        handleOptionSelect(filteredOptions[highlightedIndex])
+      } else if (e.key === "Escape") {
+        setOpen(false)
+      } else if (e.key === "Tab") {
+        setOpen(false)
+      }
+    }
+
+    const handleOptionSelect = (option: string) => {
+      if (multiple) {
+        const parts = value.split(separator)
+        parts[parts.length - 1] = option
+        const newValue = [...parts.slice(0, -1), option, ""].join(separator + " ")
+        onSelect(newValue)
+      } else {
+        onSelect(option)
+      }
+      setOpen(false)
+      setHighlightedIndex(-1)
+      inputRef.current?.focus()
     }
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-      const newValue = e.target.value
-      setInputValue(newValue)
-
-      if (allowCustomValues) {
-        if (multiple) {
-          // For multiple values, only update the current "active" value
-          const parts = value.split(separator)
-          parts[parts.length - 1] = newValue
-          onInputChange(parts.join(`${separator} `))
-        } else {
-          onInputChange(newValue)
-        }
-      }
+      onInputChange(e.target.value)
+      if (!open) setOpen(true)
+      setHighlightedIndex(-1)
     }
 
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Tab" && inputValue && filteredOptions.length > 0) {
-        e.preventDefault()
-        handleSelect(filteredOptions[0])
+    const handleInputFocus = () => {
+      if (onFocus) onFocus()
+      setOpen(true)
+    }
+
+    const handleInputBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+      // Check if the related target is inside the dropdown
+      if (dropdownRef.current?.contains(e.relatedTarget as Node)) {
+        return
       }
 
-      if (multiple && e.key === separator) {
-        e.preventDefault()
-        if (inputValue.trim()) {
-          handleSelect(inputValue.trim())
+      if (onBlur) onBlur()
+    }
+
+    // Close dropdown when clicking outside
+    useEffect(() => {
+      const handleClickOutside = (event: MouseEvent) => {
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(event.target as Node) &&
+          inputRef.current &&
+          !inputRef.current.contains(event.target as Node)
+        ) {
+          setOpen(false)
         }
       }
-    }
+
+      document.addEventListener("mousedown", handleClickOutside)
+      return () => {
+        document.removeEventListener("mousedown", handleClickOutside)
+      }
+    }, [])
 
     return (
-      <Popover open={isOpenState} onOpenChange={setOpenState}>
-        <PopoverTrigger asChild>
-          <div className="flex w-full relative">
-            <Input
-              ref={ref}
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              className={cn("w-full", className)}
-              onClick={() => setOpenState(true)}
-              onFocus={() => {
-                onFocus?.()
-                setOpenState(true)
-              }}
-              onBlur={() => {
-                onBlur?.()
-              }}
-            />
-            <Button
-              variant="outline"
-              role="combobox"
-              aria-expanded={isOpenState}
-              className="absolute right-0 px-3 focus:ring-0 focus:ring-offset-0"
-              onClick={() => setOpenState(!isOpenState)}
-              tabIndex={-1}
-            >
-              <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
-            </Button>
+      <div className="relative">
+        <Input
+          ref={ref || inputRef}
+          type="text"
+          value={value}
+          onChange={handleInputChange}
+          onFocus={handleInputFocus}
+          onBlur={handleInputBlur}
+          onKeyDown={handleKeyDown}
+          placeholder={placeholder}
+          className={className}
+          autoComplete="off"
+        />
+        {open && filteredOptions.length > 0 && (
+          <div
+            ref={dropdownRef}
+            className="absolute z-50 w-full mt-1 bg-gray-900 border border-gray-700 rounded-md shadow-lg max-h-60 overflow-auto"
+          >
+            <ul className="py-1">
+              {filteredOptions.map((option, index) => (
+                <li
+                  key={option}
+                  onClick={() => handleOptionSelect(option)}
+                  onMouseEnter={() => setHighlightedIndex(index)}
+                  className={cn(
+                    "px-3 py-2 cursor-pointer text-sm",
+                    highlightedIndex === index ? "bg-gray-800 text-white" : "hover:bg-gray-800 text-gray-300",
+                  )}
+                >
+                  {option}
+                </li>
+              ))}
+            </ul>
           </div>
-        </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start">
-          <Command>
-            <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
-            <CommandList>
-              <CommandEmpty>{emptyMessage}</CommandEmpty>
-              <CommandGroup className="max-h-60 overflow-auto">
-                {filteredOptions.map((option) => (
-                  <CommandItem key={option} value={option} onSelect={() => handleSelect(option)}>
-                    <Check className={cn("mr-2 h-4 w-4", values.includes(option) ? "opacity-100" : "opacity-0")} />
-                    {option}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            </CommandList>
-          </Command>
-        </PopoverContent>
-      </Popover>
+        )}
+      </div>
     )
   },
 )

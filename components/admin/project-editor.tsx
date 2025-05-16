@@ -324,10 +324,14 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         if (!mainVideos.includes(mediaUrl)) {
           setMainVideos((prev) => [...prev, mediaUrl])
         }
+
         // Store video URL in thumbnail_url if that column exists
         if (schemaColumns.includes("thumbnail_url")) {
           setThumbnailUrl(mediaUrl)
           setFormData((prev) => ({ ...prev, thumbnail_url: mediaUrl }))
+
+          // Process video URL to extract thumbnail and metadata
+          processVideoUrl(mediaUrl)
         }
       } else {
         if (!mainImages.includes(mediaUrl)) {
@@ -347,17 +351,107 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         }
       }
 
-      // If title is empty, try to extract a title from the filename
+      // If title is empty, try to extract a title from the filename or media metadata
       if (!formData.title) {
-        const filename = mediaUrl.split("/").pop()
-        if (filename) {
-          // Remove extension and replace dashes/underscores with spaces
-          const nameWithoutExt = filename.split(".")[0]
-          const title = nameWithoutExt.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) // Capitalize first letter of each word
+        // First try to get title from media table
+        const { data: mediaData } = await supabase
+          .from("media")
+          .select("filename, metadata")
+          .eq("public_url", mediaUrl)
+          .maybeSingle()
 
-          setFormData((prev) => ({ ...prev, title }))
+        if (mediaData) {
+          // Use title from metadata if available
+          if (mediaData.metadata?.title) {
+            setFormData((prev) => ({ ...prev, title: mediaData.metadata.title }))
+          }
+          // Otherwise use filename
+          else if (mediaData.filename) {
+            const title = mediaData.filename
+              .split(".")[0]
+              .replace(/[-_]/g, " ")
+              .replace(/\b\w/g, (l) => l.toUpperCase())
+
+            setFormData((prev) => ({ ...prev, title: title }))
+          }
+        } else {
+          // Fallback to extracting from URL
+          const filename = mediaUrl.split("/").pop()
+          if (filename) {
+            // Remove extension and replace dashes/underscores with spaces
+            const nameWithoutExt = filename.split(".")[0]
+            const title = nameWithoutExt.replace(/[-_]/g, " ").replace(/\b\w/g, (l) => l.toUpperCase()) // Capitalize first letter of each word
+
+            setFormData((prev) => ({ ...prev, title: title }))
+          }
         }
       }
+    }
+  }
+
+  // Add this new function to process video URLs from the media library
+  const processVideoUrl = async (url: string) => {
+    if (!url) return
+
+    const videoInfo = extractVideoInfo(url)
+    if (!videoInfo) return
+
+    setIsProcessingVideo(true)
+
+    try {
+      let thumbnailUrl = null
+      let videoTitle = null
+      let uploadDate = null
+
+      if (videoInfo.platform === "vimeo") {
+        // Get video thumbnail from Vimeo API
+        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+
+        if (response.ok) {
+          const videoData = await response.json()
+          const video = videoData[0]
+          thumbnailUrl = video.thumbnail_large
+          videoTitle = video.title
+          uploadDate = video.upload_date
+        }
+      } else if (videoInfo.platform === "youtube") {
+        // Use YouTube thumbnail URL format
+        thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
+
+        // Try to get YouTube video title (would need a server API call)
+        // This is simplified - in production you'd use the YouTube API
+        videoTitle = `YouTube Video ${videoInfo.id}`
+      }
+
+      if (thumbnailUrl) {
+        setVideoThumbnail(thumbnailUrl)
+
+        // If no image is set yet, use the video thumbnail
+        if (!formData.image) {
+          setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
+          setIsUsingVideoThumbnail(true)
+
+          // Add to mainImages if not already there
+          if (!mainImages.includes(thumbnailUrl)) {
+            setMainImages((prev) => [...prev, thumbnailUrl])
+          }
+        }
+      }
+
+      // Set title if available and current title is empty
+      if (videoTitle && !formData.title) {
+        setFormData((prev) => ({ ...prev, title: videoTitle }))
+      }
+
+      // Set project date if available and current date is empty
+      if (uploadDate && !formData.project_date) {
+        const date = new Date(uploadDate)
+        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+      }
+    } catch (err) {
+      console.error("Error processing video URL:", err)
+    } finally {
+      setIsProcessingVideo(false)
     }
   }
 

@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -31,8 +31,28 @@ export default function ProjectMediaUploader({
   const [videoUrl, setVideoUrl] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [existingMediaUrls, setExistingMediaUrls] = useState<string[]>([])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const supabase = getSupabaseBrowserClient()
+
+  // Fetch existing media URLs on component mount
+  useEffect(() => {
+    async function fetchExistingMedia() {
+      try {
+        const { data } = await supabase.from("media").select("public_url")
+        if (data) {
+          setExistingMediaUrls(data.map((item) => item.public_url).filter(Boolean))
+        }
+      } catch (error) {
+        console.error("Error fetching existing media:", error)
+      }
+    }
+
+    // Only run in browser
+    if (typeof window !== "undefined") {
+      fetchExistingMedia()
+    }
+  }, [])
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
@@ -193,6 +213,9 @@ export default function ProjectMediaUploader({
         }
 
         uploadedUrls.push(publicUrl)
+
+        // Add to existing media URLs for future duplicate checks
+        setExistingMediaUrls((prev) => [...prev, publicUrl])
       }
 
       // Call the onMediaSelect callback with all uploaded URLs
@@ -224,13 +247,28 @@ export default function ProjectMediaUploader({
     }
   }
 
-  const handleVideoUrlSubmit = (e: React.FormEvent) => {
+  const handleVideoUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!videoUrl.trim()) return
 
-    if (onVideoUrlSubmit) {
-      onVideoUrlSubmit(videoUrl.trim())
-      setVideoUrl("")
+    // Check if this URL already exists in the media library
+    const urlExists = existingMediaUrls.includes(videoUrl.trim())
+
+    if (urlExists) {
+      // If URL exists, just pass it to the callback without showing an error
+      if (onVideoUrlSubmit) {
+        onVideoUrlSubmit(videoUrl.trim())
+        setVideoUrl("")
+      }
+    } else {
+      // If URL is new, pass it to the callback
+      if (onVideoUrlSubmit) {
+        onVideoUrlSubmit(videoUrl.trim())
+        setVideoUrl("")
+
+        // Add to existing media URLs for future duplicate checks
+        setExistingMediaUrls((prev) => [...prev, videoUrl.trim()])
+      }
     }
   }
 

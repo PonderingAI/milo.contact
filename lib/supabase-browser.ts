@@ -7,10 +7,14 @@
 
 import { createClient as supabaseCreateClient } from "@supabase/supabase-js"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import type { Database } from "./database.types"
 
 // Singleton instances
 let browserClient: SupabaseClient | null = null
 let adminClient: SupabaseClient | null = null
+// Create a singleton instance of the Supabase client for client components
+let supabaseBrowserClient: ReturnType<typeof createClientComponentClient<Database>> | null = null
 
 /**
  * Create a Supabase client (compatibility export for existing code)
@@ -25,34 +29,31 @@ export const createClient = (options = {}): SupabaseClient => {
  * Uses singleton pattern to prevent multiple instances
  */
 export function getSupabaseBrowserClient(): SupabaseClient {
-  // For SSR, create a temporary non-persistent client
-  if (typeof window === "undefined") {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-    return supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    })
+  if (!supabaseBrowserClient) {
+    // Only create the client in browser environments
+    if (typeof window !== "undefined") {
+      supabaseBrowserClient = createClientComponentClient<Database>()
+    } else {
+      // Return a mock client for server-side rendering that won't cause errors
+      return {
+        auth: {
+          getSession: () => Promise.resolve({ data: { session: null }, error: null }),
+          onAuthStateChange: () => ({ data: null, error: null, subscription: { unsubscribe: () => {} } }),
+        },
+        // Add other necessary mock methods
+        from: () => ({
+          select: () => ({ data: null, error: null }),
+        }),
+        storage: {
+          from: () => ({
+            upload: () => Promise.resolve({ data: null, error: null }),
+            getPublicUrl: () => ({ data: { publicUrl: "" } }),
+          }),
+        },
+      } as any
+    }
   }
-
-  // For client-side, use the singleton pattern
-  if (!browserClient) {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-
-    browserClient = supabaseCreateClient(supabaseUrl, supabaseAnonKey, {
-      auth: {
-        storageKey: "milo-portfolio-auth",
-        persistSession: true,
-        autoRefreshToken: true,
-      },
-    })
-  }
-
-  return browserClient
+  return supabaseBrowserClient
 }
 
 /**
@@ -92,4 +93,9 @@ export function createAdminClient(): SupabaseClient {
 export function resetBrowserClient(): void {
   browserClient = null
   adminClient = null
+}
+
+// Reset the client (useful for testing or when auth state changes)
+export function resetSupabaseBrowserClient() {
+  supabaseBrowserClient = null
 }
