@@ -34,7 +34,7 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
             // @ts-ignore
             newSettings[item.key] = item.value
           })
-          console.log("Loaded settings:", newSettings)
+          console.log("Loaded hero settings:", newSettings)
           setSettings(newSettings)
         }
       } catch (err) {
@@ -45,20 +45,31 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
     loadSettings()
   }, [])
 
-  // Force using latest project video if available
-  const useLatestProjectVideo = settings.hero_bg_type === "latest_project" && latestProject?.video_url
-
   // Debug logs
-  console.log("Hero bg type:", settings.hero_bg_type)
+  console.log("Hero section rendering with settings:", settings)
   console.log("Latest project:", latestProject)
-  console.log("Latest project video:", latestProject?.video_url)
-  console.log("Using latest project video:", useLatestProjectVideo)
 
-  // Extract video info if using latest project video
+  // Determine what to show as background
+  let backgroundType = "image"
+  let backgroundMedia = settings.image_hero_bg
   let videoInfo = null
-  if (useLatestProjectVideo && latestProject?.video_url) {
+
+  // Case 1: Latest project video
+  if (settings.hero_bg_type === "latest_project" && latestProject?.video_url) {
+    backgroundType = "video"
+    backgroundMedia = latestProject.video_url
     videoInfo = extractVideoInfo(latestProject.video_url)
-    console.log("Video info extracted:", videoInfo)
+    console.log("Using latest project video:", backgroundMedia, videoInfo)
+  }
+  // Case 2: Video URL in settings
+  else if (settings.hero_bg_type === "video" && settings.image_hero_bg) {
+    backgroundType = "video"
+    videoInfo = extractVideoInfo(settings.image_hero_bg)
+    console.log("Using video from settings:", backgroundMedia, videoInfo)
+  }
+  // Case 3: Image background (default)
+  else {
+    console.log("Using image background:", backgroundMedia)
   }
 
   const scrollToProjects = () => {
@@ -71,18 +82,16 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
   return (
     <section className="relative h-screen flex items-center justify-center overflow-hidden">
       {/* Background */}
-      {useLatestProjectVideo && videoInfo ? (
-        // Use latest project video
+      {backgroundType === "video" && videoInfo ? (
         <VideoBackground
           platform={videoInfo.platform}
           videoId={videoInfo.id}
           fallbackImage={latestProject?.image || settings.image_hero_bg}
         />
       ) : (
-        // Use image background
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${settings.image_hero_bg})` }}
+          style={{ backgroundImage: `url(${backgroundMedia})` }}
         />
       )}
 

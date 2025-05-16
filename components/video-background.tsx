@@ -29,7 +29,7 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
     }, 5000)
 
     return () => clearTimeout(timer)
-  }, [platform, videoId])
+  }, [platform, videoId, isLoaded])
 
   const handleLoad = () => {
     console.log("Video loaded successfully")
@@ -77,17 +77,14 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
       <div className="absolute inset-0 w-full h-full">
         <iframe
           src={videoSrc}
-          className={`absolute w-full h-full transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}
+          className={`absolute transition-opacity duration-500 ${isLoaded ? "opacity-100" : "opacity-0"}`}
           style={{
             position: "absolute",
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            minWidth: "100%",
-            minHeight: "100%",
-            width: "auto",
-            height: "auto",
-            aspectRatio: "16/9",
+            width: "100%",
+            height: "100%",
             objectFit: "contain",
           }}
           frameBorder="0"

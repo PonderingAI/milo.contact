@@ -33,11 +33,10 @@ export default function NewProjectPage() {
     image: "",
     video_url: "",
     description: "",
-    special_notes: "",
+    // Removed special_notes field as it doesn't exist in the database
     project_date: new Date().toISOString().split("T")[0], // Default to today
     is_public: true, // Default to public
     publish_date: null, // No scheduled publish date by default
-    tags: [],
   })
 
   // State to track the role input for tag extraction
@@ -111,17 +110,10 @@ export default function NewProjectPage() {
     const value = e.target.value
     setRoleInput(value)
 
-    // Extract tags from comma-separated role input
-    const tags = value
-      .split(",")
-      .map((tag) => tag.trim())
-      .filter((tag) => tag)
-
-    // Update both role and tags
+    // Update role in form data
     setFormData((prev) => ({
       ...prev,
       role: value,
-      tags: tags,
     }))
   }
 
@@ -401,6 +393,9 @@ export default function NewProjectPage() {
         return
       }
 
+      // Log the data being sent to the server
+      console.log("Saving project with data:", formData)
+
       // Create in Supabase
       const { data, error: projectError } = await supabase.from("projects").insert([formData]).select()
 
@@ -545,13 +540,16 @@ export default function NewProjectPage() {
                   />
                   <p className="text-xs text-gray-500 mt-1">Separate multiple roles/tags with commas</p>
 
-                  {formData.tags.length > 0 && (
+                  {roleInput && (
                     <div className="flex flex-wrap gap-2 mt-2">
-                      {formData.tags.map((tag, index) => (
-                        <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
-                          {tag}
-                        </span>
-                      ))}
+                      {roleInput.split(",").map(
+                        (tag, index) =>
+                          tag.trim() && (
+                            <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
+                              {tag.trim()}
+                            </span>
+                          ),
+                      )}
                     </div>
                   )}
                 </div>
