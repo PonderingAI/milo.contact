@@ -1,28 +1,18 @@
 import { Suspense } from "react"
 import ProjectsContent from "./projects-content"
-import { getProjects, mockProjects } from "@/lib/project-data"
+import type { Metadata } from "next"
 
-export default async function ProjectsPage() {
-  // In production, fetch projects from Supabase
-  // For development, use mock data
-  let projects
-  try {
-    projects = await getProjects()
-    // If no projects are returned (e.g., during development without Supabase),
-    // fall back to mock data
-    if (projects.length === 0) {
-      projects = mockProjects
-    }
-  } catch (error) {
-    console.error("Error fetching projects:", error)
-    projects = mockProjects
-  }
+export const metadata: Metadata = {
+  title: "Projects | Milo Presedo",
+  description: "Explore Milo Presedo's portfolio of film, photography, and creative projects.",
+}
 
+export default function ProjectsPage() {
   return (
     <main className="min-h-screen bg-black text-white">
-      <div className="container mx-auto px-4 py-24">
+      <div className="container mx-auto px-4 py-12">
         <Suspense fallback={<div>Loading projects...</div>}>
-          <ProjectsContent initialProjects={projects} />
+          <ProjectsContent />
         </Suspense>
       </div>
     </main>
