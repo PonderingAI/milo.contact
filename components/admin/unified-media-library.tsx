@@ -23,6 +23,7 @@ import {
   Plus,
   X,
   CheckCircle,
+  Info,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { extractVideoInfo } from "@/lib/project-data"
@@ -58,10 +59,11 @@ interface MediaItem {
 
 interface UploadStatus {
   file: File
-  status: "pending" | "uploading" | "success" | "error"
+  status: "pending" | "uploading" | "success" | "error" | "duplicate"
   progress: number
   error?: string
   response?: any
+  duplicateId?: string
 }
 
 export default function UnifiedMediaLibrary() {
@@ -83,6 +85,7 @@ export default function UnifiedMediaLibrary() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
+  const [duplicateItems, setDuplicateItems] = useState<Record<string, string>>({}) // Maps file/URL to existing item ID
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = createClientComponentClient()
@@ -96,6 +99,8 @@ export default function UnifiedMediaLibrary() {
   const [newTag, setNewTag] = useState("")
   const [editingTags, setEditingTags] = useState<string[]>([])
   const [imageLoadError, setImageLoadError] = useState<Record<string, boolean>>({})
+  const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
+  const [currentDuplicates, setCurrentDuplicates] = useState<{ url: string; existingItem: any }[]>([])
 
   useEffect(() => {
     fetchMedia()
@@ -496,17 +501,24 @@ export default function UnifiedMediaLibrary() {
                 existingFile: result.existingFile,
               })
 
-              // Mark as success but with duplicate flag
+              // Mark as duplicate
               setUploadQueue((prev) => {
                 const updated = [...prev]
                 updated[queueIndex] = {
                   ...updated[queueIndex],
-                  status: "success",
+                  status: "duplicate",
                   progress: 100,
-                  response: { ...result, isDuplicate: true },
+                  response: result,
+                  duplicateId: result.existingFile?.id,
                 }
                 return updated
               })
+
+              // Add to duplicates map
+              setDuplicateItems((prev) => ({
+                ...prev,
+                [item.file.name]: result.existingFile?.id,
+              }))
             } else {
               // Success
               setUploadQueue((prev) => {
@@ -542,7 +554,7 @@ export default function UnifiedMediaLibrary() {
     setIsProcessingQueue(false)
 
     // Count results
-    const successful = uploadQueue.filter((item) => item.status === "success" && !item.response?.isDuplicate).length
+    const successful = uploadQueue.filter((item) => item.status === "success").length
     const converted = uploadQueue.filter((item) => item.status === "success" && item.response?.convertedToWebP).length
     const failed = uploadQueue.filter((item) => item.status === "error").length
     const pending = uploadQueue.filter((item) => item.status === "pending").length
@@ -608,8 +620,10 @@ export default function UnifiedMediaLibrary() {
     setUploadingVideo(true)
     let successCount = 0
     let failCount = 0
+    let duplicateCount = 0
     const results = { vimeo: 0, youtube: 0, linkedin: 0 }
     const processedUrls = new Set() // Track processed URLs to avoid duplicates
+    const foundDuplicates: { url: string; existingItem: any }[] = []
 
     try {
       // First check if the media table exists
@@ -642,70 +656,15 @@ export default function UnifiedMediaLibrary() {
 
           processedUrls.add(url)
 
+          // Check if this URL is valid
           const videoInfo = extractVideoInfo(url)
-
           if (!videoInfo) {
-            throw new Error("Invalid video URL")
+            failCount++
+            console.warn(`Invalid video URL format: ${url}`)
+            continue
           }
 
-          let thumbnailUrl = null
-          let videoTitle = null
-          let videoMetadata = {}
-
-          if (videoInfo.platform === "vimeo") {
-            // Get video thumbnail and metadata
-            const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-
-            if (!response.ok) {
-              throw new Error("Failed to fetch Vimeo video info")
-            }
-
-            const videoData = await response.json()
-            const video = videoData[0]
-
-            thumbnailUrl = video.thumbnail_large
-            videoTitle = video.title || `Vimeo ${videoInfo.id}`
-            videoMetadata = {
-              vimeoId: videoInfo.id,
-              description: video.description,
-              duration: video.duration,
-              uploadDate: video.upload_date,
-            }
-
-            results.vimeo++
-          } else if (videoInfo.platform === "youtube") {
-            // Use YouTube thumbnail URL format
-            thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-            videoTitle = `YouTube ${videoInfo.id}`
-            videoMetadata = {
-              youtubeId: videoInfo.id,
-            }
-
-            results.youtube++
-          } else if (videoInfo.platform === "linkedin") {
-            // LinkedIn doesn't provide easy thumbnail access, use a placeholder
-            thumbnailUrl = "/generic-icon.png"
-            videoTitle = `LinkedIn Post ${videoInfo.id}`
-            videoMetadata = {
-              linkedinId: videoInfo.id,
-            }
-
-            results.linkedin++
-          } else {
-            throw new Error("Unsupported video platform")
-          }
-
-          // Get current user session
-          const {
-            data: { session },
-          } = await supabase.auth.getSession()
-          const userId = session?.user?.id || "anonymous"
-
-          // Add user ID to metadata
-          videoMetadata.uploadedBy = userId
-
-          // Save to media table
-          // Use the API endpoint instead of direct database access
+          // Process the video URL through the API
           const response = await fetch("/api/process-video-url", {
             method: "POST",
             headers: {
@@ -717,12 +676,34 @@ export default function UnifiedMediaLibrary() {
             }),
           })
 
+          const result = await response.json()
+
           if (!response.ok) {
-            const errorData = await response.json()
-            throw new Error(errorData.error || "Failed to process video URL")
+            throw new Error(result.error || "Failed to process video URL")
           }
 
-          const result = await response.json()
+          // Check if it was a duplicate
+          if (result.duplicate) {
+            duplicateCount++
+            foundDuplicates.push({
+              url,
+              existingItem: result.existingVideo,
+            })
+
+            // Add to duplicates map
+            setDuplicateItems((prev) => ({
+              ...prev,
+              [url]: result.existingVideo?.id,
+            }))
+
+            continue
+          }
+
+          // Count by platform
+          if (videoInfo.platform === "vimeo") results.vimeo++
+          else if (videoInfo.platform === "youtube") results.youtube++
+          else if (videoInfo.platform === "linkedin") results.linkedin++
+
           successCount++
         } catch (err) {
           console.error("Error processing video URL:", url, err)
@@ -738,9 +719,15 @@ export default function UnifiedMediaLibrary() {
 
       toast({
         title: successCount > 0 ? "Success" : "Error",
-        description: `${successMessage}${failCount > 0 ? `, ${failCount} failed` : ""}`,
+        description: `${successMessage}${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ""}${failCount > 0 ? `, ${failCount} failed` : ""}`,
         variant: successCount > 0 ? "default" : "destructive",
       })
+
+      // If there were duplicates, show them in a dialog
+      if (duplicateCount > 0) {
+        setCurrentDuplicates(foundDuplicates)
+        setDuplicateDialogOpen(true)
+      }
 
       // Reset form if any successful and refresh
       if (successCount > 0) {
@@ -945,6 +932,25 @@ export default function UnifiedMediaLibrary() {
       ...prev,
       [id]: true,
     }))
+  }
+
+  const highlightDuplicate = (id: string) => {
+    if (!id) return
+
+    // Close the dialog
+    setDuplicateDialogOpen(false)
+
+    // Highlight the item in the grid
+    setTimeout(() => {
+      const element = document.getElementById(`media-item-${id}`)
+      if (element) {
+        element.scrollIntoView({ behavior: "smooth", block: "center" })
+        element.classList.add("ring-2", "ring-yellow-500", "ring-offset-2", "ring-offset-black")
+        setTimeout(() => {
+          element.classList.remove("ring-2", "ring-yellow-500", "ring-offset-2", "ring-offset-black")
+        }, 3000)
+      }
+    }, 300)
   }
 
   function renderMediaItem(item: MediaItem) {
@@ -1358,6 +1364,7 @@ export default function UnifiedMediaLibrary() {
                     )}
                     {item.status === "uploading" && `${item.progress}%`}
                     {item.status === "success" && "Complete"}
+                    {item.status === "duplicate" && "Duplicate"}
                     {item.status === "error" && "Failed"}
                   </span>
                 </div>
@@ -1366,6 +1373,16 @@ export default function UnifiedMediaLibrary() {
                   <div className="text-xs text-red-400 flex items-center gap-1 mt-1">
                     <AlertCircle className="h-3 w-3" />
                     {item.error || "Upload failed"}
+                  </div>
+                )}
+
+                {item.status === "duplicate" && (
+                  <div className="text-xs text-yellow-400 flex items-center gap-1 mt-1">
+                    <Info className="h-3 w-3" />
+                    <span>Duplicate file - </span>
+                    <button className="text-blue-400 underline" onClick={() => highlightDuplicate(item.duplicateId)}>
+                      View existing
+                    </button>
                   </div>
                 )}
               </div>
@@ -1451,6 +1468,32 @@ export default function UnifiedMediaLibrary() {
             </Button>
             <Button onClick={handleSaveEdit}>Save Changes</Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Videos Dialog */}
+      <Dialog open={duplicateDialogOpen} onOpenChange={setDuplicateDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Duplicate Videos Detected</DialogTitle>
+            <DialogDescription>The following videos already exist in your media library</DialogDescription>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] overflow-y-auto">
+            {currentDuplicates.map((item, index) => (
+              <div key={index} className="mb-3 p-3 bg-gray-900 rounded-md flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium">{item.existingItem?.filename}</p>
+                  <p className="text-xs text-gray-400 truncate">{item.url}</p>
+                </div>
+                <Button size="sm" variant="outline" onClick={() => highlightDuplicate(item.existingItem?.id)}>
+                  View in Library
+                </Button>
+              </div>
+            ))}
+          </div>
+
+          <Button onClick={() => setDuplicateDialogOpen(false)}>Close</Button>
         </DialogContent>
       </Dialog>
 

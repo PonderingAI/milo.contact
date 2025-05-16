@@ -18,6 +18,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid video URL format" }, { status: 400 })
     }
 
+    // First check if this video URL already exists in the database
+    const { data: existingVideos, error: checkError } = await supabase
+      .from("media")
+      .select("id, filename, public_url, filepath, filetype")
+      .or(`public_url.eq.${url},filepath.eq.${url},metadata->${videoInfo.platform}Id.eq.${videoInfo.id}`)
+      .limit(1)
+
+    if (checkError) {
+      console.error("Error checking for duplicate videos:", checkError)
+    } else if (existingVideos && existingVideos.length > 0) {
+      // Duplicate found
+      console.log("Duplicate video found:", existingVideos[0])
+      return NextResponse.json(
+        {
+          duplicate: true,
+          existingVideo: existingVideos[0],
+          message: `Video already exists as "${existingVideos[0].filename}"`,
+        },
+        { status: 200 },
+      )
+    }
+
     // Process based on platform
     let thumbnailUrl = null
     let videoTitle = null
@@ -67,6 +89,7 @@ export async function POST(request: NextRequest) {
           uploadedBy: "admin", // Since we're using the admin client
           isBts: isBts,
           uploadDate: uploadDate,
+          originalUrl: url,
         },
       })
       .select()

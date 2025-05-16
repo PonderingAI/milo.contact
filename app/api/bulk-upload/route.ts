@@ -23,6 +23,7 @@ export async function POST(request: Request) {
 
     // Calculate file hash for duplicate detection
     const fileHash = crypto.createHash("md5").update(fileBuffer).digest("hex")
+    console.log(`Calculated hash for ${filename}: ${fileHash}`)
 
     // Create Supabase client
     const supabase = createServerClient()
@@ -30,14 +31,15 @@ export async function POST(request: Request) {
     // Check for duplicates by hash
     const { data: existingFiles, error: queryError } = await supabase
       .from("media")
-      .select("id, filename, public_url")
-      .eq("metadata->fileHash", fileHash)
+      .select("id, filename, public_url, filepath, filetype")
+      .or(`metadata->fileHash.eq.${fileHash},filepath.eq.${filename}`)
       .limit(1)
 
     if (queryError) {
       console.error("Error checking for duplicates:", queryError)
     } else if (existingFiles && existingFiles.length > 0) {
       // Duplicate found
+      console.log("Duplicate file found:", existingFiles[0])
       return NextResponse.json(
         {
           duplicate: true,
@@ -138,6 +140,7 @@ export async function POST(request: Request) {
         originalType: file.type,
         fileHash: fileHash,
         convertedToWebP,
+        originalFilename: filename,
       },
     })
 
