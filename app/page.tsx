@@ -12,11 +12,11 @@ async function getLatestProject() {
   try {
     const supabase = createAdminClient()
 
-    // Get the latest project with a video_url
+    // Get the latest project with a thumbnail_url instead of video_url
     const { data, error } = await supabase
       .from("projects")
       .select("*")
-      .not("video_url", "is", null)
+      .not("thumbnail_url", "is", null)
       .order("created_at", { ascending: false })
       .limit(1)
 

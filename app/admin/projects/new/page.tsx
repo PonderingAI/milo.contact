@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Loader2, ArrowLeft, Save, X, ImageIcon, Film, Calendar, AlertCircle } from "lucide-react"
@@ -16,7 +16,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import ProjectMediaUploader from "@/components/admin/project-media-uploader"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Autocomplete } from "@/components/ui/autocomplete"
+import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -53,6 +53,14 @@ export default function NewProjectPage() {
   // Add state for suggestions
   const [categoryOptions, setCategoryOptions] = useState<string[]>([])
   const [roleOptions, setRoleOptions] = useState<string[]>([])
+
+  // Add refs for the input elements
+  const categoryInputRef = useRef<HTMLInputElement>(null)
+  const roleInputRef = useRef<HTMLInputElement>(null)
+
+  // Add state for tracking whether autocomplete dropdowns are open
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false)
+  const [isRoleOpen, setIsRoleOpen] = useState(false)
 
   // Fetch the actual schema columns when the component mounts
   useEffect(() => {
@@ -446,6 +454,8 @@ export default function NewProjectPage() {
         description: error instanceof Error ? error.message : "Failed to process video URL",
         variant: "destructive",
       })
+    } finally {
+      setProcessingVideo(false)
     }
   }
 
@@ -635,28 +645,46 @@ export default function NewProjectPage() {
                 {/* Replace the category input with Autocomplete (in the Project Details card) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
-                  <Autocomplete
+                  <SimpleAutocomplete
+                    ref={categoryInputRef}
                     options={categoryOptions}
                     value={formData.category}
-                    onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                    onInputChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                    onSelect={(value) => setFormData((prev) => ({ ...prev, category: value }))}
                     placeholder="e.g. Short Film, Music Video"
                     className="border-gray-800 bg-[#0f1520] text-gray-200"
                     allowCustomValues={true}
+                    isOpen={isCategoryOpen}
+                    onOpenChange={setIsCategoryOpen}
+                    onBlur={() => setTimeout(() => setIsCategoryOpen(false), 100)}
+                    onFocus={() => setIsCategoryOpen(true)}
                   />
                 </div>
 
                 {/* Replace the role input with Autocomplete (in the Project Details card) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Role/Tags</label>
-                  <Autocomplete
+                  <SimpleAutocomplete
+                    ref={roleInputRef}
                     options={roleOptions}
                     value={roleInput}
-                    onChange={setRoleInput}
+                    onInputChange={setRoleInput}
+                    onSelect={(value) => {
+                      setRoleInput(value)
+                      setFormData((prev) => ({
+                        ...prev,
+                        role: value,
+                      }))
+                    }}
                     placeholder="e.g. Director, 1st AC (comma-separated)"
                     className="border-gray-800 bg-[#0f1520] text-gray-200"
                     allowCustomValues={true}
                     multiple={true}
                     separator=","
+                    isOpen={isRoleOpen}
+                    onOpenChange={setIsRoleOpen}
+                    onBlur={() => setTimeout(() => setIsRoleOpen(false), 100)}
+                    onFocus={() => setIsRoleOpen(true)}
                   />
                   <p className="text-xs text-gray-500 mt-1">Separate multiple roles/tags with commas</p>
 

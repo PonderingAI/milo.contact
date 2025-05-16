@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
@@ -17,7 +17,7 @@ import ImageUploader from "@/components/admin/image-uploader"
 import MediaSelector from "@/components/admin/media-selector"
 import { toast } from "@/components/ui/use-toast"
 import Image from "next/image"
-import { Autocomplete } from "@/components/ui/autocomplete"
+import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 
 interface ProjectFormProps {
   project?: {
@@ -51,9 +51,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   // State to track the role input for tag extraction
   const [roleInput, setRoleInput] = useState(project?.role || "")
 
-  // Add state for suggestions
+  // State for suggestions
   const [categoryOptions, setCategoryOptions] = useState<string[]>([])
   const [roleOptions, setRoleOptions] = useState<string[]>([])
+
+  // State for autocomplete dropdowns
+  const [isCategoryOpen, setIsCategoryOpen] = useState(false)
+  const [isRoleOpen, setIsRoleOpen] = useState(false)
+
+  // Refs for input elements
+  const categoryInputRef = useRef<HTMLInputElement>(null)
+  const roleInputRef = useRef<HTMLInputElement>(null)
 
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -117,7 +125,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     fetchSchema()
   }, [supabase])
 
-  // Add this useEffect to fetch existing categories and roles
+  // Fetch existing categories and roles for suggestions
   useEffect(() => {
     async function fetchExistingValues() {
       try {
@@ -149,9 +157,37 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     fetchExistingValues()
   }, [])
 
+  // Handle input focus/blur for autocomplete
+  const handleInputFocus = (field: "category" | "role") => {
+    if (field === "category") {
+      setIsCategoryOpen(true)
+    } else {
+      setIsRoleOpen(true)
+    }
+  }
+
+  const handleInputBlur = (field: "category" | "role") => {
+    // Use a timeout to allow clicks on dropdown items to register
+    setTimeout(() => {
+      if (field === "category") {
+        setIsCategoryOpen(false)
+      } else {
+        setIsRoleOpen(false)
+      }
+    }, 200)
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+
+    // If changing category or role, show autocomplete
+    if (name === "category") {
+      setIsCategoryOpen(true)
+    } else if (name === "role") {
+      setRoleInput(value)
+      setIsRoleOpen(true)
+    }
   }
 
   const handleSelectChange = (name: string, value: string | boolean) => {
@@ -161,12 +197,22 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const handleRoleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setRoleInput(value)
+    setIsRoleOpen(true)
 
     // Update role in form data
     setFormData((prev) => ({
       ...prev,
       role: value,
     }))
+  }
+
+  const handleCategorySelect = (selected: string) => {
+    setFormData((prev) => ({ ...prev, category: selected }))
+  }
+
+  const handleRoleSelect = (selected: string) => {
+    setRoleInput(selected)
+    setFormData((prev) => ({ ...prev, role: selected }))
   }
 
   const handleImageUpload = (url: string) => {
@@ -307,7 +353,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     return null
   }
 
-  // Add console logging to see what's being submitted
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -336,7 +381,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       console.log("Form data before submission:", formData)
       console.log("Clean data being sent to API:", cleanData)
 
-      // Make sure role is properly formatted (it might be coming from roleInput)
+      // Make sure role is properly formatted
       if (roleInput && !cleanData.role) {
         cleanData.role = roleInput
       }
@@ -424,32 +469,64 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           />
         </div>
 
-        {/* Replace the category input with Autocomplete */}
         <div className="space-y-2">
           <Label htmlFor="category">Category *</Label>
-          <Autocomplete
-            options={categoryOptions}
-            value={formData.category}
-            onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
-            placeholder="e.g. Short Film, Music Video, etc."
-            className="bg-gray-800 border-gray-700"
-            allowCustomValues={true}
-          />
+          <div className="relative">
+            <Input
+              id="category"
+              name="category"
+              value={formData.category}
+              onChange={handleChange}
+              onFocus={() => handleInputFocus("category")}
+              onBlur={() => handleInputBlur("category")}
+              placeholder="e.g. Short Film, Music Video, etc."
+              className="bg-gray-800 border-gray-700"
+              required
+              ref={categoryInputRef}
+            />
+            {isCategoryOpen && (
+              <SimpleAutocomplete
+                inputRef={categoryInputRef}
+                options={categoryOptions}
+                value={formData.category}
+                onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
+                onSelect={handleCategorySelect}
+                isOpen={isCategoryOpen}
+                setIsOpen={setIsCategoryOpen}
+              />
+            )}
+          </div>
         </div>
 
-        {/* Replace the role input with Autocomplete */}
         <div className="space-y-2">
           <Label htmlFor="role">Role/Tags *</Label>
-          <Autocomplete
-            options={roleOptions}
-            value={roleInput}
-            onChange={setRoleInput}
-            placeholder="e.g. Director, 1st AC, etc. (comma-separated)"
-            className="bg-gray-800 border-gray-700"
-            allowCustomValues={true}
-            multiple={true}
-            separator=","
-          />
+          <div className="relative">
+            <Input
+              id="role"
+              name="role"
+              value={roleInput}
+              onChange={handleRoleChange}
+              onFocus={() => handleInputFocus("role")}
+              onBlur={() => handleInputBlur("role")}
+              placeholder="e.g. Director, 1st AC, etc. (comma-separated)"
+              className="bg-gray-800 border-gray-700"
+              required
+              ref={roleInputRef}
+            />
+            {isRoleOpen && (
+              <SimpleAutocomplete
+                inputRef={roleInputRef}
+                options={roleOptions}
+                value={roleInput}
+                onChange={setRoleInput}
+                onSelect={handleRoleSelect}
+                isOpen={isRoleOpen}
+                setIsOpen={setIsRoleOpen}
+                isMultiple={true}
+                separator=","
+              />
+            )}
+          </div>
           <p className="text-xs text-gray-400">Separate multiple roles/tags with commas</p>
 
           {roleInput && (
