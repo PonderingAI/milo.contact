@@ -64,7 +64,7 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
             src={`https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}&modestbranding=1`}
             className="absolute top-0 left-0 w-full h-full"
             frameBorder="0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allow="autoplay; clipboard-write; encrypted-media; picture-in-picture"
             allowFullScreen
             title="Background Video"
             onLoad={handleLoad}
