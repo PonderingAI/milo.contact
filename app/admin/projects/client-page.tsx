@@ -91,28 +91,28 @@ export default function ProjectsClientPage() {
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent" />
+
+                {/* Project info at bottom left */}
                 <div className="absolute bottom-0 left-0 p-4">
                   <h3 className="text-lg font-medium text-white">{project.title}</h3>
                   <p className="text-sm text-gray-300">
                     {project.category} • {project.role}
                   </p>
+                  <div className="text-xs text-gray-400 mt-1 capitalize">{project.type}</div>
                 </div>
-              </div>
-              <div className="p-4 flex justify-between items-center">
-                <div className="text-sm text-gray-400">
-                  <span className="capitalize">{project.type}</span>
-                </div>
-                <div className="flex gap-2">
+
+                {/* Action buttons at top right */}
+                <div className="absolute top-2 right-2 flex gap-2">
                   <Link href={`/projects/${project.id}`} target="_blank">
-                    <Button variant="ghost" size="icon">
+                    <Button variant="secondary" size="icon" className="bg-gray-800/80 hover:bg-gray-700/80">
                       <ExternalLink size={16} />
                       <span className="sr-only">View</span>
                     </Button>
                   </Link>
-                  <Link href={`/admin/edit-project/${project.id}`} className="...">
-                    <Button variant="outline" size="sm">
-                      <Edit size={16} className="mr-1" />
-                      Edit
+                  <Link href={`/admin/edit-project/${project.id}`}>
+                    <Button variant="secondary" size="icon" className="bg-gray-800/80 hover:bg-gray-700/80">
+                      <Edit size={16} />
+                      <span className="sr-only">Edit</span>
                     </Button>
                   </Link>
                 </div>
