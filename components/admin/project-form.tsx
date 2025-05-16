@@ -17,6 +17,7 @@ import ImageUploader from "@/components/admin/image-uploader"
 import MediaSelector from "@/components/admin/media-selector"
 import { toast } from "@/components/ui/use-toast"
 import Image from "next/image"
+import { Autocomplete } from "@/components/ui/autocomplete"
 
 interface ProjectFormProps {
   project?: {
@@ -49,6 +50,10 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
   // State to track the role input for tag extraction
   const [roleInput, setRoleInput] = useState(project?.role || "")
+
+  // Add state for suggestions
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([])
+  const [roleOptions, setRoleOptions] = useState<string[]>([])
 
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -111,6 +116,38 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
     fetchSchema()
   }, [supabase])
+
+  // Add this useEffect to fetch existing categories and roles
+  useEffect(() => {
+    async function fetchExistingValues() {
+      try {
+        const supabase = getSupabaseBrowserClient()
+
+        // Fetch categories
+        const { data: categoryData } = await supabase.from("projects").select("category")
+
+        if (categoryData) {
+          const categories = categoryData.map((item) => item.category).filter(Boolean)
+          setCategoryOptions(categories)
+        }
+
+        // Fetch roles
+        const { data: roleData } = await supabase.from("projects").select("role")
+
+        if (roleData) {
+          // Split comma-separated roles and flatten the array
+          const roles = roleData
+            .flatMap((item) => item.role?.split(",").map((r: string) => r.trim()) || [])
+            .filter(Boolean)
+          setRoleOptions(roles)
+        }
+      } catch (err) {
+        console.error("Error fetching existing values:", err)
+      }
+    }
+
+    fetchExistingValues()
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -270,6 +307,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     return null
   }
 
+  // Add console logging to see what's being submitted
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -294,7 +332,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         }
       })
 
-      console.log("Saving project with data:", cleanData)
+      // Ensure required fields are present and not empty
+      console.log("Form data before submission:", formData)
+      console.log("Clean data being sent to API:", cleanData)
+
+      // Make sure role is properly formatted (it might be coming from roleInput)
+      if (roleInput && !cleanData.role) {
+        cleanData.role = roleInput
+      }
 
       if (mode === "create") {
         // Create new project using API route
@@ -306,16 +351,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           body: JSON.stringify(cleanData),
         })
 
+        const responseData = await response.json()
+
         if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to create project")
+          console.error("API error response:", responseData)
+          throw new Error(responseData.error || "Failed to create project")
         }
 
-        const result = await response.json()
         // Redirect to the project edit page
-        router.push(`/admin/projects/${result.data[0].id}/edit`)
+        router.push(`/admin/projects/${responseData.data[0].id}/edit`)
       } else {
-        // Update existing project - we'll need to create an update API route
+        // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
           method: "PUT",
           headers: {
@@ -324,9 +370,11 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           body: JSON.stringify(cleanData),
         })
 
+        const responseData = await response.json()
+
         if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to update project")
+          console.error("API error response:", responseData)
+          throw new Error(responseData.error || "Failed to update project")
         }
 
         // Refresh the page
@@ -376,29 +424,31 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           />
         </div>
 
+        {/* Replace the category input with Autocomplete */}
         <div className="space-y-2">
           <Label htmlFor="category">Category *</Label>
-          <Input
-            id="category"
-            name="category"
+          <Autocomplete
+            options={categoryOptions}
             value={formData.category}
-            onChange={handleChange}
+            onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
             placeholder="e.g. Short Film, Music Video, etc."
             className="bg-gray-800 border-gray-700"
-            required
+            allowCustomValues={true}
           />
         </div>
 
+        {/* Replace the role input with Autocomplete */}
         <div className="space-y-2">
           <Label htmlFor="role">Role/Tags *</Label>
-          <Input
-            id="role"
-            name="role"
+          <Autocomplete
+            options={roleOptions}
             value={roleInput}
-            onChange={handleRoleChange}
+            onChange={setRoleInput}
             placeholder="e.g. Director, 1st AC, etc. (comma-separated)"
             className="bg-gray-800 border-gray-700"
-            required
+            allowCustomValues={true}
+            multiple={true}
+            separator=","
           />
           <p className="text-xs text-gray-400">Separate multiple roles/tags with commas</p>
 

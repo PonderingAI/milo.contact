@@ -16,6 +16,7 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import ProjectMediaUploader from "@/components/admin/project-media-uploader"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Autocomplete } from "@/components/ui/autocomplete"
 
 export default function NewProjectPage() {
   const router = useRouter()
@@ -48,6 +49,10 @@ export default function NewProjectPage() {
   const [mainImages, setMainImages] = useState<string[]>([])
   const [mainVideos, setMainVideos] = useState<string[]>([])
   const [thumbnailUrl, setThumbnailUrl] = useState<string>("")
+
+  // Add state for suggestions
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([])
+  const [roleOptions, setRoleOptions] = useState<string[]>([])
 
   // Fetch the actual schema columns when the component mounts
   useEffect(() => {
@@ -99,6 +104,36 @@ export default function NewProjectPage() {
     }
 
     fetchSchema()
+  }, [supabase])
+
+  // Add this useEffect to fetch existing categories and roles
+  useEffect(() => {
+    async function fetchExistingValues() {
+      try {
+        // Fetch categories
+        const { data: categoryData } = await supabase.from("projects").select("category")
+
+        if (categoryData) {
+          const categories = categoryData.map((item) => item.category).filter(Boolean)
+          setCategoryOptions(categories)
+        }
+
+        // Fetch roles
+        const { data: roleData } = await supabase.from("projects").select("role")
+
+        if (roleData) {
+          // Split comma-separated roles and flatten the array
+          const roles = roleData
+            .flatMap((item) => item.role?.split(",").map((r: string) => r.trim()) || [])
+            .filter(Boolean)
+          setRoleOptions(roles)
+        }
+      } catch (err) {
+        console.error("Error fetching existing values:", err)
+      }
+    }
+
+    fetchExistingValues()
   }, [supabase])
 
   // Helper function to format date for input field
@@ -597,25 +632,31 @@ export default function NewProjectPage() {
                   />
                 </div>
 
+                {/* Replace the category input with Autocomplete (in the Project Details card) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Category</label>
-                  <Input
-                    name="category"
+                  <Autocomplete
+                    options={categoryOptions}
                     value={formData.category}
-                    onChange={handleChange}
-                    className="border-gray-800 bg-[#0f1520] text-gray-200"
+                    onChange={(value) => setFormData((prev) => ({ ...prev, category: value }))}
                     placeholder="e.g. Short Film, Music Video"
+                    className="border-gray-800 bg-[#0f1520] text-gray-200"
+                    allowCustomValues={true}
                   />
                 </div>
 
+                {/* Replace the role input with Autocomplete (in the Project Details card) */}
                 <div>
                   <label className="block text-xs font-medium text-gray-400 mb-1">Role/Tags</label>
-                  <Input
-                    name="role"
+                  <Autocomplete
+                    options={roleOptions}
                     value={roleInput}
-                    onChange={handleRoleChange}
-                    className="border-gray-800 bg-[#0f1520] text-gray-200"
+                    onChange={setRoleInput}
                     placeholder="e.g. Director, 1st AC (comma-separated)"
+                    className="border-gray-800 bg-[#0f1520] text-gray-200"
+                    allowCustomValues={true}
+                    multiple={true}
+                    separator=","
                   />
                   <p className="text-xs text-gray-500 mt-1">Separate multiple roles/tags with commas</p>
 
