@@ -4,7 +4,7 @@ import type React from "react"
 
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getSupabaseBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -71,7 +71,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [schemaColumns, setSchemaColumns] = useState<string[]>([])
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const router = useRouter()
-  const supabase = createClientComponentClient()
+  const supabase = getSupabaseBrowserClient()
 
   // Fetch the actual schema columns when the component mounts
   useEffect(() => {
@@ -129,6 +129,8 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   useEffect(() => {
     async function fetchExistingValues() {
       try {
+        const supabase = getSupabaseBrowserClient()
+
         // Fetch categories
         const { data: categoryData } = await supabase.from("projects").select("category")
 
@@ -153,7 +155,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     }
 
     fetchExistingValues()
-  }, [supabase])
+  }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -330,9 +332,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setError(null)
 
     try {
-      // Log the form data for debugging
-      console.log("Form data before submission:", formData)
-
       // Create a clean data object with only the required fields
       const projectData = {
         title: formData.title.trim(),
@@ -348,9 +347,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       if (formData.thumbnail_url) {
         projectData.thumbnail_url = formData.thumbnail_url.trim()
       }
-
-      // Log the data being sent to the API
-      console.log("Sending project data to API:", projectData)
 
       if (mode === "create") {
         // Create new project using API route
