@@ -10,7 +10,7 @@ import CookieConsent from "@/components/cookie-consent"
 import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
 import { initErrorTracking } from "@/lib/error-tracking"
-import { createServerClient } from "@/lib/supabase-server"
+import { createAdminClient } from "@/lib/supabase-server"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -37,11 +37,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // Fetch background color from site settings
   let backgroundColor = "#000000" // Default black
   try {
-    const supabase = createServerClient()
-    const { data } = await supabase.from("site_settings").select("value").eq("key", "background_color").single()
+    const supabase = createAdminClient()
+    const { data, error } = await supabase.from("site_settings").select("value").eq("key", "background_color").single()
 
-    if (data && data.value) {
-      backgroundColor = data.value
+    if (error) {
+      console.error("Error fetching background color:", error)
+    } else if (data && data.value) {
+      backgroundColor = data.value.startsWith("#") ? data.value : `#${data.value}`
     }
   } catch (error) {
     console.error("Error fetching background color:", error)

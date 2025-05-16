@@ -588,10 +588,20 @@ export default function SiteInformationForm() {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setSettings((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
+
+    // Special handling for background color to ensure it has a # prefix
+    if (name === "background_color") {
+      const colorValue = value.startsWith("#") ? value : `#${value}`
+      setSettings((prev) => ({
+        ...prev,
+        [name]: colorValue,
+      }))
+    } else {
+      setSettings((prev) => ({
+        ...prev,
+        [name]: value,
+      }))
+    }
   }
 
   const handleSelectChange = (name: string, value: string) => {
@@ -727,7 +737,11 @@ export default function SiteInformationForm() {
                       id="background_color"
                       name="background_color"
                       type="color"
-                      value={settings.background_color}
+                      value={
+                        settings.background_color.startsWith("#")
+                          ? settings.background_color
+                          : `#${settings.background_color}`
+                      }
                       onChange={handleChange}
                       className="w-16 h-10 p-1"
                     />
@@ -736,12 +750,21 @@ export default function SiteInformationForm() {
                       name="background_color"
                       type="text"
                       value={settings.background_color}
-                      onChange={handleChange}
+                      onChange={(e) => {
+                        // Remove # if present for consistency
+                        const value = e.target.value.replace(/^#/, "")
+                        setSettings((prev) => ({
+                          ...prev,
+                          background_color: value.startsWith("#") ? value : `#${value}`,
+                        }))
+                      }}
                       className="flex-1"
                       placeholder="#000000"
                     />
                   </div>
-                  <p className="text-xs text-gray-400">This color will be used for the site background</p>
+                  <p className="text-xs text-gray-400">
+                    This color will be used for the site background (with or without # prefix)
+                  </p>
                 </div>
               </CardContent>
             </Card>
