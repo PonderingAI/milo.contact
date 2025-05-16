@@ -10,8 +10,7 @@ import CookieConsent from "@/components/cookie-consent"
 import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
 import { initErrorTracking } from "@/lib/error-tracking"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
+import { createAdminClient } from "@/lib/supabase-server"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -33,8 +32,8 @@ export const metadata = {
 
 async function getBackgroundColor() {
   try {
-    const cookieStore = cookies()
-    const supabase = createClientComponentClient({ cookies: () => cookieStore })
+    // Use createAdminClient instead of cookies-based client
+    const supabase = createAdminClient()
 
     const { data, error } = await supabase.from("site_settings").select("value").eq("key", "background_color").single()
 

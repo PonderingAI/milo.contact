@@ -1,142 +1,140 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { extractVideoInfo } from "@/lib/utils"
+import { ArrowDown } from "lucide-react"
+import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
+import { extractVideoInfo } from "@/lib/project-data"
 import VideoBackground from "./video-background"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import type { Project } from "@/lib/project-data"
 
 interface HeroSectionProps {
-  heading?: string
-  subheading?: string
-  backgroundImage?: string
-  backgroundVideo?: string
-  backgroundType?: string
+  latestProject?: Project | null
 }
 
-export default function HeroSection({
-  heading = "Milo Presedo",
-  subheading = "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-  backgroundImage = "/images/hero-bg.jpg",
-  backgroundVideo = "",
-  backgroundType = "image",
-}: HeroSectionProps) {
-  const [videoInfo, setVideoInfo] = useState<{ platform: string; id: string } | null>(null)
-  const [latestProjectMedia, setLatestProjectMedia] = useState<{
-    type: "image" | "video"
-    url: string
-    platform?: string
-    videoId?: string
-  } | null>(null)
+export default function HeroSection({ latestProject }: HeroSectionProps) {
+  const [settings, setSettings] = useState({
+    hero_heading: "Milo Presedo",
+    hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+    image_hero_bg: "/images/hero-bg.jpg",
+    hero_bg_type: "image", // "image", "video", or "latest_project"
+  })
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Extract video info if backgroundType is video and backgroundVideo is provided
-    if (backgroundType === "video" && backgroundVideo) {
-      const info = extractVideoInfo(backgroundVideo)
-      if (info) {
-        setVideoInfo(info)
-      }
-    }
+    async function loadSettings() {
+      try {
+        setLoading(true)
+        const supabase = getSupabaseBrowserClient()
+        const { data, error } = await supabase
+          .from("site_settings")
+          .select("key, value")
+          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type"])
 
-    // Fetch latest project media if backgroundType is latest_project
-    if (backgroundType === "latest_project") {
-      fetchLatestProjectMedia()
-    }
-  }, [backgroundType, backgroundVideo])
-
-  const fetchLatestProjectMedia = async () => {
-    try {
-      const supabase = createClientComponentClient()
-
-      // Get the latest project
-      const { data: projects, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(1)
-
-      if (error) {
-        console.error("Error fetching latest project:", error)
-        return
-      }
-
-      if (projects && projects.length > 0) {
-        const latestProject = projects[0]
-
-        // Check if the project has a video
-        if (latestProject.video_url) {
-          const videoInfo = extractVideoInfo(latestProject.video_url)
-          if (videoInfo) {
-            setLatestProjectMedia({
-              type: "video",
-              url: latestProject.video_url,
-              platform: videoInfo.platform,
-              videoId: videoInfo.id,
-            })
-            return
-          }
+        if (error) {
+          console.error("Error loading hero settings:", error)
+          setError("Failed to load hero settings")
+          return
         }
 
-        // Fallback to image if no video or video info extraction failed
-        if (latestProject.image_url) {
-          setLatestProjectMedia({
-            type: "image",
-            url: latestProject.image_url,
+        if (data && data.length > 0) {
+          const newSettings = { ...settings }
+          data.forEach((item) => {
+            // @ts-ignore
+            newSettings[item.key] = item.value
           })
+          setSettings(newSettings)
+          console.log("Hero settings loaded:", newSettings) // Debug log
         }
+      } catch (err) {
+        console.error("Error in loadSettings:", err)
+        setError("An unexpected error occurred")
+      } finally {
+        setLoading(false)
       }
-    } catch (error) {
-      console.error("Error in fetchLatestProjectMedia:", error)
+    }
+
+    loadSettings()
+  }, [])
+
+  // Determine background media
+  let backgroundMedia = settings.image_hero_bg
+  let isVideo = false
+  let videoInfo = null
+
+  // If hero_bg_type is "latest_project" and we have a latest project with video
+  if (settings.hero_bg_type === "latest_project" && latestProject?.video_url) {
+    backgroundMedia = latestProject.video_url
+    isVideo = true
+    videoInfo = extractVideoInfo(latestProject.video_url)
+    console.log("Using latest project video:", backgroundMedia) // Debug log
+  }
+  // Otherwise check if the current background is a video URL
+  else if (
+    settings.image_hero_bg &&
+    (settings.image_hero_bg.includes("vimeo.com") ||
+      settings.image_hero_bg.includes("youtube.com") ||
+      settings.image_hero_bg.includes("youtu.be"))
+  ) {
+    isVideo = true
+    videoInfo = extractVideoInfo(settings.image_hero_bg)
+    console.log("Using video background:", backgroundMedia) // Debug log
+  } else {
+    console.log("Using image background:", backgroundMedia) // Debug log
+  }
+
+  const scrollToProjects = () => {
+    const projectsSection = document.getElementById("projects")
+    if (projectsSection) {
+      projectsSection.scrollIntoView({ behavior: "smooth" })
     }
   }
 
-  // Determine what to display as background
-  const renderBackground = () => {
-    // Case 1: Latest project media (video or image)
-    if (backgroundType === "latest_project" && latestProjectMedia) {
-      if (latestProjectMedia.type === "video" && latestProjectMedia.platform && latestProjectMedia.videoId) {
-        return (
-          <VideoBackground
-            platform={latestProjectMedia.platform}
-            videoId={latestProjectMedia.videoId}
-            fallbackImage={backgroundImage}
-          />
-        )
-      } else {
-        return (
-          <div
-            className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-            style={{ backgroundImage: `url(${latestProjectMedia.url})` }}
-          />
-        )
-      }
-    }
-
-    // Case 2: Video background
-    if (backgroundType === "video" && videoInfo) {
-      return <VideoBackground platform={videoInfo.platform} videoId={videoInfo.id} fallbackImage={backgroundImage} />
-    }
-
-    // Case 3: Default to image background
+  if (loading) {
     return (
-      <div
-        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-        style={{ backgroundImage: `url(${backgroundImage})` }}
-      />
+      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-black">
+        <div className="text-white">Loading...</div>
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section className="relative h-screen flex items-center justify-center overflow-hidden bg-black">
+        <div className="text-white">Error: {error}</div>
+      </section>
     )
   }
 
   return (
-    <section className="relative h-screen w-full overflow-hidden">
+    <section className="relative h-screen flex items-center justify-center overflow-hidden">
       {/* Background */}
-      {renderBackground()}
+      {isVideo && videoInfo ? (
+        <VideoBackground
+          platform={videoInfo.platform}
+          videoId={videoInfo.id}
+          fallbackImage={latestProject?.image || "/images/hero-bg.jpg"}
+        />
+      ) : (
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: `url(${backgroundMedia})` }}
+        />
+      )}
 
       {/* Overlay */}
-      <div className="absolute inset-0 bg-black bg-opacity-30"></div>
+      <div className="absolute inset-0 bg-black/50" />
 
-      {/* Content - Positioned at bottom left */}
-      <div className="absolute bottom-8 left-8 z-10 max-w-xl text-white">
-        <h1 className="text-3xl md:text-4xl font-bold mb-2">{heading}</h1>
-        <p className="text-sm md:text-base opacity-90">{subheading}</p>
+      {/* Content - positioned at bottom left */}
+      <div className="absolute bottom-10 left-10 z-10 text-left">
+        <h1 className="text-2xl md:text-3xl lg:text-4xl font-serif mb-2">{settings.hero_heading}</h1>
+        <p className="text-sm md:text-base text-gray-200 mb-4 max-w-md">{settings.hero_subheading}</p>
+        <button
+          onClick={scrollToProjects}
+          className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors text-sm"
+        >
+          View My Work <ArrowDown className="w-3 h-3 animate-bounce" />
+        </button>
       </div>
     </section>
   )
