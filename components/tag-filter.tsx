@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { Badge } from "@/components/ui/badge"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 interface TagFilterProps {
@@ -10,40 +11,29 @@ interface TagFilterProps {
 
 export default function TagFilter({ onTagSelect, selectedTag }: TagFilterProps) {
   const [tags, setTags] = useState<{ name: string; count: number }[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    async function loadTags() {
+    async function fetchTags() {
       try {
-        setIsLoading(true)
+        setLoading(true)
         const supabase = getSupabaseBrowserClient()
 
-        // First try to get tags from the database
-        const { data: projectsData, error: projectsError } = await supabase.from("projects").select("category, role")
+        // Get all projects
+        const { data: projects, error } = await supabase.from("projects").select("category, role")
 
-        if (projectsError) {
-          console.error("Error loading projects for tags:", projectsError)
-          setTags([
-            { name: "All", count: 0 },
-            { name: "Short Film", count: 0 },
-            { name: "Music Video", count: 0 },
-            { name: "Feature Film", count: 0 },
-            { name: "Director", count: 0 },
-            { name: "Photographer", count: 0 },
-          ])
+        if (error) {
+          console.error("Error fetching projects for tags:", error)
           return
         }
 
-        // Extract unique tags and count occurrences
+        // Extract and count tags
         const tagCounts: Record<string, number> = {}
 
-        projectsData.forEach((project) => {
-          // Add category as tag
+        projects?.forEach((project) => {
           if (project.category) {
             tagCounts[project.category] = (tagCounts[project.category] || 0) + 1
           }
-
-          // Add role as tag
           if (project.role) {
             tagCounts[project.role] = (tagCounts[project.role] || 0) + 1
           }
@@ -54,40 +44,46 @@ export default function TagFilter({ onTagSelect, selectedTag }: TagFilterProps) 
           .map(([name, count]) => ({ name, count }))
           .sort((a, b) => b.count - a.count)
 
-        // Add "All" tag at the beginning
-        setTags([{ name: "All", count: projectsData.length }, ...sortedTags])
+        setTags(sortedTags)
       } catch (err) {
-        console.error("Error in loadTags:", err)
-        setTags([
-          { name: "All", count: 0 },
-          { name: "Short Film", count: 0 },
-          { name: "Music Video", count: 0 },
-          { name: "Feature Film", count: 0 },
-          { name: "Director", count: 0 },
-          { name: "Photographer", count: 0 },
-        ])
+        console.error("Error in fetchTags:", err)
       } finally {
-        setIsLoading(false)
+        setLoading(false)
       }
     }
 
-    loadTags()
+    fetchTags()
   }, [])
 
+  if (loading) {
+    return (
+      <div className="flex flex-wrap gap-2 mb-8">
+        {[1, 2, 3, 4, 5].map((i) => (
+          <div key={i} className="h-6 w-16 bg-gray-800 rounded-full animate-pulse" />
+        ))}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-wrap gap-3 mb-12">
+    <div className="flex flex-wrap gap-2 mb-8">
+      <Badge
+        variant={selectedTag === null ? "default" : "outline"}
+        className="cursor-pointer"
+        onClick={() => onTagSelect(null)}
+      >
+        All
+      </Badge>
+
       {tags.map((tag) => (
-        <button
+        <Badge
           key={tag.name}
-          onClick={() => onTagSelect(tag.name === "All" ? null : tag.name)}
-          className={`px-4 py-2 rounded-full text-sm transition-colors ${
-            (selectedTag === tag.name) || (selectedTag === null && tag.name === "All")
-              ? "bg-white text-black"
-              : "bg-gray-900 text-gray-300 hover:bg-gray-800"
-          }`}
+          variant={selectedTag === tag.name ? "default" : "outline"}
+          className="cursor-pointer"
+          onClick={() => onTagSelect(tag.name)}
         >
-          {tag.name} {tag.count > 0 && <span className="text-xs">({tag.count})</span>}
-        </button>
+          {tag.name} ({tag.count})
+        </Badge>
       ))}
     </div>
   )

@@ -18,6 +18,7 @@ import { extractVideoInfo } from "@/lib/utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 // SQL code for site_settings table setup
 const SITE_SETTINGS_SQL = `-- 1. Create the site_settings table
@@ -90,17 +91,31 @@ interface MediaUploaderProps {
   currentValue: string
   onUpload: (url: string) => void
   allowVideo?: boolean
+  allowLatestProject?: boolean
+  bgType?: string
+  onBgTypeChange?: (type: string) => void
 }
 
-function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo = false }: MediaUploaderProps) {
+function MediaUploader({
+  label,
+  settingKey,
+  currentValue,
+  onUpload,
+  allowVideo = false,
+  allowLatestProject = false,
+  bgType = "image",
+  onBgTypeChange,
+}: MediaUploaderProps) {
   const [uploading, setUploading] = useState(false)
-  const [mediaType, setMediaType] = useState<"image" | "video">(
-    currentValue.includes("vimeo.com") ||
-      currentValue.includes("youtube.com") ||
-      currentValue.includes("youtu.be") ||
-      currentValue.includes("linkedin.com")
-      ? "video"
-      : "image",
+  const [mediaType, setMediaType] = useState<"image" | "video" | "latest_project">(
+    bgType === "latest_project"
+      ? "latest_project"
+      : currentValue.includes("vimeo.com") ||
+          currentValue.includes("youtube.com") ||
+          currentValue.includes("youtu.be") ||
+          currentValue.includes("linkedin.com")
+        ? "video"
+        : "image",
   )
   const [videoUrl, setVideoUrl] = useState(
     currentValue.includes("vimeo.com") ||
@@ -293,24 +308,43 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
       setMediaType("video")
       setVideoUrl(url)
       setPreview(null)
+      if (onBgTypeChange) onBgTypeChange("video")
     } else {
       setMediaType("image")
       setPreview(url)
       setVideoUrl("")
+      if (onBgTypeChange) onBgTypeChange("image")
     }
 
     onUpload(url)
+  }
+
+  const handleMediaTypeChange = (value: "image" | "video" | "latest_project") => {
+    setMediaType(value)
+    if (onBgTypeChange) onBgTypeChange(value)
+
+    // If switching to latest_project, we don't need to update the URL
+    if (value !== "latest_project") {
+      // If switching between image and video, clear the other value
+      if (value === "image") {
+        setVideoUrl("")
+        if (preview) onUpload(preview)
+      } else if (value === "video") {
+        setPreview(null)
+        if (videoUrl) onUpload(videoUrl)
+      }
+    }
   }
 
   return (
     <div className="space-y-4">
       <Label>{label}</Label>
 
-      {allowVideo && (
+      {(allowVideo || allowLatestProject) && (
         <RadioGroup
           value={mediaType}
-          onValueChange={(value) => setMediaType(value as "image" | "video")}
-          className="flex space-x-4 mb-4"
+          onValueChange={(value) => handleMediaTypeChange(value as "image" | "video" | "latest_project")}
+          className="flex flex-wrap space-x-4 mb-4"
         >
           <div className="flex items-center space-x-2">
             <RadioGroupItem value="image" id={`${settingKey}-image`} />
@@ -318,28 +352,46 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
               Image
             </Label>
           </div>
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="video" id={`${settingKey}-video`} />
-            <Label htmlFor={`${settingKey}-video`} className="cursor-pointer">
-              Video
-            </Label>
-          </div>
+          {allowVideo && (
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="video" id={`${settingKey}-video`} />
+              <Label htmlFor={`${settingKey}-video`} className="cursor-pointer">
+                Video
+              </Label>
+            </div>
+          )}
+          {allowLatestProject && (
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="latest_project" id={`${settingKey}-latest-project`} />
+              <Label htmlFor={`${settingKey}-latest-project`} className="cursor-pointer">
+                Latest Project Video
+              </Label>
+            </div>
+          )}
         </RadioGroup>
       )}
 
-      <div className="mb-4">
-        <MediaSelector
-          onSelect={handleMediaSelect}
-          currentValue={mediaType === "image" ? preview || "" : videoUrl}
-          mediaType={mediaType === "image" ? "images" : "videos"}
-          buttonLabel={`Browse Media Library (${mediaType === "image" ? "Images" : "Videos"})`}
-        />
-      </div>
+      {mediaType !== "latest_project" && (
+        <div className="mb-4">
+          <MediaSelector
+            onSelect={handleMediaSelect}
+            currentValue={mediaType === "image" ? preview || "" : videoUrl}
+            mediaType={mediaType === "image" ? "images" : "videos"}
+            buttonLabel={`Browse Media Library (${mediaType === "image" ? "Images" : "Videos"})`}
+          />
+        </div>
+      )}
 
-      <p className="text-sm text-gray-400 mb-2">Or upload a new file:</p>
-
-      {mediaType === "image" ? (
+      {mediaType === "latest_project" ? (
+        <div className="p-4 bg-gray-800/50 rounded-lg">
+          <p className="text-sm">
+            The hero background will automatically use the video from the latest project. If the latest project doesn't
+            have a video, it will use the project's image instead.
+          </p>
+        </div>
+      ) : mediaType === "image" ? (
         <div className="space-y-2">
+          <p className="text-sm text-gray-400 mb-2">Or upload a new file:</p>
           <div className="flex items-center gap-4">
             <Input
               id={`image-${settingKey}`}
@@ -362,6 +414,7 @@ function MediaUploader({ label, settingKey, currentValue, onUpload, allowVideo =
         </div>
       ) : (
         <div className="space-y-2">
+          <p className="text-sm text-gray-400 mb-2">Or enter a video URL:</p>
           <div className="flex items-center gap-2">
             <Input
               id={`video-${settingKey}`}
@@ -445,6 +498,10 @@ export default function SiteInformationForm() {
     hero_heading: "Film Production & Photography",
     hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
     image_hero_bg: "/images/hero-bg.jpg",
+    hero_bg_type: "image", // "image", "video", or "latest_project"
+
+    // Projects section
+    projects_per_page: "20",
 
     // About section
     about_heading: "About Me",
@@ -536,10 +593,24 @@ export default function SiteInformationForm() {
     }))
   }
 
+  const handleSelectChange = (name: string, value: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      [name]: value,
+    }))
+  }
+
   const handleMediaUpload = (key: string, value: string) => {
     setSettings((prev) => ({
       ...prev,
       [key]: value,
+    }))
+  }
+
+  const handleBgTypeChange = (type: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      hero_bg_type: type,
     }))
   }
 
@@ -611,6 +682,7 @@ export default function SiteInformationForm() {
         <Tabs defaultValue="hero">
           <TabsList className="mb-4">
             <TabsTrigger value="hero">Hero</TabsTrigger>
+            <TabsTrigger value="projects">Projects</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
             <TabsTrigger value="services">Services</TabsTrigger>
             <TabsTrigger value="contact">Contact</TabsTrigger>
@@ -643,7 +715,42 @@ export default function SiteInformationForm() {
                   currentValue={settings.image_hero_bg}
                   onUpload={(url) => handleMediaUpload("image_hero_bg", url)}
                   allowVideo={true}
+                  allowLatestProject={true}
+                  bgType={settings.hero_bg_type}
+                  onBgTypeChange={handleBgTypeChange}
                 />
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="projects">
+            <Card>
+              <CardHeader>
+                <CardTitle>Projects Section</CardTitle>
+                <CardDescription>Configure how projects are displayed on your site.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="projects_per_page">Projects Per Page</Label>
+                  <Select
+                    value={settings.projects_per_page}
+                    onValueChange={(value) => handleSelectChange("projects_per_page", value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select number of projects" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="10">10</SelectItem>
+                      <SelectItem value="20">20</SelectItem>
+                      <SelectItem value="30">30</SelectItem>
+                      <SelectItem value="50">50</SelectItem>
+                      <SelectItem value="100">100</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Number of projects to show before the "View More" button appears
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>

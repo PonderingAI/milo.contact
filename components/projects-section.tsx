@@ -23,7 +23,7 @@ export default function ProjectsSection({ projects }: ProjectsSectionProps) {
   }
 
   return (
-    <section id="work" className="mb-24">
+    <section id="projects" className="mb-24">
       <h2 className="text-5xl md:text-7xl font-serif mb-12">My Work</h2>
 
       <ProjectSearch onSearch={handleSearch} />
