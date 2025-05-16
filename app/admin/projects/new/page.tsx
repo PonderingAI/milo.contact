@@ -29,7 +29,6 @@ export default function NewProjectPage() {
   const [formData, setFormData] = useState({
     title: "",
     category: "",
-    type: "directed",
     role: "",
     image: "",
     video_url: "",
@@ -38,7 +37,11 @@ export default function NewProjectPage() {
     project_date: new Date().toISOString().split("T")[0], // Default to today
     is_public: true, // Default to public
     publish_date: null, // No scheduled publish date by default
+    tags: [],
   })
+
+  // State to track the role input for tag extraction
+  const [roleInput, setRoleInput] = useState("")
 
   // Media state
   const [btsImages, setBtsImages] = useState<string[]>([])
@@ -102,6 +105,24 @@ export default function NewProjectPage() {
 
   const handleSelectChange = (name: string, value: any) => {
     setFormData((prev) => ({ ...prev, [name]: value }))
+  }
+
+  const handleRoleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setRoleInput(value)
+
+    // Extract tags from comma-separated role input
+    const tags = value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag)
+
+    // Update both role and tags
+    setFormData((prev) => ({
+      ...prev,
+      role: value,
+      tags: tags,
+    }))
   }
 
   // Handler for main media selection
@@ -514,29 +535,25 @@ export default function NewProjectPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Role</label>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Role/Tags</label>
                   <Input
                     name="role"
-                    value={formData.role}
-                    onChange={handleChange}
+                    value={roleInput}
+                    onChange={handleRoleChange}
                     className="border-gray-800 bg-[#0f1520] text-gray-200"
-                    placeholder="e.g. Director, 1st AC"
+                    placeholder="e.g. Director, 1st AC (comma-separated)"
                   />
-                </div>
+                  <p className="text-xs text-gray-500 mt-1">Separate multiple roles/tags with commas</p>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Type</label>
-                  <Select value={formData.type} onValueChange={(value) => handleSelectChange("type", value)}>
-                    <SelectTrigger className="border-gray-800 bg-[#0f1520] text-gray-200">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#070a10] border-gray-800 text-gray-200">
-                      <SelectItem value="directed">Directed</SelectItem>
-                      <SelectItem value="camera">Camera</SelectItem>
-                      <SelectItem value="production">Production</SelectItem>
-                      <SelectItem value="photography">Photography</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {formData.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      {formData.tags.map((tag, index) => (
+                        <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div>

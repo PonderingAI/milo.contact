@@ -14,37 +14,26 @@ interface OffsetProjectGridProps {
 
 export default function OffsetProjectGrid({ projects, searchQuery = "", selectedTag = null }: OffsetProjectGridProps) {
   const [projectsPerPage, setProjectsPerPage] = useState(20)
-  const [projectGap, setProjectGap] = useState(4) // Default gap size (16px)
   const [visibleProjects, setVisibleProjects] = useState(projectsPerPage)
   const [filteredProjects, setFilteredProjects] = useState<Project[]>(projects)
-  const [backgroundColor, setBackgroundColor] = useState("#000000")
 
-  // Load settings
+  // Load projects per page setting
   useEffect(() => {
     async function loadSettings() {
       try {
         const supabase = getSupabaseBrowserClient()
         const { data, error } = await supabase
           .from("site_settings")
-          .select("key, value")
-          .in("key", ["projects_per_page", "project_gap", "background_color"])
+          .select("value")
+          .eq("key", "projects_per_page")
+          .single()
 
-        if (!error && data) {
-          data.forEach((item) => {
-            if (item.key === "projects_per_page" && item.value) {
-              setProjectsPerPage(Number.parseInt(item.value, 10))
-              setVisibleProjects(Number.parseInt(item.value, 10))
-            }
-            if (item.key === "project_gap" && item.value) {
-              setProjectGap(Number.parseInt(item.value, 10))
-            }
-            if (item.key === "background_color" && item.value) {
-              setBackgroundColor(item.value)
-            }
-          })
+        if (!error && data && data.value) {
+          setProjectsPerPage(Number.parseInt(data.value, 10))
+          setVisibleProjects(Number.parseInt(data.value, 10))
         }
       } catch (err) {
-        console.error("Error loading settings:", err)
+        console.error("Error loading projects per page setting:", err)
       }
     }
 
@@ -63,8 +52,7 @@ export default function OffsetProjectGrid({ projects, searchQuery = "", selected
           project.title?.toLowerCase().includes(query) ||
           project.category?.toLowerCase().includes(query) ||
           project.role?.toLowerCase().includes(query) ||
-          project.description?.toLowerCase().includes(query) ||
-          project.tags?.some((tag) => tag.toLowerCase().includes(query)),
+          project.description?.toLowerCase().includes(query),
       )
     }
 
@@ -97,30 +85,25 @@ export default function OffsetProjectGrid({ projects, searchQuery = "", selected
     )
   }
 
-  // Calculate gap class based on settings
-  const gapClass = `gap-${projectGap}`
-
   return (
-    <div className="space-y-8" style={{ backgroundColor }}>
-      <div className={`grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 ${gapClass}`}>
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-3 gap-y-12">
         {filteredProjects.slice(0, visibleProjects).map((project, index) => {
-          // Calculate vertical offset for each project
+          // Calculate offset for each project - vertical offset pattern
+          const col = index % 3
+          let offsetClass = ""
+
           // First column: no offset
           // Second column: offset down
           // Third column: offset up
-          // Pattern repeats
-          const col = index % 3
-
-          let offsetClass = ""
-
           if (col === 1) {
-            offsetClass = "md:mt-16" // Second column offset down
+            offsetClass = "md:mt-12"
           } else if (col === 2) {
-            offsetClass = "md:-mt-16" // Third column offset up
+            offsetClass = "md:-mt-12"
           }
 
           return (
-            <div key={project.id} className={`${offsetClass} transition-all duration-300`}>
+            <div key={project.id} className={offsetClass}>
               <ProjectCard
                 id={project.id}
                 title={project.title}

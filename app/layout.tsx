@@ -10,6 +10,8 @@ import CookieConsent from "@/components/cookie-consent"
 import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
 import { initErrorTracking } from "@/lib/error-tracking"
+import { cn } from "@/lib/utils"
+import { fontSans } from "@/lib/fonts"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -29,23 +31,37 @@ export const metadata = {
     generator: 'v0.dev'
 }
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Fetch background color from site settings
+  let backgroundColor = "#000000" // Default black
+  try {
+    const { createClient } = await import("@/lib/supabase-server")
+    const supabase = createClient()
+    const { data } = await supabase.from("site_settings").select("value").eq("key", "background_color").single()
+
+    if (data && data.value) {
+      backgroundColor = data.value
+    }
+  } catch (error) {
+    console.error("Error fetching background color:", error)
+  }
+
   // Initialize error tracking
   initErrorTracking()
   return (
     <ClerkProvider>
-      <html lang="en">
+      <html lang="en" suppressHydrationWarning>
         <head>
           {/* Default favicons that will be overridden by DynamicFavicons if available */}
           <link rel="icon" href="/favicon.ico" sizes="any" />
           <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
           <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
           <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+          <DynamicFavicons />
         </head>
-        <body className={inter.className}>
+        <body className={cn("min-h-screen font-sans antialiased", fontSans.variable)} style={{ backgroundColor }}>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
             <CustomCursor />
-            <DynamicFavicons />
             <Suspense>{children}</Suspense>
             <Analytics />
             <CookieConsent />

@@ -6,7 +6,6 @@ import ProjectsSection from "@/components/projects-section"
 import { getProjects, isDatabaseSetup } from "@/lib/project-data"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { createServerClient } from "@/lib/supabase-server"
 
 export default async function Home() {
   // Check if database is set up
@@ -18,23 +17,8 @@ export default async function Home() {
   // Get the latest project
   const latestProject = projects.length > 0 ? projects[0] : null
 
-  // Get background color from settings
-  let backgroundColor = "#000000"
-  if (dbSetup) {
-    try {
-      const supabase = createServerClient()
-      const { data } = await supabase.from("site_settings").select("value").eq("key", "background_color").single()
-
-      if (data && data.value) {
-        backgroundColor = data.value
-      }
-    } catch (err) {
-      console.error("Error getting background color:", err)
-    }
-  }
-
   return (
-    <main className="min-h-screen" style={{ backgroundColor }}>
+    <main className="min-h-screen bg-black text-white">
       <HeroSection latestProject={latestProject} />
 
       <div className="container mx-auto px-4 py-24">

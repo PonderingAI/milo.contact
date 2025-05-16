@@ -12,18 +12,18 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Loader2, X } from "lucide-react"
+import { AlertCircle, Loader2 } from "lucide-react"
 import ImageUploader from "@/components/admin/image-uploader"
 import MediaSelector from "@/components/admin/media-selector"
 import { toast } from "@/components/ui/use-toast"
 import Image from "next/image"
-import { Badge } from "@/components/ui/badge"
 
 interface ProjectFormProps {
   project?: {
     id: string
     title: string
     category: string
+    type: string
     role: string
     image: string
     video_url?: string
@@ -31,8 +31,7 @@ interface ProjectFormProps {
     special_notes?: string
     is_public: boolean
     publish_date: string | null
-    tags?: string[]
-    project_date?: string | null
+    tags: string[]
   }
   mode: "create" | "edit"
 }
@@ -49,34 +48,18 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     is_public: project?.is_public ?? true,
     publish_date: project?.publish_date || null,
     tags: project?.tags || [],
-    project_date: project?.project_date || null,
   })
+
+  // State to track the role input for tag extraction
+  const [roleInput, setRoleInput] = useState(project?.role || "")
 
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [isUsingVideoThumbnail, setIsUsingVideoThumbnail] = useState(false)
-  const [parsedTags, setParsedTags] = useState<string[]>([])
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
-
-  // Parse tags from role field
-  useEffect(() => {
-    if (formData.role) {
-      // Split by commas and trim whitespace
-      const roleTags = formData.role
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0)
-
-      // Combine with existing tags, remove duplicates
-      const allTags = [...new Set([...roleTags, ...formData.tags])]
-      setParsedTags(allTags)
-    } else {
-      setParsedTags(formData.tags)
-    }
-  }, [formData.role, formData.tags])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -87,16 +70,27 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setFormData((prev) => ({ ...prev, [name]: value }))
   }
 
+  const handleRoleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setRoleInput(value)
+
+    // Extract tags from comma-separated role input
+    const tags = value
+      .split(",")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag)
+
+    // Update both role and tags
+    setFormData((prev) => ({
+      ...prev,
+      role: value,
+      tags: tags,
+    }))
+  }
+
   const handleImageUpload = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
     setIsUsingVideoThumbnail(false)
-  }
-
-  const removeTag = (tagToRemove: string) => {
-    setFormData((prev) => ({
-      ...prev,
-      tags: prev.tags.filter((tag) => tag !== tagToRemove),
-    }))
   }
 
   // Process video URL and extract thumbnail
@@ -246,24 +240,9 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setError(null)
 
     try {
-      // Extract tags from role field
-      const roleTags = formData.role
-        .split(",")
-        .map((tag) => tag.trim())
-        .filter((tag) => tag.length > 0)
-
-      // Combine with existing tags, remove duplicates
-      const allTags = [...new Set([...roleTags, ...formData.tags])]
-
-      // Prepare data for submission
-      const dataToSubmit = {
-        ...formData,
-        tags: allTags,
-      }
-
       if (mode === "create") {
         // Create new project
-        const { data, error } = await supabase.from("projects").insert([dataToSubmit]).select()
+        const { data, error } = await supabase.from("projects").insert([formData]).select()
 
         if (error) throw error
 
@@ -271,7 +250,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         router.push(`/admin/projects/${data[0].id}/edit`)
       } else {
         // Update existing project
-        const { error } = await supabase.from("projects").update(dataToSubmit).eq("id", project?.id)
+        const { error } = await supabase.from("projects").update(formData).eq("id", project?.id)
 
         if (error) throw error
 
@@ -328,32 +307,25 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           />
         </div>
 
-        <div className="space-y-2 md:col-span-2">
-          <Label htmlFor="role">Roles/Tags *</Label>
+        <div className="space-y-2">
+          <Label htmlFor="role">Role/Tags *</Label>
           <Input
             id="role"
             name="role"
-            value={formData.role}
-            onChange={handleChange}
-            placeholder="e.g. Director, 1st AC, Drone Operator (separate with commas)"
+            value={roleInput}
+            onChange={handleRoleChange}
+            placeholder="e.g. Director, 1st AC, etc. (comma-separated)"
             className="bg-gray-800 border-gray-700"
             required
           />
-          <p className="text-xs text-gray-400 mt-1">
-            Separate multiple roles with commas. These will be used as tags for filtering.
-          </p>
+          <p className="text-xs text-gray-400">Separate multiple roles/tags with commas</p>
 
-          {parsedTags.length > 0 && (
+          {formData.tags.length > 0 && (
             <div className="flex flex-wrap gap-2 mt-2">
-              {parsedTags.map((tag, index) => (
-                <Badge key={index} variant="secondary" className="flex items-center gap-1">
+              {formData.tags.map((tag, index) => (
+                <span key={index} className="px-2 py-1 bg-gray-700 rounded-md text-xs">
                   {tag}
-                  {formData.tags.includes(tag) && (
-                    <button type="button" onClick={() => removeTag(tag)} className="text-gray-400 hover:text-gray-200">
-                      <X className="h-3 w-3" />
-                    </button>
-                  )}
-                </Badge>
+                </span>
               ))}
             </div>
           )}
@@ -442,22 +414,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             />
           </div>
         </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="project_date">Project Date</Label>
-        <Input
-          type="date"
-          id="project_date"
-          name="project_date"
-          value={formData.project_date ? new Date(formData.project_date).toISOString().split("T")[0] : ""}
-          onChange={(e) => {
-            const value = e.target.value ? new Date(e.target.value).toISOString() : null
-            setFormData((prev) => ({ ...prev, project_date: value }))
-          }}
-          className="bg-gray-800 border-gray-700"
-        />
-        <p className="text-xs text-gray-400">When was this project completed?</p>
       </div>
 
       <div className="space-y-2">
