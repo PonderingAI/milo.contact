@@ -332,20 +332,23 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setError(null)
 
     try {
-      // Create a clean data object with only the required fields
-      const projectData = {
-        title: formData.title.trim(),
-        category: formData.category.trim(),
-        role: formData.role.trim(),
-        image: formData.image.trim(),
-        description: formData.description,
-        is_public: formData.is_public,
-        project_date: formData.project_date || new Date().toISOString().split("T")[0],
-      }
+      // Create a clean data object with only the columns that exist in the database
+      const cleanData: Record<string, any> = {}
 
-      // Add thumbnail_url if it exists and is not empty
-      if (formData.thumbnail_url) {
-        projectData.thumbnail_url = formData.thumbnail_url.trim()
+      // Add all fields from formData that exist in the schema
+      Object.entries(formData).forEach(([key, value]) => {
+        if (schemaColumns.includes(key)) {
+          cleanData[key] = value
+        }
+      })
+
+      // Ensure required fields are present and not empty
+      console.log("Form data before submission:", formData)
+      console.log("Clean data being sent to API:", cleanData)
+
+      // Make sure role is properly formatted
+      if (roleInput && !cleanData.role) {
+        cleanData.role = roleInput
       }
 
       if (mode === "create") {
@@ -355,21 +358,15 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(projectData),
+          body: JSON.stringify(cleanData),
         })
 
         const responseData = await response.json()
 
         if (!response.ok) {
           console.error("API error response:", responseData)
-          throw new Error(responseData.error || responseData.details || "Failed to create project")
+          throw new Error(responseData.error || "Failed to create project")
         }
-
-        // Show success message
-        toast({
-          title: "Project created",
-          description: "Project created successfully!",
-        })
 
         // Redirect to the project edit page
         router.push(`/admin/projects/${responseData.data[0].id}/edit`)
@@ -380,25 +377,25 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify(projectData),
+          body: JSON.stringify(cleanData),
         })
 
         const responseData = await response.json()
 
         if (!response.ok) {
           console.error("API error response:", responseData)
-          throw new Error(responseData.error || responseData.details || "Failed to update project")
+          throw new Error(responseData.error || "Failed to update project")
         }
-
-        // Show success message
-        toast({
-          title: "Project updated",
-          description: "Project updated successfully!",
-        })
 
         // Refresh the page
         router.refresh()
       }
+
+      // Show success message
+      toast({
+        title: mode === "create" ? "Project created" : "Project updated",
+        description: mode === "create" ? "Project created successfully!" : "Project updated successfully!",
+      })
     } catch (error: any) {
       console.error("Error saving project:", error)
       setError(error.message || "Failed to save project")

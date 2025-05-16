@@ -42,7 +42,9 @@ export async function POST(request: Request) {
         {
           success: false,
           error: error.message,
-          details: "This could be due to missing required fields or database constraints.",
+          details: "Database error: " + error.message,
+          code: error.code,
+          hint: error.hint,
         },
         { status: 500 },
       )
