@@ -43,6 +43,11 @@ export function Autocomplete({
       .filter(Boolean)
   }, [value, multiple, separator])
 
+  // Get unique options
+  const uniqueOptions = React.useMemo(() => {
+    return [...new Set(options)]
+  }, [options])
+
   // Sort options by frequency (assuming most used ones are duplicated in the array)
   const sortedOptions = React.useMemo(() => {
     const counts = options.reduce(
@@ -53,15 +58,17 @@ export function Autocomplete({
       {} as Record<string, number>,
     )
 
-    return [...new Set(options)].sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
-  }, [options])
+    return uniqueOptions.sort((a, b) => (counts[b] || 0) - (counts[a] || 0))
+  }, [options, uniqueOptions])
 
   // Filter options based on current input
   const filteredOptions = React.useMemo(() => {
-    if (!inputValue.trim()) return sortedOptions
+    // Only show suggestions after at least one character is typed
+    if (!inputValue.trim() || inputValue.length < 1) return []
 
     const searchTerm = inputValue.toLowerCase()
-    return sortedOptions.filter((option) => option.toLowerCase().includes(searchTerm))
+    // Get unique options that match the search term
+    return [...new Set(sortedOptions)].filter((option) => option.toLowerCase().includes(searchTerm))
   }, [inputValue, sortedOptions])
 
   // Sort filtered options to prioritize those that start with the input value
@@ -128,25 +135,41 @@ export function Autocomplete({
         <div className="flex w-full relative">
           <Input
             value={inputValue}
-            onChange={handleInputChange}
+            onChange={(e) => {
+              handleInputChange(e)
+              // Only open dropdown if there's text and options available
+              if (e.target.value.trim().length >= 1) {
+                setOpen(true)
+              }
+            }}
             onKeyDown={handleKeyDown}
             placeholder={placeholder}
             className={cn("w-full", className)}
-            onClick={() => setOpen(true)}
+            onClick={() => {
+              // Only open if there's text
+              if (inputValue.trim().length >= 1) {
+                setOpen(true)
+              }
+            }}
           />
           <Button
             variant="outline"
             role="combobox"
             aria-expanded={open}
             className="absolute right-0 px-3 focus:ring-0 focus:ring-offset-0"
-            onClick={() => setOpen(!open)}
+            onClick={() => {
+              // Only toggle if there's text
+              if (inputValue.trim().length >= 1) {
+                setOpen(!open)
+              }
+            }}
             tabIndex={-1}
           >
             <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </div>
       </PopoverTrigger>
-      <PopoverContent className="w-full p-0" align="start">
+      <PopoverContent className="w-full p-0 border-t-0 rounded-t-none shadow-md" align="start" sideOffset={0}>
         <Command>
           <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
           <CommandList>

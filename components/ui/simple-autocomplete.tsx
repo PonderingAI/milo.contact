@@ -65,7 +65,8 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
 
     // Filter options based on current input
     const filteredOptions = React.useMemo(() => {
-      if (!inputValue.trim()) return options
+      // Only show suggestions after at least one character is typed
+      if (!inputValue.trim() || inputValue.length < 1) return []
 
       const searchTerm = inputValue.toLowerCase()
       return options.filter((option) => option.toLowerCase().includes(searchTerm))
@@ -152,13 +153,27 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
             <Input
               ref={inputRef}
               value={multiple ? inputValue : activeValue}
-              onChange={handleInputChange}
+              onChange={(e) => {
+                handleInputChange(e)
+                // Only open dropdown if there's text and options available
+                if (e.target.value.trim().length >= 1) {
+                  setIsOpenState(true)
+                }
+              }}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
               className={cn("w-full", className)}
-              onClick={() => setIsOpenState(true)}
+              onClick={() => {
+                // Only open if there's text
+                if ((multiple ? inputValue : activeValue).trim().length >= 1) {
+                  setIsOpenState(true)
+                }
+              }}
               onFocus={() => {
-                setIsOpenState(true)
+                // Only open if there's text
+                if ((multiple ? inputValue : activeValue).trim().length >= 1) {
+                  setIsOpenState(true)
+                }
                 onFocus?.()
               }}
               onBlur={() => {
@@ -170,14 +185,19 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
               role="combobox"
               aria-expanded={isOpenState}
               className="absolute right-0 px-3 focus:ring-0 focus:ring-offset-0"
-              onClick={() => setIsOpenState(!isOpenState)}
+              onClick={() => {
+                // Only toggle if there's text
+                if ((multiple ? inputValue : activeValue).trim().length >= 1) {
+                  setIsOpenState(!isOpenState)
+                }
+              }}
               tabIndex={-1}
             >
               <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-50" />
             </Button>
           </div>
         </PopoverTrigger>
-        <PopoverContent className="w-full p-0" align="start">
+        <PopoverContent className="w-full p-0 border-t-0 rounded-t-none shadow-md" align="start" sideOffset={0}>
           <Command>
             <CommandInput placeholder={placeholder} value={inputValue} onValueChange={setInputValue} />
             <CommandList>
