@@ -54,6 +54,11 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   // Get BTS images or use empty array if none
   const btsImages = project.bts_images || []
 
+  // Check if description or special notes exist
+  const hasDescription = project.description && project.description.trim().length > 0
+  const hasSpecialNotes = project.special_notes && project.special_notes.trim().length > 0
+  const hasAboutSection = hasDescription || hasSpecialNotes
+
   return (
     <>
       <div className="flex items-center gap-4 mb-8">
@@ -80,29 +85,35 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
         )}
       </div>
 
-      {/* Description section */}
-      <div ref={descriptionRef} className="max-w-3xl mx-auto mb-16">
-        <h2 className="text-2xl font-serif mb-4">About this Project</h2>
-        <p className="text-gray-300 mb-6">{project.description}</p>
+      {/* Description section - only render if there's content */}
+      {hasAboutSection && (
+        <div ref={descriptionRef} className="max-w-3xl mx-auto mb-16">
+          {hasDescription && (
+            <>
+              <h2 className="text-2xl font-serif mb-4">About this Project</h2>
+              <p className="text-gray-300 mb-6">{project.description}</p>
+            </>
+          )}
 
-        {project.special_notes && (
-          <div className="mb-8">
-            <h3 className="text-xl font-serif mb-2">What made this special</h3>
-            <p className="text-gray-300">{project.special_notes}</p>
-          </div>
-        )}
+          {hasSpecialNotes && (
+            <div className="mb-8">
+              <h3 className="text-xl font-serif mb-2">What made this special</h3>
+              <p className="text-gray-300">{project.special_notes}</p>
+            </div>
+          )}
 
-        {project.video_url && (
-          <a
-            href={project.video_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 px-4 py-2 border border-white rounded-full text-white hover:bg-white hover:text-black transition-colors"
-          >
-            View Original <ExternalLink className="h-4 w-4" />
-          </a>
-        )}
-      </div>
+          {project.video_url && (
+            <a
+              href={project.video_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-4 py-2 border border-white rounded-full text-white hover:bg-white hover:text-black transition-colors"
+            >
+              View Original <ExternalLink className="h-4 w-4" />
+            </a>
+          )}
+        </div>
+      )}
 
       {/* BTS Gallery - clustered around with proper aspect ratios */}
       {btsImages.length > 0 && (

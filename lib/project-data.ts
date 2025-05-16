@@ -406,34 +406,48 @@ export async function getProjectsByTag(tag: string): Promise<Project[]> {
 /**
  * Extract video platform and ID from a video URL
  */
-export function extractVideoInfo(url: string) {
-  // Vimeo regex
-  const vimeoRegex =
-    /(?:https?:)?\/\/(?:www\.)?vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:[a-zA-Z0-9_-]+)?/i
-  const vimeoMatch = url.match(vimeoRegex)
+export function extractVideoInfo(url: string): { platform: string; id: string } | null {
+  try {
+    if (!url || typeof url !== "string") {
+      console.error("Invalid video URL:", url)
+      return null
+    }
 
-  if (vimeoMatch && vimeoMatch[1]) {
-    return { platform: "vimeo", id: vimeoMatch[1] }
+    // YouTube URL patterns
+    const youtubePatterns = [
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
+      /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
+    ]
+
+    // Vimeo URL patterns
+    const vimeoPatterns = [
+      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
+      /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
+    ]
+
+    // Check YouTube patterns
+    for (const pattern of youtubePatterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        return { platform: "youtube", id: match[1] }
+      }
+    }
+
+    // Check Vimeo patterns
+    for (const pattern of vimeoPatterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        return { platform: "vimeo", id: match[1] }
+      }
+    }
+
+    console.warn("Unrecognized video URL format:", url)
+    return null
+  } catch (error) {
+    console.error("Error extracting video info:", error)
+    return null
   }
-
-  // YouTube regex - handles both youtu.be and youtube.com/watch?v= formats
-  const youtubeRegex =
-    /(?:https?:)?\/\/(?:www\.)?(?:youtube\.com\/(?:watch\?v=|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/i
-  const youtubeMatch = url.match(youtubeRegex)
-
-  if (youtubeMatch && youtubeMatch[1]) {
-    return { platform: "youtube", id: youtubeMatch[1] }
-  }
-
-  // LinkedIn regex
-  const linkedinRegex = /(?:https?:)?\/\/(?:www\.)?linkedin\.com\/(?:posts|feed\/update)\/(?:urn:li:activity:)?(\d+)/i
-  const linkedinMatch = url.match(linkedinRegex)
-
-  if (linkedinMatch && linkedinMatch[1]) {
-    return { platform: "linkedin", id: linkedinMatch[1] }
-  }
-
-  return null
 }
 
 // Mock data for development - will be replaced by Supabase data in production
