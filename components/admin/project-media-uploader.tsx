@@ -384,6 +384,14 @@ export default function ProjectMediaUploader({
             </AlertDescription>
           </Alert>
         )}
+        {/* Preview of selected media */}
+        {(mediaType === "all" || mediaType === "image") && (
+          <div className="mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {/* This will be populated by the parent component's state management */}
+            </div>
+          </div>
+        )}
       </CardContent>
 
       {/* Media Library Dialog */}

@@ -374,6 +374,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       } else {
         if (!mainImages.includes(mediaUrl)) {
           setMainImages((prev) => [...prev, mediaUrl])
+          console.log("Added image to mainImages:", mediaUrl)
         }
         // Set as cover image if none is set
         if (!formData.image) {
@@ -403,70 +404,11 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     }
   }
 
-  // Helper function to process video URL and extract metadata
-  const processVideoUrl = async (url: string) => {
-    const videoInfo = extractVideoInfo(url)
-    if (!videoInfo) return
-
-    try {
-      let thumbnailUrl = null
-      let videoTitle = null
-      let uploadDate = null
-
-      if (videoInfo.platform === "vimeo") {
-        // Get video thumbnail from Vimeo API
-        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch Vimeo video info")
-        }
-
-        const videoData = await response.json()
-        const video = videoData[0]
-        thumbnailUrl = video.thumbnail_large
-        videoTitle = video.title
-        uploadDate = video.upload_date
-      } else if (videoInfo.platform === "youtube") {
-        // Use YouTube thumbnail URL format
-        thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-
-        // Fetch the actual YouTube title
-        try {
-          const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
-          videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
-        } catch (error) {
-          console.error("Error fetching YouTube title:", error)
-          videoTitle = `YouTube Video: ${videoInfo.id}`
-        }
-      }
-
-      // Set thumbnail if available
-      if (thumbnailUrl && !formData.image) {
-        setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-        if (!mainImages.includes(thumbnailUrl)) {
-          setMainImages((prev) => [...prev, thumbnailUrl])
-        }
-      }
-
-      // Set title if available
-      if (videoTitle && !formData.title) {
-        setFormData((prev) => ({ ...prev, title: videoTitle }))
-      }
-
-      // Set date if available
-      if (uploadDate && !formData.project_date) {
-        const date = new Date(uploadDate)
-        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
-      }
-    } catch (error) {
-      console.error("Error processing video URL:", error)
-    }
-  }
-
   // Handler for BTS media selection
   const handleBtsMediaSelect = (url: string | string[]) => {
     // Handle both single and multiple selections
     const urls = Array.isArray(url) ? url : [url]
+    console.log("handleBtsMediaSelect received URLs:", urls)
 
     urls.forEach((mediaUrl) => {
       // Determine if it's an image or video based on extension or URL
@@ -479,10 +421,12 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       if (isVideo) {
         if (!btsVideos.includes(mediaUrl)) {
           setBtsVideos((prev) => [...prev, mediaUrl])
+          console.log("Added video to btsVideos:", mediaUrl)
         }
       } else {
         if (!btsImages.includes(mediaUrl)) {
           setBtsImages((prev) => [...prev, mediaUrl])
+          console.log("Added image to btsImages:", mediaUrl)
         }
       }
     })

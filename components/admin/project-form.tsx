@@ -319,9 +319,71 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         mediaUrl.includes("vimeo.com") ||
         mediaUrl.includes("youtu.be")
 
+      const processVideoUrl = async (url: string) => {
+        setIsProcessingVideo(true)
+        const toastId = toast({
+          title: "Processing video",
+          description: "Fetching video information...",
+        }).id
+
+        try {
+          // Use the new API route to process the video URL
+          const response = await fetch("/api/process-video-url", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ url }),
+          })
+
+          if (!response.ok) {
+            const errorData = await response.json()
+            throw new Error(errorData.error || "Failed to process video URL")
+          }
+
+          const result = await response.json()
+          console.log("Video processing result:", result)
+
+          // If we have a thumbnail and no image is set, use the thumbnail
+          if (result.thumbnailUrl && !formData.image && !mainImages.includes(result.thumbnailUrl)) {
+            setFormData((prev) => ({ ...prev, image: result.thumbnailUrl }))
+            setVideoThumbnail(result.thumbnailUrl)
+            setMainImages((prev) => [...prev, result.thumbnailUrl])
+          }
+
+          // If project title is empty, use video title
+          if (!formData.title && result.title) {
+            setFormData((prev) => ({ ...prev, title: result.title }))
+          }
+
+          // If project date is empty and we have an upload date, use it
+          if (!formData.project_date && result.uploadDate) {
+            const date = new Date(result.uploadDate)
+            setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+          }
+
+          toast({
+            id: toastId,
+            title: "Video processed",
+            description: "Video information has been processed",
+          })
+        } catch (error) {
+          console.error("Error processing video:", error)
+          toast({
+            id: toastId,
+            title: "Error processing video",
+            description: error instanceof Error ? error.message : "Failed to process video URL",
+            variant: "destructive",
+          })
+        } finally {
+          setIsProcessingVideo(false)
+        }
+      }
+
       if (isVideo) {
         if (!mainVideos.includes(mediaUrl)) {
           setMainVideos((prev) => [...prev, mediaUrl])
+          console.log("Added video to mainVideos:", mediaUrl)
         }
         // Store video URL in thumbnail_url if that column exists
         if (schemaColumns.includes("thumbnail_url")) {
@@ -373,6 +435,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       } else {
         if (!mainImages.includes(mediaUrl)) {
           setMainImages((prev) => [...prev, mediaUrl])
+          console.log("Added image to mainImages:", mediaUrl)
         }
         // Set as cover image if none is set
         if (!formData.image) {
@@ -387,7 +450,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           }
         }
       }
-
       // If title is empty, try to extract a title from the filename
       if (!formData.title) {
         const filename = mediaUrl.split("/").pop()
@@ -402,85 +464,11 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     }
   }
 
-  // Helper function to fetch YouTube title
-  const fetchYouTubeTitle = async (videoId: string): Promise<string | null> => {
-    try {
-      const response = await fetch(`/api/youtube-title?videoId=${videoId}`)
-      if (!response.ok) {
-        console.error("Failed to fetch YouTube title:", response.status, response.statusText)
-        return null
-      }
-      const data = await response.json()
-      return data.title || null
-    } catch (error) {
-      console.error("Error fetching YouTube title:", error)
-      return null
-    }
-  }
-
-  // Update the processVideoUrl function in the project form component to fetch YouTube titles
-  const processVideoUrl = async (url: string) => {
-    const videoInfo = extractVideoInfo(url)
-    if (!videoInfo) return
-
-    try {
-      let thumbnailUrl = null
-      let videoTitle = null
-      let uploadDate = null
-
-      if (videoInfo.platform === "vimeo") {
-        // Get video thumbnail from Vimeo API
-        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-
-        if (!response.ok) {
-          throw new Error("Failed to fetch Vimeo video info")
-        }
-
-        const videoData = await response.json()
-        const video = videoData[0]
-        thumbnailUrl = video.thumbnail_large
-        videoTitle = video.title
-        uploadDate = video.upload_date
-      } else if (videoInfo.platform === "youtube") {
-        // Use YouTube thumbnail URL format
-        thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-
-        // Fetch the actual YouTube title
-        try {
-          const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
-          videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
-        } catch (error) {
-          console.error("Error fetching YouTube title:", error)
-          videoTitle = `YouTube Video: ${videoInfo.id}`
-        }
-      }
-
-      // Set thumbnail if available
-      if (thumbnailUrl && !formData.image) {
-        setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-        if (!mainImages.includes(thumbnailUrl)) {
-          setMainImages((prev) => [...prev, thumbnailUrl])
-        }
-      }
-
-      // Set title if available
-      if (videoTitle && !formData.title) {
-        setFormData((prev) => ({ ...prev, title: videoTitle }))
-      }
-
-      // Set date if available
-      if (uploadDate && !formData.project_date) {
-        const date = new Date(uploadDate)
-        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
-      }
-    } catch (error) {
-      console.error("Error processing video URL:", error)
-    }
-  }
-
+  // Handler for BTS media selection
   const handleBtsMediaSelect = (url: string | string[]) => {
     // Handle both single and multiple selections
     const urls = Array.isArray(url) ? url : [url]
+    console.log("handleBtsMediaSelect received URLs:", urls)
 
     urls.forEach((mediaUrl) => {
       // Determine if it's an image or video based on extension or URL
@@ -493,10 +481,12 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       if (isVideo) {
         if (!btsVideos.includes(mediaUrl)) {
           setBtsVideos((prev) => [...prev, mediaUrl])
+          console.log("Added video to btsVideos:", mediaUrl)
         }
       } else {
         if (!btsImages.includes(mediaUrl)) {
           setBtsImages((prev) => [...prev, mediaUrl])
+          console.log("Added image to btsImages:", mediaUrl)
         }
       }
     })

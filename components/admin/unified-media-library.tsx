@@ -971,6 +971,16 @@ export default function UnifiedMediaLibrary({
         setSelectedItems([...selectedItems, url])
       }
     }
+
+    // Log selection for debugging
+    console.log(
+      "Selected items:",
+      selectionMode === "single"
+        ? [url]
+        : selectedItems.includes(url)
+          ? selectedItems.filter((item) => item !== url)
+          : [...selectedItems, url],
+    )
   }
 
   const handleConfirmSelection = () => {
@@ -1204,7 +1214,18 @@ export default function UnifiedMediaLibrary({
             />
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gray-800">
-              <span className="text-gray-400">{item.filetype}</span>
+              {isImage ? (
+                <Image
+                  src={item.public_url || "/placeholder.svg"}
+                  alt={item.filename}
+                  fill
+                  className="object-cover"
+                  onError={() => handleImageError(item.id)}
+                  unoptimized
+                />
+              ) : (
+                <span className="text-gray-400">{item.filetype}</span>
+              )}
             </div>
           )}
           {isVimeo && (
