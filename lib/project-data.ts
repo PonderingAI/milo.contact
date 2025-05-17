@@ -16,8 +16,8 @@ export interface Project {
   category: string
   role: string
   image: string
-  video_url?: string
-  video_platform?: "youtube" | "vimeo"
+  thumbnail_url?: string // This is where video URLs are stored
+  video_platform?: string
   video_id?: string
   description?: string
   special_notes?: string
@@ -129,9 +129,9 @@ export async function getProjects(): Promise<Project[]> {
         project.category = project.type
       }
 
-      // If project has video_url but no video_platform/video_id, extract them
-      if (project.video_url && (!project.video_platform || !project.video_id)) {
-        const videoInfo = extractVideoInfo(project.video_url)
+      // If project has thumbnail_url but no video_platform/video_id, extract them
+      if (project.thumbnail_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.thumbnail_url)
         if (videoInfo) {
           project.video_platform = videoInfo.platform
           project.video_id = videoInfo.id
@@ -200,8 +200,8 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       const mockProject = mockProjects.find((p) => p.id === id)
       if (mockProject) {
         // Process video URL if present
-        if (mockProject.video_url && (!mockProject.video_platform || !mockProject.video_id)) {
-          const videoInfo = extractVideoInfo(mockProject.video_url)
+        if (mockProject.thumbnail_url && (!mockProject.video_platform || !mockProject.video_id)) {
+          const videoInfo = extractVideoInfo(mockProject.thumbnail_url)
           if (videoInfo) {
             mockProject.video_platform = videoInfo.platform
             mockProject.video_id = videoInfo.id
@@ -237,8 +237,8 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       const mockProject = mockProjects.find((p) => p.id === id)
       if (mockProject) {
         // Process video URL if present
-        if (mockProject.video_url && (!mockProject.video_platform || !mockProject.video_id)) {
-          const videoInfo = extractVideoInfo(mockProject.video_url)
+        if (mockProject.thumbnail_url && (!mockProject.video_platform || !mockProject.video_id)) {
+          const videoInfo = extractVideoInfo(mockProject.thumbnail_url)
           if (videoInfo) {
             mockProject.video_platform = videoInfo.platform
             mockProject.video_id = videoInfo.id
@@ -253,9 +253,9 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       return null
     }
 
-    // Process video URL if present
-    if (project.video_url && (!project.video_platform || !project.video_id)) {
-      const videoInfo = extractVideoInfo(project.video_url)
+    // Process video URL if present (from thumbnail_url)
+    if (project.thumbnail_url && (!project.video_platform || !project.video_id)) {
+      const videoInfo = extractVideoInfo(project.thumbnail_url)
       if (videoInfo) {
         project.video_platform = videoInfo.platform
         project.video_id = videoInfo.id
@@ -291,8 +291,8 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
     const mockProject = mockProjects.find((p) => p.id === id)
     if (mockProject) {
       // Process video URL if present
-      if (mockProject.video_url && (!mockProject.video_platform || !mockProject.video_id)) {
-        const videoInfo = extractVideoInfo(mockProject.video_url)
+      if (mockProject.thumbnail_url && (!mockProject.video_platform || !mockProject.video_id)) {
+        const videoInfo = extractVideoInfo(mockProject.thumbnail_url)
         if (videoInfo) {
           mockProject.video_platform = videoInfo.platform
           mockProject.video_id = videoInfo.id
@@ -343,8 +343,8 @@ export async function getProjectsByCategory(category: string): Promise<Project[]
       }
 
       // Process video URL if present
-      if (project.video_url && (!project.video_platform || !project.video_id)) {
-        const videoInfo = extractVideoInfo(project.video_url)
+      if (project.thumbnail_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.thumbnail_url)
         if (videoInfo) {
           project.video_platform = videoInfo.platform
           project.video_id = videoInfo.id
@@ -415,8 +415,8 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
       }
 
       // Process video URL if present
-      if (project.video_url && (!project.video_platform || !project.video_id)) {
-        const videoInfo = extractVideoInfo(project.video_url)
+      if (project.thumbnail_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.thumbnail_url)
         if (videoInfo) {
           project.video_platform = videoInfo.platform
           project.video_id = videoInfo.id
@@ -537,7 +537,7 @@ export const mockProjects = [
     category: "Short Film",
     role: "Director",
     image: "/images/project1.jpg",
-    video_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+    thumbnail_url: "https://www.youtube.com/watch?v=dQw4w9WgXcQ", // Changed from video_url to thumbnail_url
     description: "A compelling short film exploring themes of identity and belonging in a post-digital world.",
     special_notes:
       "This project was particularly special because we shot it entirely during golden hour over three consecutive days, creating a consistent and dreamlike visual atmosphere.",
@@ -549,7 +549,7 @@ export const mockProjects = [
     category: "Music Video",
     role: "Director",
     image: "/images/project2.jpg",
-    video_url: "https://vimeo.com/123456789",
+    thumbnail_url: "https://vimeo.com/123456789", // Changed from video_url to thumbnail_url
     description: "An experimental music video featuring innovative visual techniques and storytelling.",
     special_notes:
       "Working with the artist to develop a visual language that complemented the music was a rewarding creative challenge.",
@@ -563,7 +563,7 @@ export const mockProjects = [
     category: "Feature Film",
     role: "1st AC",
     image: "/images/project5.jpg",
-    video_url: "https://youtube.com/watch?v=i_HtDNSxCnE",
+    thumbnail_url: "https://youtube.com/watch?v=i_HtDNSxCnE", // Changed from video_url to thumbnail_url
     description: "Worked as 1st AC on this award-winning feature film, managing focus and camera operations.",
     special_notes:
       "The challenging lighting conditions and complex camera movements made this project particularly rewarding.",
@@ -575,7 +575,7 @@ export const mockProjects = [
     category: "Television",
     role: "2nd AC",
     image: "/images/project6.jpg",
-    video_url: "https://www.youtube.com/watch?v=lmnopqrstuv",
+    thumbnail_url: "https://www.youtube.com/watch?v=lmnopqrstuv", // Changed from video_url to thumbnail_url
     description: "Served as 2nd AC for this popular TV series, handling equipment and supporting the camera team.",
     special_notes: "Working with a seasoned DP taught me invaluable lessons about lighting and composition.",
     tags: ["Television", "2nd AC"],
@@ -588,7 +588,7 @@ export const mockProjects = [
     category: "Short Film",
     role: "Production Assistant",
     image: "/images/project2.jpg",
-    video_url: "https://youtube.com/watch?v=-fgtd87ywuw",
+    thumbnail_url: "https://youtube.com/watch?v=-fgtd87ywuw", // Changed from video_url to thumbnail_url
     description: "Provided essential support as a PA on this award-winning short film production.",
     special_notes: "Being part of such a collaborative and creative team was an incredible learning experience.",
     tags: ["Short Film", "Production Assistant"],
@@ -599,7 +599,7 @@ export const mockProjects = [
     category: "Music Video",
     role: "Production Assistant",
     image: "/images/project3.jpg",
-    video_url: "https://youtube.com/watch?v=Oix719dXXb8",
+    thumbnail_url: "https://youtube.com/watch?v=Oix719dXXb8", // Changed from video_url to thumbnail_url
     description: "Assisted with various aspects of production for this innovative music video.",
     special_notes: "The fast-paced production schedule taught me how to work efficiently under pressure.",
     tags: ["Music Video", "Production Assistant"],

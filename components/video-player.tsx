@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 
 interface VideoPlayerProps {
@@ -21,8 +23,33 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
     // Reset states when props change
     setIsLoaded(false)
     setHasError(false)
-  }, [platform, videoId])
 
+    console.log("VideoPlayer props changed:", { platform, videoId })
+
+    // Set a timeout to show fallback if video doesn't load
+    const timer = setTimeout(() => {
+      if (!isLoaded) {
+        console.log("Video load timeout - showing fallback")
+        setHasError(true)
+        onError?.()
+      }
+    }, 5000)
+
+    return () => clearTimeout(timer)
+  }, [platform, videoId, onError])
+
+  const handleLoad = () => {
+    console.log("Video loaded successfully")
+    setIsLoaded(true)
+  }
+
+  const handleError = (e: React.SyntheticEvent<HTMLIFrameElement, Event>) => {
+    console.error("Error loading video:", e)
+    setHasError(true)
+    onError?.()
+  }
+
+  // Get video embed URL
   const getEmbedUrl = () => {
     try {
       if (!platform || !videoId) {
@@ -53,12 +80,6 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
   const embedUrl = getEmbedUrl()
   console.log("Generated embed URL:", embedUrl)
 
-  const handleError = () => {
-    console.error("Error loading video iframe")
-    setHasError(true)
-    onError?.()
-  }
-
   if (hasError) {
     return (
       <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
@@ -85,10 +106,7 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
           allowFullScreen
           title="Embedded video"
-          onLoad={() => {
-            console.log("Video iframe loaded successfully")
-            setIsLoaded(true)
-          }}
+          onLoad={handleLoad}
           onError={handleError}
         ></iframe>
       )}

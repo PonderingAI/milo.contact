@@ -15,7 +15,9 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
   const [hasError, setHasError] = useState(false)
 
   // Log props for debugging
-  console.log("VideoBackground props:", { platform, videoId, fallbackImage })
+  useEffect(() => {
+    console.log("VideoBackground props:", { platform, videoId, fallbackImage })
+  }, [platform, videoId, fallbackImage])
 
   useEffect(() => {
     // Reset states when video changes
