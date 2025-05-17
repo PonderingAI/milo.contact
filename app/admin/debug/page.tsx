@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Database, Server, FileText, AlertTriangle, Bug } from "lucide-react"
+import { Database, Server, FileText, AlertTriangle, Bug, FileImage } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -97,6 +97,29 @@ export default function AdminDebugPage() {
             <Link href="/admin/debug/logs" className="w-full">
               <Button variant="default" className="w-full">
                 View Logs
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
+        {/* Project Media Debugger Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <FileImage className="h-5 w-5" />
+              Project Media Debugger
+            </CardTitle>
+            <CardDescription>Debug video and BTS image issues</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Diagnose issues with project videos and BTS images, check field values and data structure.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug/project-media" className="w-full">
+              <Button variant="default" className="w-full">
+                Open Media Debugger
               </Button>
             </Link>
           </CardFooter>

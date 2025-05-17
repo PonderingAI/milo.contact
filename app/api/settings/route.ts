@@ -1,57 +1,63 @@
-import { NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase-server"
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
     const supabase = createAdminClient()
-    const { data, error } = await supabase.from("settings").select("*")
+
+    const { data, error } = await supabase.from("site_settings").select("*")
 
     if (error) {
+      console.error("Error fetching settings:", error)
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    const settingsObject: Record<string, any> = {}
-    data.forEach((setting) => {
-      settingsObject[setting.key] = setting.value
-    })
-
-    return NextResponse.json(settingsObject)
-  } catch (error) {
-    console.error("Error getting settings:", error)
-    return NextResponse.json({ error: "An unexpected error occurred while retrieving settings" }, { status: 500 })
+    return NextResponse.json(data)
+  } catch (error: any) {
+    console.error("Error in GET /api/settings:", error)
+    return NextResponse.json({ error: error.message || "An unknown error occurred" }, { status: 500 })
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
-    const reqData = await request.json()
+    const settings = await request.json()
+
+    if (!Array.isArray(settings)) {
+      return NextResponse.json({ error: "Invalid settings format" }, { status: 400 })
+    }
+
     const supabase = createAdminClient()
 
-    // Validate that we received key-value settings
-    if (!reqData || typeof reqData !== "object") {
-      return NextResponse.json({ error: "Invalid settings data" }, { status: 400 })
+    // Process each setting
+    for (const setting of settings) {
+      const { key, value } = setting
+
+      // Special handling for background_color to ensure it has a # prefix
+      let processedValue = value
+      if (key === "background_color" && value && !value.startsWith("#")) {
+        processedValue = `#${value}`
+      }
+
+      // Special handling for hero_bg_type to ensure it's saved correctly
+      if (key === "hero_bg_type") {
+        console.log(`Saving hero_bg_type: "${value}"`)
+      }
+
+      // Upsert the setting
+      const { error } = await supabase
+        .from("site_settings")
+        .upsert({ key, value: processedValue }, { onConflict: "key" })
+
+      if (error) {
+        console.error(`Error upserting setting ${key}:`, error)
+        return NextResponse.json({ error: error.message }, { status: 500 })
+      }
     }
 
-    console.log("Settings to update:", reqData)
-
-    // Batch insert/update the settings
-    const updates = Object.entries(reqData).map(([key, value]) => ({
-      key,
-      value,
-    }))
-
-    const { error } = await supabase.from("settings").upsert(updates, {
-      onConflict: "key",
-    })
-
-    if (error) {
-      console.error("Error updating settings:", error)
-      return NextResponse.json({ error: error.message }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true, message: "Settings updated successfully" })
-  } catch (error) {
-    console.error("Error updating settings:", error)
-    return NextResponse.json({ error: "An unexpected error occurred while updating settings" }, { status: 500 })
+    return NextResponse.json({ success: true })
+  } catch (error: any) {
+    console.error("Error in POST /api/settings:", error)
+    return NextResponse.json({ error: error.message || "An unknown error occurred" }, { status: 500 })
   }
 }
