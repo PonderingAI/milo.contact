@@ -1,15 +1,8 @@
-export type UserRole = {
-  id: string
-  name: string
-  description: string
-}
+import { cookies } from "next/headers"
 
-export const assignRole = async (userId: string, roleName: string): Promise<boolean> => {
-  console.log(`Placeholder: Assigning role ${roleName} to user ${userId}`)
-  return true
-}
+export async function isAdmin() {
+  const adminCookie = cookies().get("admin")
+  const isAdmin = adminCookie?.value === "true"
 
-export const removeRole = async (userId: string, roleName: string): Promise<boolean> => {
-  console.log(`Placeholder: Removing role ${roleName} from user ${userId}`)
-  return true
+  return { isAdmin }
 }
