@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import Image from "next/image"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 export default function AboutSection() {
@@ -13,7 +12,6 @@ export default function AboutSection() {
       "My journey combines a solid educational background with hands-on experience in computer science, graphic design, and film production. I work as a Director of Photography (DP), 1st and 2nd Assistant Camera (1AC & 2AC), as well as a drone and underwater operator.",
     about_text3:
       "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature, which often inspires my landscape and product photography work.",
-    image_profile: "/images/profile.jpg",
   })
   const [isLoading, setIsLoading] = useState(true)
 
@@ -26,7 +24,7 @@ export default function AboutSection() {
         const { data, error } = await supabase
           .from("site_settings")
           .select("key, value")
-          .in("key", ["about_heading", "about_text1", "about_text2", "about_text3", "image_profile"])
+          .in("key", ["about_heading", "about_text1", "about_text2", "about_text3"])
 
         if (error) {
           // If table doesn't exist, we'll use default values
@@ -45,7 +43,6 @@ export default function AboutSection() {
             if (item.key === "about_text1") newSettings.about_text1 = item.value
             if (item.key === "about_text2") newSettings.about_text2 = item.value
             if (item.key === "about_text3") newSettings.about_text3 = item.value
-            if (item.key === "image_profile") newSettings.image_profile = item.value
           })
           setSettings(newSettings)
         }
@@ -61,16 +58,11 @@ export default function AboutSection() {
 
   return (
     <section id="about" className="py-24">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        <div>
-          <h2 className="text-5xl md:text-7xl font-serif mb-8">{settings.about_heading}</h2>
-          <p className="text-xl text-gray-300 mb-6">{settings.about_text1}</p>
-          <p className="text-xl text-gray-300 mb-6">{settings.about_text2}</p>
-          <p className="text-xl text-gray-300">{settings.about_text3}</p>
-        </div>
-        <div className="relative h-[600px] rounded-lg overflow-hidden">
-          <Image src={settings.image_profile || "/placeholder.svg"} alt="Milo Presedo" fill className="object-cover" />
-        </div>
+      <div className="max-w-4xl mx-auto">
+        <h2 className="text-5xl md:text-7xl font-serif mb-8">{settings.about_heading}</h2>
+        <p className="text-xl text-gray-300 mb-6">{settings.about_text1}</p>
+        <p className="text-xl text-gray-300 mb-6">{settings.about_text2}</p>
+        <p className="text-xl text-gray-300">{settings.about_text3}</p>
       </div>
     </section>
   )

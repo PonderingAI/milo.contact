@@ -293,3 +293,12 @@ body,
   margin: 1rem 0;
   font-family: monospace;
 }
+
+/* Check for any global CSS that might be creating this text */
+/* Look for ::before pseudo-elements that might be adding this text */
+
+/* Remove this rule or similar that's creating the "Milo Presedo" text */
+/* .some-class::before {
+  content: "Milo Presedo";
+   other styles 
+} */
