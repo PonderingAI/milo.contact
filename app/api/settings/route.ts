@@ -39,6 +39,11 @@ export async function POST(request: NextRequest) {
         processedValue = `#${value}`
       }
 
+      // Special handling for hero_bg_type to ensure it's saved correctly
+      if (key === "hero_bg_type") {
+        console.log(`Saving hero_bg_type: "${value}"`)
+      }
+
       // Upsert the setting
       const { error } = await supabase
         .from("site_settings")

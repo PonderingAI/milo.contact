@@ -107,16 +107,7 @@ function MediaUploader({
   onBgTypeChange,
 }: MediaUploaderProps) {
   const [uploading, setUploading] = useState(false)
-  const [mediaType, setMediaType] = useState<"image" | "video" | "latest_project">(
-    bgType === "latest_project"
-      ? "latest_project"
-      : currentValue.includes("vimeo.com") ||
-          currentValue.includes("youtube.com") ||
-          currentValue.includes("youtu.be") ||
-          currentValue.includes("linkedin.com")
-        ? "video"
-        : "image",
-  )
+  const [mediaType, setMediaType] = useState<"image" | "video" | "latest_project">("image")
   const [videoUrl, setVideoUrl] = useState(
     currentValue.includes("vimeo.com") ||
       currentValue.includes("youtube.com") ||
@@ -136,6 +127,22 @@ function MediaUploader({
       : null,
   )
   const supabase = createClientComponentClient()
+
+  useEffect(() => {
+    // Set the initial media type based on the bgType prop or current value
+    if (bgType === "latest_project") {
+      setMediaType("latest_project")
+    } else if (
+      currentValue.includes("vimeo.com") ||
+      currentValue.includes("youtube.com") ||
+      currentValue.includes("youtu.be") ||
+      currentValue.includes("linkedin.com")
+    ) {
+      setMediaType("video")
+    } else {
+      setMediaType("image")
+    }
+  }, [bgType, currentValue])
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -321,18 +328,22 @@ function MediaUploader({
 
   const handleMediaTypeChange = (value: "image" | "video" | "latest_project") => {
     setMediaType(value)
+
+    // Always call onBgTypeChange when media type changes
     if (onBgTypeChange) onBgTypeChange(value)
 
-    // If switching to latest_project, we don't need to update the URL
-    if (value !== "latest_project") {
-      // If switching between image and video, clear the other value
-      if (value === "image") {
-        setVideoUrl("")
-        if (preview) onUpload(preview)
-      } else if (value === "video") {
-        setPreview(null)
-        if (videoUrl) onUpload(videoUrl)
-      }
+    // If switching to latest_project, we need to update the URL to a special value
+    if (value === "latest_project") {
+      // Use a special placeholder value to indicate latest project
+      onUpload("latest_project")
+    }
+    // If switching between image and video, clear the other value
+    else if (value === "image") {
+      setVideoUrl("")
+      if (preview) onUpload(preview)
+    } else if (value === "video") {
+      setPreview(null)
+      if (videoUrl) onUpload(videoUrl)
     }
   }
 
@@ -640,6 +651,9 @@ export default function SiteInformationForm() {
 
     try {
       setSaving(true)
+
+      // Debug log
+      console.log("Saving settings:", settings)
 
       // Convert settings object to array of {key, value} pairs
       const settingsArray = Object.entries(settings).map(([key, value]) => ({

@@ -34,15 +34,22 @@ async function getLatestProject() {
   }
 }
 
-export default async function Home() {
+// In the HomePage component, ensure we're passing the latest project to HeroSection
+export default async function HomePage() {
+  // Get all projects
+  const projects = await getProjects()
+
+  // Get the latest project (first in the array since they're ordered by created_at desc)
+  const latestProject = projects.length > 0 ? projects[0] : null
+
+  console.log("Latest project for hero:", latestProject?.title)
+
   // Check if database is set up
   const dbSetup = await isDatabaseSetup()
 
   // Get projects - this will return mock data if the database isn't set up
-  const projects = await getProjects()
-
   // Get the latest project with video
-  const latestProject = await getLatestProject()
+  // const latestProject = await getLatestProject()
 
   // Check if we have real projects from the database
   const hasRealProjects = dbSetup && projects.length > 0

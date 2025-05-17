@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 import { useState, useEffect } from "react"
 
 interface VideoBackgroundProps {
@@ -20,6 +22,8 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
     setIsLoaded(false)
     setHasError(false)
 
+    console.log("VideoBackground props changed:", { platform, videoId, fallbackImage })
+
     // Set a timeout to show fallback if video doesn't load
     const timer = setTimeout(() => {
       if (!isLoaded) {
@@ -29,25 +33,37 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
     }, 5000)
 
     return () => clearTimeout(timer)
-  }, [platform, videoId, isLoaded])
+  }, [platform, videoId, fallbackImage])
 
   const handleLoad = () => {
     console.log("Video loaded successfully")
     setIsLoaded(true)
   }
 
-  const handleError = () => {
-    console.error("Error loading video")
+  const handleError = (e: React.SyntheticEvent<HTMLIFrameElement, Event>) => {
+    console.error("Error loading video:", e)
     setHasError(true)
   }
 
   // Get video embed URL
   const getVideoSrc = () => {
+    if (!platform || !videoId) {
+      console.error("Missing platform or videoId")
+      return ""
+    }
+
     if (platform === "youtube") {
       return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}`
     } else if (platform === "vimeo") {
       return `https://player.vimeo.com/video/${videoId}?background=1&autoplay=1&loop=1&byline=0&title=0`
+    } else if (platform === "linkedin") {
+      // LinkedIn doesn't support direct embedding in the same way
+      // Return empty string to trigger fallback image
+      console.log("LinkedIn video detected - using fallback image")
+      return ""
     }
+
+    console.warn("Unknown platform:", platform)
     return ""
   }
 

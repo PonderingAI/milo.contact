@@ -36,6 +36,8 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
           })
           console.log("Loaded hero settings:", newSettings)
           setSettings(newSettings)
+        } else if (error) {
+          console.error("Error fetching hero settings:", error)
         }
       } catch (err) {
         console.error("Error loading hero settings:", err)
@@ -55,15 +57,25 @@ export default function HeroSection({ latestProject }: HeroSectionProps) {
   let videoInfo = null
 
   // Case 1: Latest project video
-  if (settings.hero_bg_type === "latest_project" && latestProject?.video_url) {
-    backgroundType = "video"
-    backgroundMedia = latestProject.video_url
-    videoInfo = extractVideoInfo(latestProject.video_url)
-    console.log("Using latest project video:", backgroundMedia, videoInfo)
+  if (settings.hero_bg_type === "latest_project") {
+    console.log("Latest project setting detected:", latestProject)
+
+    if (latestProject?.video_url) {
+      backgroundType = "video"
+      backgroundMedia = latestProject.video_url
+      videoInfo = extractVideoInfo(latestProject.video_url)
+      console.log("Using latest project video:", backgroundMedia, videoInfo)
+    } else if (latestProject?.image) {
+      // Fallback to latest project image if no video
+      backgroundType = "image"
+      backgroundMedia = latestProject.image
+      console.log("Using latest project image as fallback:", backgroundMedia)
+    }
   }
   // Case 2: Video URL in settings
   else if (settings.hero_bg_type === "video" && settings.image_hero_bg) {
     backgroundType = "video"
+    backgroundMedia = settings.image_hero_bg
     videoInfo = extractVideoInfo(settings.image_hero_bg)
     console.log("Using video from settings:", backgroundMedia, videoInfo)
   }
