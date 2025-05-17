@@ -275,16 +275,16 @@ export default function UploadWidget({
     >
       {/* Normal UI - hidden when dragging */}
       {!isLocalDrag && (
-        <div className="space-y-2">
-          {/* Browse Media button */}
+        <div className="space-y-4">
+          {/* Browse Media button at the top */}
           <button
             onClick={openMediaBrowser}
             className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
           >
-            Browse Media
+            Browse Media Library
           </button>
 
-          {/* URL input */}
+          {/* URL input in the middle */}
           <div className="relative">
             <input
               type="text"
@@ -302,7 +302,7 @@ export default function UploadWidget({
             </button>
           </div>
 
-          {/* Browse Device button */}
+          {/* Browse Device button at the bottom */}
           <button
             onClick={triggerFileInput}
             className={`w-full ${compact ? "py-2" : "py-3"} rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center ${compact ? "text-sm" : "text-base"}`}
