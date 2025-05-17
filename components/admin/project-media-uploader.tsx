@@ -1,125 +1,160 @@
 "use client"
 
+import { useState, useRef, useCallback } from "react"
 import type React from "react"
 
-import { useState, useRef, useEffect } from "react"
-import { Upload, ArrowRight, Loader2 } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { UploadCloud, Loader2, X, Film, Search, Info } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import UnifiedMediaLibrary from "./unified-media-library"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import MediaSelector from "./media-selector"
-import { Progress } from "@/components/ui/progress"
 
 interface ProjectMediaUploaderProps {
   title: string
   onMediaSelect: (url: string | string[]) => void
   onVideoUrlSubmit?: (url: string) => void
-  compact?: boolean
-  mediaType?: "all" | "images" | "videos"
+  mediaType?: "image" | "video" | "all"
   folder?: string
+  isLoading?: boolean
 }
 
 export default function ProjectMediaUploader({
   title,
   onMediaSelect,
   onVideoUrlSubmit,
-  compact = false,
   mediaType = "all",
   folder = "projects",
+  isLoading = false,
 }: ProjectMediaUploaderProps) {
   const supabase = createClientComponentClient()
   const [isDragging, setIsDragging] = useState(false)
-  const [videoUrl, setVideoUrl] = useState("")
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
-  const [totalFiles, setTotalFiles] = useState(0)
-  const [uploadedFiles, setUploadedFiles] = useState(0)
+  const [videoUrl, setVideoUrl] = useState("")
+  const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false)
+  const [duplicateWarning, setDuplicateWarning] = useState<{
+    show: boolean
+    message: string
+    existingItem?: any
+  }>({ show: false, message: "" })
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const dropAreaRef = useRef<HTMLDivElement>(null)
 
-  // Listen for global drag events
-  useEffect(() => {
-    const handleDragOver = (e: DragEvent) => {
-      e.preventDefault()
-    }
-
-    const handleDrop = (e: DragEvent) => {
-      e.preventDefault()
-      setIsDragging(false)
-    }
-
-    document.addEventListener("dragover", handleDragOver)
-    document.addEventListener("drop", handleDrop)
-
-    return () => {
-      document.removeEventListener("dragover", handleDragOver)
-      document.removeEventListener("drop", handleDrop)
-    }
-  }, [])
-
-  const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragEnter = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(true)
   }
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-
-    // Check if we're leaving the actual drop target (not a child element)
-    const relatedTarget = e.relatedTarget as Node
-    if (dropAreaRef.current && !dropAreaRef.current.contains(relatedTarget)) {
-      setIsDragging(false)
-    }
-  }
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    e.stopPropagation()
-    // Set the drop effect
-    e.dataTransfer.dropEffect = "copy"
-  }
-
-  const handleDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+  const handleDragLeave = (e: React.DragEvent) => {
     e.preventDefault()
     e.stopPropagation()
     setIsDragging(false)
-
-    const files = e.dataTransfer.files
-    if (files && files.length > 0) {
-      await handleFileUpload(files)
-    }
   }
 
-  // Find the handleFileUpload function and update it to ensure URLs are properly passed back
-  const handleFileUpload = async (files: FileList) => {
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setIsDragging(false)
+
+      const files = e.dataTransfer.files
+      if (files && files.length > 0) {
+        await handleFileUpload(Array.from(files))
+      }
+    },
+    [onMediaSelect],
+  )
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files
     if (!files || files.length === 0) return
 
+    await handleFileUpload(Array.from(files))
+
+    // Reset the input
+    e.target.value = ""
+  }
+
+  const handleFileUpload = async (files: File[]) => {
+    if (files.length === 0) return
+
+    // Filter files based on mediaType
+    const filteredFiles = files.filter((file) => {
+      const fileType = file.type.split("/")[0]
+      if (mediaType === "image") return fileType === "image"
+      if (mediaType === "video") return fileType === "video"
+      return true // "all" type
+    })
+
+    if (filteredFiles.length === 0) {
+      toast({
+        title: "Invalid file type",
+        description: `Please upload ${mediaType === "image" ? "images" : mediaType === "video" ? "videos" : "media files"}`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsUploading(true)
+    setUploadProgress(0)
+
     try {
-      setIsUploading(true)
-      setTotalFiles(files.length)
-      setUploadedFiles(0)
-      setUploadProgress(0)
+      // Process each file
+      for (let i = 0; i < filteredFiles.length; i++) {
+        const file = filteredFiles[i]
 
-      // Show upload in progress toast
-      const toastId = toast({
-        title: "Upload in progress",
-        description: `Uploading ${files.length} file(s) to ${title}...`,
-      }).id
+        // Check for duplicates before uploading
+        const fileHash = await calculateFileHash(file)
+        const duplicateCheckResponse = await fetch("/api/check-media-duplicate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileHash,
+            filename: file.name,
+          }),
+        })
 
-      const uploadedUrls: string[] = []
+        const duplicateCheckResult = await duplicateCheckResponse.json()
 
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
+        if (duplicateCheckResult.isDuplicate) {
+          // If it's a duplicate, use the existing file instead of uploading again
+          setDuplicateWarning({
+            show: true,
+            message: duplicateCheckResult.reason || `File "${file.name}" already exists in the media library.`,
+            existingItem: duplicateCheckResult.existingItem,
+          })
+
+          // Add the existing file URL to the selected media
+          if (duplicateCheckResult.existingItem?.public_url) {
+            onMediaSelect(duplicateCheckResult.existingItem.public_url)
+          }
+
+          // Update progress
+          setUploadProgress(((i + 1) / filteredFiles.length) * 100)
+          continue
+        }
 
         // Create a FormData object
-        const formDataUpload = new FormData()
-        formDataUpload.append("file", file)
+        const formData = new FormData()
+        formData.append("file", file)
+        formData.append("folder", folder)
 
-        // Upload the file using the bulk-upload endpoint which handles WebP conversion
+        // Upload the file
         const response = await fetch("/api/bulk-upload", {
           method: "POST",
-          body: formDataUpload,
+          body: formData,
         })
 
         if (!response.ok) {
@@ -128,146 +163,245 @@ export default function ProjectMediaUploader({
         }
 
         const result = await response.json()
-        console.log("Upload result:", result)
 
-        if (result.success) {
-          // Make sure we're using the correct URL property
-          uploadedUrls.push(result.publicUrl)
-          setUploadedFiles((prev) => prev + 1)
-          setUploadProgress(Math.round(((i + 1) / files.length) * 100))
+        // If it's a duplicate, show a warning but still use the file
+        if (result.duplicate) {
+          setDuplicateWarning({
+            show: true,
+            message: result.message || `File "${file.name}" already exists in the media library.`,
+            existingItem: result.existingFile,
+          })
+
+          // Add the existing file URL to the selected media
+          if (result.existingFile?.public_url) {
+            onMediaSelect(result.existingFile.public_url)
+          }
         } else {
-          throw new Error(result.error || "Unknown error during upload")
+          // Add the new file URL to the selected media
+          onMediaSelect(result.publicUrl)
         }
+
+        // Update progress
+        setUploadProgress(((i + 1) / filteredFiles.length) * 100)
       }
 
-      // Call the onMediaSelect with all uploaded URLs
-      if (uploadedUrls.length > 0) {
-        console.log("Calling onMediaSelect with URLs:", uploadedUrls)
-        onMediaSelect(uploadedUrls.length === 1 ? uploadedUrls[0] : uploadedUrls)
-
-        toast({
-          id: toastId,
-          title: "Upload successful",
-          description: `${files.length} file(s) uploaded to ${title}`,
-        })
-      }
+      toast({
+        title: "Upload complete",
+        description: `${filteredFiles.length} file${filteredFiles.length !== 1 ? "s" : ""} uploaded successfully`,
+      })
     } catch (error) {
-      console.error("Error uploading file:", error)
+      console.error("Error uploading files:", error)
       toast({
         title: "Upload failed",
-        description: error instanceof Error ? error.message : "Failed to upload file",
+        description: error instanceof Error ? error.message : "Failed to upload files",
         variant: "destructive",
       })
     } finally {
       setIsUploading(false)
+      setUploadProgress(0)
     }
   }
 
-  const handleVideoUrlSubmit = () => {
-    if (videoUrl.trim() && onVideoUrlSubmit) {
-      onVideoUrlSubmit(videoUrl)
+  const calculateFileHash = async (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        if (!e.target?.result) {
+          resolve("")
+          return
+        }
+
+        const arrayBuffer = e.target.result as ArrayBuffer
+        const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer)
+        const hashArray = Array.from(new Uint8Array(hashBuffer))
+        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+        resolve(hashHex)
+      }
+      reader.readAsArrayBuffer(file)
+    })
+  }
+
+  const handleVideoUrlSubmit = async () => {
+    if (!videoUrl.trim() || !onVideoUrlSubmit) return
+
+    // Check for duplicates before processing
+    const duplicateCheckResponse = await fetch("/api/check-media-duplicate", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url: videoUrl.trim(),
+      }),
+    })
+
+    const duplicateCheckResult = await duplicateCheckResponse.json()
+
+    if (duplicateCheckResult.isDuplicate) {
+      // If it's a duplicate, use the existing video instead of processing again
+      setDuplicateWarning({
+        show: true,
+        message: duplicateCheckResult.reason || `Video already exists in the media library.`,
+        existingItem: duplicateCheckResult.existingItem,
+      })
+
+      // Add the existing video URL to the selected media
+      if (duplicateCheckResult.existingItem?.public_url) {
+        onMediaSelect(duplicateCheckResult.existingItem.public_url)
+      }
+
+      // Clear the input
       setVideoUrl("")
+      return
     }
+
+    // Process the video URL
+    onVideoUrlSubmit(videoUrl.trim())
+    setVideoUrl("")
+  }
+
+  const handleMediaLibrarySelect = (urls: string[]) => {
+    if (urls.length > 0) {
+      onMediaSelect(urls)
+      setIsMediaLibraryOpen(false)
+    }
+  }
+
+  const closeDuplicateWarning = () => {
+    setDuplicateWarning({ show: false, message: "" })
   }
 
   return (
-    <div className="space-y-2">
-      <h2 className="text-sm font-medium mb-2 text-gray-400">{title}</h2>
+    <Card className="border-gray-800 bg-[#070a10]">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-xl text-gray-200">{title} Media</CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <Tabs defaultValue="upload">
+          <TabsList className="bg-gray-800">
+            <TabsTrigger value="upload">Upload</TabsTrigger>
+            <TabsTrigger value="library">Media Library</TabsTrigger>
+            {mediaType !== "image" && <TabsTrigger value="video">Video URL</TabsTrigger>}
+          </TabsList>
 
-      <div
-        ref={dropAreaRef}
-        className={`rounded-xl bg-[#070a10] p-4 relative min-h-[180px] ${
-          isDragging ? "ring-2 ring-blue-500 bg-[#0a101e]" : ""
-        } transition-all duration-200`}
-        onDragEnter={handleDragEnter}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {/* Normal UI - shown when not dragging and not uploading */}
-        {!isDragging && !isUploading && (
-          <div className="space-y-2">
-            {/* Media Selector */}
-            <MediaSelector
-              onSelect={onMediaSelect}
-              mediaType={mediaType}
-              multiple={true}
-              buttonLabel="Browse Media Library"
-            />
-
-            {/* URL input - only show if onVideoUrlSubmit is provided */}
-            {onVideoUrlSubmit && (
-              <div className="relative">
-                <input
-                  type="text"
-                  value={videoUrl}
-                  onChange={(e) => setVideoUrl(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && videoUrl.trim()) {
-                      e.preventDefault()
-                      handleVideoUrlSubmit()
-                    }
-                  }}
-                  placeholder="Enter video URL..."
-                  className="w-full py-2 px-3 pr-10 rounded-lg bg-[#0f1520] text-gray-300 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-700 text-sm"
-                />
-                <button
-                  type="button"
-                  onClick={handleVideoUrlSubmit}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-200"
-                >
-                  <ArrowRight size={18} />
-                </button>
+          <TabsContent value="upload" className="pt-4">
+            <div
+              className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                isDragging ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500"
+              }`}
+              onDragEnter={handleDragEnter}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <div className="flex flex-col items-center justify-center gap-2">
+                <UploadCloud className="h-8 w-8 text-gray-400" />
+                <p className="text-sm font-medium">{isDragging ? "Drop files here" : "Drag & drop files here"}</p>
+                <p className="text-xs text-gray-400">
+                  or <span className="text-blue-500 cursor-pointer">browse</span> to upload
+                </p>
+                {isUploading && (
+                  <div className="w-full mt-2">
+                    <div className="h-1 w-full bg-gray-700 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-500 transition-all duration-300 ease-in-out"
+                        style={{ width: `${uploadProgress}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">Uploading... {Math.round(uploadProgress)}%</p>
+                  </div>
+                )}
               </div>
-            )}
-
-            {/* Browse Device button */}
-            <label className="w-full py-2 rounded-lg bg-[#0f1520] hover:bg-[#131a2a] transition-colors text-gray-300 text-center text-sm cursor-pointer block">
-              Browse Device
               <input
-                type="file"
                 ref={fileInputRef}
-                className="hidden"
-                accept={mediaType === "images" ? "image/*" : mediaType === "videos" ? "video/*" : "image/*,video/*"}
+                type="file"
                 multiple
-                onChange={(e) => {
-                  if (e.target.files && e.target.files.length > 0) {
-                    handleFileUpload(e.target.files)
-                    e.target.value = "" // Reset input
-                  }
-                }}
+                onChange={handleFileSelect}
+                className="hidden"
+                accept={
+                  mediaType === "image"
+                    ? "image/*"
+                    : mediaType === "video"
+                      ? "video/*"
+                      : "image/*,video/*,audio/*,application/pdf"
+                }
               />
-            </label>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="library" className="pt-4">
+            <div className="text-center">
+              <Button
+                onClick={() => setIsMediaLibraryOpen(true)}
+                className="bg-gray-800 hover:bg-gray-700 text-gray-200"
+              >
+                <Search className="h-4 w-4 mr-2" />
+                Browse Media Library
+              </Button>
+            </div>
+          </TabsContent>
+
+          {mediaType !== "image" && (
+            <TabsContent value="video" className="pt-4">
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Paste YouTube, Vimeo, or LinkedIn video URL"
+                    value={videoUrl}
+                    onChange={(e) => setVideoUrl(e.target.value)}
+                    className="bg-gray-800 border-gray-700 text-gray-200"
+                  />
+                  <Button
+                    onClick={handleVideoUrlSubmit}
+                    disabled={!videoUrl.trim() || isUploading}
+                    className="bg-gray-800 hover:bg-gray-700 text-gray-200"
+                  >
+                    {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}
+                  </Button>
+                </div>
+                <p className="text-xs text-gray-400">Supported formats: YouTube, Vimeo, and LinkedIn video URLs</p>
+              </div>
+            </TabsContent>
+          )}
+        </Tabs>
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-4">
+            <Loader2 className="h-5 w-5 animate-spin text-gray-400 mr-2" />
+            <span className="text-sm text-gray-400">Loading media...</span>
           </div>
         )}
 
-        {/* Upload Progress UI */}
-        {isUploading && (
-          <div className="absolute inset-0 rounded-xl bg-[#0a101e]/90 backdrop-blur-sm flex flex-col items-center justify-center z-10 p-6">
-            <Loader2 className="h-8 w-8 text-blue-400 mb-4 animate-spin" />
-            <h3 className="text-lg font-medium text-white mb-2">Uploading to {title}...</h3>
-            <div className="w-full max-w-md mb-2">
-              <Progress value={uploadProgress} className="h-2" />
-            </div>
-            <p className="text-gray-300 text-sm">
-              {uploadedFiles} of {totalFiles} files ({uploadProgress}%)
-            </p>
-          </div>
+        {duplicateWarning.show && (
+          <Alert className="bg-yellow-900/20 border-yellow-800">
+            <Info className="h-4 w-4 text-yellow-500" />
+            <AlertDescription className="flex justify-between items-center">
+              <span>{duplicateWarning.message}</span>
+              <Button variant="ghost" size="sm" onClick={closeDuplicateWarning} className="h-6 w-6 p-0">
+                <X className="h-4 w-4" />
+              </Button>
+            </AlertDescription>
+          </Alert>
         )}
+      </CardContent>
 
-        {/* Drop UI - shown when dragging */}
-        {isDragging && (
-          <div className="absolute inset-0 rounded-xl border-2 border-dashed border-blue-500 bg-[#0a101e]/80 backdrop-blur-sm flex flex-col items-center justify-center z-10">
-            <div className="bg-[#131a2a] p-6 rounded-lg shadow-lg flex flex-col items-center">
-              <Upload className="h-10 w-10 text-blue-400 mb-3" />
-              <h3 className="text-xl font-bold text-white mb-1">Drop in {title}</h3>
-              <p className="text-gray-300 text-center text-sm">
-                Files will be added to the {title.toLowerCase()} section
-              </p>
-            </div>
+      {/* Media Library Dialog */}
+      <Dialog open={isMediaLibraryOpen} onOpenChange={setIsMediaLibraryOpen}>
+        <DialogContent className="max-w-6xl w-[95vw]">
+          <DialogHeader>
+            <DialogTitle>Media Library</DialogTitle>
+            <DialogDescription>Select media to add to your project</DialogDescription>
+          </DialogHeader>
+          <div className="h-[70vh] overflow-y-auto">
+            <UnifiedMediaLibrary
+              selectionMode="multiple"
+              onSelect={handleMediaLibrarySelect}
+              mediaTypeFilter={mediaType}
+            />
           </div>
-        )}
-      </div>
-    </div>
+        </DialogContent>
+      </Dialog>
+    </Card>
   )
 }

@@ -1,5 +1,6 @@
 import { createAdminClient } from "@/lib/supabase-server"
 import { extractVideoInfo, fetchYouTubeTitle } from "@/lib/project-data"
+import { checkMediaDuplicate } from "@/lib/media-utils"
 import { type NextRequest, NextResponse } from "next/server"
 
 export async function POST(request: NextRequest) {
@@ -18,23 +19,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid video URL format" }, { status: 400 })
     }
 
-    // First check if this video URL already exists in the database
-    const { data: existingVideos, error: checkError } = await supabase
-      .from("media")
-      .select("id, filename, public_url, filepath, filetype")
-      .or(`public_url.eq.${url},filepath.eq.${url},metadata->${videoInfo.platform}Id.eq.${videoInfo.id}`)
-      .limit(1)
+    // Check for duplicates using our universal duplicate checker
+    const duplicateCheck = await checkMediaDuplicate({ url })
 
-    if (checkError) {
-      console.error("Error checking for duplicate videos:", checkError)
-    } else if (existingVideos && existingVideos.length > 0) {
+    if (duplicateCheck.isDuplicate) {
       // Duplicate found
-      console.log("Duplicate video found:", existingVideos[0])
+      console.log("Duplicate video found:", duplicateCheck.existingItem)
       return NextResponse.json(
         {
           duplicate: true,
-          existingVideo: existingVideos[0],
-          message: `Video already exists as "${existingVideos[0].filename}"`,
+          existingVideo: duplicateCheck.existingItem,
+          message: duplicateCheck.reason || `Video already exists as "${duplicateCheck.existingItem.filename}"`,
+          matchType: duplicateCheck.matchType,
         },
         { status: 200 },
       )

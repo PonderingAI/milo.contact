@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { createServerClient } from "@/lib/supabase-server"
+import { checkMediaDuplicate } from "@/lib/media-utils"
 import sharp from "sharp"
 import { v4 as uuidv4 } from "uuid"
 import crypto from "crypto"
@@ -25,26 +26,21 @@ export async function POST(request: Request) {
     const fileHash = crypto.createHash("md5").update(fileBuffer).digest("hex")
     console.log(`Calculated hash for ${filename}: ${fileHash}`)
 
-    // Create Supabase client
-    const supabase = createServerClient()
+    // Check for duplicates using our universal duplicate checker
+    const duplicateCheck = await checkMediaDuplicate({
+      fileHash,
+      filename,
+    })
 
-    // Check for duplicates by hash
-    const { data: existingFiles, error: queryError } = await supabase
-      .from("media")
-      .select("id, filename, public_url, filepath, filetype")
-      .or(`metadata->fileHash.eq.${fileHash},filepath.eq.${filename}`)
-      .limit(1)
-
-    if (queryError) {
-      console.error("Error checking for duplicates:", queryError)
-    } else if (existingFiles && existingFiles.length > 0) {
+    if (duplicateCheck.isDuplicate) {
       // Duplicate found
-      console.log("Duplicate file found:", existingFiles[0])
+      console.log("Duplicate file found:", duplicateCheck.existingItem)
       return NextResponse.json(
         {
           duplicate: true,
-          existingFile: existingFiles[0],
-          message: `File already exists as "${existingFiles[0].filename}"`,
+          existingFile: duplicateCheck.existingItem,
+          message: duplicateCheck.reason || `File already exists as "${duplicateCheck.existingItem.filename}"`,
+          matchType: duplicateCheck.matchType,
         },
         { status: 200 },
       )
@@ -70,10 +66,12 @@ export async function POST(request: Request) {
         const webpBuffer = await sharp(fileBuffer).webp({ quality: 85 }).toBuffer()
 
         // Upload the WebP file
-        const { error: uploadError, data } = await supabase.storage.from("public").upload(uploadPath, webpBuffer, {
-          contentType: "image/webp",
-          upsert: false,
-        })
+        const { error: uploadError, data } = await createServerClient()
+          .storage.from("public")
+          .upload(uploadPath, webpBuffer, {
+            contentType: "image/webp",
+            upsert: false,
+          })
 
         if (uploadError) {
           throw new Error(`WebP upload failed: ${uploadError.message}`)
@@ -82,7 +80,7 @@ export async function POST(request: Request) {
         // Get the public URL
         const {
           data: { publicUrl: url },
-        } = supabase.storage.from("public").getPublicUrl(uploadPath)
+        } = createServerClient().storage.from("public").getPublicUrl(uploadPath)
 
         publicUrl = url
         convertedToWebP = true
@@ -92,10 +90,12 @@ export async function POST(request: Request) {
         // Fallback to original format if WebP conversion fails
         uploadPath = `media/${uuidv4()}-${filename}`
 
-        const { error: uploadError } = await supabase.storage.from("public").upload(uploadPath, fileBuffer, {
-          contentType: file.type,
-          upsert: false,
-        })
+        const { error: uploadError } = await createServerClient()
+          .storage.from("public")
+          .upload(uploadPath, fileBuffer, {
+            contentType: file.type,
+            upsert: false,
+          })
 
         if (uploadError) {
           throw new Error(`Original upload failed: ${uploadError.message}`)
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
 
         const {
           data: { publicUrl: url },
-        } = supabase.storage.from("public").getPublicUrl(uploadPath)
+        } = createServerClient().storage.from("public").getPublicUrl(uploadPath)
 
         publicUrl = url
       }
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       // Handle other file types without conversion
       uploadPath = `media/${uuidv4()}-${filename}`
 
-      const { error: uploadError } = await supabase.storage.from("public").upload(uploadPath, fileBuffer, {
+      const { error: uploadError } = await createServerClient().storage.from("public").upload(uploadPath, fileBuffer, {
         contentType: file.type,
         upsert: false,
       })
@@ -122,27 +122,29 @@ export async function POST(request: Request) {
 
       const {
         data: { publicUrl: url },
-      } = supabase.storage.from("public").getPublicUrl(uploadPath)
+      } = createServerClient().storage.from("public").getPublicUrl(uploadPath)
 
       publicUrl = url
     }
 
     // Add record to the media table
-    const { error: insertError } = await supabase.from("media").insert({
-      filename,
-      filepath: uploadPath,
-      filesize,
-      filetype: fileType,
-      public_url: publicUrl,
-      thumbnail_url: thumbnailUrl,
-      tags: [fileType],
-      metadata: {
-        originalType: file.type,
-        fileHash: fileHash,
-        convertedToWebP,
-        originalFilename: filename,
-      },
-    })
+    const { error: insertError } = await createServerClient()
+      .from("media")
+      .insert({
+        filename,
+        filepath: uploadPath,
+        filesize,
+        filetype: fileType,
+        public_url: publicUrl,
+        thumbnail_url: thumbnailUrl,
+        tags: [fileType],
+        metadata: {
+          originalType: file.type,
+          fileHash: fileHash,
+          convertedToWebP,
+          originalFilename: filename,
+        },
+      })
 
     if (insertError) {
       throw new Error(`Database insert failed: ${insertError.message}`)

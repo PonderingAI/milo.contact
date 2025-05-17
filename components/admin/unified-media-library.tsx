@@ -24,9 +24,9 @@ import {
   X,
   CheckCircle,
   Info,
+  Check,
 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import { extractVideoInfo } from "@/lib/project-data"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Progress } from "@/components/ui/progress"
@@ -66,7 +66,19 @@ interface UploadStatus {
   duplicateId?: string
 }
 
-export default function UnifiedMediaLibrary() {
+interface UnifiedMediaLibraryProps {
+  selectionMode?: "single" | "multiple" | "none"
+  onSelect?: (urls: string[]) => void
+  mediaTypeFilter?: "image" | "video" | "all"
+  initialSelectedItems?: string[]
+}
+
+export default function UnifiedMediaLibrary({
+  selectionMode = "none",
+  onSelect,
+  mediaTypeFilter = "all",
+  initialSelectedItems = [],
+}: UnifiedMediaLibraryProps) {
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -86,6 +98,7 @@ export default function UnifiedMediaLibrary() {
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [duplicateItems, setDuplicateItems] = useState<Record<string, string>>({}) // Maps file/URL to existing item ID
+  const [selectedItems, setSelectedItems] = useState<string[]>(initialSelectedItems || [])
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = createClientComponentClient()
@@ -115,6 +128,13 @@ export default function UnifiedMediaLibrary() {
       processBulkUpload()
     }
   }, [uploadQueue, isProcessingQueue])
+
+  // Initialize selected items from props
+  useEffect(() => {
+    if (initialSelectedItems && initialSelectedItems.length > 0) {
+      setSelectedItems(initialSelectedItems)
+    }
+  }, [initialSelectedItems])
 
   const checkMediaTable = async () => {
     try {
@@ -291,6 +311,53 @@ export default function UnifiedMediaLibrary() {
       setUploadingFile(true)
 
       try {
+        // Check for duplicates first
+        const fileHash = await calculateFileHash(file)
+        const duplicateCheckResponse = await fetch("/api/check-media-duplicate", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileHash,
+            filename: file.name,
+          }),
+        })
+
+        const duplicateCheckResult = await duplicateCheckResponse.json()
+
+        if (duplicateCheckResult.isDuplicate) {
+          // If it's a duplicate, use the existing file instead of uploading again
+          toast({
+            title: "Duplicate file",
+            description: duplicateCheckResult.reason || `File "${file.name}" already exists in the media library.`,
+            variant: "warning",
+          })
+
+          // Highlight the duplicate file in the grid by scrolling to it
+          const duplicateId = duplicateCheckResult.existingItem?.id
+          if (duplicateId) {
+            setTimeout(() => {
+              const element = document.getElementById(`media-item-${duplicateId}`)
+              if (element) {
+                element.scrollIntoView({ behavior: "smooth", block: "center" })
+                element.classList.add("ring-2", "ring-yellow-500", "ring-offset-2", "ring-offset-black")
+                setTimeout(() => {
+                  element.classList.remove("ring-2", "ring-yellow-500", "ring-offset-2", "ring-offset-black")
+                }, 3000)
+              }
+            }, 500)
+          }
+
+          // If in selection mode, select the duplicate
+          if (selectionMode !== "none" && duplicateCheckResult.existingItem?.public_url) {
+            toggleItemSelection(duplicateCheckResult.existingItem.public_url)
+          }
+
+          setUploadingFile(false)
+          return
+        }
+
         // Create a FormData object
         const formData = new FormData()
         formData.append("file", file)
@@ -337,11 +404,21 @@ export default function UnifiedMediaLibrary() {
               }
             }, 500)
           }
+
+          // If in selection mode, select the duplicate
+          if (selectionMode !== "none" && result.existingFile?.public_url) {
+            toggleItemSelection(result.existingFile.public_url)
+          }
         } else {
           toast({
             title: "Success",
             description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
           })
+
+          // If in selection mode, select the new file
+          if (selectionMode !== "none" && result.publicUrl) {
+            toggleItemSelection(result.publicUrl)
+          }
         }
 
         // Refresh the media list
@@ -380,6 +457,25 @@ export default function UnifiedMediaLibrary() {
         }
       }, 100)
     }
+  }
+
+  const calculateFileHash = async (file: File): Promise<string> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader()
+      reader.onload = async (e) => {
+        if (!e.target?.result) {
+          resolve("")
+          return
+        }
+
+        const arrayBuffer = e.target.result as ArrayBuffer
+        const hashBuffer = await crypto.subtle.digest("SHA-256", arrayBuffer)
+        const hashArray = Array.from(new Uint8Array(hashBuffer))
+        const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+        resolve(hashHex)
+      }
+      reader.readAsArrayBuffer(file)
+    })
   }
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -452,6 +548,55 @@ export default function UnifiedMediaLibrary() {
           })
 
           try {
+            // Check for duplicates first
+            const fileHash = await calculateFileHash(item.file)
+            const duplicateCheckResponse = await fetch("/api/check-media-duplicate", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                fileHash,
+                filename: item.file.name,
+              }),
+            })
+
+            const duplicateCheckResult = await duplicateCheckResponse.json()
+
+            if (duplicateCheckResult.isDuplicate) {
+              // Mark as duplicate
+              setUploadQueue((prev) => {
+                const updated = [...prev]
+                updated[queueIndex] = {
+                  ...updated[queueIndex],
+                  status: "duplicate",
+                  progress: 100,
+                  response: duplicateCheckResult,
+                  duplicateId: duplicateCheckResult.existingItem?.id,
+                }
+                return updated
+              })
+
+              // Add to duplicates list
+              duplicates.push({
+                filename: item.file.name,
+                existingFile: duplicateCheckResult.existingItem,
+              })
+
+              // Add to duplicates map
+              setDuplicateItems((prev) => ({
+                ...prev,
+                [item.file.name]: duplicateCheckResult.existingItem?.id,
+              }))
+
+              // If in selection mode, select the duplicate
+              if (selectionMode !== "none" && duplicateCheckResult.existingItem?.public_url) {
+                toggleItemSelection(duplicateCheckResult.existingItem.public_url)
+              }
+
+              return
+            }
+
             // Create a FormData object
             const formData = new FormData()
             formData.append("file", item.file)
@@ -519,6 +664,11 @@ export default function UnifiedMediaLibrary() {
                 ...prev,
                 [item.file.name]: result.existingFile?.id,
               }))
+
+              // If in selection mode, select the duplicate
+              if (selectionMode !== "none" && result.existingFile?.public_url) {
+                toggleItemSelection(result.existingFile.public_url)
+              }
             } else {
               // Success
               setUploadQueue((prev) => {
@@ -531,6 +681,11 @@ export default function UnifiedMediaLibrary() {
                 }
                 return updated
               })
+
+              // If in selection mode, select the new file
+              if (selectionMode !== "none" && result.publicUrl) {
+                toggleItemSelection(result.publicUrl)
+              }
             }
           } catch (error) {
             // Exception
@@ -656,11 +811,38 @@ export default function UnifiedMediaLibrary() {
 
           processedUrls.add(url)
 
-          // Check if this URL is valid
-          const videoInfo = extractVideoInfo(url)
-          if (!videoInfo) {
-            failCount++
-            console.warn(`Invalid video URL format: ${url}`)
+          // Check for duplicates before processing
+          const duplicateCheckResponse = await fetch("/api/check-media-duplicate", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              url,
+            }),
+          })
+
+          const duplicateCheckResult = await duplicateCheckResponse.json()
+
+          if (duplicateCheckResult.isDuplicate) {
+            // If it's a duplicate, use the existing video instead of processing again
+            duplicateCount++
+            foundDuplicates.push({
+              url,
+              existingItem: duplicateCheckResult.existingItem,
+            })
+
+            // Add to duplicates map
+            setDuplicateItems((prev) => ({
+              ...prev,
+              [url]: duplicateCheckResult.existingItem?.id,
+            }))
+
+            // If in selection mode, select the duplicate
+            if (selectionMode !== "none" && duplicateCheckResult.existingItem?.public_url) {
+              toggleItemSelection(duplicateCheckResult.existingItem.public_url)
+            }
+
             continue
           }
 
@@ -696,13 +878,23 @@ export default function UnifiedMediaLibrary() {
               [url]: result.existingVideo?.id,
             }))
 
+            // If in selection mode, select the duplicate
+            if (selectionMode !== "none" && result.existingVideo?.public_url) {
+              toggleItemSelection(result.existingVideo.public_url)
+            }
+
             continue
           }
 
           // Count by platform
-          if (videoInfo.platform === "vimeo") results.vimeo++
-          else if (videoInfo.platform === "youtube") results.youtube++
-          else if (videoInfo.platform === "linkedin") results.linkedin++
+          if (result.platform === "vimeo") results.vimeo++
+          else if (result.platform === "youtube") results.youtube++
+          else if (result.platform === "linkedin") results.linkedin++
+
+          // If in selection mode, select the new video
+          if (selectionMode !== "none" && result.url) {
+            toggleItemSelection(result.url)
+          }
 
           successCount++
         } catch (err) {
@@ -765,6 +957,28 @@ export default function UnifiedMediaLibrary() {
     }
   }
 
+  const toggleItemSelection = (url: string) => {
+    if (selectionMode === "none") return
+
+    if (selectionMode === "single") {
+      // In single selection mode, replace the current selection
+      setSelectedItems([url])
+    } else {
+      // In multiple selection mode, toggle the selection
+      if (selectedItems.includes(url)) {
+        setSelectedItems(selectedItems.filter((item) => item !== url))
+      } else {
+        setSelectedItems([...selectedItems, url])
+      }
+    }
+  }
+
+  const handleConfirmSelection = () => {
+    if (onSelect && selectedItems.length > 0) {
+      onSelect(selectedItems)
+    }
+  }
+
   const filteredMedia = mediaItems.filter((item) => {
     // Filter by search term
     const matchesSearch =
@@ -780,7 +994,14 @@ export default function UnifiedMediaLibrary() {
       item.filetype === activeTab ||
       (activeTab === "video" && ["vimeo", "youtube", "linkedin"].includes(item.filetype))
 
-    return matchesSearch && matchesTags && matchesType
+    // Filter by media type filter prop
+    const matchesMediaTypeFilter =
+      mediaTypeFilter === "all" ||
+      (mediaTypeFilter === "image" && item.filetype === "image") ||
+      (mediaTypeFilter === "video" &&
+        (item.filetype === "video" || ["vimeo", "youtube", "linkedin"].includes(item.filetype)))
+
+    return matchesSearch && matchesTags && matchesType && matchesMediaTypeFilter
   })
 
   const calculateTotalStorage = (): number => {
@@ -959,10 +1180,19 @@ export default function UnifiedMediaLibrary() {
     const isLinkedin = item.filetype === "linkedin"
     const isImage = item.filetype === "image"
     const hasImageError = imageLoadError[item.id]
+    const isSelected = selectedItems.includes(item.public_url)
 
     return (
-      <div key={item.id} id={`media-item-${item.id}`} className="bg-gray-900 rounded-lg overflow-hidden">
-        <div className="relative h-40 cursor-pointer" onClick={() => (isImage ? setSelectedImage(item) : null)}>
+      <div
+        key={item.id}
+        id={`media-item-${item.id}`}
+        className={`bg-gray-900 rounded-lg overflow-hidden ${isSelected ? "ring-2 ring-blue-500" : ""}`}
+        onClick={selectionMode !== "none" ? () => toggleItemSelection(item.public_url) : undefined}
+      >
+        <div
+          className="relative h-40 cursor-pointer"
+          onClick={() => (isImage && selectionMode === "none" ? setSelectedImage(item) : null)}
+        >
           {item.thumbnail_url && !hasImageError ? (
             <Image
               src={item.thumbnail_url || "/placeholder.svg"}
@@ -986,9 +1216,18 @@ export default function UnifiedMediaLibrary() {
           {isLinkedin && (
             <div className="absolute top-2 right-2 bg-blue-800 text-white text-xs px-2 py-1 rounded">LinkedIn</div>
           )}
-          {isImage && (
+          {isImage && selectionMode === "none" && (
             <div className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center">
               <ImageIcon size={12} className="mr-1" /> Click to preview
+            </div>
+          )}
+          {selectionMode !== "none" && (
+            <div className="absolute top-2 left-2">
+              <div
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? "bg-blue-500 border-blue-500" : "border-white/50"}`}
+              >
+                {isSelected && <Check className="h-3 w-3 text-white" />}
+              </div>
             </div>
           )}
         </div>
@@ -1023,7 +1262,10 @@ export default function UnifiedMediaLibrary() {
               variant="outline"
               size="sm"
               className="flex items-center gap-1 text-xs"
-              onClick={() => handleCopyUrl(item.public_url)}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleCopyUrl(item.public_url)
+              }}
             >
               {copiedUrl === item.public_url ? (
                 <>
@@ -1039,7 +1281,15 @@ export default function UnifiedMediaLibrary() {
             </Button>
 
             <div className="flex gap-1">
-              <Button variant="ghost" size="icon" onClick={() => handleEditMedia(item)} className="h-8 w-8">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleEditMedia(item)
+                }}
+                className="h-8 w-8"
+              >
                 <Edit className="h-4 w-4 text-blue-500" />
                 <span className="sr-only">Edit</span>
               </Button>
@@ -1047,7 +1297,10 @@ export default function UnifiedMediaLibrary() {
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => handleDeleteMedia(item.id, item.filepath, item.filetype)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  handleDeleteMedia(item.id, item.filepath, item.filetype)
+                }}
                 className="h-8 w-8"
               >
                 <Trash2 className="h-4 w-4 text-red-500" />
@@ -1062,7 +1315,7 @@ export default function UnifiedMediaLibrary() {
 
   return (
     <div>
-      <h1 className="text-3xl font-serif mb-8">Media Library</h1>
+      {selectionMode === "none" && <h1 className="text-3xl font-serif mb-8">Media Library</h1>}
 
       {error && (
         <Alert variant="destructive" className="mb-6">
@@ -1117,7 +1370,20 @@ export default function UnifiedMediaLibrary() {
                   </div>
                 )}
               </div>
-              <input ref={fileInputRef} type="file" multiple onChange={handleFileSelect} className="hidden" />
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                accept={
+                  mediaTypeFilter === "image"
+                    ? "image/*"
+                    : mediaTypeFilter === "video"
+                      ? "video/*"
+                      : "image/*,video/*,audio/*,application/pdf"
+                }
+              />
             </div>
             <div className="text-sm text-gray-400">
               <p>Upload files directly to the media library.</p>
@@ -1277,6 +1543,16 @@ export default function UnifiedMediaLibrary() {
           {renderMediaGrid()}
         </TabsContent>
       </Tabs>
+
+      {/* Selection controls */}
+      {selectionMode !== "none" && (
+        <div className="fixed bottom-4 right-4 bg-gray-900 p-3 rounded-lg shadow-lg flex items-center gap-3">
+          <span className="text-sm text-gray-300">{selectedItems.length} items selected</span>
+          <Button onClick={handleConfirmSelection} disabled={selectedItems.length === 0}>
+            Confirm Selection
+          </Button>
+        </div>
+      )}
 
       {/* Image Preview Dialog */}
       <Dialog open={!!selectedImage} onOpenChange={(open) => !open && setSelectedImage(null)}>
