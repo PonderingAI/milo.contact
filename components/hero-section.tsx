@@ -1,125 +1,86 @@
-"use client"
-
-import { useState, useEffect } from "react"
-import { ArrowDown } from "lucide-react"
-import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
-import { extractVideoInfo } from "@/lib/project-data"
+import Link from "next/link"
 import VideoBackground from "./video-background"
 import type { Project } from "@/lib/project-data"
 
 interface HeroSectionProps {
-  latestProject?: Project | null
+  title?: string
+  subtitle?: string
+  bgImageUrl?: string
+  bgVideoUrl?: string
+  bgType?: "image" | "video" | "latest_project"
+  buttonText?: string
+  buttonUrl?: string
+  latestProject?: Project
 }
 
-export default function HeroSection({ latestProject }: HeroSectionProps) {
-  const [settings, setSettings] = useState({
-    hero_heading: "Milo Presedo",
-    hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-    image_hero_bg: "/images/hero-bg.jpg",
-    hero_bg_type: "image", // "image", "video", or "latest_project"
-  })
+export default function HeroSection({
+  title = "Milo Presedo",
+  subtitle = "Filmmaker, Podcaster & Media Expert",
+  bgImageUrl = "/images/hero-bg.jpg",
+  bgVideoUrl = "",
+  bgType = "image",
+  buttonText = "View Projects",
+  buttonUrl = "/projects",
+  latestProject,
+}: HeroSectionProps) {
+  // Determine the correct background to use based on the bgType
+  const useLatestProject = bgType === "latest_project" && latestProject
 
-  useEffect(() => {
-    async function loadSettings() {
-      try {
-        const supabase = getSupabaseBrowserClient()
-        const { data, error } = await supabase
-          .from("site_settings")
-          .select("key, value")
-          .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type"])
+  let backgroundImageUrl = bgImageUrl
+  let backgroundVideoUrl = bgVideoUrl
 
-        if (!error && data) {
-          const newSettings = { ...settings }
-          data.forEach((item) => {
-            // @ts-ignore
-            newSettings[item.key] = item.value
-          })
-          console.log("Loaded hero settings:", newSettings)
-          setSettings(newSettings)
-        } else if (error) {
-          console.error("Error fetching hero settings:", error)
-        }
-      } catch (err) {
-        console.error("Error loading hero settings:", err)
-      }
-    }
+  // Log important information for debugging
+  console.log("HeroSection: Background type:", bgType)
+  console.log("HeroSection: Latest project available:", !!latestProject)
 
-    loadSettings()
-  }, [])
+  if (useLatestProject) {
+    console.log("HeroSection: Using latest project:", latestProject.id, latestProject.title)
 
-  // Debug logs
-  console.log("Hero section rendering with settings:", settings)
-  console.log("Latest project:", latestProject)
-
-  // Determine what to show as background
-  let backgroundType = "image"
-  let backgroundMedia = settings.image_hero_bg
-  let videoInfo = null
-
-  // Case 1: Latest project video
-  if (settings.hero_bg_type === "latest_project") {
-    console.log("Latest project setting detected:", latestProject)
-
-    if (latestProject?.video_url) {
-      backgroundType = "video"
-      backgroundMedia = latestProject.video_url
-      videoInfo = extractVideoInfo(latestProject.video_url)
-      console.log("Using latest project video:", backgroundMedia, videoInfo)
-    } else if (latestProject?.image) {
-      // Fallback to latest project image if no video
-      backgroundType = "image"
-      backgroundMedia = latestProject.image
-      console.log("Using latest project image as fallback:", backgroundMedia)
+    // Use latest project video URL if available, otherwise use the image
+    if (latestProject.video_url) {
+      console.log("HeroSection: Using latest project video:", latestProject.video_url)
+      backgroundVideoUrl = latestProject.video_url
+      backgroundImageUrl = latestProject.image || bgImageUrl // Use project image as fallback
+    } else {
+      console.log("HeroSection: Latest project has no video, using image:", latestProject.image)
+      backgroundImageUrl = latestProject.image || bgImageUrl
     }
   }
-  // Case 2: Video URL in settings
-  else if (settings.hero_bg_type === "video" && settings.image_hero_bg) {
-    backgroundType = "video"
-    backgroundMedia = settings.image_hero_bg
-    videoInfo = extractVideoInfo(settings.image_hero_bg)
-    console.log("Using video from settings:", backgroundMedia, videoInfo)
-  }
-  // Case 3: Image background (default)
-  else {
-    console.log("Using image background:", backgroundMedia)
-  }
 
-  const scrollToProjects = () => {
-    const projectsSection = document.getElementById("projects")
-    if (projectsSection) {
-      projectsSection.scrollIntoView({ behavior: "smooth" })
-    }
-  }
+  // Determine which background to show
+  const showVideo =
+    (bgType === "video" && !!backgroundVideoUrl) || (bgType === "latest_project" && !!backgroundVideoUrl)
+
+  console.log("HeroSection: Show video:", showVideo)
+  console.log("HeroSection: Video URL:", backgroundVideoUrl)
+  console.log("HeroSection: Image URL:", backgroundImageUrl)
 
   return (
-    <section className="relative h-screen flex items-center justify-center overflow-hidden">
+    <section className="relative h-screen flex items-center justify-center text-white overflow-hidden">
       {/* Background */}
-      {backgroundType === "video" && videoInfo ? (
-        <VideoBackground
-          platform={videoInfo.platform}
-          videoId={videoInfo.id}
-          fallbackImage={latestProject?.image || settings.image_hero_bg}
-        />
+      {showVideo ? (
+        <VideoBackground videoUrl={backgroundVideoUrl} fallbackImageUrl={backgroundImageUrl} isVisible={true} />
       ) : (
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${backgroundMedia})` }}
-        />
+          style={{ backgroundImage: `url(${backgroundImageUrl})` }}
+        >
+          <div className="absolute inset-0 bg-black/50" />
+        </div>
       )}
 
-      {/* Overlay */}
-      <div className="absolute inset-0 bg-black/50" />
-
-      {/* Content - positioned at bottom left */}
-      <div className="absolute bottom-10 left-10 z-10 text-left">
-        <h1 className="text-2xl md:text-3xl lg:text-4xl font-serif mb-2">{settings.hero_heading}</h1>
-        <p className="text-sm md:text-base text-gray-200 mb-4 max-w-md">{settings.hero_subheading}</p>
-        <button
-          onClick={scrollToProjects}
-          className="flex items-center gap-2 text-gray-300 hover:text-white transition-colors text-sm"
-        >
-          View My Work <ArrowDown className="w-3 h-3 animate-bounce" />
-        </button>
+      {/* Content */}
+      <div className="relative z-10 text-center max-w-3xl px-4 md:px-8 animate-fade-in">
+        <h1 className="text-4xl sm:text-5xl md:text-6xl font-serif mb-6">{title}</h1>
+        <p className="text-lg sm:text-xl md:text-2xl mb-8 max-w-2xl mx-auto opacity-90">{subtitle}</p>
+        {buttonText && buttonUrl && (
+          <Link
+            href={buttonUrl}
+            className="inline-block bg-white text-black px-6 py-3 rounded-full font-medium transition-transform hover:scale-105"
+          >
+            {buttonText}
+          </Link>
+        )}
       </div>
     </section>
   )

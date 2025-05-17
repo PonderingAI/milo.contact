@@ -11,7 +11,7 @@
   "dependencies": {
     "@clerk/nextjs": "latest",
     "@emotion/is-prop-valid": "latest",
-    "@hookform/resolvers": "^3.9.1",
+    "@hookform/resolvers": "latest",
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-alert-dialog": "1.1.4",
     "@radix-ui/react-aspect-ratio": "1.1.1",
@@ -64,9 +64,8 @@
     "react": "^19",
     "react-day-picker": "8.10.1",
     "react-dom": "^19",
-    "react-hook-form": "^7.54.1",
+    "react-hook-form": "latest",
     "react-resizable-panels": "^2.1.7",
-    "react-syntax-highlighter": "latest",
     "recharts": "latest",
     "semver": "latest",
     "sharp": "latest",
@@ -79,7 +78,7 @@
     "vaul": "^0.9.6",
     "vue": "latest",
     "vue-router": "latest",
-    "zod": "^3.24.1"
+    "zod": "latest"
   },
   "devDependencies": {
     "@types/node": "^22",

@@ -1,972 +1,408 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Button } from "@/components/ui/button"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { useForm } from "react-hook-form"
+import * as z from "zod"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Film, AlertTriangle, Copy, Check } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import MediaSelector from "./media-selector"
-import { extractVideoInfo } from "@/lib/utils"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Card, CardContent } from "@/components/ui/card"
+import { Loader2, Save } from "lucide-react"
+import { getSupabaseBrowserClient } from "@/lib/supabase"
 
-// SQL code for site_settings table setup
-const SITE_SETTINGS_SQL = `-- 1. Create the site_settings table
-CREATE TABLE IF NOT EXISTS public.site_settings (
-  id SERIAL PRIMARY KEY,
-  key TEXT UNIQUE NOT NULL,
-  value TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
+const siteInformationSchema = z.object({
+  site_name: z.string().min(1, "Site name is required"),
+  site_description: z.string().min(1, "Site description is required"),
+  contact_email: z.string().email("Invalid email address"),
+  hero_bg_type: z.enum(["image", "video", "latest_project"]),
+  hero_bg_url: z.string().optional(),
+  hero_title: z.string(),
+  hero_subtitle: z.string(),
+  video_url: z.string().optional(),
+  cta_text: z.string().optional(),
+  cta_url: z.string().optional(),
+})
 
--- 2. Enable Row Level Security
-ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
-
--- 3. Create policies for site_settings table
--- Allow authenticated users to select
-CREATE POLICY "Allow authenticated users to select site_settings"
-  ON public.site_settings
-  FOR SELECT
-  TO authenticated
-  USING (true);
-
--- Allow public to select
-CREATE POLICY "Allow public to select site_settings"
-  ON public.site_settings
-  FOR SELECT
-  TO anon
-  USING (true);
-
--- Allow authenticated users with admin role to insert/update/delete
-CREATE POLICY "Allow admins to insert site_settings"
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM auth.users
-      WHERE auth.users.id = auth.uid()
-      AND auth.users.raw_app_meta_data->>'role' = 'admin'
-    )
-  );
-
-CREATE POLICY "Allow admins to update site_settings"
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM auth.users
-      WHERE auth.users.id = auth.uid()
-      AND auth.users.raw_app_meta_data->>'role' = 'admin'
-    )
-  );
-
-CREATE POLICY "Allow admins to delete site_settings"
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM auth.users
-      WHERE auth.users.id = auth.uid()
-      AND auth.users.raw_app_meta_data->>'role' = 'admin'
-    )
-  );`
-
-interface MediaUploaderProps {
-  label: string
-  settingKey: string
-  currentValue: string
-  onUpload: (url: string) => void
-  allowVideo?: boolean
-  allowLatestProject?: boolean
-  bgType?: string
-  onBgTypeChange?: (type: string) => void
-}
-
-function MediaUploader({
-  label,
-  settingKey,
-  currentValue,
-  onUpload,
-  allowVideo = false,
-  allowLatestProject = false,
-  bgType = "image",
-  onBgTypeChange,
-}: MediaUploaderProps) {
-  const [uploading, setUploading] = useState(false)
-  const [mediaType, setMediaType] = useState<"image" | "video" | "latest_project">("image")
-  const [videoUrl, setVideoUrl] = useState(
-    currentValue.includes("vimeo.com") ||
-      currentValue.includes("youtube.com") ||
-      currentValue.includes("youtu.be") ||
-      currentValue.includes("linkedin.com")
-      ? currentValue
-      : "",
-  )
-  const [preview, setPreview] = useState<string | null>(
-    !(
-      currentValue.includes("vimeo.com") ||
-      currentValue.includes("youtube.com") ||
-      currentValue.includes("youtu.be") ||
-      currentValue.includes("linkedin.com")
-    )
-      ? currentValue
-      : null,
-  )
-  const supabase = createClientComponentClient()
-
-  useEffect(() => {
-    // Set the initial media type based on the bgType prop or current value
-    if (bgType === "latest_project") {
-      setMediaType("latest_project")
-    } else if (
-      currentValue.includes("vimeo.com") ||
-      currentValue.includes("youtube.com") ||
-      currentValue.includes("youtu.be") ||
-      currentValue.includes("linkedin.com")
-    ) {
-      setMediaType("video")
-    } else {
-      setMediaType("image")
-    }
-  }, [bgType, currentValue])
-
-  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Check if file is an image
-    if (!file.type.startsWith("image/")) {
-      toast({
-        title: "Invalid file type",
-        description: "Please select an image file",
-        variant: "destructive",
-      })
-      return
-    }
-
-    // Check file size (max 5MB)
-    if (file.size > 5 * 1024 * 1024) {
-      toast({
-        title: "File too large",
-        description: "Image size should be less than 5MB",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      setUploading(true)
-
-      // Ensure the bucket exists
-      const { data: buckets } = await supabase.storage.listBuckets()
-      const bucketExists = buckets?.some((bucket) => bucket.name === "public")
-
-      if (!bucketExists) {
-        const { error } = await supabase.storage.createBucket("public", {
-          public: true,
-          fileSizeLimit: 5242880, // 5MB
-        })
-
-        if (error) {
-          throw new Error(`Failed to create bucket: ${error.message}`)
-        }
-      }
-
-      // Generate a unique filename
-      const timestamp = new Date().getTime()
-      const fileExt = file.name.split(".").pop()
-      const fileName = `${settingKey}_${timestamp}.${fileExt}`
-      const filePath = `site/${fileName}`
-
-      // Upload the file
-      const { data, error: uploadError } = await supabase.storage.from("public").upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: true,
-      })
-
-      if (uploadError) {
-        throw new Error(`Failed to upload image: ${uploadError.message}`)
-      }
-
-      // Get the public URL
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("public").getPublicUrl(filePath)
-
-      // Update the preview
-      setPreview(publicUrl)
-
-      // Add to media table
-      const { error: mediaError } = await supabase.from("media").insert({
-        filename: file.name,
-        filepath: filePath,
-        filesize: file.size,
-        filetype: "image",
-        public_url: publicUrl,
-        tags: ["site", settingKey],
-      })
-
-      if (mediaError) {
-        console.error("Warning: Failed to add to media table:", mediaError)
-        // Continue anyway as the file is uploaded
-      }
-
-      // Call the onUpload callback
-      onUpload(publicUrl)
-
-      toast({
-        title: "Upload successful",
-        description: "Image has been uploaded successfully",
-      })
-    } catch (err: any) {
-      console.error("Error uploading image:", err)
-      toast({
-        title: "Upload failed",
-        description: err.message || "Failed to upload image",
-        variant: "destructive",
-      })
-    } finally {
-      setUploading(false)
-    }
-  }
-
-  const handleVideoUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setVideoUrl(e.target.value)
-  }
-
-  const saveVideoUrl = async () => {
-    if (!videoUrl) {
-      toast({
-        title: "Missing URL",
-        description: "Please enter a video URL",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      // Extract video info
-      const videoInfo = extractVideoInfo(videoUrl)
-
-      if (!videoInfo) {
-        toast({
-          title: "Invalid URL",
-          description: "Please enter a valid Vimeo, YouTube, or LinkedIn video URL",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Add to media table
-      const { error: mediaError } = await supabase.from("media").insert({
-        filename: `${videoInfo.platform} Video ${videoInfo.id}`,
-        filepath: videoUrl,
-        filesize: 0, // Size is not applicable for external videos
-        filetype: videoInfo.platform,
-        public_url: videoUrl,
-        tags: ["video", videoInfo.platform, "site", settingKey],
-      })
-
-      if (mediaError) {
-        console.error("Warning: Failed to add to media table:", mediaError)
-        // Continue anyway as we have the URL
-      }
-
-      onUpload(videoUrl)
-      toast({
-        title: "Video URL saved",
-        description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been saved successfully`,
-      })
-    } catch (err: any) {
-      console.error("Error saving video URL:", err)
-      toast({
-        title: "Error",
-        description: err.message || "Failed to save video URL",
-        variant: "destructive",
-      })
-    }
-  }
-
-  const handleMediaSelect = (url: string) => {
-    if (!url) return
-
-    // Determine if it's a video or image URL
-    const isVideo =
-      url.includes("vimeo.com") ||
-      url.includes("youtube.com") ||
-      url.includes("youtu.be") ||
-      url.includes("linkedin.com")
-
-    if (isVideo) {
-      setMediaType("video")
-      setVideoUrl(url)
-      setPreview(null)
-      if (onBgTypeChange) onBgTypeChange("video")
-    } else {
-      setMediaType("image")
-      setPreview(url)
-      setVideoUrl("")
-      if (onBgTypeChange) onBgTypeChange("image")
-    }
-
-    onUpload(url)
-  }
-
-  const handleMediaTypeChange = (value: "image" | "video" | "latest_project") => {
-    setMediaType(value)
-
-    // Always call onBgTypeChange when media type changes
-    if (onBgTypeChange) onBgTypeChange(value)
-
-    // If switching to latest_project, we need to update the URL to a special value
-    if (value === "latest_project") {
-      // Use a special placeholder value to indicate latest project
-      onUpload("latest_project")
-    }
-    // If switching between image and video, clear the other value
-    else if (value === "image") {
-      setVideoUrl("")
-      if (preview) onUpload(preview)
-    } else if (value === "video") {
-      setPreview(null)
-      if (videoUrl) onUpload(videoUrl)
-    }
-  }
-
-  return (
-    <div className="space-y-4">
-      <Label>{label}</Label>
-
-      {(allowVideo || allowLatestProject) && (
-        <RadioGroup
-          value={mediaType}
-          onValueChange={(value) => handleMediaTypeChange(value as "image" | "video" | "latest_project")}
-          className="flex flex-wrap space-x-4 mb-4"
-        >
-          <div className="flex items-center space-x-2">
-            <RadioGroupItem value="image" id={`${settingKey}-image`} />
-            <Label htmlFor={`${settingKey}-image`} className="cursor-pointer">
-              Image
-            </Label>
-          </div>
-          {allowVideo && (
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="video" id={`${settingKey}-video`} />
-              <Label htmlFor={`${settingKey}-video`} className="cursor-pointer">
-                Video
-              </Label>
-            </div>
-          )}
-          {allowLatestProject && (
-            <div className="flex items-center space-x-2">
-              <RadioGroupItem value="latest_project" id={`${settingKey}-latest-project`} />
-              <Label htmlFor={`${settingKey}-latest-project`} className="cursor-pointer">
-                Latest Project Video
-              </Label>
-            </div>
-          )}
-        </RadioGroup>
-      )}
-
-      {mediaType !== "latest_project" && (
-        <div className="mb-4">
-          <MediaSelector
-            onSelect={handleMediaSelect}
-            currentValue={mediaType === "image" ? preview || "" : videoUrl}
-            mediaType={mediaType === "image" ? "images" : "videos"}
-            buttonLabel={`Browse Media Library (${mediaType === "image" ? "Images" : "Videos"})`}
-          />
-        </div>
-      )}
-
-      {mediaType === "latest_project" ? (
-        <div className="p-4 bg-gray-800/50 rounded-lg">
-          <p className="text-sm">
-            The hero background will automatically use the video from the latest project. If the latest project doesn't
-            have a video, it will use the project's image instead.
-          </p>
-        </div>
-      ) : mediaType === "image" ? (
-        <div className="space-y-2">
-          <p className="text-sm text-gray-400 mb-2">Or upload a new file:</p>
-          <div className="flex items-center gap-4">
-            <Input
-              id={`image-${settingKey}`}
-              type="file"
-              accept="image/*"
-              onChange={handleFileChange}
-              disabled={uploading}
-            />
-            {uploading && <Loader2 className="h-5 w-5 animate-spin text-gray-400" />}
-          </div>
-
-          {preview && (
-            <div className="mt-4">
-              <p className="text-xs text-gray-400 mb-1">Preview:</p>
-              <div className="relative bg-gray-900/50 rounded-lg p-2 w-full max-w-xs">
-                <img src={preview || "/placeholder.svg"} alt={`${label} preview`} className="w-full h-auto rounded" />
-              </div>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          <p className="text-sm text-gray-400 mb-2">Or enter a video URL:</p>
-          <div className="flex items-center gap-2">
-            <Input
-              id={`video-${settingKey}`}
-              type="text"
-              placeholder="https://vimeo.com/123456789 or YouTube/LinkedIn URL"
-              value={videoUrl}
-              onChange={handleVideoUrlChange}
-            />
-            <Button type="button" onClick={saveVideoUrl} size="sm">
-              <Film className="h-4 w-4 mr-2" />
-              Save
-            </Button>
-          </div>
-          <p className="text-xs text-gray-400">Enter a Vimeo, YouTube, or LinkedIn video URL</p>
-
-          {videoUrl && (
-            <div className="mt-4">
-              <p className="text-xs text-gray-400 mb-1">Current Video URL:</p>
-              <div className="bg-gray-900/50 rounded-lg p-2">
-                <p className="text-sm break-all">{videoUrl}</p>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SqlSetupInstructions() {
-  const [copied, setCopied] = useState(false)
-  const [showCode, setShowCode] = useState(false)
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(SITE_SETTINGS_SQL)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <Alert variant="destructive" className="mb-6">
-      <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Site settings table not found</AlertTitle>
-      <AlertDescription className="space-y-4">
-        <p>
-          The site_settings table does not exist in your database. You need to create it manually by running the SQL
-          code below in your Supabase SQL Editor.
-        </p>
-
-        <div className="flex justify-between items-center">
-          <Button variant="outline" size="sm" onClick={() => setShowCode(!showCode)}>
-            {showCode ? "Hide SQL Code" : "Show SQL Code"}
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={copyToClipboard} className="flex items-center gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied!" : "Copy SQL"}
-          </Button>
-        </div>
-
-        {showCode && (
-          <div className="relative mt-2 max-h-96 overflow-auto rounded border border-gray-700">
-            <SyntaxHighlighter language="sql" style={vscDarkPlus} customStyle={{ margin: 0, borderRadius: "0.375rem" }}>
-              {SITE_SETTINGS_SQL}
-            </SyntaxHighlighter>
-          </div>
-        )}
-
-        <p>After running the SQL code, refresh this page to continue setting up your site.</p>
-      </AlertDescription>
-    </Alert>
-  )
-}
+type SiteInformationFormValues = z.infer<typeof siteInformationSchema>
 
 export default function SiteInformationForm() {
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [tableExists, setTableExists] = useState(true)
-  const [settings, setSettings] = useState({
-    // Hero section
-    hero_heading: "Milo Presedo",
-    hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-    image_hero_bg: "/images/hero-bg.jpg",
-    hero_bg_type: "image", // "image", "video", or "latest_project"
-    background_color: "#000000", // Default black background
+  const [isLoading, setIsLoading] = useState(true)
+  const [isSaving, setIsSaving] = useState(false)
 
-    // Projects section
-    projects_per_page: "20",
-
-    // About section
-    about_heading: "About Me",
-    about_text1:
-      "I'm Milo Presedo, an AI Solutions Architect and film production professional. Fluent in German, Spanish and English, I love diving into the latest AI models, VR technologies, and complex problem-solving.",
-    about_text2:
-      "My journey combines a solid educational background with hands-on experience in computer science, graphic design, and film production. I work as a Director of Photography (DP), 1st and 2nd Assistant Camera (1AC & 2AC), as well as a drone and underwater operator.",
-    about_text3:
-      "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature, which often inspires my landscape and product photography work.",
-    image_profile: "/images/profile.jpg",
-
-    // Services section
-    services_heading: "Services",
-
-    // Contact section
-    contact_heading: "Get in Touch",
-    contact_text:
-      "Connect with me to discuss AI, VR, film production, or photography projects. I'm always open to new collaborations and opportunities.",
-    contact_email: "milo.presedo@mailbox.org",
-    contact_phone: "+41 77 422 68 03",
-    chatgpt_url: "https://chatgpt.com/g/g-vOF4lzRBG-milo",
-
-    // Footer
-    footer_text: "© 2023 Milo Presedo. All rights reserved.",
+  // Initialize form with default values
+  const form = useForm<SiteInformationFormValues>({
+    resolver: zodResolver(siteInformationSchema),
+    defaultValues: {
+      site_name: "",
+      site_description: "",
+      contact_email: "",
+      hero_bg_type: "image",
+      hero_bg_url: "",
+      hero_title: "",
+      hero_subtitle: "",
+      video_url: "",
+      cta_text: "",
+      cta_url: "",
+    },
   })
 
-  const supabase = createClientComponentClient()
-
+  // Fetch current site information when component mounts
   useEffect(() => {
-    async function checkTableExists() {
+    const fetchSiteInformation = async () => {
       try {
-        const response = await fetch("/api/check-table-exists?table=site_settings")
-        const data = await response.json()
+        setIsLoading(true)
+        const supabase = getSupabaseBrowserClient()
+        const { data, error } = await supabase.from("settings").select("*")
 
-        if (data.exists) {
-          setTableExists(true)
-          loadSettings()
-        } else {
-          setTableExists(false)
-          setLoading(false)
-        }
-      } catch (err) {
-        console.error("Error checking if table exists:", err)
-        setLoading(false)
-      }
-    }
-
-    async function loadSettings() {
-      try {
-        const response = await fetch("/api/settings")
-
-        if (!response.ok) {
-          throw new Error(`Failed to load settings: ${response.status}`)
+        if (error) {
+          throw error
         }
 
-        const data = await response.json()
-
+        // Convert array of settings to an object
         if (data && data.length > 0) {
-          const newSettings = { ...settings }
-          data.forEach((item: { key: string; value: string }) => {
-            // @ts-ignore
-            if (newSettings.hasOwnProperty(item.key)) {
-              // @ts-ignore
-              newSettings[item.key] = item.value
-            }
+          const settingsObj: Record<string, any> = {}
+          data.forEach((setting) => {
+            settingsObj[setting.key] = setting.value
           })
-          setSettings(newSettings)
+
+          // Set form values from settings
+          form.reset({
+            site_name: settingsObj.site_name || "",
+            site_description: settingsObj.site_description || "",
+            contact_email: settingsObj.contact_email || "",
+            hero_bg_type: settingsObj.hero_bg_type || "image",
+            hero_bg_url: settingsObj.hero_bg_url || "",
+            hero_title: settingsObj.hero_title || "",
+            hero_subtitle: settingsObj.hero_subtitle || "",
+            video_url: settingsObj.video_url || "",
+            cta_text: settingsObj.cta_text || "",
+            cta_url: settingsObj.cta_url || "",
+          })
+
+          console.log("Loaded settings:", settingsObj)
         }
-      } catch (err) {
-        console.error("Error in loadSettings:", err)
+      } catch (error) {
+        console.error("Error fetching site information:", error)
         toast({
           title: "Error",
-          description: "Failed to load settings",
+          description: "Failed to load site information. Please try again.",
           variant: "destructive",
         })
       } finally {
-        setLoading(false)
+        setIsLoading(false)
       }
     }
 
-    checkTableExists()
-  }, [])
+    fetchSiteInformation()
+  }, [form])
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target
-
-    // Special handling for background color to ensure it has a # prefix
-    if (name === "background_color") {
-      const colorValue = value.startsWith("#") ? value : `#${value}`
-      setSettings((prev) => ({
-        ...prev,
-        [name]: colorValue,
-      }))
-    } else {
-      setSettings((prev) => ({
-        ...prev,
-        [name]: value,
-      }))
-    }
-  }
-
-  const handleSelectChange = (name: string, value: string) => {
-    setSettings((prev) => ({
-      ...prev,
-      [name]: value,
-    }))
-  }
-
-  const handleMediaUpload = (key: string, value: string) => {
-    setSettings((prev) => ({
-      ...prev,
-      [key]: value,
-    }))
-  }
-
-  const handleBgTypeChange = (type: string) => {
-    setSettings((prev) => ({
-      ...prev,
-      hero_bg_type: type,
-    }))
-  }
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    // If the table doesn't exist, show an error
-    if (!tableExists) {
-      toast({
-        title: "Settings table not found",
-        description: "Please set up the site settings table first using the SQL code provided",
-        variant: "destructive",
-      })
-      return
-    }
-
+  // Handle form submission
+  const onSubmit = async (values: SiteInformationFormValues) => {
     try {
-      setSaving(true)
+      setIsSaving(true)
+      const supabase = getSupabaseBrowserClient()
 
-      // Debug log
-      console.log("Saving settings:", settings)
+      console.log("Saving site information:", values)
 
-      // Convert settings object to array of {key, value} pairs
-      const settingsArray = Object.entries(settings).map(([key, value]) => ({
-        key,
-        value: value || "",
-      }))
+      // Convert form values to settings format and upsert
+      const settings = [
+        { key: "site_name", value: values.site_name },
+        { key: "site_description", value: values.site_description },
+        { key: "contact_email", value: values.contact_email },
+        { key: "hero_bg_type", value: values.hero_bg_type },
+        { key: "hero_bg_url", value: values.hero_bg_url },
+        { key: "hero_title", value: values.hero_title },
+        { key: "hero_subtitle", value: values.hero_subtitle },
+        { key: "video_url", value: values.video_url },
+        { key: "cta_text", value: values.cta_text },
+        { key: "cta_url", value: values.cta_url },
+      ]
 
-      // Use the API route to save settings
-      const response = await fetch("/api/settings", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(settingsArray),
-      })
+      // Upsert each setting
+      for (const setting of settings) {
+        const { error } = await supabase
+          .from("settings")
+          .upsert({ key: setting.key, value: setting.value }, { onConflict: "key" })
 
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to save settings")
+        if (error) {
+          throw error
+        }
       }
 
       toast({
-        title: "Settings saved",
-        description: "Your site information has been updated successfully.",
+        title: "Success",
+        description: "Site information has been updated.",
       })
-    } catch (err: any) {
-      console.error("Error saving settings:", err)
+    } catch (error) {
+      console.error("Error saving site information:", error)
       toast({
-        title: "Error saving settings",
-        description: err.message || "An unknown error occurred",
+        title: "Error",
+        description: "Failed to save site information. Please try again.",
         variant: "destructive",
       })
     } finally {
-      setSaving(false)
+      setIsSaving(false)
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
-    )
+  // Handle bg type change
+  const handleBgTypeChange = (value: string) => {
+    form.setValue("hero_bg_type", value as "image" | "video" | "latest_project")
+
+    // If switching to latest_project, clear the hero_bg_url and video_url as they'll be pulled from the latest project
+    if (value === "latest_project") {
+      form.setValue("hero_bg_url", "")
+      form.setValue("video_url", "")
+    }
+
+    console.log("Background type changed to:", value)
   }
 
   return (
     <div className="space-y-6">
-      {!tableExists && <SqlSetupInstructions />}
+      <div className="space-y-2">
+        <h2 className="text-2xl font-bold">Site Information</h2>
+        <p className="text-muted-foreground">Update your site&apos;s basic information and appearance.</p>
+      </div>
 
-      <form onSubmit={handleSubmit}>
-        <Tabs defaultValue="hero">
-          <TabsList className="mb-4">
-            <TabsTrigger value="hero">Hero</TabsTrigger>
-            <TabsTrigger value="projects">Projects</TabsTrigger>
-            <TabsTrigger value="about">About</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="contact">Contact</TabsTrigger>
-            <TabsTrigger value="footer">Footer</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="hero">
-            <Card>
-              <CardHeader>
-                <CardTitle>Hero Section</CardTitle>
-                <CardDescription>Update the main heading and background image of your site.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="hero_heading">Heading</Label>
-                  <Input id="hero_heading" name="hero_heading" value={settings.hero_heading} onChange={handleChange} />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hero_subheading">Subheading</Label>
-                  <Input
-                    id="hero_subheading"
-                    name="hero_subheading"
-                    value={settings.hero_subheading}
-                    onChange={handleChange}
-                  />
-                </div>
-                <MediaUploader
-                  label="Background Media"
-                  settingKey="image_hero_bg"
-                  currentValue={settings.image_hero_bg}
-                  onUpload={(url) => handleMediaUpload("image_hero_bg", url)}
-                  allowVideo={true}
-                  allowLatestProject={true}
-                  bgType={settings.hero_bg_type}
-                  onBgTypeChange={handleBgTypeChange}
-                />
-                <div className="space-y-2 mt-4">
-                  <Label htmlFor="background_color">Background Color</Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id="background_color"
-                      name="background_color"
-                      type="color"
-                      value={
-                        settings.background_color.startsWith("#")
-                          ? settings.background_color
-                          : `#${settings.background_color}`
-                      }
-                      onChange={handleChange}
-                      className="w-16 h-10 p-1"
-                    />
-                    <Input
-                      id="background_color_text"
-                      name="background_color"
-                      type="text"
-                      value={settings.background_color}
-                      onChange={(e) => {
-                        // Remove # if present for consistency
-                        const value = e.target.value.replace(/^#/, "")
-                        setSettings((prev) => ({
-                          ...prev,
-                          background_color: value.startsWith("#") ? value : `#${value}`,
-                        }))
-                      }}
-                      className="flex-1"
-                      placeholder="#000000"
-                    />
-                  </div>
-                  <p className="text-xs text-gray-400">
-                    This color will be used for the site background (with or without # prefix)
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="projects">
-            <Card>
-              <CardHeader>
-                <CardTitle>Projects Section</CardTitle>
-                <CardDescription>Configure how projects are displayed on your site.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="projects_per_page">Projects Per Page</Label>
-                  <Select
-                    value={settings.projects_per_page}
-                    onValueChange={(value) => handleSelectChange("projects_per_page", value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select number of projects" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="10">10</SelectItem>
-                      <SelectItem value="20">20</SelectItem>
-                      <SelectItem value="30">30</SelectItem>
-                      <SelectItem value="50">50</SelectItem>
-                      <SelectItem value="100">100</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Number of projects to show before the "View More" button appears
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="about">
-            <Card>
-              <CardHeader>
-                <CardTitle>About Section</CardTitle>
-                <CardDescription>Update your profile information and image.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="about_heading">Heading</Label>
-                  <Input
-                    id="about_heading"
-                    name="about_heading"
-                    value={settings.about_heading}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="about_text1">Paragraph 1</Label>
-                  <Textarea
-                    id="about_text1"
-                    name="about_text1"
-                    value={settings.about_text1}
-                    onChange={handleChange}
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="about_text2">Paragraph 2</Label>
-                  <Textarea
-                    id="about_text2"
-                    name="about_text2"
-                    value={settings.about_text2}
-                    onChange={handleChange}
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="about_text3">Paragraph 3</Label>
-                  <Textarea
-                    id="about_text3"
-                    name="about_text3"
-                    value={settings.about_text3}
-                    onChange={handleChange}
-                    rows={3}
-                  />
-                </div>
-                <MediaUploader
-                  label="Profile Image"
-                  settingKey="image_profile"
-                  currentValue={settings.image_profile}
-                  onUpload={(url) => handleMediaUpload("image_profile", url)}
-                />
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="services">
-            <Card>
-              <CardHeader>
-                <CardTitle>Services Section</CardTitle>
-                <CardDescription>Update your services section heading.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="services_heading">Heading</Label>
-                  <Input
-                    id="services_heading"
-                    name="services_heading"
-                    value={settings.services_heading}
-                    onChange={handleChange}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="contact">
-            <Card>
-              <CardHeader>
-                <CardTitle>Contact Section</CardTitle>
-                <CardDescription>Update your contact information.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="contact_heading">Heading</Label>
-                  <Input
-                    id="contact_heading"
-                    name="contact_heading"
-                    value={settings.contact_heading}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contact_text">Description</Label>
-                  <Textarea
-                    id="contact_text"
-                    name="contact_text"
-                    value={settings.contact_text}
-                    onChange={handleChange}
-                    rows={3}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contact_email">Email</Label>
-                  <Input
-                    id="contact_email"
-                    name="contact_email"
-                    value={settings.contact_email}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contact_phone">Phone</Label>
-                  <Input
-                    id="contact_phone"
-                    name="contact_phone"
-                    value={settings.contact_phone}
-                    onChange={handleChange}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="chatgpt_url">ChatGPT URL</Label>
-                  <Input id="chatgpt_url" name="chatgpt_url" value={settings.chatgpt_url} onChange={handleChange} />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="footer">
-            <Card>
-              <CardHeader>
-                <CardTitle>Footer</CardTitle>
-                <CardDescription>Update your footer text.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="footer_text">Footer Text</Label>
-                  <Input id="footer_text" name="footer_text" value={settings.footer_text} onChange={handleChange} />
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-
-        <div className="mt-6 flex justify-end">
-          <Button type="submit" disabled={saving || !tableExists}>
-            {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Save Changes
-          </Button>
+      {isLoading ? (
+        <div className="flex items-center justify-center p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
         </div>
-      </form>
+      ) : (
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <Card>
+              <CardContent className="pt-6">
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="site_name"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Site Name</FormLabel>
+                        <FormControl>
+                          <Input placeholder="My Portfolio Site" {...field} />
+                        </FormControl>
+                        <FormDescription>
+                          This will be displayed in the browser tab and various places on your site.
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="contact_email"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Contact Email</FormLabel>
+                        <FormControl>
+                          <Input type="email" placeholder="contact@example.com" {...field} />
+                        </FormControl>
+                        <FormDescription>This email will be used for contact forms and notifications.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                <FormField
+                  control={form.control}
+                  name="site_description"
+                  render={({ field }) => (
+                    <FormItem className="mt-6">
+                      <FormLabel>Site Description</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="A brief description of your portfolio site..." {...field} />
+                      </FormControl>
+                      <FormDescription>This will be used as the meta description for SEO purposes.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardContent className="pt-6">
+                <h3 className="text-lg font-semibold mb-4">Hero Section</h3>
+
+                <FormField
+                  control={form.control}
+                  name="hero_bg_type"
+                  render={({ field }) => (
+                    <FormItem className="mb-6">
+                      <FormLabel>Hero Background Type</FormLabel>
+                      <FormControl>
+                        <RadioGroup
+                          onValueChange={(value) => {
+                            field.onChange(value)
+                            handleBgTypeChange(value)
+                          }}
+                          defaultValue={field.value}
+                          value={field.value}
+                          className="grid grid-cols-3 gap-4"
+                        >
+                          <FormItem className="flex flex-col items-center space-y-2 rounded-md border border-gray-200 p-4 dark:border-gray-800">
+                            <FormControl>
+                              <RadioGroupItem value="image" />
+                            </FormControl>
+                            <FormLabel className="font-normal">Image</FormLabel>
+                          </FormItem>
+                          <FormItem className="flex flex-col items-center space-y-2 rounded-md border border-gray-200 p-4 dark:border-gray-800">
+                            <FormControl>
+                              <RadioGroupItem value="video" />
+                            </FormControl>
+                            <FormLabel className="font-normal">Video</FormLabel>
+                          </FormItem>
+                          <FormItem className="flex flex-col items-center space-y-2 rounded-md border border-gray-200 p-4 dark:border-gray-800">
+                            <FormControl>
+                              <RadioGroupItem value="latest_project" />
+                            </FormControl>
+                            <FormLabel className="font-normal">Latest Project Video</FormLabel>
+                          </FormItem>
+                        </RadioGroup>
+                      </FormControl>
+                      <FormDescription>Choose the type of background for your hero section.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {form.watch("hero_bg_type") === "image" && (
+                  <FormField
+                    control={form.control}
+                    name="hero_bg_url"
+                    render={({ field }) => (
+                      <FormItem className="mb-6">
+                        <FormLabel>Background Image URL</FormLabel>
+                        <FormControl>
+                          <Input placeholder="/images/hero-bg.jpg" {...field} />
+                        </FormControl>
+                        <FormDescription>URL to the image you want to use as the hero background.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {form.watch("hero_bg_type") === "video" && (
+                  <FormField
+                    control={form.control}
+                    name="video_url"
+                    render={({ field }) => (
+                      <FormItem className="mb-6">
+                        <FormLabel>Background Video URL</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder="https://www.youtube.com/watch?v=VIDEO_ID or https://vimeo.com/VIDEO_ID"
+                            {...field}
+                          />
+                        </FormControl>
+                        <FormDescription>
+                          URL to the video you want to use as the hero background (YouTube or Vimeo).
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
+
+                {form.watch("hero_bg_type") === "latest_project" && (
+                  <div className="mb-6 p-4 bg-gray-100 dark:bg-gray-800 rounded-md">
+                    <p className="text-sm">
+                      The hero section will automatically use the video from your latest project. Make sure your latest
+                      project has a video URL set.
+                    </p>
+                  </div>
+                )}
+
+                <FormField
+                  control={form.control}
+                  name="hero_title"
+                  render={({ field }) => (
+                    <FormItem className="mb-6">
+                      <FormLabel>Hero Title</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Welcome to my portfolio" {...field} />
+                      </FormControl>
+                      <FormDescription>The main heading for your hero section.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="hero_subtitle"
+                  render={({ field }) => (
+                    <FormItem className="mb-6">
+                      <FormLabel>Hero Subtitle</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="I'm a filmmaker and photographer based in..." {...field} />
+                      </FormControl>
+                      <FormDescription>A brief introduction or tagline.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <div className="grid gap-6 sm:grid-cols-2">
+                  <FormField
+                    control={form.control}
+                    name="cta_text"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CTA Button Text</FormLabel>
+                        <FormControl>
+                          <Input placeholder="View My Work" {...field} />
+                        </FormControl>
+                        <FormDescription>Text for your call-to-action button.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  <FormField
+                    control={form.control}
+                    name="cta_url"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>CTA Button URL</FormLabel>
+                        <FormControl>
+                          <Input placeholder="/projects" {...field} />
+                        </FormControl>
+                        <FormDescription>Where the button should link to.</FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
+            <Button type="submit" disabled={isSaving}>
+              {isSaving ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <Save className="mr-2 h-4 w-4" />
+                  Save Changes
+                </>
+              )}
+            </Button>
+          </form>
+        </Form>
+      )}
     </div>
   )
 }
