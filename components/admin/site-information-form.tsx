@@ -517,6 +517,9 @@ export default function SiteInformationForm() {
     try {
       setSaving(true)
 
+      // Debug log
+      console.log("Saving settings:", settings)
+
       // Convert settings object to array of {key, value} pairs
       const settingsArray = Object.entries(settings).map(([key, value]) => ({
         key,
@@ -533,22 +536,20 @@ export default function SiteInformationForm() {
       })
 
       if (!response.ok) {
-        let errorMessage = "Failed to save settings"
-        try {
-          const errorData = await response.json()
-          if (errorData && errorData.error) {
-            errorMessage = errorData.error
-          }
-        } catch (e) {
-          // If JSON parsing fails, use the default error message
-        }
-        throw new Error(errorMessage)
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to save settings")
       }
 
+      // Force a page reload to ensure the changes are reflected
       toast({
         title: "Settings saved",
-        description: "Your site information has been updated successfully.",
+        description: "Your site information has been updated successfully. The page will refresh to show changes.",
       })
+
+      // Give the toast time to be seen before refreshing
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
     } catch (err: any) {
       console.error("Error saving settings:", err)
       toast({
