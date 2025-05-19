@@ -43,7 +43,16 @@ export default function ClientProjectsPage() {
     try {
       setLoading(true)
       const supabase = getSupabaseBrowserClient()
-      const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: false })
+      
+      // Check if Supabase client is properly initialized
+      if (!supabase) {
+        throw new Error('Supabase client initialization failed')
+      }
+
+      const { data, error } = await supabase
+        .from("projects")
+        .select("*")
+        .order("created_at", { ascending: false })
 
       if (error) {
         throw error
