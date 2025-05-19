@@ -268,14 +268,21 @@ function MediaUploader({
     if (value === "latest_project") {
       // Use a special placeholder value to indicate latest project
       onUpload("latest_project")
+      console.log("Setting media type to latest_project")
     }
     // If switching between image and video, clear the other value
     else if (value === "image") {
       setVideoUrl("")
-      if (preview) onUpload(preview)
+      if (preview) {
+        console.log("Setting media type to image with URL:", preview)
+        onUpload(preview)
+      }
     } else if (value === "video") {
       setPreview(null)
-      if (videoUrl) onUpload(videoUrl)
+      if (videoUrl) {
+        console.log("Setting media type to video with URL:", videoUrl)
+        onUpload(videoUrl)
+      }
     }
   }
 
@@ -533,10 +540,16 @@ export default function SiteInformationForm() {
         throw new Error(errorData.error || "Failed to save settings")
       }
 
+      // Force a page reload to ensure the changes are reflected
       toast({
         title: "Settings saved",
-        description: "Your site information has been updated successfully.",
+        description: "Your site information has been updated successfully. The page will refresh to show changes.",
       })
+
+      // Give the toast time to be seen before refreshing
+      setTimeout(() => {
+        window.location.reload()
+      }, 1500)
     } catch (err: any) {
       console.error("Error saving settings:", err)
       toast({

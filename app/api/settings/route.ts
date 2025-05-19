@@ -55,6 +55,9 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Log success for debugging
+    console.log("Settings saved successfully")
+
     return NextResponse.json({ success: true })
   } catch (error: any) {
     console.error("Error in POST /api/settings:", error)
