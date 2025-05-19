@@ -115,19 +115,19 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
     }
   }
 
-  // Get video embed URL with privacy-enhanced mode for YouTube
+  // Get video embed URL with optimized parameters
   const getVideoSrc = () => {
     if (!videoInfo) return ""
 
     const { platform, id } = videoInfo
-    const cacheBuster = retryCountRef.current > 0 ? `&cb=${Date.now()}` : ""
+    const cacheBuster = retryCountRef.current > 0 ? `&_=${Date.now()}` : ""
 
     if (platform === "youtube") {
-      // Use privacy-enhanced mode (youtube-nocookie.com)
-      return `https://www.youtube-nocookie.com/embed/${id}?controls=0&showinfo=0&rel=0&loop=1&playlist=${id}&mute=1&autoplay=1&iv_load_policy=3${cacheBuster}`
+      // Use privacy-enhanced mode with optimized parameters
+      return `https://www.youtube-nocookie.com/embed/${id}?controls=0&showinfo=0&rel=0&loop=1&playlist=${id}&mute=1&autoplay=1&iv_load_policy=3&playsinline=1${cacheBuster}`
     } else if (platform === "vimeo") {
-      // Use player.vimeo.com format
-      return `https://player.vimeo.com/video/${id}?background=1&autoplay=1&loop=1&byline=0&title=0&muted=1${cacheBuster}`
+      // Use player.vimeo.com format with optimized parameters
+      return `https://player.vimeo.com/video/${id}?background=1&autoplay=1&loop=1&byline=0&title=0&muted=1&playsinline=1${cacheBuster}`
     }
 
     return ""
@@ -181,11 +181,12 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
             objectFit: "contain",
           }}
           frameBorder="0"
-          allow="autoplay; encrypted-media"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
           onLoad={handleLoad}
           onError={handleError}
           title="Background video"
+          referrerPolicy="strict-origin-when-cross-origin"
         ></iframe>
       </div>
     </div>

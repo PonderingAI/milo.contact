@@ -17,7 +17,7 @@ export default function VideoPlayer({
   platform,
   videoId,
   autoplay = false,
-  useNativeControls = true, // Default to true to show native controls
+  useNativeControls = true,
   onError,
 }: VideoPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(false)
@@ -104,7 +104,7 @@ export default function VideoPlayer({
     }
   }
 
-  // Get video embed URL
+  // Get video embed URL with optimized parameters
   const getEmbedUrl = () => {
     try {
       if (!platform || !videoId) {
@@ -118,15 +118,70 @@ export default function VideoPlayer({
       const cacheBuster = retryCount > 0 ? `&cb=${Date.now()}` : ""
 
       if (platform.toLowerCase() === "youtube") {
-        // Use privacy-enhanced mode (youtube-nocookie.com)
-        return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0${
-          useNativeControls ? "" : "&modestbranding=1"
-        }${isPlaying && autoplay ? "&autoplay=1" : ""}${cacheBuster}`
+        // Use youtube-nocookie.com for enhanced privacy
+        const baseUrl = "https://www.youtube-nocookie.com/embed/"
+
+        // Build query parameters based on settings
+        const params = new URLSearchParams()
+
+        // Add a random ID to avoid caching issues with retries
+        if (retryCount > 0) {
+          params.append("_", Date.now().toString())
+        }
+
+        // Basic parameters for all YouTube embeds
+        params.append("rel", "0") // Don't show related videos
+        params.append("playsinline", "1") // Play inline on mobile
+
+        if (useNativeControls) {
+          params.append("controls", "1") // Show controls
+        } else {
+          params.append("controls", "0") // Hide controls
+        }
+
+        // Add autoplay if needed
+        if (isPlaying && autoplay) {
+          params.append("autoplay", "1")
+          params.append("mute", "1") // Required for autoplay in most browsers
+        }
+
+        // Add additional parameters based on context
+        if (!useNativeControls) {
+          params.append("modestbranding", "1") // Hide YouTube logo
+          params.append("showinfo", "0") // Hide video title and uploader
+        }
+
+        // Create the final URL
+        return `${baseUrl}${videoId}?${params.toString()}`
       } else if (platform.toLowerCase() === "vimeo") {
         // For Vimeo, use the player.vimeo.com/video/ID format
-        return `https://player.vimeo.com/video/${videoId}?${
-          useNativeControls ? "" : "title=0&byline=0&portrait=0"
-        }${isPlaying && autoplay ? "&autoplay=1" : ""}${cacheBuster}`
+        const baseUrl = "https://player.vimeo.com/video/"
+
+        // Build query parameters based on settings
+        const params = new URLSearchParams()
+
+        // Basic parameters for all Vimeo embeds
+        params.append("playsinline", "1") // Play inline on mobile
+
+        if (!useNativeControls) {
+          params.append("title", "0")
+          params.append("byline", "0")
+          params.append("portrait", "0")
+        }
+
+        // Add autoplay if needed
+        if (isPlaying && autoplay) {
+          params.append("autoplay", "1")
+          params.append("muted", "1") // Required for autoplay in most browsers
+        }
+
+        // Add a random ID to avoid caching issues with retries
+        if (retryCount > 0) {
+          params.append("_", Date.now().toString())
+        }
+
+        // Create the final URL
+        return `${baseUrl}${videoId}?${params.toString()}`
       }
 
       console.error("Unsupported platform", platform)
@@ -210,12 +265,13 @@ export default function VideoPlayer({
           src={embedUrl}
           className={`w-full h-full ${isLoaded ? "opacity-100" : "opacity-0"}`}
           frameBorder="0"
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
           allowFullScreen
           title={`${platform} video player`}
           onLoad={handleLoad}
           onError={handleError}
           aria-hidden={!isLoaded}
+          referrerPolicy="strict-origin-when-cross-origin"
         />
       )}
     </div>

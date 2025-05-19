@@ -17,6 +17,7 @@ export function formatFileSize(bytes: number): string {
 
 /**
  * Extract video platform and ID from a video URL
+ * Supports various YouTube and Vimeo URL formats
  * @param url Video URL from YouTube, Vimeo, or LinkedIn
  * @returns Object with platform and id, or null if not recognized
  */
@@ -28,18 +29,38 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
 
   console.log("Extracting video info from:", url)
 
-  // YouTube URL patterns (including youtube-nocookie.com)
+  // YouTube URL patterns
   const youtubePatterns = [
+    // Standard watch URLs
     /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
+
+    // Short URLs
     /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
-    /(?:https?:\/\/)?(?:www\.)?youtube-nocookie\.com\/embed\/([^?]+)/i,
+
+    // Embed URLs (both regular and nocookie)
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?/]+)/i,
+    /(?:https?:\/\/)?(?:www\.)?youtube-nocookie\.com\/embed\/([^?/]+)/i,
+
+    // Share URLs
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([^?/]+)/i,
+
+    // Handle URLs with time parameters
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?(?:.+&)?v=([^&]+)(?:&|$)/i,
   ]
 
-  // Vimeo URL patterns (including player.vimeo.com)
+  // Vimeo URL patterns
   const vimeoPatterns = [
-    /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
-    /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
+    // Standard URLs
+    /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)(?:[?/].*)?$/i,
+
+    // Player URLs
+    /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)(?:[?/].*)?$/i,
+
+    // App URLs
+    /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(?:channels\/[^/]+\/|groups\/[^/]+\/videos\/|album\/\d+\/video\/|)(\d+)(?:[?/].*)?$/i,
+
+    // Event URLs
+    /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/event\/(\d+)(?:[?/].*)?$/i,
   ]
 
   // LinkedIn URL patterns
@@ -75,37 +96,20 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
     }
   }
 
+  // If we get here, try to extract YouTube video ID from query parameters
+  try {
+    const urlObj = new URL(url)
+    if (urlObj.hostname.includes("youtube.com") || urlObj.hostname.includes("youtu.be")) {
+      const videoId = urlObj.searchParams.get("v")
+      if (videoId) {
+        console.log("YouTube video ID from query params:", videoId)
+        return { platform: "youtube", id: videoId }
+      }
+    }
+  } catch (e) {
+    // URL parsing failed, continue with other methods
+  }
+
   console.warn("Unrecognized video URL format:", url)
   return null
-}
-
-/**
- * Formats a date string in a human-readable format
- * @param dateString ISO date string
- * @returns Formatted date string
- */
-export function formatDate(dateString: string): string {
-  if (!dateString) return ""
-
-  const date = new Date(dateString)
-
-  // Check if date is valid
-  if (isNaN(date.getTime())) return ""
-
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-}
-
-/**
- * Truncates text to a specified length and adds ellipsis
- * @param text Text to truncate
- * @param maxLength Maximum length before truncation
- * @returns Truncated text
- */
-export function truncateText(text: string, maxLength: number): string {
-  if (!text || text.length <= maxLength) return text
-  return text.slice(0, maxLength) + "..."
 }
