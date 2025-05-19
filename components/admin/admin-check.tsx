@@ -30,7 +30,7 @@ export default function AdminCheck({ children }: AdminCheckProps) {
     }
   }, [isLoaded, isSignedIn, router, user])
 
-  if (loading) {
+  if (!isLoaded || loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <p>Checking permissions...</p>
