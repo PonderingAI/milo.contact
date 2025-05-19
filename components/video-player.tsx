@@ -12,7 +12,7 @@ interface VideoPlayerProps {
   onError?: () => void
 }
 
-export default function VideoPlayer({ platform, videoId, autoplay = false, onError }: VideoPlayerProps) {
+export default function VideoPlayer({ platform, videoId, autoplay = true, onError }: VideoPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [isPlaying, setIsPlaying] = useState(autoplay)
@@ -112,11 +112,12 @@ export default function VideoPlayer({ platform, videoId, autoplay = false, onErr
 
       if (platform.toLowerCase() === "youtube") {
         return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1${
-          isPlaying ? "&autoplay=1" : ""
+          isPlaying ? "&autoplay=1&mute=1" : ""
         }${cacheBuster}`
       } else if (platform.toLowerCase() === "vimeo") {
+        // Use the player.vimeo.com/video/ID format as requested
         return `https://player.vimeo.com/video/${videoId}?title=0&byline=0&portrait=0${
-          isPlaying ? "&autoplay=1" : ""
+          isPlaying ? "&autoplay=1&muted=1" : ""
         }${cacheBuster}`
       }
 

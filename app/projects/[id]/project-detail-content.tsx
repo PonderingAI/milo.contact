@@ -5,9 +5,8 @@ import type React from "react"
 import { useState, useEffect, useRef, useCallback } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ArrowLeft, Calendar, Tag, Info, Play, ExternalLink } from "lucide-react"
+import { ArrowLeft, Play, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import VideoPlayer from "@/components/video-player"
 import BTSLightbox from "@/components/bts-lightbox"
 import { extractVideoInfo } from "@/lib/project-data"
@@ -220,7 +219,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                 platform={videoInfo.platform}
                 videoId={videoInfo.id}
                 onError={handleVideoError}
-                autoplay={false}
+                autoplay={true} // Enable autoplay for main video
               />
             </div>
           ) : (
@@ -258,25 +257,10 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
             )}
           </div>
 
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            {project.category && (
-              <Badge variant="outline" className="flex items-center gap-1 text-sm py-1.5">
-                <Tag className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>{project.category}</span>
-              </Badge>
-            )}
-            {project.role && (
-              <Badge variant="outline" className="flex items-center gap-1 text-sm py-1.5">
-                <Info className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>{project.role}</span>
-              </Badge>
-            )}
-            {formattedDate && (
-              <Badge variant="outline" className="flex items-center gap-1 text-sm py-1.5">
-                <Calendar className="h-3.5 w-3.5" aria-hidden="true" />
-                <span>{formattedDate}</span>
-              </Badge>
-            )}
+          <div className="flex flex-wrap gap-4 text-gray-300">
+            {project.category && <span>{project.category}</span>}
+            {project.role && <span>{project.role}</span>}
+            {formattedDate && <span>{formattedDate}</span>}
           </div>
         </div>
 
@@ -310,11 +294,11 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
               {project.tags && project.tags.length > 0 && (
                 <div className="mt-6 sm:mt-8">
                   <h3 className="text-lg sm:text-xl font-semibold mb-3 sm:mb-4">Tags</h3>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-3">
                     {project.tags.map((tag, index) => (
-                      <Badge key={index} variant="secondary">
+                      <span key={index} className="text-gray-300">
                         {tag}
-                      </Badge>
+                      </span>
                     ))}
                   </div>
                 </div>
