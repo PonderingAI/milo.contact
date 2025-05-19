@@ -15,7 +15,7 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const loadTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const retryCountRef = useRef(0)
-  const maxRetries = 1 // Reduced retries to avoid long loading times
+  const maxRetries = 2
 
   // Extract video info on mount or when videoUrl changes
   useEffect(() => {
@@ -55,11 +55,31 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
 
     // Set a timeout to show fallback if video doesn't load
     loadTimeoutRef.current = setTimeout(() => {
-      if (!isLoaded) {
-        console.log("Video load timeout - showing black background")
+      if (!isLoaded && retryCountRef.current < maxRetries) {
+        console.log(`Video load timeout - retrying (${retryCountRef.current + 1}/${maxRetries})`)
+        retryCountRef.current += 1
+
+        // Force iframe reload
+        if (iframeRef.current) {
+          const src = iframeRef.current.src
+          iframeRef.current.src = ""
+          setTimeout(() => {
+            if (iframeRef.current) iframeRef.current.src = src
+          }, 100)
+        }
+
+        // Set another timeout for the next retry
+        loadTimeoutRef.current = setTimeout(() => {
+          if (!isLoaded) {
+            console.log("Video load timeout after retries - showing fallback")
+            setHasError(true)
+          }
+        }, 5000)
+      } else if (!isLoaded) {
+        console.log("Video load timeout - showing fallback")
         setHasError(true)
       }
-    }, 5000) // Shorter timeout to avoid long waiting
+    }, 8000) // Longer initial timeout
 
     return () => {
       if (loadTimeoutRef.current) {
@@ -78,39 +98,73 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
 
   const handleError = () => {
     console.error("Error loading video iframe")
-    setHasError(true)
+    if (retryCountRef.current < maxRetries) {
+      console.log(`Retrying video load (${retryCountRef.current + 1}/${maxRetries})`)
+      retryCountRef.current += 1
+
+      // Force iframe reload
+      if (iframeRef.current) {
+        const src = iframeRef.current.src
+        iframeRef.current.src = ""
+        setTimeout(() => {
+          if (iframeRef.current) iframeRef.current.src = src
+        }, 100)
+      }
+    } else {
+      setHasError(true)
+    }
   }
 
-  // Get video embed URL with minimal parameters
+  // Get video embed URL with privacy-enhanced mode for YouTube
   const getVideoSrc = () => {
     if (!videoInfo) return ""
 
     const { platform, id } = videoInfo
+    const cacheBuster = retryCountRef.current > 0 ? `&cb=${Date.now()}` : ""
 
-    // Use minimal parameters to avoid permission policy errors
     if (platform === "youtube") {
-      return `https://www.youtube-nocookie.com/embed/${id}?controls=0&rel=0&autoplay=1&mute=1`
+      // Use privacy-enhanced mode (youtube-nocookie.com)
+      return `https://www.youtube-nocookie.com/embed/${id}?controls=0&showinfo=0&rel=0&loop=1&playlist=${id}&mute=1&autoplay=1&iv_load_policy=3${cacheBuster}`
     } else if (platform === "vimeo") {
-      return `https://player.vimeo.com/video/${id}?background=1&autoplay=1&muted=1`
+      // Use player.vimeo.com format
+      return `https://player.vimeo.com/video/${id}?background=1&autoplay=1&loop=1&byline=0&title=0&muted=1${cacheBuster}`
     }
 
     return ""
   }
 
-  // If error or no valid video source, show black background
+  // If error or no valid video source, show fallback image
   if (hasError || !videoInfo) {
-    return <div className="absolute inset-0 bg-black" />
+    return (
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${fallbackImage})` }}
+      />
+    )
   }
 
   const videoSrc = getVideoSrc()
 
-  // If we couldn't generate a valid video source, show black background
+  // If we couldn't generate a valid video source, show fallback image
   if (!videoSrc) {
-    return <div className="absolute inset-0 bg-black" />
+    return (
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${fallbackImage})` }}
+      />
+    )
   }
 
   return (
     <div className="absolute inset-0 overflow-hidden bg-black">
+      {/* Fallback image shown until video loads */}
+      {!isLoaded && (
+        <div
+          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+          style={{ backgroundImage: `url(${fallbackImage})` }}
+        />
+      )}
+
       {/* Video iframe */}
       <div className="absolute inset-0 w-full h-full">
         <iframe
@@ -127,7 +181,7 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
             objectFit: "contain",
           }}
           frameBorder="0"
-          allow="autoplay"
+          allow="autoplay; encrypted-media"
           allowFullScreen
           onLoad={handleLoad}
           onError={handleError}

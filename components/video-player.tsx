@@ -17,7 +17,7 @@ export default function VideoPlayer({
   platform,
   videoId,
   autoplay = false,
-  useNativeControls = false,
+  useNativeControls = true, // Default to true to show native controls
   onError,
 }: VideoPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(false)
@@ -54,7 +54,7 @@ export default function VideoPlayer({
         setHasError(true)
         onError?.()
       }
-    }, 8000) // Increased timeout for slower connections
+    }, 10000) // Increased timeout for slower connections
 
     setLoadingTimeout(timer)
 
@@ -118,17 +118,15 @@ export default function VideoPlayer({
       const cacheBuster = retryCount > 0 ? `&cb=${Date.now()}` : ""
 
       if (platform.toLowerCase() === "youtube") {
-        // For YouTube, use the standard embed URL with appropriate parameters
-        // When useNativeControls is true, we don't add any parameters that would hide the native controls
-        return `https://www.youtube.com/embed/${videoId}?rel=0${
+        // Use privacy-enhanced mode (youtube-nocookie.com)
+        return `https://www.youtube-nocookie.com/embed/${videoId}?rel=0${
           useNativeControls ? "" : "&modestbranding=1"
-        }${isPlaying && autoplay ? "&autoplay=1&mute=1" : ""}${cacheBuster}`
+        }${isPlaying && autoplay ? "&autoplay=1" : ""}${cacheBuster}`
       } else if (platform.toLowerCase() === "vimeo") {
         // For Vimeo, use the player.vimeo.com/video/ID format
-        // When useNativeControls is true, we don't add parameters that would hide controls
         return `https://player.vimeo.com/video/${videoId}?${
           useNativeControls ? "" : "title=0&byline=0&portrait=0"
-        }${isPlaying && autoplay ? "&autoplay=1&muted=1" : ""}${cacheBuster}`
+        }${isPlaying && autoplay ? "&autoplay=1" : ""}${cacheBuster}`
       }
 
       console.error("Unsupported platform", platform)
