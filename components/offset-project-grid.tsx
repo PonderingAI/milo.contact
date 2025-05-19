@@ -12,14 +12,10 @@ interface OffsetProjectGridProps {
   selectedTags?: string[]
 }
 
-export function OffsetProjectGrid({
-  projects = [], // Provide default empty array
-  searchQuery = "",
-  selectedTags = [],
-}: OffsetProjectGridProps) {
+export function OffsetProjectGrid({ projects, searchQuery = "", selectedTags = [] }: OffsetProjectGridProps) {
   const [projectsPerPage, setProjectsPerPage] = useState(20)
   const [visibleProjects, setVisibleProjects] = useState(projectsPerPage)
-  const [filteredProjects, setFilteredProjects] = useState<Project[]>([])
+  const [filteredProjects, setFilteredProjects] = useState<Project[]>(projects)
 
   // Load projects per page setting
   useEffect(() => {
@@ -33,11 +29,8 @@ export function OffsetProjectGrid({
           .single()
 
         if (!error && data && data.value) {
-          const parsedValue = Number.parseInt(data.value, 10)
-          if (!isNaN(parsedValue)) {
-            setProjectsPerPage(parsedValue)
-            setVisibleProjects(parsedValue)
-          }
+          setProjectsPerPage(Number.parseInt(data.value, 10))
+          setVisibleProjects(Number.parseInt(data.value, 10))
         }
       } catch (err) {
         console.error("Error loading projects per page setting:", err)
@@ -49,20 +42,17 @@ export function OffsetProjectGrid({
 
   // Filter projects based on search query and selected tags
   useEffect(() => {
-    // Ensure projects is an array before filtering
-    const projectsArray = Array.isArray(projects) ? projects : []
-
-    let filtered = [...projectsArray]
+    let filtered = [...projects]
 
     // Filter by search query
     if (searchQuery) {
       const query = searchQuery.toLowerCase()
       filtered = filtered.filter(
         (project) =>
-          project?.title?.toLowerCase().includes(query) ||
-          project?.category?.toLowerCase().includes(query) ||
-          project?.role?.toLowerCase().includes(query) ||
-          project?.description?.toLowerCase().includes(query),
+          project.title?.toLowerCase().includes(query) ||
+          project.category?.toLowerCase().includes(query) ||
+          project.role?.toLowerCase().includes(query) ||
+          project.description?.toLowerCase().includes(query),
       )
     }
 
@@ -71,8 +61,7 @@ export function OffsetProjectGrid({
       filtered = filtered.filter((project) => {
         return selectedTags.every(
           (tag) =>
-            project?.category?.toLowerCase() === tag.toLowerCase() ||
-            project?.role?.toLowerCase() === tag.toLowerCase(),
+            project.category?.toLowerCase() === tag.toLowerCase() || project.role?.toLowerCase() === tag.toLowerCase(),
         )
       })
     }
@@ -100,8 +89,6 @@ export function OffsetProjectGrid({
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-12">
         {filteredProjects.slice(0, visibleProjects).map((project, index) => {
-          if (!project) return null
-
           // Calculate offset for each project - horizontal offset pattern
           const row = Math.floor(index / 3)
           const col = index % 3
@@ -115,13 +102,13 @@ export function OffsetProjectGrid({
           }
 
           return (
-            <div key={project.id || index} className={offsetClass}>
+            <div key={project.id} className={offsetClass}>
               <ProjectCard
                 id={project.id}
-                title={project.title || "Untitled Project"}
-                category={project.category || ""}
-                role={project.role || ""}
-                image={project.image || ""}
+                title={project.title}
+                category={project.category}
+                role={project.role}
+                image={project.image}
                 link={`/projects/${project.id}`}
               />
             </div>

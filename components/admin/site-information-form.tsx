@@ -11,11 +11,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Film } from "lucide-react"
+import { Loader2, Film, RefreshCw } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import MediaSelector from "./media-selector"
 import { extractVideoInfo } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { triggerSiteRefresh } from "@/lib/refresh-utils"
 
 interface MediaUploaderProps {
   label: string
@@ -268,21 +269,14 @@ function MediaUploader({
     if (value === "latest_project") {
       // Use a special placeholder value to indicate latest project
       onUpload("latest_project")
-      console.log("Setting media type to latest_project")
     }
     // If switching between image and video, clear the other value
     else if (value === "image") {
       setVideoUrl("")
-      if (preview) {
-        console.log("Setting media type to image with URL:", preview)
-        onUpload(preview)
-      }
+      if (preview) onUpload(preview)
     } else if (value === "video") {
       setPreview(null)
-      if (videoUrl) {
-        console.log("Setting media type to video with URL:", videoUrl)
-        onUpload(videoUrl)
-      }
+      if (videoUrl) onUpload(videoUrl)
     }
   }
 
@@ -540,16 +534,13 @@ export default function SiteInformationForm() {
         throw new Error(errorData.error || "Failed to save settings")
       }
 
-      // Force a page reload to ensure the changes are reflected
+      // Trigger a site-wide refresh
+      triggerSiteRefresh("settings")
+
       toast({
         title: "Settings saved",
-        description: "Your site information has been updated successfully. The page will refresh to show changes.",
+        description: "Your site information has been updated successfully. All site visitors will see the changes.",
       })
-
-      // Give the toast time to be seen before refreshing
-      setTimeout(() => {
-        window.location.href = "/" // Navigate to the home page
-      }, 1500)
     } catch (err: any) {
       console.error("Error saving settings:", err)
       toast({
@@ -560,6 +551,11 @@ export default function SiteInformationForm() {
     } finally {
       setSaving(false)
     }
+  }
+
+  // Add a manual refresh button to the form
+  const handleManualRefresh = () => {
+    triggerSiteRefresh("settings", { immediate: true })
   }
 
   if (loading) {
@@ -829,7 +825,11 @@ export default function SiteInformationForm() {
           </TabsContent>
         </Tabs>
 
-        <div className="mt-6 flex justify-end">
+        <div className="mt-6 flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={handleManualRefresh}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Refresh Site
+          </Button>
           <Button type="submit" disabled={saving}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes

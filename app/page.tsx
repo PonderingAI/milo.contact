@@ -1,15 +1,53 @@
-import { Suspense } from "react"
-import HeroSection from "@/components/hero-section"
-import ProjectsSection from "@/components/projects-section"
-import AboutSection from "@/components/about-section"
-import ContactSection from "@/components/contact-section"
 import { createServerClient } from "@/lib/supabase-server"
-import { unstable_noStore as noStore } from "next/cache"
+import HeroSection from "@/components/hero-section"
+import AboutSection from "@/components/about-section"
+import ProjectsSection from "@/components/projects-section"
+import ServicesSection from "@/components/services-section"
+import ContactSection from "@/components/contact-section"
+
+async function getHeroSettings() {
+  try {
+    const supabase = createServerClient()
+    const { data, error } = await supabase
+      .from("site_settings")
+      .select("*")
+      .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type"])
+
+    if (error) {
+      console.error("Error fetching hero settings:", error)
+      return {
+        hero_heading: "Milo Presedo",
+        hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+        image_hero_bg: "/images/hero-bg.jpg",
+        hero_bg_type: "image",
+      }
+    }
+
+    // Convert array to object
+    const settings: Record<string, string> = {}
+    data.forEach((item) => {
+      settings[item.key] = item.value
+    })
+
+    return {
+      hero_heading: settings.hero_heading || "Milo Presedo",
+      hero_subheading:
+        settings.hero_subheading || "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+      image_hero_bg: settings.image_hero_bg || "/images/hero-bg.jpg",
+      hero_bg_type: settings.hero_bg_type || "image",
+    }
+  } catch (error) {
+    console.error("Error in getHeroSettings:", error)
+    return {
+      hero_heading: "Milo Presedo",
+      hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+      image_hero_bg: "/images/hero-bg.jpg",
+      hero_bg_type: "image",
+    }
+  }
+}
 
 async function getLatestProject() {
-  // Prevent caching to ensure we always get fresh data
-  noStore()
-
   try {
     const supabase = createServerClient()
     const { data, error } = await supabase
@@ -32,16 +70,15 @@ async function getLatestProject() {
 }
 
 export default async function Home() {
-  // Fetch the latest project for the hero section
+  const heroSettings = await getHeroSettings()
   const latestProject = await getLatestProject()
 
   return (
     <main>
-      <Suspense fallback={<div className="h-screen bg-black"></div>}>
-        <HeroSection latestProject={latestProject} />
-      </Suspense>
-      <ProjectsSection />
+      <HeroSection initialSettings={heroSettings} latestProject={latestProject} />
       <AboutSection />
+      <ProjectsSection />
+      <ServicesSection />
       <ContactSection />
     </main>
   )
