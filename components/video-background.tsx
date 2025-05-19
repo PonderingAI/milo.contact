@@ -43,18 +43,26 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
     }
   }, [videoUrl])
 
-  // Set up load timeout and cleanup
+  // Set up load timeout and cleanup - FIXED DEPENDENCY ARRAY
   useEffect(() => {
     // Clear any existing timeout
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current)
     }
 
-    // Reset states when video changes
+    // Reset states when videoUrl changes
     setIsLoaded(false)
+
+    // If no videoUrl, or if videoInfo hasn't been set yet (or failed extraction), don't start timeout
+    if (!videoUrl || !videoInfo) {
+      return
+    }
 
     // Set a timeout to show fallback if video doesn't load
     loadTimeoutRef.current = setTimeout(() => {
+      // The !isLoaded check here will use the value of isLoaded from the closure.
+      // It's important that handleLoad clears this timeout. If this callback runs,
+      // it means handleLoad was not called in time.
       if (!isLoaded && retryCountRef.current < maxRetries) {
         console.log(`Video load timeout - retrying (${retryCountRef.current + 1}/${maxRetries})`)
         retryCountRef.current += 1
@@ -70,6 +78,7 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
 
         // Set another timeout for the next retry
         loadTimeoutRef.current = setTimeout(() => {
+          // Check isLoaded again after retry attempt timeout
           if (!isLoaded) {
             console.log("Video load timeout after retries - showing fallback")
             setHasError(true)
@@ -86,13 +95,15 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
         clearTimeout(loadTimeoutRef.current)
       }
     }
-  }, [videoUrl, isLoaded])
+  }, [videoUrl, videoInfo]) // FIXED: Removed isLoaded from dependency array, added videoInfo
 
   const handleLoad = () => {
     console.log("Video iframe loaded successfully")
     setIsLoaded(true)
+    // Important: Clear the timeout when the video loads successfully
     if (loadTimeoutRef.current) {
       clearTimeout(loadTimeoutRef.current)
+      loadTimeoutRef.current = null
     }
   }
 
