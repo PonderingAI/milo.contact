@@ -548,7 +548,7 @@ export default function SiteInformationForm() {
 
       // Give the toast time to be seen before refreshing
       setTimeout(() => {
-        window.location.reload()
+        window.location.href = "/" // Navigate to the home page
       }, 1500)
     } catch (err: any) {
       console.error("Error saving settings:", err)

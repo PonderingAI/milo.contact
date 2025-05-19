@@ -1,7 +1,7 @@
 import { Suspense } from "react"
 import HeroSection from "@/components/hero-section"
-import AboutSection from "@/components/about-section"
 import ProjectsSection from "@/components/projects-section"
+import AboutSection from "@/components/about-section"
 import ContactSection from "@/components/contact-section"
 import { createServerClient } from "@/lib/supabase-server"
 import { unstable_noStore as noStore } from "next/cache"
