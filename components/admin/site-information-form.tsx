@@ -11,79 +11,12 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Film, AlertTriangle, Copy, Check } from "lucide-react"
+import { Loader2, Film, AlertTriangle } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import MediaSelector from "./media-selector"
 import { extractVideoInfo } from "@/lib/utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
-import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-
-// SQL code for site_settings table setup
-const SITE_SETTINGS_SQL = `-- 1. Create the site_settings table
-CREATE TABLE IF NOT EXISTS public.site_settings (
-  id SERIAL PRIMARY KEY,
-  key TEXT UNIQUE NOT NULL,
-  value TEXT,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-);
-
--- 2. Enable Row Level Security
-ALTER TABLE public.site_settings ENABLE ROW LEVEL SECURITY;
-
--- 3. Create policies for site_settings table
--- Allow authenticated users to select
-CREATE POLICY "Allow authenticated users to select site_settings"
-  ON public.site_settings
-  FOR SELECT
-  TO authenticated
-  USING (true);
-
--- Allow public to select
-CREATE POLICY "Allow public to select site_settings"
-  ON public.site_settings
-  FOR SELECT
-  TO anon
-  USING (true);
-
--- Allow authenticated users with admin role to insert/update/delete
-CREATE POLICY "Allow admins to insert site_settings"
-  ON public.site_settings
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (
-    EXISTS (
-      SELECT 1 FROM auth.users
-      WHERE auth.users.id = auth.uid()
-      AND auth.users.raw_app_meta_data->>'role' = 'admin'
-    )
-  );
-
-CREATE POLICY "Allow admins to update site_settings"
-  ON public.site_settings
-  FOR UPDATE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM auth.users
-      WHERE auth.users.id = auth.uid()
-      AND auth.users.raw_app_meta_data->>'role' = 'admin'
-    )
-  );
-
-CREATE POLICY "Allow admins to delete site_settings"
-  ON public.site_settings
-  FOR DELETE
-  TO authenticated
-  USING (
-    EXISTS (
-      SELECT 1 FROM auth.users
-      WHERE auth.users.id = auth.uid()
-      AND auth.users.raw_app_meta_data->>'role' = 'admin'
-    )
-  );`
 
 interface MediaUploaderProps {
   label: string
@@ -455,51 +388,6 @@ function MediaUploader({
   )
 }
 
-function SqlSetupInstructions() {
-  const [copied, setCopied] = useState(false)
-  const [showCode, setShowCode] = useState(false)
-
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(SITE_SETTINGS_SQL)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <Alert variant="destructive" className="mb-6">
-      <AlertTriangle className="h-4 w-4" />
-      <AlertTitle>Site settings table not found</AlertTitle>
-      <AlertDescription className="space-y-4">
-        <p>
-          The site_settings table does not exist in your database. You need to create it manually by running the SQL
-          code below in your Supabase SQL Editor.
-        </p>
-
-        <div className="flex justify-between items-center">
-          <Button variant="outline" size="sm" onClick={() => setShowCode(!showCode)}>
-            {showCode ? "Hide SQL Code" : "Show SQL Code"}
-          </Button>
-
-          <Button variant="outline" size="sm" onClick={copyToClipboard} className="flex items-center gap-2">
-            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-            {copied ? "Copied!" : "Copy SQL"}
-          </Button>
-        </div>
-
-        {showCode && (
-          <div className="relative mt-2 max-h-96 overflow-auto rounded border border-gray-700">
-            <SyntaxHighlighter language="sql" style={vscDarkPlus} customStyle={{ margin: 0, borderRadius: "0.375rem" }}>
-              {SITE_SETTINGS_SQL}
-            </SyntaxHighlighter>
-          </div>
-        )}
-
-        <p>After running the SQL code, refresh this page to continue setting up your site.</p>
-      </AlertDescription>
-    </Alert>
-  )
-}
-
 export default function SiteInformationForm() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -718,7 +606,22 @@ export default function SiteInformationForm() {
 
   return (
     <div className="space-y-6">
-      {!tableExists && <SqlSetupInstructions />}
+      {!tableExists && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Site settings table not found</AlertTitle>
+          <AlertDescription>
+            <p>The site_settings table does not exist in your database.</p>
+            <p className="mt-2">
+              Please go to{" "}
+              <a href="/admin/database" className="underline font-medium">
+                Database Management
+              </a>{" "}
+              to set up the required tables.
+            </p>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <form onSubmit={handleSubmit}>
         <Tabs defaultValue="hero">

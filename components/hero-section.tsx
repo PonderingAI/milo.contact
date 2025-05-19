@@ -1,7 +1,6 @@
-import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import VideoBackground from "./video-background"
 import { createServerClient } from "@/lib/supabase-server"
+import VideoBackground from "./video-background"
+import { fontSerif } from "@/lib/fonts"
 
 interface HeroSectionProps {
   latestProject?: any
@@ -80,19 +79,17 @@ export default async function HeroSection({ latestProject }: HeroSectionProps) {
         </div>
       )}
 
-      {/* Content */}
+      {/* Center Content */}
       <div className="relative z-10 text-center px-4 max-w-4xl">
-        <h1 className="text-4xl md:text-6xl font-bold mb-4">{settings.hero_heading}</h1>
+        <h1 className={`text-4xl md:text-6xl font-bold mb-4 ${fontSerif.variable} font-serif`}>
+          {settings.hero_heading}
+        </h1>
         <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">{settings.hero_subheading}</p>
+      </div>
 
-        <div className="flex flex-wrap justify-center gap-4">
-          <Button asChild size="lg">
-            <Link href="/projects">View Projects</Link>
-          </Button>
-          <Button asChild size="lg" variant="outline">
-            <Link href="#contact">Contact Me</Link>
-          </Button>
-        </div>
+      {/* Bottom Left Text */}
+      <div className="absolute bottom-8 left-8 z-10">
+        <p className="text-sm md:text-base text-gray-300 opacity-80">Cinematography • Camera • Drone • Underwater</p>
       </div>
     </section>
   )
