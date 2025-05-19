@@ -546,17 +546,34 @@ export default function SiteInformationForm() {
     async function checkTableExists() {
       try {
         const response = await fetch("/api/check-table-exists?table=site_settings")
-        const data = await response.json()
 
-        if (data.exists) {
-          setTableExists(true)
-          loadSettings()
-        } else {
+        // Check if the response is ok before parsing JSON
+        if (!response.ok) {
+          console.error("Error response from check-table-exists:", response.status, response.statusText)
+          setTableExists(false)
+          setLoading(false)
+          return
+        }
+
+        // Try to parse the JSON response
+        try {
+          const data = await response.json()
+
+          if (data.exists) {
+            setTableExists(true)
+            loadSettings()
+          } else {
+            setTableExists(false)
+            setLoading(false)
+          }
+        } catch (parseError) {
+          console.error("Error parsing JSON from check-table-exists:", parseError)
           setTableExists(false)
           setLoading(false)
         }
       } catch (err) {
-        console.error("Error checking if table exists:", err)
+        console.error("Network error checking if table exists:", err)
+        setTableExists(false)
         setLoading(false)
       }
     }
