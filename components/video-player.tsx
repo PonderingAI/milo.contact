@@ -1,42 +1,48 @@
 "use client"
 
 import type React from "react"
-
 import { useState, useEffect } from "react"
+import { Play, AlertCircle, RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 
 interface VideoPlayerProps {
   platform: string
   videoId: string
+  autoplay?: boolean
   onError?: () => void
 }
 
-export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerProps) {
+export default function VideoPlayer({ platform, videoId, autoplay = false, onError }: VideoPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(autoplay)
+  const [retryCount, setRetryCount] = useState(0)
 
   // Log props for debugging
   useEffect(() => {
-    console.log("VideoPlayer mounted with props:", { platform, videoId })
-  }, [platform, videoId])
+    console.log("VideoPlayer mounted with props:", { platform, videoId, autoplay })
+  }, [platform, videoId, autoplay])
 
   useEffect(() => {
     // Reset states when props change
     setIsLoaded(false)
     setHasError(false)
+    setIsPlaying(autoplay)
+    setRetryCount(0)
 
-    console.log("VideoPlayer props changed:", { platform, videoId })
+    console.log("VideoPlayer props changed:", { platform, videoId, autoplay })
 
     // Set a timeout to show fallback if video doesn't load
     const timer = setTimeout(() => {
-      if (!isLoaded) {
+      if (!isLoaded && isPlaying) {
         console.log("Video load timeout - showing fallback")
         setHasError(true)
         onError?.()
       }
-    }, 5000)
+    }, 8000) // Increased timeout for slower connections
 
     return () => clearTimeout(timer)
-  }, [platform, videoId, onError])
+  }, [platform, videoId, autoplay, onError])
 
   const handleLoad = () => {
     console.log("Video loaded successfully")
@@ -49,6 +55,17 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
     onError?.()
   }
 
+  const handleRetry = () => {
+    setHasError(false)
+    setIsLoaded(false)
+    setRetryCount((prev) => prev + 1)
+    setIsPlaying(true)
+  }
+
+  const handlePlay = () => {
+    setIsPlaying(true)
+  }
+
   // Get video embed URL
   const getEmbedUrl = () => {
     try {
@@ -59,10 +76,13 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
         return ""
       }
 
+      // Add a cache-busting parameter for retries
+      const cacheBuster = retryCount > 0 ? `&cb=${Date.now()}` : ""
+
       if (platform.toLowerCase() === "youtube") {
-        return `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`
+        return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1${isPlaying ? "&autoplay=1" : ""}${cacheBuster}`
       } else if (platform.toLowerCase() === "vimeo") {
-        return `https://player.vimeo.com/video/${videoId}?autoplay=1&color=ffffff&title=0&byline=0&portrait=0`
+        return `https://player.vimeo.com/video/${videoId}?title=0&byline=0&portrait=0${isPlaying ? "&autoplay=1" : ""}${cacheBuster}`
       }
 
       console.error("Unsupported platform", platform)
@@ -83,9 +103,27 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
   if (hasError) {
     return (
       <div className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center">
-        <div className="text-white text-center p-4">
-          <p className="mb-2">Unable to load video</p>
-          <p className="text-sm text-gray-400">Check the video URL format</p>
+        <div className="text-white text-center p-4 flex flex-col items-center">
+          <AlertCircle className="h-12 w-12 mb-4 text-red-500" />
+          <p className="mb-2 text-lg font-medium">Unable to load video</p>
+          <p className="text-sm text-gray-400 mb-4">There was a problem loading the video</p>
+          <Button variant="outline" onClick={handleRetry} className="flex items-center gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Retry
+          </Button>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isPlaying) {
+    return (
+      <div
+        className="relative w-full aspect-video rounded-lg overflow-hidden bg-gray-900 flex items-center justify-center cursor-pointer"
+        onClick={handlePlay}
+      >
+        <div className="rounded-full bg-white/20 p-6 backdrop-blur-sm">
+          <Play className="h-12 w-12 text-white" fill="white" />
         </div>
       </div>
     )
@@ -100,6 +138,7 @@ export default function VideoPlayer({ platform, videoId, onError }: VideoPlayerP
       )}
       {embedUrl && (
         <iframe
+          key={`video-${platform}-${videoId}-${retryCount}`} // Force iframe refresh on retry
           src={embedUrl}
           className={`w-full h-full ${isLoaded ? "opacity-100" : "opacity-0"}`}
           frameBorder="0"
