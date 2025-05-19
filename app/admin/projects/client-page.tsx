@@ -43,6 +43,12 @@ export default function ClientProjectsPage() {
     try {
       setLoading(true)
       const supabase = getSupabaseBrowserClient()
+
+      // Check if supabase client is available
+      if (!supabase) {
+        throw new Error("Supabase client is not available")
+      }
+
       const { data, error } = await supabase.from("projects").select("*").order("created_at", { ascending: false })
 
       if (error) {
@@ -53,10 +59,23 @@ export default function ClientProjectsPage() {
         setProjects(data)
         setFilteredProjects(data)
 
-        // Extract unique categories and roles
-        const uniqueCategories = Array.from(new Set(data.map((p) => p.category).filter(Boolean)))
+        // Extract unique categories and roles with proper null checks
+        const uniqueCategories = Array.from(
+          new Set(data.map((p) => (p && p.category ? p.category : null)).filter(Boolean)),
+        )
+
         const uniqueRoles = Array.from(
-          new Set(data.flatMap((p) => (p.role ? p.role.split(",").map((r) => r.trim()) : [])).filter(Boolean)),
+          new Set(
+            data.flatMap((p) => {
+              if (p && p.role) {
+                return p.role
+                  .split(",")
+                  .map((r) => r.trim())
+                  .filter(Boolean)
+              }
+              return []
+            }),
+          ),
         )
 
         setCategories(uniqueCategories as string[])
@@ -72,23 +91,38 @@ export default function ClientProjectsPage() {
 
   // Apply filters when dependencies change
   useEffect(() => {
-    let result = projects
+    if (!projects || projects.length === 0) {
+      setFilteredProjects([])
+      return
+    }
 
-    // Apply category filter
+    let result = [...projects]
+
+    // Apply category filter with null checks
     if (selectedCategory) {
-      result = result.filter((project) => project.category?.toLowerCase() === selectedCategory.toLowerCase())
+      result = result.filter(
+        (project) => project && project.category && project.category.toLowerCase() === selectedCategory.toLowerCase(),
+      )
     }
 
-    // Apply role filter
+    // Apply role filter with null checks
     if (selectedRole) {
-      result = result.filter((project) => project.role?.toLowerCase().includes(selectedRole.toLowerCase()))
+      result = result.filter(
+        (project) => project && project.role && project.role.toLowerCase().includes(selectedRole.toLowerCase()),
+      )
     }
 
-    // Apply search filter
+    // Apply search filter with null checks
     if (searchQuery) {
       result = result.filter((project) => {
-        const searchableText = [project.title, project.description, project.category, project.role]
-          .filter(Boolean)
+        if (!project) return false
+
+        const searchableText = [
+          project.title || "",
+          project.description || "",
+          project.category || "",
+          project.role || "",
+        ]
           .join(" ")
           .toLowerCase()
 
@@ -165,14 +199,18 @@ export default function ClientProjectsPage() {
 
               {showFilters && (
                 <div className="space-y-4 pt-2">
-                  <TagFilter
-                    title="Categories"
-                    tags={categories}
-                    selectedTag={selectedCategory}
-                    onChange={handleCategoryChange}
-                  />
+                  {categories.length > 0 && (
+                    <TagFilter
+                      title="Categories"
+                      tags={categories}
+                      selectedTag={selectedCategory}
+                      onChange={handleCategoryChange}
+                    />
+                  )}
 
-                  <TagFilter title="Roles" tags={roles} selectedTag={selectedRole} onChange={handleRoleChange} />
+                  {roles.length > 0 && (
+                    <TagFilter title="Roles" tags={roles} selectedTag={selectedRole} onChange={handleRoleChange} />
+                  )}
 
                   {(selectedCategory || selectedRole || searchQuery) && (
                     <div className="flex justify-end">
@@ -220,14 +258,16 @@ export default function ClientProjectsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredProjects.map((project) => (
-              <ProjectCard
-                key={project.id}
-                project={project}
-                isAdmin={true}
-                onEdit={() => router.push(`/admin/projects/${project.id}/edit`)}
-              />
-            ))}
+            {filteredProjects.map((project) =>
+              project ? (
+                <ProjectCard
+                  key={project.id || `project-${Math.random()}`}
+                  project={project}
+                  isAdmin={true}
+                  onEdit={() => project.id && router.push(`/admin/projects/${project.id}/edit`)}
+                />
+              ) : null,
+            )}
           </div>
         )}
       </div>
