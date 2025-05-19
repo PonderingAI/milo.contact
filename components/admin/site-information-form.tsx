@@ -16,7 +16,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import MediaSelector from "./media-selector"
 import { extractVideoInfo } from "@/lib/utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { triggerSiteRefresh } from "@/lib/refresh-utils"
+import { commonInvalidations } from "@/lib/cache-utils"
 
 interface MediaUploaderProps {
   label: string
@@ -391,6 +391,7 @@ function MediaUploader({
 export default function SiteInformationForm() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const [settings, setSettings] = useState({
     // Hero section
     hero_heading: "Milo Presedo",
@@ -505,6 +506,35 @@ export default function SiteInformationForm() {
     }))
   }
 
+  const refreshSite = async () => {
+    setRefreshing(true)
+    try {
+      const success = await commonInvalidations.siteSettings()
+
+      if (success) {
+        toast({
+          title: "Site refreshed",
+          description: "The site has been refreshed with the latest settings",
+        })
+      } else {
+        toast({
+          title: "Refresh failed",
+          description: "Failed to refresh the site. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error("Error refreshing site:", error)
+      toast({
+        title: "Refresh error",
+        description: "An error occurred while refreshing the site",
+        variant: "destructive",
+      })
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
@@ -534,12 +564,12 @@ export default function SiteInformationForm() {
         throw new Error(errorData.error || "Failed to save settings")
       }
 
-      // Trigger a site-wide refresh
-      triggerSiteRefresh("settings")
+      // Automatically refresh the site after saving settings
+      await refreshSite()
 
       toast({
         title: "Settings saved",
-        description: "Your site information has been updated successfully. All site visitors will see the changes.",
+        description: "Your site information has been updated successfully.",
       })
     } catch (err: any) {
       console.error("Error saving settings:", err)
@@ -551,11 +581,6 @@ export default function SiteInformationForm() {
     } finally {
       setSaving(false)
     }
-  }
-
-  // Add a manual refresh button to the form
-  const handleManualRefresh = () => {
-    triggerSiteRefresh("settings", { immediate: true })
   }
 
   if (loading) {
@@ -825,11 +850,18 @@ export default function SiteInformationForm() {
           </TabsContent>
         </Tabs>
 
-        <div className="mt-6 flex justify-end gap-2">
-          <Button type="button" variant="outline" onClick={handleManualRefresh}>
-            <RefreshCw className="mr-2 h-4 w-4" />
+        <div className="mt-6 flex justify-between items-center">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={refreshSite}
+            disabled={refreshing}
+            className="flex items-center gap-2"
+          >
+            {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
             Refresh Site
           </Button>
+
           <Button type="submit" disabled={saving}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes
