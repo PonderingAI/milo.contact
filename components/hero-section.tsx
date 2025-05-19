@@ -1,122 +1,70 @@
-import { createServerClient } from "@/lib/supabase-server"
+import Link from "next/link"
 import VideoBackground from "./video-background"
-import { fontSerif } from "@/lib/fonts"
-import { extractVideoInfo } from "@/lib/utils"
+import { unstable_cache } from "next/cache"
+
+// Cache the hero section data
+const getHeroData = unstable_cache(
+  async (projectId: string | undefined) => {
+    // This is a placeholder for actual data fetching
+    // In a real app, you would fetch data from an API or database
+    return {
+      title: "Milo Presedo",
+      subtitle: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
+    }
+  },
+  ["hero-data"],
+  { revalidate: 60 }, // Revalidate every 60 seconds
+)
 
 interface HeroSectionProps {
-  latestProject?: any
-}
-
-async function getHeroSettings() {
-  try {
-    const supabase = createServerClient()
-    const { data, error } = await supabase
-      .from("site_settings")
-      .select("*")
-      .in("key", ["hero_heading", "hero_subheading", "image_hero_bg", "hero_bg_type"])
-
-    if (error) {
-      console.error("Error fetching hero settings:", error)
-      return {
-        hero_heading: "Milo Presedo",
-        hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-        image_hero_bg: "/images/hero-bg.jpg",
-        hero_bg_type: "image",
-      }
-    }
-
-    // Convert array to object
-    const settings: Record<string, string> = {}
-    data.forEach((item) => {
-      settings[item.key] = item.value
-    })
-
-    return {
-      hero_heading: settings.hero_heading || "Milo Presedo",
-      hero_subheading:
-        settings.hero_subheading || "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-      image_hero_bg: settings.image_hero_bg || "/images/hero-bg.jpg",
-      hero_bg_type: settings.hero_bg_type || "image",
-    }
-  } catch (error) {
-    console.error("Error in getHeroSettings:", error)
-    return {
-      hero_heading: "Milo Presedo",
-      hero_subheading: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-      image_hero_bg: "/images/hero-bg.jpg",
-      hero_bg_type: "image",
-    }
-  }
-}
-
-// Helper function to prepare video URLs for embedding
-function prepareVideoUrl(url: string): string {
-  if (!url) return ""
-
-  // For Vimeo URLs, convert to player.vimeo.com format
-  if (url.includes("vimeo.com") && !url.includes("player.vimeo.com")) {
-    const videoInfo = extractVideoInfo(url)
-    if (videoInfo && videoInfo.platform === "vimeo" && videoInfo.id) {
-      return `https://player.vimeo.com/video/${videoInfo.id}`
-    }
-  }
-
-  return url
+  latestProject: any
 }
 
 export default async function HeroSection({ latestProject }: HeroSectionProps) {
-  const settings = await getHeroSettings()
+  const heroData = await getHeroData(latestProject?.id)
 
-  console.log("Hero settings:", settings)
-  console.log("Latest project:", latestProject)
+  // Determine if we have a valid video URL
+  const hasVideo = latestProject?.video_url && typeof latestProject.video_url === "string"
 
-  // Determine what media to show based on hero_bg_type
-  let backgroundMedia = settings.image_hero_bg
-  let fallbackImage = "/images/hero-bg.jpg"
-
-  if (settings.hero_bg_type === "latest_project" && latestProject) {
-    // Use the latest project's video or image
-    backgroundMedia = latestProject.thumbnail_url || latestProject.image || settings.image_hero_bg
-    fallbackImage = latestProject.image || settings.image_hero_bg
-    console.log("Using latest project media:", backgroundMedia)
-  } else {
-    console.log("Using configured media:", backgroundMedia)
-  }
-
-  // Prepare video URL for embedding if needed
-  backgroundMedia = prepareVideoUrl(backgroundMedia)
-
-  // Ensure we have a valid fallback image
-  if (!fallbackImage || fallbackImage === "latest_project") {
-    fallbackImage = "/images/hero-bg.jpg"
-  }
-
-  const isVideo =
-    backgroundMedia?.includes("vimeo.com") ||
-    backgroundMedia?.includes("youtube.com") ||
-    backgroundMedia?.includes("youtu.be") ||
-    backgroundMedia?.includes("linkedin.com")
+  // Log for debugging
+  console.log("Hero section latest project:", {
+    title: latestProject?.title,
+    hasVideo,
+    videoUrl: hasVideo ? latestProject.video_url : "none",
+  })
 
   return (
-    <section className="relative h-screen overflow-hidden">
-      {/* Background Media */}
-      {isVideo ? (
-        <VideoBackground videoUrl={backgroundMedia} fallbackImage={fallbackImage} />
+    <section className="relative h-screen flex items-end justify-start overflow-hidden">
+      {/* Background - either video or plain black */}
+      {hasVideo ? (
+        <VideoBackground videoUrl={latestProject.video_url} />
       ) : (
-        <div
-          className="absolute inset-0 bg-cover bg-center bg-no-repeat"
-          style={{ backgroundImage: `url(${backgroundMedia})` }}
-        >
-          <div className="absolute inset-0 bg-black bg-opacity-50"></div>
-        </div>
+        <div className="absolute inset-0 bg-black" />
       )}
 
-      {/* Bottom Left Text */}
-      <div className="absolute bottom-8 left-8 z-10 max-w-md text-left">
-        <h1 className={`text-3xl md:text-4xl font-bold mb-2 ${fontSerif.variable} font-serif`}>
-          {settings.hero_heading}
-        </h1>
-        <p className="text-sm md:text-base text-gray-200 leading-snug">{settings.hero_subheading}</p>
+      {/* Gradient overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black via-black/50 to-transparent" />
+
+      {/* Content */}
+      <div className="relative container mx-auto px-4 pb-24 z-10">
+        <div className="max-w-2xl">
+          <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-4 text-white">{heroData.title}</h1>
+          <p className="text-xl md:text-2xl text-gray-200 mb-8">{heroData.subtitle}</p>
+          <div className="flex flex-wrap gap-4">
+            <Link
+              href="/projects"
+              className="bg-white text-black px-6 py-3 rounded-md font-medium hover:bg-gray-200 transition"
+            >
+              View Projects
+            </Link>
+            <Link
+              href="/contact"
+              className="bg-transparent border border-white text-white px-6 py-3 rounded-md font-medium hover:bg-white/10 transition"
+            >
+              Contact Me
+            </Link>
+          </div>
+        </div>
       </div>
     </section>
   )

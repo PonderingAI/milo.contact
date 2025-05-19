@@ -28,51 +28,21 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
 
   console.log("Extracting video info from:", url)
 
-  // YouTube URL patterns
-  const youtubePatterns = [
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
-    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
-    /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
-    /(?:https?:\/\/)?(?:www\.)?youtube-nocookie\.com\/embed\/([^?]+)/i,
-  ]
-
-  // Vimeo URL patterns
-  const vimeoPatterns = [
-    /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
-    /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
-  ]
-
-  // LinkedIn URL patterns
-  const linkedinPatterns = [
-    /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/feed\/update\/urn:li:activity:([0-9a-zA-Z-]+)/i,
-    /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/posts\/[^/]+-([0-9a-zA-Z-]+)/i,
-  ]
-
-  // Check YouTube patterns
-  for (const pattern of youtubePatterns) {
-    const match = url.match(pattern)
-    if (match && match[1]) {
-      console.log("YouTube video ID:", match[1])
-      return { platform: "youtube", id: match[1] }
-    }
+  // Simple regex patterns for common video URLs
+  // YouTube
+  const youtubeMatch = url.match(
+    /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i,
+  )
+  if (youtubeMatch && youtubeMatch[1]) {
+    console.log("YouTube video ID:", youtubeMatch[1])
+    return { platform: "youtube", id: youtubeMatch[1] }
   }
 
-  // Check Vimeo patterns
-  for (const pattern of vimeoPatterns) {
-    const match = url.match(pattern)
-    if (match && match[1]) {
-      console.log("Vimeo video ID:", match[1])
-      return { platform: "vimeo", id: match[1] }
-    }
-  }
-
-  // Check LinkedIn patterns
-  for (const pattern of linkedinPatterns) {
-    const match = url.match(pattern)
-    if (match && match[1]) {
-      console.log("LinkedIn video ID:", match[1])
-      return { platform: "linkedin", id: match[1] }
-    }
+  // Vimeo
+  const vimeoMatch = url.match(/(?:vimeo\.com\/|player\.vimeo\.com\/video\/)(\d+)/i)
+  if (vimeoMatch && vimeoMatch[1]) {
+    console.log("Vimeo video ID:", vimeoMatch[1])
+    return { platform: "vimeo", id: vimeoMatch[1] }
   }
 
   console.warn("Unrecognized video URL format:", url)
