@@ -1,30 +1,44 @@
 "use client"
 
-import type React from "react"
-
 import { useState, useEffect } from "react"
+import { extractVideoInfo } from "@/lib/utils"
 
 interface VideoBackgroundProps {
-  platform: string
-  videoId: string
-  fallbackImage: string
+  videoUrl: string
+  fallbackImage?: string
 }
 
-export default function VideoBackground({ platform, videoId, fallbackImage }: VideoBackgroundProps) {
+export default function VideoBackground({ videoUrl, fallbackImage = "/images/hero-bg.jpg" }: VideoBackgroundProps) {
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [videoInfo, setVideoInfo] = useState<{ platform: string; id: string } | null>(null)
 
-  // Log props for debugging
+  // Extract video info on mount or when videoUrl changes
   useEffect(() => {
-    console.log("VideoBackground props:", { platform, videoId, fallbackImage })
-  }, [platform, videoId, fallbackImage])
+    if (!videoUrl) {
+      setHasError(true)
+      return
+    }
 
+    try {
+      const info = extractVideoInfo(videoUrl)
+      if (info) {
+        setVideoInfo(info)
+        setHasError(false)
+      } else {
+        console.error("Could not extract video info from URL:", videoUrl)
+        setHasError(true)
+      }
+    } catch (error) {
+      console.error("Error extracting video info:", error)
+      setHasError(true)
+    }
+  }, [videoUrl])
+
+  // Handle load events
   useEffect(() => {
     // Reset states when video changes
     setIsLoaded(false)
-    setHasError(false)
-
-    console.log("VideoBackground props changed:", { platform, videoId, fallbackImage })
 
     // Set a timeout to show fallback if video doesn't load
     const timer = setTimeout(() => {
@@ -35,37 +49,28 @@ export default function VideoBackground({ platform, videoId, fallbackImage }: Vi
     }, 5000)
 
     return () => clearTimeout(timer)
-  }, [platform, videoId, fallbackImage])
+  }, [videoUrl, isLoaded])
 
   const handleLoad = () => {
-    console.log("Video loaded successfully")
     setIsLoaded(true)
   }
 
-  const handleError = (e: React.SyntheticEvent<HTMLIFrameElement, Event>) => {
-    console.error("Error loading video:", e)
+  const handleError = () => {
     setHasError(true)
   }
 
   // Get video embed URL
   const getVideoSrc = () => {
-    if (!platform || !videoId) {
-      console.error("Missing platform or videoId")
-      return ""
-    }
+    if (!videoInfo) return ""
+
+    const { platform, id } = videoInfo
 
     if (platform === "youtube") {
-      return `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${videoId}`
+      return `https://www.youtube.com/embed/${id}?autoplay=1&mute=1&controls=0&showinfo=0&rel=0&loop=1&playlist=${id}`
     } else if (platform === "vimeo") {
-      return `https://player.vimeo.com/video/${videoId}?background=1&autoplay=1&loop=1&byline=0&title=0`
-    } else if (platform === "linkedin") {
-      // LinkedIn doesn't support direct embedding in the same way
-      // Return empty string to trigger fallback image
-      console.log("LinkedIn video detected - using fallback image")
-      return ""
+      return `https://player.vimeo.com/video/${id}?background=1&autoplay=1&loop=1&byline=0&title=0`
     }
 
-    console.warn("Unknown platform:", platform)
     return ""
   }
 

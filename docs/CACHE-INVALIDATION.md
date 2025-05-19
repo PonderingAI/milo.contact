@@ -1,85 +1,106 @@
 # Cache Invalidation System
 
-This document explains the cache invalidation system implemented in the portfolio site. The system allows for efficient updates to content without requiring a full page reload or deployment.
+This document explains the cache invalidation system used in the Milo Presedo portfolio site. The system is designed to be efficient, minimizing bandwidth usage while ensuring content changes are reflected promptly.
 
 ## Overview
 
-The cache invalidation system consists of:
+The cache invalidation system allows the site to update content without requiring a full page reload or deployment. It's particularly useful for:
 
-1. A reusable utility library (`lib/cache-utils.ts`)
-2. An API endpoint for revalidation (`app/api/revalidate/route.ts`)
-3. Integration with Next.js's built-in cache invalidation
+- Updating site settings (like the hero background)
+- Refreshing project data
+- Ensuring media changes are visible immediately
 
-## How It Works
+## Key Components
 
-When content is updated in the admin panel, the system can trigger a cache invalidation to ensure the changes are immediately visible on the frontend.
+1. **Cache Utilities (`lib/cache-utils.ts`)**
+   - Provides functions for invalidating specific paths or the entire site
+   - Includes throttling to prevent excessive invalidations
+   - Offers common invalidation patterns for frequently used scenarios
 
-### Cache Utility Functions
+2. **Revalidation API (`app/api/revalidate/route.ts`)**
+   - Handles cache invalidation requests
+   - Includes security checks to ensure only authorized users can trigger invalidations
+   - Implements rate limiting to prevent abuse
 
-The `lib/cache-utils.ts` file provides several utility functions:
+## Usage
 
-- `invalidateCache(path?)`: Invalidates the cache for a specific path or the entire site
-- `invalidateMultiplePaths(paths)`: Invalidates multiple paths at once
-- `commonInvalidations`: Pre-configured invalidation patterns for common scenarios
+### Basic Invalidation
 
-### Usage Examples
-
-#### Basic Usage
+To invalidate a specific path:
 
 \`\`\`typescript
-import { invalidateCache } from '@/lib/cache-utils';
+import { invalidateCache } from '@/lib/cache-utils'
 
 // Invalidate the home page
-await invalidateCache('/');
+await invalidateCache('/')
+
+// Invalidate a specific project page
+await invalidateCache('/projects/123')
 \`\`\`
 
-#### Using Common Invalidation Patterns
+### Using Common Patterns
+
+For frequently used invalidation patterns:
 
 \`\`\`typescript
-import { commonInvalidations } from '@/lib/cache-utils';
+import { commonInvalidations } from '@/lib/cache-utils'
 
-// Invalidate site settings (affects multiple pages)
-await commonInvalidations.siteSettings();
+// Invalidate the home page and its components
+await commonInvalidations.home()
+
+// Invalidate all project-related pages
+await commonInvalidations.projects()
+
+// Invalidate site-wide settings
+await commonInvalidations.siteSettings()
 \`\`\`
 
-#### Invalidating Multiple Paths
+### Forcing Invalidation
+
+To bypass throttling when immediate invalidation is necessary:
 
 \`\`\`typescript
-import { invalidateMultiplePaths } from '@/lib/cache-utils';
+// Force invalidation even if recently invalidated
+await invalidateCache('/', true)
 
-// Invalidate specific paths
-await invalidateMultiplePaths(['/projects', '/about', '/contact']);
+// Force invalidation for common patterns
+await commonInvalidations.siteSettings(true)
 \`\`\`
 
-## Integration Points
+## Optimization Features
 
-The cache invalidation system is integrated at several points:
+The system includes several optimizations to minimize unnecessary fetching:
 
-1. **Admin Settings Form**: Automatically refreshes the site when settings are saved
-2. **Project Management**: Refreshes relevant pages when projects are created, updated, or deleted
-3. **Media Library**: Refreshes pages when media items that affect the site are updated
+1. **Throttling**: Prevents the same path from being invalidated too frequently
+2. **Deduplication**: Removes duplicate paths when invalidating multiple paths
+3. **Rate Limiting**: Prevents abuse by limiting the number of invalidation requests
+4. **Targeted Invalidation**: Only invalidates what's necessary, not the entire site
 
 ## Security Considerations
 
-The revalidation API endpoint includes security checks to ensure only authenticated admin users can trigger cache invalidation. In production, it verifies:
+The revalidation API includes several security measures:
 
-1. The presence of an authorization header
-2. The validity of the provided token
-3. That the user has admin privileges
-
-## Performance Considerations
-
-To minimize Edge Middleware invocations and optimize performance:
-
-1. Group related invalidations together when possible
-2. Use the most specific path possible (e.g., `/projects/123` instead of `/projects`)
-3. Consider the timing of invalidations (e.g., batch updates together)
+1. **Authentication**: Only authenticated users can trigger invalidations
+2. **Role-Based Access**: Only admin users can trigger invalidations
+3. **Rate Limiting**: Prevents abuse by limiting the number of invalidation requests
+4. **Input Validation**: Ensures the path parameter is valid
 
 ## Troubleshooting
 
-If changes are not appearing on the frontend after updates:
+If content changes are not reflected after invalidation:
 
-1. Check the browser console for any errors in the revalidation process
-2. Verify that the correct paths are being invalidated
-3. Try using the "Refresh Site" button in the admin panel
-4. As a last resort, clear your browser cache or do a hard refresh (Ctrl+F5)
+1. Check the browser console for error messages
+2. Verify the correct path is being invalidated
+3. Try forcing invalidation with the second parameter set to `true`
+4. Clear browser cache manually if necessary
+
+## Best Practices
+
+1. **Be Specific**: Invalidate only the paths that need to be updated
+2. **Group Related Changes**: Make all related changes before invalidating
+3. **Respect Throttling**: Only force invalidation when absolutely necessary
+4. **Monitor Usage**: Watch for excessive invalidations that might indicate a problem
+
+## Integration with Admin UI
+
+The admin UI includes a "Refresh Site" button that triggers cache invalidation. This button is available in the site settings form and automatically triggers after saving settings.

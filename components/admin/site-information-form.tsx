@@ -509,7 +509,8 @@ export default function SiteInformationForm() {
   const refreshSite = async () => {
     setRefreshing(true)
     try {
-      const success = await commonInvalidations.siteSettings()
+      // Force refresh to bypass throttling when user explicitly requests it
+      const success = await commonInvalidations.siteSettings(true)
 
       if (success) {
         toast({
@@ -565,7 +566,8 @@ export default function SiteInformationForm() {
       }
 
       // Automatically refresh the site after saving settings
-      await refreshSite()
+      // Don't force refresh here to respect throttling
+      await commonInvalidations.siteSettings()
 
       toast({
         title: "Settings saved",

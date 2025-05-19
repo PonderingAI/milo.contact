@@ -3,11 +3,17 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase-server"
 import { headers } from "next/headers"
 
+// Track revalidation requests to prevent abuse
+const revalidationRequests: Record<string, { count: number; lastReset: number }> = {}
+const MAX_REQUESTS_PER_MINUTE = 10
+const RESET_INTERVAL = 60000 // 1 minute
+
 /**
  * API route for cache revalidation
  *
  * This endpoint allows authorized users to revalidate specific paths or the entire site.
  * It's used to ensure content changes are immediately visible without requiring a full deployment.
+ * Includes rate limiting to prevent abuse.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -24,6 +30,26 @@ export async function POST(request: NextRequest) {
     // This uses the supabase client to verify the session
     const headersList = headers()
     const authHeader = headersList.get("authorization")
+    const clientIp = request.ip || "unknown"
+
+    // Rate limiting
+    const now = Date.now()
+    if (!revalidationRequests[clientIp]) {
+      revalidationRequests[clientIp] = { count: 0, lastReset: now }
+    }
+
+    // Reset counter if it's been more than a minute
+    if (now - revalidationRequests[clientIp].lastReset > RESET_INTERVAL) {
+      revalidationRequests[clientIp] = { count: 0, lastReset: now }
+    }
+
+    // Check if rate limit exceeded
+    if (revalidationRequests[clientIp].count >= MAX_REQUESTS_PER_MINUTE) {
+      return NextResponse.json({ error: "Rate limit exceeded. Try again later." }, { status: 429 })
+    }
+
+    // Increment request counter
+    revalidationRequests[clientIp].count++
 
     if (process.env.NODE_ENV === "production") {
       // Only perform auth check in production to avoid issues during development
@@ -60,7 +86,7 @@ export async function POST(request: NextRequest) {
     revalidatePath(path)
 
     // Log the revalidation for monitoring
-    console.log(`Cache revalidated for path: ${path}`)
+    console.log(`Cache revalidated for path: ${path} by IP: ${clientIp}`)
 
     return NextResponse.json({ revalidated: true, path })
   } catch (error) {
