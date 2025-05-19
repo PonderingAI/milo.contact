@@ -4,36 +4,46 @@ import Link from "next/link"
 interface ProjectCardProps {
   id: string
   title: string
-  category: string
-  role: string
-  image: string
+  category?: string
+  role?: string
+  image?: string
   link: string
 }
 
 export function ProjectCard({ id, title, category, role, image, link }: ProjectCardProps) {
-  return (
-    <Link href={link} className="group block">
-      <div className="relative aspect-video overflow-hidden rounded-lg">
-        <Image
-          src={image || "/placeholder.svg"}
-          alt={title}
-          fill
-          className="object-cover transition-transform duration-500 group-hover:scale-105"
-        />
-        <div className="absolute inset-0 bg-black/30 group-hover:bg-black/10 transition-colors"></div>
-      </div>
+  // Provide fallbacks for all props
+  const safeTitle = title || "Untitled Project"
+  const safeCategory = category || ""
+  const safeRole = role || ""
+  const safeImage = image || "/images/project1.jpg" // Default image
+  const safeLink = link || "#"
 
-      {/* Text content below image, aligned with left edge */}
-      <div className="mt-4">
-        <h3 className="text-xl font-serif mb-1 group-hover:text-gray-300 transition-colors">{title}</h3>
-        <div className="flex flex-wrap gap-2">
-          <span className="text-sm text-gray-400">{category}</span>
-          <span className="text-sm text-gray-400 before:content-['•'] before:mr-2">{role}</span>
+  return (
+    <div className="group relative overflow-hidden rounded-lg bg-black">
+      <Link href={safeLink} className="block">
+        <div className="relative h-[300px] w-full overflow-hidden">
+          <Image
+            src={safeImage || "/placeholder.svg"}
+            alt={safeTitle}
+            fill
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            className="object-cover transition-transform duration-300 group-hover:scale-105"
+            priority={false}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-transparent opacity-80"></div>
         </div>
-      </div>
-    </Link>
+        <div className="absolute bottom-0 left-0 w-full p-4 text-white">
+          <h3 className="text-xl font-bold">{safeTitle}</h3>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {safeCategory && (
+              <span className="inline-block rounded-full bg-white/20 px-2 py-1 text-xs">{safeCategory}</span>
+            )}
+            {safeRole && <span className="inline-block rounded-full bg-white/20 px-2 py-1 text-xs">{safeRole}</span>}
+          </div>
+        </div>
+      </Link>
+    </div>
   )
 }
 
-// Also keep the default export for backward compatibility
 export default ProjectCard

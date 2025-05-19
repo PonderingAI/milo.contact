@@ -15,6 +15,7 @@ async function getLatestProject() {
       .limit(1)
 
     if (error || !data || data.length === 0) {
+      console.log("No latest project found or error:", error)
       return null
     }
 
