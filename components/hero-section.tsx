@@ -51,12 +51,25 @@ async function getHeroSettings() {
 export default async function HeroSection({ latestProject }: HeroSectionProps) {
   const settings = await getHeroSettings()
 
+  console.log("Hero settings:", settings)
+  console.log("Latest project:", latestProject)
+
   // Determine what media to show based on hero_bg_type
   let backgroundMedia = settings.image_hero_bg
+  let fallbackImage = "/images/hero-bg.jpg"
 
   if (settings.hero_bg_type === "latest_project" && latestProject) {
     // Use the latest project's video or image
     backgroundMedia = latestProject.video_url || latestProject.thumbnail_url || settings.image_hero_bg
+    fallbackImage = latestProject.thumbnail_url || settings.image_hero_bg
+    console.log("Using latest project media:", backgroundMedia)
+  } else {
+    console.log("Using configured media:", backgroundMedia)
+  }
+
+  // Ensure we have a valid fallback image
+  if (!fallbackImage || fallbackImage === "latest_project") {
+    fallbackImage = "/images/hero-bg.jpg"
   }
 
   const isVideo =
@@ -69,7 +82,7 @@ export default async function HeroSection({ latestProject }: HeroSectionProps) {
     <section className="relative h-screen overflow-hidden">
       {/* Background Media */}
       {isVideo ? (
-        <VideoBackground videoUrl={backgroundMedia} fallbackImage={settings.image_hero_bg} />
+        <VideoBackground videoUrl={backgroundMedia} fallbackImage={fallbackImage} />
       ) : (
         <div
           className="absolute inset-0 bg-cover bg-center bg-no-repeat"

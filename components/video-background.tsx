@@ -13,9 +13,15 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
   const [hasError, setHasError] = useState(false)
   const [videoInfo, setVideoInfo] = useState<{ platform: string; id: string } | null>(null)
 
+  // Log for debugging
+  useEffect(() => {
+    console.log("VideoBackground received:", { videoUrl, fallbackImage })
+  }, [videoUrl, fallbackImage])
+
   // Extract video info on mount or when videoUrl changes
   useEffect(() => {
     if (!videoUrl) {
+      console.error("No video URL provided")
       setHasError(true)
       return
     }
@@ -23,6 +29,7 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
     try {
       const info = extractVideoInfo(videoUrl)
       if (info) {
+        console.log("Video info extracted:", info)
         setVideoInfo(info)
         setHasError(false)
       } else {
@@ -52,10 +59,12 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
   }, [videoUrl, isLoaded])
 
   const handleLoad = () => {
+    console.log("Video loaded successfully")
     setIsLoaded(true)
   }
 
   const handleError = () => {
+    console.error("Error loading video iframe")
     setHasError(true)
   }
 
@@ -74,10 +83,20 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
     return ""
   }
 
+  // If error or no valid video source, show fallback image
+  if (hasError || !videoInfo) {
+    return (
+      <div
+        className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+        style={{ backgroundImage: `url(${fallbackImage})` }}
+      />
+    )
+  }
+
   const videoSrc = getVideoSrc()
 
-  // If error or no valid video source, show fallback image
-  if (hasError || !videoSrc) {
+  // If we couldn't generate a valid video source, show fallback image
+  if (!videoSrc) {
     return (
       <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -111,7 +130,8 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
             objectFit: "contain",
           }}
           frameBorder="0"
-          allow="autoplay"
+          allow="autoplay; encrypted-media"
+          allowFullScreen
           onLoad={handleLoad}
           onError={handleError}
         ></iframe>

@@ -8,7 +8,7 @@
 
 // Track last invalidation time for each path to prevent frequent invalidations
 const lastInvalidationTimes: Record<string, number> = {}
-const THROTTLE_TIME = 10000 // 10 seconds between invalidations for the same path
+const THROTTLE_TIME = 5000 // 5 seconds between invalidations for the same path
 
 /**
  * Invalidates the cache for a specific route or the entire site
@@ -30,16 +30,40 @@ export async function invalidateCache(path = "/", force = false): Promise<boolea
 
   try {
     const endpoint = "/api/revalidate"
+
+    // Get the auth token from localStorage if available (client-side only)
+    let authToken = null
+    if (typeof window !== "undefined") {
+      try {
+        const supabaseData = localStorage.getItem("supabase.auth.token")
+        if (supabaseData) {
+          const parsedData = JSON.parse(supabaseData)
+          authToken = parsedData?.currentSession?.access_token
+        }
+      } catch (e) {
+        console.error("Error getting auth token:", e)
+      }
+    }
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    }
+
+    // Add authorization header if token is available
+    if (authToken) {
+      headers["Authorization"] = `Bearer ${authToken}`
+    }
+
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers,
       body: JSON.stringify({ path }),
+      credentials: "include", // Include cookies for auth
     })
 
     if (!response.ok) {
-      console.error("Failed to invalidate cache:", await response.text())
+      const errorText = await response.text()
+      console.error(`Failed to invalidate cache (${response.status}):`, errorText)
       return false
     }
 

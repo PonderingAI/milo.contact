@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { revalidatePath } from "next/cache"
-import { createAdminClient } from "@/lib/supabase-server"
-import { headers } from "next/headers"
+import { createServerClient } from "@/lib/supabase-server"
+import { cookies } from "next/headers"
 
 // Track revalidation requests to prevent abuse
 const revalidationRequests: Record<string, { count: number; lastReset: number }> = {}
@@ -26,10 +26,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid path parameter" }, { status: 400 })
     }
 
-    // Security check - verify the request is coming from an authenticated admin user
-    // This uses the supabase client to verify the session
-    const headersList = headers()
-    const authHeader = headersList.get("authorization")
+    // Get client IP for rate limiting
     const clientIp = request.ip || "unknown"
 
     // Rate limiting
@@ -51,44 +48,56 @@ export async function POST(request: NextRequest) {
     // Increment request counter
     revalidationRequests[clientIp].count++
 
-    if (process.env.NODE_ENV === "production") {
-      // Only perform auth check in production to avoid issues during development
-      if (!authHeader) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-      }
-
-      try {
-        const supabase = createAdminClient()
-        const token = authHeader.replace("Bearer ", "")
-
-        const {
-          data: { user },
-          error,
-        } = await supabase.auth.getUser(token)
-
-        if (error || !user) {
-          return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-        }
-
-        // Check if user has admin role
-        const isAdmin = user.app_metadata?.role === "admin"
-
-        if (!isAdmin) {
-          return NextResponse.json({ error: "Forbidden - Admin access required" }, { status: 403 })
-        }
-      } catch (authError) {
-        console.error("Auth verification error:", authError)
-        return NextResponse.json({ error: "Authentication error" }, { status: 500 })
-      }
+    // In development, skip auth check
+    if (process.env.NODE_ENV !== "production") {
+      // Revalidate the path
+      revalidatePath(path)
+      console.log(`[DEV] Cache revalidated for path: ${path}`)
+      return NextResponse.json({ revalidated: true, path })
     }
 
-    // Revalidate the path
-    revalidatePath(path)
+    // In production, verify user is authenticated
+    try {
+      // Get the user's session from cookies
+      const cookieStore = cookies()
+      const supabase = createServerClient()
 
-    // Log the revalidation for monitoring
-    console.log(`Cache revalidated for path: ${path} by IP: ${clientIp}`)
+      const {
+        data: { session },
+        error: sessionError,
+      } = await supabase.auth.getSession()
 
-    return NextResponse.json({ revalidated: true, path })
+      if (sessionError || !session) {
+        console.error("Session error:", sessionError)
+        return NextResponse.json({ error: "Authentication required" }, { status: 401 })
+      }
+
+      // Check if user has admin role
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", session.user.id)
+        .single()
+
+      if (userError) {
+        console.error("User role check error:", userError)
+        return NextResponse.json({ error: "Failed to verify permissions" }, { status: 500 })
+      }
+
+      const isAdmin = userData?.role === "admin"
+
+      if (!isAdmin) {
+        return NextResponse.json({ error: "Admin privileges required" }, { status: 403 })
+      }
+
+      // Revalidate the path
+      revalidatePath(path)
+      console.log(`Cache revalidated for path: ${path} by user: ${session.user.id}`)
+      return NextResponse.json({ revalidated: true, path })
+    } catch (authError) {
+      console.error("Auth verification error:", authError)
+      return NextResponse.json({ error: "Authentication error" }, { status: 500 })
+    }
   } catch (error) {
     console.error("Revalidation error:", error)
     return NextResponse.json({ error: "Failed to revalidate cache" }, { status: 500 })
