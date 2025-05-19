@@ -66,7 +66,7 @@ export default async function HeroSection({ latestProject }: HeroSectionProps) {
     backgroundMedia?.includes("linkedin.com")
 
   return (
-    <section className="relative h-screen flex items-center justify-center overflow-hidden">
+    <section className="relative h-screen overflow-hidden">
       {/* Background Media */}
       {isVideo ? (
         <VideoBackground videoUrl={backgroundMedia} />
@@ -79,17 +79,12 @@ export default async function HeroSection({ latestProject }: HeroSectionProps) {
         </div>
       )}
 
-      {/* Center Content */}
-      <div className="relative z-10 text-center px-4 max-w-4xl">
-        <h1 className={`text-4xl md:text-6xl font-bold mb-4 ${fontSerif.variable} font-serif`}>
+      {/* Bottom Left Text */}
+      <div className="absolute bottom-8 left-8 z-10 max-w-md text-left">
+        <h1 className={`text-3xl md:text-4xl font-bold mb-2 ${fontSerif.variable} font-serif`}>
           {settings.hero_heading}
         </h1>
-        <p className="text-xl md:text-2xl mb-8 max-w-3xl mx-auto">{settings.hero_subheading}</p>
-      </div>
-
-      {/* Bottom Left Text */}
-      <div className="absolute bottom-8 left-8 z-10">
-        <p className="text-sm md:text-base text-gray-300 opacity-80">Cinematography • Camera • Drone • Underwater</p>
+        <p className="text-sm md:text-base text-gray-200 leading-snug">{settings.hero_subheading}</p>
       </div>
     </section>
   )

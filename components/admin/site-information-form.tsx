@@ -11,11 +11,10 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { toast } from "@/components/ui/use-toast"
-import { Loader2, Film, AlertTriangle } from "lucide-react"
+import { Loader2, Film } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import MediaSelector from "./media-selector"
 import { extractVideoInfo } from "@/lib/utils"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 interface MediaUploaderProps {
@@ -391,7 +390,6 @@ function MediaUploader({
 export default function SiteInformationForm() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [tableExists, setTableExists] = useState(true)
   const [settings, setSettings] = useState({
     // Hero section
     hero_heading: "Milo Presedo",
@@ -431,41 +429,6 @@ export default function SiteInformationForm() {
   const supabase = createClientComponentClient()
 
   useEffect(() => {
-    async function checkTableExists() {
-      try {
-        const response = await fetch("/api/check-table-exists?table=site_settings")
-
-        // Check if the response is ok before parsing JSON
-        if (!response.ok) {
-          console.error("Error response from check-table-exists:", response.status, response.statusText)
-          setTableExists(false)
-          setLoading(false)
-          return
-        }
-
-        // Try to parse the JSON response
-        try {
-          const data = await response.json()
-
-          if (data.exists) {
-            setTableExists(true)
-            loadSettings()
-          } else {
-            setTableExists(false)
-            setLoading(false)
-          }
-        } catch (parseError) {
-          console.error("Error parsing JSON from check-table-exists:", parseError)
-          setTableExists(false)
-          setLoading(false)
-        }
-      } catch (err) {
-        console.error("Network error checking if table exists:", err)
-        setTableExists(false)
-        setLoading(false)
-      }
-    }
-
     async function loadSettings() {
       try {
         const response = await fetch("/api/settings")
@@ -499,7 +462,7 @@ export default function SiteInformationForm() {
       }
     }
 
-    checkTableExists()
+    loadSettings()
   }, [])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -543,16 +506,6 @@ export default function SiteInformationForm() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
-    // If the table doesn't exist, show an error
-    if (!tableExists) {
-      toast({
-        title: "Settings table not found",
-        description: "Please set up the site settings table first using the SQL code provided",
-        variant: "destructive",
-      })
-      return
-    }
 
     try {
       setSaving(true)
@@ -606,23 +559,6 @@ export default function SiteInformationForm() {
 
   return (
     <div className="space-y-6">
-      {!tableExists && (
-        <Alert variant="destructive" className="mb-6">
-          <AlertTriangle className="h-4 w-4" />
-          <AlertTitle>Site settings table not found</AlertTitle>
-          <AlertDescription>
-            <p>The site_settings table does not exist in your database.</p>
-            <p className="mt-2">
-              Please go to{" "}
-              <a href="/admin/database" className="underline font-medium">
-                Database Management
-              </a>{" "}
-              to set up the required tables.
-            </p>
-          </AlertDescription>
-        </Alert>
-      )}
-
       <form onSubmit={handleSubmit}>
         <Tabs defaultValue="hero">
           <TabsList className="mb-4">
@@ -881,7 +817,7 @@ export default function SiteInformationForm() {
         </Tabs>
 
         <div className="mt-6 flex justify-end">
-          <Button type="submit" disabled={saving || !tableExists}>
+          <Button type="submit" disabled={saving}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Save Changes
           </Button>
