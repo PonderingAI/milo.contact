@@ -9,10 +9,17 @@ interface VideoPlayerProps {
   platform: string
   videoId: string
   autoplay?: boolean
+  useNativeControls?: boolean
   onError?: () => void
 }
 
-export default function VideoPlayer({ platform, videoId, autoplay = true, onError }: VideoPlayerProps) {
+export default function VideoPlayer({
+  platform,
+  videoId,
+  autoplay = false,
+  useNativeControls = false,
+  onError,
+}: VideoPlayerProps) {
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasError, setHasError] = useState(false)
   const [isPlaying, setIsPlaying] = useState(autoplay)
@@ -23,8 +30,8 @@ export default function VideoPlayer({ platform, videoId, autoplay = true, onErro
 
   // Log props for debugging
   useEffect(() => {
-    console.log("VideoPlayer mounted with props:", { platform, videoId, autoplay })
-  }, [platform, videoId, autoplay])
+    console.log("VideoPlayer mounted with props:", { platform, videoId, autoplay, useNativeControls })
+  }, [platform, videoId, autoplay, useNativeControls])
 
   useEffect(() => {
     // Reset states when props change
@@ -33,7 +40,7 @@ export default function VideoPlayer({ platform, videoId, autoplay = true, onErro
     setIsPlaying(autoplay)
     setRetryCount(0)
 
-    console.log("VideoPlayer props changed:", { platform, videoId, autoplay })
+    console.log("VideoPlayer props changed:", { platform, videoId, autoplay, useNativeControls })
 
     // Clear any existing timeout
     if (loadingTimeout) {
@@ -56,7 +63,7 @@ export default function VideoPlayer({ platform, videoId, autoplay = true, onErro
         clearTimeout(loadingTimeout)
       }
     }
-  }, [platform, videoId, autoplay, onError])
+  }, [platform, videoId, autoplay, useNativeControls, onError])
 
   const handleLoad = () => {
     console.log("Video loaded successfully")
@@ -111,14 +118,17 @@ export default function VideoPlayer({ platform, videoId, autoplay = true, onErro
       const cacheBuster = retryCount > 0 ? `&cb=${Date.now()}` : ""
 
       if (platform.toLowerCase() === "youtube") {
-        return `https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1${
-          isPlaying ? "&autoplay=1&mute=1" : ""
-        }${cacheBuster}`
+        // For YouTube, use the standard embed URL with appropriate parameters
+        // When useNativeControls is true, we don't add any parameters that would hide the native controls
+        return `https://www.youtube.com/embed/${videoId}?rel=0${
+          useNativeControls ? "" : "&modestbranding=1"
+        }${isPlaying && autoplay ? "&autoplay=1&mute=1" : ""}${cacheBuster}`
       } else if (platform.toLowerCase() === "vimeo") {
-        // Use the player.vimeo.com/video/ID format as requested
-        return `https://player.vimeo.com/video/${videoId}?title=0&byline=0&portrait=0${
-          isPlaying ? "&autoplay=1&muted=1" : ""
-        }${cacheBuster}`
+        // For Vimeo, use the player.vimeo.com/video/ID format
+        // When useNativeControls is true, we don't add parameters that would hide controls
+        return `https://player.vimeo.com/video/${videoId}?${
+          useNativeControls ? "" : "title=0&byline=0&portrait=0"
+        }${isPlaying && autoplay ? "&autoplay=1&muted=1" : ""}${cacheBuster}`
       }
 
       console.error("Unsupported platform", platform)
@@ -161,7 +171,7 @@ export default function VideoPlayer({ platform, videoId, autoplay = true, onErro
     )
   }
 
-  if (!isPlaying) {
+  if (!isPlaying && !useNativeControls) {
     return (
       <div
         ref={containerRef}

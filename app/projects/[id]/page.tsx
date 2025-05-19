@@ -43,7 +43,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
   }
 
   return (
-    <main className="min-h-screen bg-black text-white">
+    <main className="min-h-screen bg-black text-white w-full">
       <Suspense fallback={<ProjectDetailSkeleton />}>
         <ProjectDetailContent project={project} />
       </Suspense>
@@ -53,22 +53,23 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
 
 function ProjectDetailSkeleton() {
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="max-w-7xl mx-auto">
+    <div className="w-full">
+      {/* Video skeleton - full width */}
+      <div className="w-full aspect-video bg-gray-800 animate-pulse"></div>
+
+      {/* Content skeleton with padding */}
+      <div className="px-4 sm:px-6 lg:px-8 xl:px-12 py-8">
         {/* Back button skeleton */}
         <div className="mb-8">
           <div className="w-32 h-10 bg-gray-800 rounded-md animate-pulse"></div>
         </div>
 
-        {/* Video skeleton */}
-        <div className="w-full mb-12 aspect-video bg-gray-800 rounded-lg animate-pulse"></div>
-
         {/* Title skeleton */}
         <div className="mb-16">
           <div className="w-3/4 h-12 bg-gray-800 rounded-md animate-pulse mb-6"></div>
           <div className="flex gap-3">
-            <div className="w-24 h-8 bg-gray-800 rounded-full animate-pulse"></div>
-            <div className="w-24 h-8 bg-gray-800 rounded-full animate-pulse"></div>
+            <div className="w-24 h-6 bg-gray-800 rounded-md animate-pulse"></div>
+            <div className="w-24 h-6 bg-gray-800 rounded-md animate-pulse"></div>
           </div>
         </div>
 

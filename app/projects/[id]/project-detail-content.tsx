@@ -195,8 +195,34 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
       {/* Screen reader announcement area */}
       <div id="sr-announcement" className="sr-only" aria-live="polite" aria-atomic="true"></div>
 
-      {/* Main content */}
-      <div ref={mainRef} className="max-w-7xl mx-auto px-4 sm:px-6" tabIndex={-1}>
+      {/* Full-width video/image section - no width constraints */}
+      <div className="w-full mb-8">
+        {videoInfo && !videoError ? (
+          <div className="w-full aspect-video">
+            <VideoPlayer
+              platform={videoInfo.platform}
+              videoId={videoInfo.id}
+              onError={handleVideoError}
+              autoplay={false} // Disable autoplay to preserve audio
+              useNativeControls={true} // Use native YouTube/Vimeo controls
+            />
+          </div>
+        ) : (
+          <div className="w-full aspect-video relative">
+            <Image
+              src={project.image || "/placeholder.svg"}
+              alt={project.title}
+              fill
+              className="object-cover"
+              priority
+              sizes="100vw"
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Content with padding on smaller screens but full width on larger screens */}
+      <div ref={mainRef} className="w-full px-4 sm:px-6 lg:px-8 xl:px-12" tabIndex={-1}>
         {/* Back button */}
         <div className="mb-6 sm:mb-8">
           <Button asChild variant="ghost" className="group">
@@ -209,31 +235,6 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
               Back to Projects
             </Link>
           </Button>
-        </div>
-
-        {/* Full-width video/image section */}
-        <div className="w-full mb-8 sm:mb-12 rounded-lg overflow-hidden bg-black/50">
-          {videoInfo && !videoError ? (
-            <div className="aspect-video w-full">
-              <VideoPlayer
-                platform={videoInfo.platform}
-                videoId={videoInfo.id}
-                onError={handleVideoError}
-                autoplay={true} // Enable autoplay for main video
-              />
-            </div>
-          ) : (
-            <div className="aspect-video w-full relative">
-              <Image
-                src={project.image || "/placeholder.svg"}
-                alt={project.title}
-                fill
-                className="object-cover"
-                priority
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 90vw, 1200px"
-              />
-            </div>
-          )}
         </div>
 
         {/* Project title and metadata */}
