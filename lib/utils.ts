@@ -5,74 +5,76 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+export function formatFileSize(bytes: number): string {
+  if (bytes === 0) return "0 Bytes"
+
+  const k = 1024
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"]
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+  return Number.parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
+
 /**
- * Extracts platform and video ID from a video URL
+ * Extract video platform and ID from a video URL
  * @param url Video URL from YouTube, Vimeo, or LinkedIn
  * @returns Object with platform and id, or null if not recognized
  */
 export function extractVideoInfo(url: string): { platform: string; id: string } | null {
-  if (!url) return null
+  if (!url || typeof url !== "string") {
+    console.error("Invalid video URL:", url)
+    return null
+  }
 
   console.log("Extracting video info from:", url)
 
-  // YouTube
-  const youtubeRegex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i
-  const youtubeMatch = url.match(youtubeRegex)
+  // YouTube URL patterns
+  const youtubePatterns = [
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
+    /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
+    /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
+    /(?:https?:\/\/)?(?:www\.)?youtube-nocookie\.com\/embed\/([^?]+)/i,
+  ]
 
-  if (youtubeMatch && youtubeMatch[1]) {
-    console.log("YouTube video ID:", youtubeMatch[1])
-    return { platform: "youtube", id: youtubeMatch[1] }
+  // Vimeo URL patterns
+  const vimeoPatterns = [
+    /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
+    /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
+  ]
+
+  // LinkedIn URL patterns
+  const linkedinPatterns = [
+    /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/feed\/update\/urn:li:activity:([0-9a-zA-Z-]+)/i,
+    /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/posts\/[^/]+-([0-9a-zA-Z-]+)/i,
+  ]
+
+  // Check YouTube patterns
+  for (const pattern of youtubePatterns) {
+    const match = url.match(pattern)
+    if (match && match[1]) {
+      console.log("YouTube video ID:", match[1])
+      return { platform: "youtube", id: match[1] }
+    }
   }
 
-  // Vimeo
-  const vimeoRegex = /(?:vimeo\.com\/(?:video\/)?|player\.vimeo\.com\/video\/)(\d+)/i
-  const vimeoMatch = url.match(vimeoRegex)
-
-  if (vimeoMatch && vimeoMatch[1]) {
-    console.log("Vimeo video ID:", vimeoMatch[1])
-    return { platform: "vimeo", id: vimeoMatch[1] }
+  // Check Vimeo patterns
+  for (const pattern of vimeoPatterns) {
+    const match = url.match(pattern)
+    if (match && match[1]) {
+      console.log("Vimeo video ID:", match[1])
+      return { platform: "vimeo", id: match[1] }
+    }
   }
 
-  // LinkedIn
-  const linkedinRegex = /linkedin\.com\/posts\/.*(?:\?|&)videoId=(\d+)/i
-  const linkedinMatch = url.match(linkedinRegex)
-
-  if (linkedinMatch && linkedinMatch[1]) {
-    console.log("LinkedIn video ID:", linkedinMatch[1])
-    return { platform: "linkedin", id: linkedinMatch[1] }
+  // Check LinkedIn patterns
+  for (const pattern of linkedinPatterns) {
+    const match = url.match(pattern)
+    if (match && match[1]) {
+      console.log("LinkedIn video ID:", match[1])
+      return { platform: "linkedin", id: match[1] }
+    }
   }
 
-  console.log("No video ID found in URL")
+  console.warn("Unrecognized video URL format:", url)
   return null
-}
-
-/**
- * Formats a date string in a human-readable format
- * @param dateString ISO date string
- * @returns Formatted date string
- */
-export function formatDate(dateString: string): string {
-  if (!dateString) return ""
-
-  const date = new Date(dateString)
-
-  // Check if date is valid
-  if (isNaN(date.getTime())) return ""
-
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  })
-}
-
-/**
- * Truncates text to a specified length and adds ellipsis
- * @param text Text to truncate
- * @param maxLength Maximum length before truncation
- * @returns Truncated text
- */
-export function truncateText(text: string, maxLength: number): string {
-  if (!text || text.length <= maxLength) return text
-  return text.slice(0, maxLength) + "..."
 }

@@ -1,6 +1,7 @@
 import { createServerClient } from "@/lib/supabase-server"
 import VideoBackground from "./video-background"
 import { fontSerif } from "@/lib/fonts"
+import { extractVideoInfo } from "@/lib/utils"
 
 interface HeroSectionProps {
   latestProject?: any
@@ -48,6 +49,21 @@ async function getHeroSettings() {
   }
 }
 
+// Helper function to prepare video URLs for embedding
+function prepareVideoUrl(url: string): string {
+  if (!url) return ""
+
+  // For Vimeo URLs, convert to player.vimeo.com format
+  if (url.includes("vimeo.com") && !url.includes("player.vimeo.com")) {
+    const videoInfo = extractVideoInfo(url)
+    if (videoInfo && videoInfo.platform === "vimeo" && videoInfo.id) {
+      return `https://player.vimeo.com/video/${videoInfo.id}`
+    }
+  }
+
+  return url
+}
+
 export default async function HeroSection({ latestProject }: HeroSectionProps) {
   const settings = await getHeroSettings()
 
@@ -60,12 +76,15 @@ export default async function HeroSection({ latestProject }: HeroSectionProps) {
 
   if (settings.hero_bg_type === "latest_project" && latestProject) {
     // Use the latest project's video or image
-    backgroundMedia = latestProject.video_url || latestProject.thumbnail_url || settings.image_hero_bg
-    fallbackImage = latestProject.thumbnail_url || settings.image_hero_bg
+    backgroundMedia = latestProject.thumbnail_url || latestProject.image || settings.image_hero_bg
+    fallbackImage = latestProject.image || settings.image_hero_bg
     console.log("Using latest project media:", backgroundMedia)
   } else {
     console.log("Using configured media:", backgroundMedia)
   }
+
+  // Prepare video URL for embedding if needed
+  backgroundMedia = prepareVideoUrl(backgroundMedia)
 
   // Ensure we have a valid fallback image
   if (!fallbackImage || fallbackImage === "latest_project") {
