@@ -1,5 +1,11 @@
 "use client"
 
+/**
+ * @deprecated This component is deprecated and should not be used.
+ * It has been removed from the main page layout.
+ * Do not reimplement or add this component back to the page.
+ */
+
 import { useState, useEffect } from "react"
 import { Camera, Film, Smartphone, Waves, DrillIcon as Drone } from "lucide-react"
 import Link from "next/link"

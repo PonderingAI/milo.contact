@@ -151,10 +151,10 @@ export default function ContactSection() {
   }
 
   return (
-    <section id="contact" className="py-24">
+    <section id="contact" className="py-24 px-8 md:px-16 lg:px-24">
       {isAdmin && <ContactTableSetupGuide />}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-16 max-w-7xl mx-auto">
         <div>
           <h2 className="text-5xl md:text-7xl font-serif mb-8">{settings.contact_heading}</h2>
           <p className="text-xl text-gray-300 mb-12">{settings.contact_text}</p>
