@@ -1,62 +1,169 @@
-# Project Creation & BTS Images Issues
+# Project Creation and BTS Content Issues
 
-## Problem Description
+## Project Creation Page Issues
 
-When creating a new project, the Behind-The-Scenes (BTS) images are not being properly saved. The user is redirected to the projects list page immediately after project creation, but the BTS images saving process may not have completed or may have failed silently.
+### Deep Dive into Project Creation Flow
 
-## Root Causes
+#### Form Submission Flow
+In `components/admin/project-editor.tsx`, the form submission process is:
 
-1. **Asynchronous Timing Issue**: 
-   - The form submission redirects immediately after project creation
-   - BTS image saving happens asynchronously but doesn't block the redirect
-   - The user is redirected before BTS images are fully processed
+1. User fills out form and clicks submit
+2. `handleSubmit` function is called
+3. Form data is validated
+4. API request is made to create the project
+5. If successful, BTS images are saved in a separate request
+6. User is redirected to the edit page with `router.push()`
 
-2. **Error Handling Gaps**:
-   - Errors in BTS image saving are logged but not shown to the user
-   - No feedback is provided about the success or failure of BTS image saving
-   - Silent failures lead to confusion when BTS images don't appear
+#### BTS Image Handling
+BTS images are handled separately from the main project data:
 
-3. **Database Schema Issues**:
-   - The BTS images table might not be properly set up
-   - No distinction between BTS images and videos in the database
-   - Inconsistent handling between create and edit modes
+\`\`\`javascript
+// Save BTS images if any
+if ((btsImages.length > 0 || btsVideos.length > 0) && responseData.data && responseData.data[0]) {
+  const projectId = responseData.data[0].id
 
-## Technical Analysis
+  try {
+    const btsResponse = await fetch("/api/projects/bts-images", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        projectId,
+        images: [...btsImages, ...btsVideos],
+      }),
+    })
 
-### Project Creation Flow
+    if (!btsResponse.ok) {
+      console.error("Error saving BTS images:", await btsResponse.json())
+    }
+  } catch (btsError) {
+    console.error("Error saving BTS images:", btsError)
+  }
+}
+\`\`\`
 
-1. User fills out project form and adds BTS images
-2. Form is submitted via `handleSubmit` function
-3. Project data is sent to `/api/projects/create` endpoint
-4. After successful project creation, the code attempts to save BTS images
-5. User is redirected to projects list regardless of BTS image saving status
+**Key Issues**:
+1. There's no waiting for the BTS image save to complete before redirecting
+2. Errors in saving BTS images are logged but not shown to the user
+3. The redirect happens regardless of whether BTS images were saved successfully
 
-### BTS Image Saving Process
+### API Endpoint for BTS Images
 
-Current implementation has these issues:
-- No waiting for BTS image saving to complete before redirect
-- No proper error handling for BTS image saving failures
-- No user feedback about BTS image saving status
-- Inconsistent behavior between create and edit modes
+Let's examine the API endpoint that handles BTS images in `app/api/projects/bts-images/route.ts`:
 
-## Recommended Fixes
+This endpoint should:
+1. Receive a project ID and array of image URLs
+2. Save these to the `bts_images` table in the database
+3. Return success or error
 
-1. **Improve Asynchronous Flow**:
-   - Wait for BTS image saving to complete before redirecting
-   - Use Promise.all to handle multiple BTS image uploads in parallel
-   - Add proper loading state during BTS image saving
+**Potential Issues**:
+1. The endpoint might not be properly handling the array of images
+2. There could be database constraints or permission issues
+3. The response might not include enough information for proper error handling
 
-2. **Add Error Handling**:
-   - Catch and display errors during BTS image saving
-   - Provide user feedback via toast notifications
-   - Log detailed errors for debugging
+## Missing BTS Content
 
-3. **Update Database Schema**:
-   - Ensure BTS images table is properly set up
-   - Add field to distinguish between images and videos
-   - Make behavior consistent between create and edit modes
+### Data Flow for BTS Content
 
-4. **Improve User Experience**:
-   - Add loading indicators during BTS image saving
-   - Provide success/error notifications
-   - Allow retry for failed BTS image uploads
+1. **Creation**: BTS images are uploaded and saved during project creation/editing
+2. **Storage**: They should be stored in the `bts_images` table with a reference to the project
+3. **Retrieval**: When viewing a project, `getProjectById` fetches the project and its BTS images
+4. **Display**: The project detail page should render these images
+
+### Fetching BTS Images
+
+In `lib/project-data.ts`, the `getProjectById` function fetches BTS images:
+
+\`\`\`javascript
+// Get BTS images for the project
+const { data: btsImages, error: btsError } = await supabase
+  .from("bts_images")
+  .select("*")
+  .eq("project_id", id)
+  .order("created_at", { ascending: true })
+
+if (btsError) {
+  console.error("Error fetching BTS images:", btsError)
+}
+
+return {
+  ...project,
+  tags: [project.category, ...roleTags].filter(Boolean),
+  bts_images: btsImages || [],
+} as Project & { bts_images: BtsImage[] }
+\`\`\`
+
+**Potential Issues**:
+1. If there's a database error, it's logged but an empty array is returned
+2. The `bts_images` table might not exist or have the expected schema
+3. The project ID might not be correctly formatted or matched
+
+### Displaying BTS Images
+
+In `app/projects/[id]/project-detail-content.tsx`, there should be code to display BTS images:
+
+The component should:
+1. Receive the project with its `bts_images` array
+2. Check if the array exists and has items
+3. Render the images in a gallery or similar component
+
+**Potential Issues**:
+1. The component might not be checking for the existence of BTS images
+2. There might be conditional rendering that's incorrectly hiding the BTS section
+3. The BTS images might be passed incorrectly from the parent component
+
+## Upload Component UI Issues
+
+### Current Implementation vs. Desired Implementation
+
+#### Current Implementation
+The upload component appears to be implemented as a tabbed interface where only one section is visible at a time:
+- "Upload" tab shows drag & drop
+- "Media Library" tab shows the library browser
+- "Video URL" tab shows the URL input
+
+This is controlled by the `Tabs` component from shadcn/ui:
+
+\`\`\`jsx
+<Tabs defaultValue="upload">
+  <TabsList className="bg-gray-800">
+    <TabsTrigger value="upload">Upload</TabsTrigger>
+    <TabsTrigger value="library">Media Library</TabsTrigger>
+    {mediaType !== "image" && <TabsTrigger value="video">Video URL</TabsTrigger>}
+  </TabsList>
+
+  <TabsContent value="upload">
+    {/* Upload content */}
+  </TabsContent>
+
+  <TabsContent value="library">
+    {/* Library content */}
+  </TabsContent>
+
+  <TabsContent value="video">
+    {/* Video URL content */}
+  </TabsContent>
+</Tabs>
+\`\`\`
+
+#### Desired Implementation
+The desired implementation is a single component with all elements visible at once:
+1. Media Library button at the top
+2. Video URL input in the middle
+3. Browse Device button at the bottom
+4. When dragging, the entire area becomes a drop zone
+
+### Why the Change Didn't Work
+
+The changes made to `components/admin/upload-widget.tsx` appear to have been implemented correctly, but there are two possible issues:
+
+1. **Component Not Being Used**: The updated `UploadWidget` component might not be used in the project creation page. Instead, the page might be using `ProjectMediaUploader` which still uses the tabbed interface.
+
+2. **CSS/Layout Issues**: The layout might be correct but CSS issues could be preventing it from displaying as intended.
+
+Let's examine how `ProjectMediaUploader` uses `UploadWidget`:
+
+In `components/admin/project-media-uploader.tsx`, it should be importing and using `UploadWidget`, but it might be implementing its own UI instead.
+
+**Key Finding**: The `ProjectMediaUploader` component appears to be implementing its own tabbed interface rather than using the updated `UploadWidget` component. This explains why the UI hasn't changed despite updates to `UploadWidget`.

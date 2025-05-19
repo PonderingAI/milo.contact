@@ -1,196 +1,276 @@
-import { type NextRequest, NextResponse } from "next/server"
-import { isAdmin } from "@/lib/auth-utils"
+/**
+ * Comprehensive Setup API
+ *
+ * This endpoint initializes all necessary database tables and storage buckets.
+ * It's designed to be a one-click setup solution for the portfolio.
+ */
 
-export async function GET(request: NextRequest) {
+import { createAdminClient } from "@/lib/supabase-server"
+import { NextResponse } from "next/server"
+
+export async function GET() {
   try {
-    // Check if user is admin
-    const adminCheck = await isAdmin()
-    if (!adminCheck.isAdmin) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const supabase = createAdminClient()
+    const results = {
+      database: { success: false, message: "" },
+      siteSettings: { success: false, message: "" },
+      storage: { success: false, message: "" },
+      mediaTable: { success: false, message: "" },
+      mediaPolicy: { success: false, message: "" },
     }
 
-    // Setup database
-    const dbResponse = await fetch(new URL("/api/setup-database", request.url))
-    const dbData = await dbResponse.json()
+    // 1. Check if site_settings table exists
+    const { error: settingsCheckError } = await supabase.from("site_settings").select("key").limit(1).maybeSingle()
 
-    if (!dbResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up database", details: dbData }, { status: 500 })
+    if (settingsCheckError && settingsCheckError.code === "42P01") {
+      // Create site_settings table
+      const { error: createTableError } = await supabase.rpc("create_site_settings_table")
+
+      if (createTableError) {
+        results.siteSettings = {
+          success: false,
+          message: `Error creating site_settings table: ${createTableError.message}`,
+        }
+      } else {
+        // Insert default settings
+        const defaultSettings = [
+          { key: "hero_heading", value: "Film Production & Photography" },
+          { key: "hero_subheading", value: "Director of Photography, Camera Assistant, Drone & Underwater Operator" },
+          { key: "image_hero_bg", value: "/images/hero-bg.jpg" },
+          { key: "about_heading", value: "About Me" },
+          {
+            key: "about_text1",
+            value:
+              "I'm Milo Presedo, an AI Solutions Architect and film production professional. Fluent in German, Spanish and English, I love diving into the latest AI models, VR technologies, and complex problem-solving.",
+          },
+          {
+            key: "about_text2",
+            value:
+              "My journey combines a solid educational background with hands-on experience in computer science, graphic design, and film production. I work as a Director of Photography (DP), 1st and 2nd Assistant Camera (1AC & 2AC), as well as a drone and underwater operator.",
+          },
+          {
+            key: "about_text3",
+            value:
+              "In my free time, I enjoy FPV drone flying, scuba diving, and exploring nature, which often inspires my landscape and product photography work.",
+          },
+          { key: "image_profile", value: "/images/profile.jpg" },
+          { key: "services_heading", value: "Services" },
+          { key: "contact_heading", value: "Get in Touch" },
+          {
+            key: "contact_text",
+            value:
+              "Connect with me to discuss AI, VR, film production, or photography projects. I'm always open to new collaborations and opportunities.",
+          },
+          { key: "contact_email", value: "milo.presedo@mailbox.org" },
+          { key: "contact_phone", value: "+41 77 422 68 03" },
+          { key: "chatgpt_url", value: "https://chatgpt.com/g/g-vOF4lzRBG-milo" },
+          { key: "footer_text", value: `© ${new Date().getFullYear()} Milo Presedo. All rights reserved.` },
+        ]
+
+        const { error: insertError } = await supabase.from("site_settings").insert(defaultSettings)
+
+        if (insertError) {
+          results.siteSettings = {
+            success: false,
+            message: `Error inserting default settings: ${insertError.message}`,
+          }
+        } else {
+          results.siteSettings = {
+            success: true,
+            message: "Site settings table created and populated with defaults",
+          }
+        }
+      }
+    } else {
+      results.siteSettings = {
+        success: true,
+        message: "Site settings table already exists",
+      }
     }
 
-    // Setup exec SQL function
-    const execSqlResponse = await fetch(new URL("/api/setup-exec-sql", request.url))
-    const execSqlData = await execSqlResponse.json()
+    // 2. Check if projects table exists
+    const { error: projectsCheckError } = await supabase.from("projects").select("id").limit(1).maybeSingle()
 
-    if (!execSqlResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up exec SQL function", details: execSqlData }, { status: 500 })
+    if (projectsCheckError && projectsCheckError.code === "42P01") {
+      // Create projects table using RPC
+      const { error: createProjectsError } = await supabase.rpc("create_projects_table")
+
+      if (createProjectsError) {
+        results.database = {
+          success: false,
+          message: `Error creating projects table: ${createProjectsError.message}`,
+        }
+      } else {
+        results.database = {
+          success: true,
+          message: "Projects table created successfully",
+        }
+      }
+    } else {
+      results.database = {
+        success: true,
+        message: "Projects table already exists",
+      }
     }
 
-    // Setup check tables function
-    const checkTablesResponse = await fetch(new URL("/api/setup-check-tables-function", request.url))
-    const checkTablesData = await checkTablesResponse.json()
+    // 3. Check if media table exists
+    const { error: mediaCheckError } = await supabase.from("media").select("id").limit(1).maybeSingle()
 
-    if (!checkTablesResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to set up check tables function", details: checkTablesData },
-        { status: 500 },
-      )
+    if (mediaCheckError && mediaCheckError.code === "42P01") {
+      // Create media table
+      const { error: createMediaError } = await supabase.rpc("create_media_table")
+
+      if (createMediaError) {
+        // If the RPC doesn't exist, create the table directly
+        const { error: directCreateError } = await supabase.query(`
+          CREATE TABLE IF NOT EXISTS media (
+            id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+            filename TEXT NOT NULL,
+            filepath TEXT NOT NULL,
+            filesize INTEGER NOT NULL,
+            filetype TEXT NOT NULL,
+            public_url TEXT NOT NULL,
+            thumbnail_url TEXT,
+            tags TEXT[] DEFAULT '{}',
+            metadata JSONB DEFAULT '{}',
+            usage_locations JSONB DEFAULT '{}',
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          
+          -- Add index on filepath for faster lookups
+          CREATE INDEX IF NOT EXISTS media_filepath_idx ON public.media(filepath);
+          
+          -- Add index on filetype for filtering
+          CREATE INDEX IF NOT EXISTS media_filetype_idx ON public.media(filetype);
+          
+          -- Add index on tags for filtering
+          CREATE INDEX IF NOT EXISTS media_tags_idx ON public.media USING GIN(tags);
+        `)
+
+        if (directCreateError) {
+          results.mediaTable = {
+            success: false,
+            message: `Error creating media table: ${directCreateError.message}`,
+          }
+        } else {
+          results.mediaTable = {
+            success: true,
+            message: "Media table created successfully via direct SQL",
+          }
+        }
+      } else {
+        results.mediaTable = {
+          success: true,
+          message: "Media table created successfully via RPC",
+        }
+      }
+    } else {
+      results.mediaTable = {
+        success: true,
+        message: "Media table already exists",
+      }
     }
 
-    // Setup projects table
-    const projectsResponse = await fetch(new URL("/api/setup-projects-table", request.url))
-    const projectsData = await projectsResponse.json()
+    // 4. Create storage buckets
+    try {
+      // Check existing buckets
+      const { data: buckets } = await supabase.storage.listBuckets()
+      const existingBuckets = new Set(buckets?.map((b) => b.name) || [])
 
-    if (!projectsResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up projects table", details: projectsData }, { status: 500 })
+      // Create required buckets if they don't exist
+      const requiredBuckets = [
+        { name: "projects", public: true, fileSizeLimit: 10485760 }, // 10MB
+        { name: "icons", public: true, fileSizeLimit: 1048576 }, // 1MB
+        { name: "media", public: true, fileSizeLimit: 52428800 }, // 50MB
+        { name: "public", public: true, fileSizeLimit: 10485760 }, // 10MB
+      ]
+
+      for (const bucket of requiredBuckets) {
+        if (!existingBuckets.has(bucket.name)) {
+          const { error } = await supabase.storage.createBucket(bucket.name, {
+            public: bucket.public,
+            fileSizeLimit: bucket.fileSizeLimit,
+          })
+
+          if (error && !error.message.includes("already exists")) {
+            throw error
+          }
+        }
+      }
+
+      results.storage = {
+        success: true,
+        message: "Storage buckets created or verified successfully",
+      }
+    } catch (storageError: any) {
+      results.storage = {
+        success: false,
+        message: `Error with storage buckets: ${storageError.message}`,
+      }
     }
 
-    // Setup settings table
-    const settingsResponse = await fetch(new URL("/api/setup-settings-table", request.url))
-    const settingsData = await settingsResponse.json()
+    // 5. Set up media storage policy for public access
+    try {
+      // Create SQL to set up the storage policies
+      const createPolicySql = `
+        BEGIN;
+        
+        -- Drop existing policies if they exist
+        DROP POLICY IF EXISTS "Public Read Media" ON storage.objects;
+        DROP POLICY IF EXISTS "Admin Insert Media" ON storage.objects;
+        
+        -- Create a policy that allows public read access to the media bucket
+        CREATE POLICY "Public Read Media" 
+        ON storage.objects 
+        FOR SELECT 
+        USING (bucket_id = 'media');
+        
+        -- Create a policy that allows insertion into the media bucket
+        -- We rely on application-level checks for admin status
+        CREATE POLICY "Admin Insert Media" 
+        ON storage.objects 
+        FOR INSERT 
+        WITH CHECK (bucket_id = 'media');
+        
+        COMMIT;
+      `
 
-    if (!settingsResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up settings table", details: settingsData }, { status: 500 })
-    }
+      // Execute the SQL to create the policies
+      const { error } = await supabase.rpc("exec_sql", { sql: createPolicySql })
 
-    // Setup site settings
-    const siteSettingsResponse = await fetch(new URL("/api/setup-site-settings", request.url))
-    const siteSettingsData = await siteSettingsResponse.json()
+      if (error) {
+        throw error
+      }
 
-    if (!siteSettingsResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up site settings", details: siteSettingsData }, { status: 500 })
-    }
-
-    // Setup tag order table
-    const tagOrderResponse = await fetch(new URL("/api/setup-tag-order-table", request.url))
-    const tagOrderData = await tagOrderResponse.json()
-
-    if (!tagOrderResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up tag order table", details: tagOrderData }, { status: 500 })
-    }
-
-    // Setup storage
-    const storageResponse = await fetch(new URL("/api/setup-storage", request.url))
-    const storageData = await storageResponse.json()
-
-    if (!storageResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up storage", details: storageData }, { status: 500 })
-    }
-
-    // Setup icons bucket
-    const iconsBucketResponse = await fetch(new URL("/api/setup-icons-bucket", request.url))
-    const iconsBucketData = await iconsBucketResponse.json()
-
-    if (!iconsBucketResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up icons bucket", details: iconsBucketData }, { status: 500 })
-    }
-
-    // Setup media storage policy
-    const mediaStoragePolicyResponse = await fetch(new URL("/api/setup-media-storage-policy", request.url))
-    const mediaStoragePolicyData = await mediaStoragePolicyResponse.json()
-
-    if (!mediaStoragePolicyResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to set up media storage policy", details: mediaStoragePolicyData },
-        { status: 500 },
-      )
-    }
-
-    // Setup media table
-    const mediaTableResponse = await fetch(new URL("/api/setup-media-table", request.url))
-    const mediaTableData = await mediaTableResponse.json()
-
-    if (!mediaTableResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up media table", details: mediaTableData }, { status: 500 })
-    }
-
-    // Setup BTS images table
-    const btsImagesTableResponse = await fetch(new URL("/api/setup-bts-images-table", request.url))
-    const btsImagesTableData = await btsImagesTableResponse.json()
-
-    if (!btsImagesTableResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to set up BTS images table", details: btsImagesTableData },
-        { status: 500 },
-      )
-    }
-
-    // Setup dependency tables
-    const dependencyTablesResponse = await fetch(new URL("/api/setup-dependencies-tables", request.url))
-    const dependencyTablesData = await dependencyTablesResponse.json()
-
-    if (!dependencyTablesResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to set up dependency tables", details: dependencyTablesData },
-        { status: 500 },
-      )
-    }
-
-    // Setup dependency settings table
-    const dependencySettingsResponse = await fetch(new URL("/api/setup-dependency-settings-table", request.url))
-    const dependencySettingsData = await dependencySettingsResponse.json()
-
-    if (!dependencySettingsResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to set up dependency settings table", details: dependencySettingsData },
-        { status: 500 },
-      )
-    }
-
-    // Setup security audits table
-    const securityAuditsResponse = await fetch(new URL("/api/setup-security-audits-table", request.url))
-    const securityAuditsData = await securityAuditsResponse.json()
-
-    if (!securityAuditsResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to set up security audits table", details: securityAuditsData },
-        { status: 500 },
-      )
-    }
-
-    // Setup dependencies
-    const dependenciesResponse = await fetch(new URL("/api/setup-dependencies", request.url))
-    const dependenciesData = await dependenciesResponse.json()
-
-    if (!dependenciesResponse.ok) {
-      return NextResponse.json({ error: "Failed to set up dependencies", details: dependenciesData }, { status: 500 })
-    }
-
-    // Setup dependency compatibility table
-    const compatibilityResponse = await fetch(new URL("/api/dependencies/setup-compatibility-table", request.url))
-    const compatibilityData = await compatibilityResponse.json()
-
-    if (!compatibilityResponse.ok) {
-      return NextResponse.json(
-        { error: "Failed to set up dependency compatibility table", details: compatibilityData },
-        { status: 500 },
-      )
+      results.mediaPolicy = {
+        success: true,
+        message: "Media storage policies configured successfully",
+      }
+    } catch (policyError: any) {
+      results.mediaPolicy = {
+        success: false,
+        message: `Error with media policies: ${policyError.message}`,
+      }
     }
 
     return NextResponse.json({
-      success: true,
-      message: "All setup completed successfully",
-      details: {
-        database: dbData,
-        execSql: execSqlData,
-        checkTables: checkTablesData,
-        projects: projectsData,
-        settings: settingsData,
-        siteSettings: siteSettingsData,
-        tagOrder: tagOrderData,
-        storage: storageData,
-        iconsBucket: iconsBucketData,
-        mediaStoragePolicy: mediaStoragePolicyData,
-        mediaTable: mediaTableData,
-        btsImagesTable: btsImagesTableData,
-        dependencyTables: dependencyTablesData,
-        dependencySettings: dependencySettingsData,
-        securityAudits: securityAuditsData,
-        dependencies: dependenciesData,
-        compatibilityTable: compatibilityData,
-      },
+      success:
+        results.database.success &&
+        results.siteSettings.success &&
+        results.storage.success &&
+        results.mediaTable.success &&
+        results.mediaPolicy.success,
+      results,
     })
-  } catch (error) {
-    console.error("Error in setup all API:", error)
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+  } catch (error: any) {
+    console.error("Error in setup-all:", error)
+    return NextResponse.json(
+      {
+        success: false,
+        error: error.message,
+      },
+      { status: 500 },
+    )
   }
 }

@@ -1,73 +1,104 @@
 # Upload Component Analysis
 
-## Problem Description
+## Current Implementation vs. Desired Implementation
 
-The upload component in the project creation page still shows as a windowed/tabbed interface rather than a single component with all elements visible at once in a block layout as requested.
+### Current Implementation in ProjectMediaUploader
 
-## Root Causes
+The `ProjectMediaUploader` component currently uses a tabbed interface from shadcn/ui:
 
-1. **Multiple Component Layers**:
-   - There are two separate components handling uploads:
-     - `UploadWidget` - The base component that was updated correctly
-     - `ProjectMediaUploader` - A wrapper component that still uses tabs
+\`\`\`jsx
+<Tabs defaultValue="upload">
+  <TabsList className="bg-gray-800">
+    <TabsTrigger value="upload">Upload</TabsTrigger>
+    <TabsTrigger value="library">Media Library</TabsTrigger>
+    {mediaType !== "image" && <TabsTrigger value="video">Video URL</TabsTrigger>}
+  </TabsList>
 
-2. **Component Usage Hierarchy**:
-   - The project creation page uses `ProjectMediaUploader`, not `UploadWidget` directly
-   - Changes to `UploadWidget` don't affect the tabbed interface in `ProjectMediaUploader`
+  <TabsContent value="upload">
+    {/* Drag & drop upload area */}
+  </TabsContent>
 
-3. **Independent UI Implementations**:
-   - `ProjectMediaUploader` implements its own tabbed interface
-   - It doesn't inherit the layout changes made to `UploadWidget`
+  <TabsContent value="library">
+    {/* Media library button */}
+  </TabsContent>
 
-## Technical Analysis
+  <TabsContent value="video">
+    {/* Video URL input */}
+  </TabsContent>
+</Tabs>
+\`\`\`
 
-### Component Structure
+This creates a windowed interface where only one section is visible at a time, controlled by the tabs.
 
-1. **UploadWidget Component**:
-   - Base component for uploading media
-   - Was updated to show all elements at once
-   - Used by other components including `ProjectMediaUploader`
+### Desired Implementation
 
-2. **ProjectMediaUploader Component**:
-   - Wrapper around `UploadWidget` with additional functionality
-   - Implements its own tabbed interface
-   - Used directly in the project creation page
+The desired implementation is a single component with all elements visible at once:
 
-3. **Project Editor Component**:
-   - Uses `ProjectMediaUploader` for media uploads
-   - Doesn't directly interact with `UploadWidget`
+\`\`\`jsx
+<div className="space-y-4">
+  {/* Media Library button at the top */}
+  <button onClick={openMediaBrowser} className="w-full py-3 rounded-lg bg-[#0f1520]">
+    Browse Media Library
+  </button>
 
-### UI Flow
+  {/* Video URL input in the middle */}
+  <div className="relative">
+    <input
+      type="text"
+      value={url}
+      onChange={handleUrlChange}
+      placeholder={urlPlaceholder}
+      className="w-full py-3 px-3 pr-10 rounded-lg bg-[#0f1520]"
+    />
+    <button onClick={handleUrlSubmit} className="absolute right-2 top-1/2 -translate-y-1/2">
+      <ArrowRight size={22} />
+    </button>
+  </div>
 
-The current UI flow is:
-1. User goes to project creation page
-2. `ProjectEditor` renders `ProjectMediaUploader`
-3. `ProjectMediaUploader` shows a tabbed interface
-4. When a tab is selected, it renders `UploadWidget`
-5. `UploadWidget` shows all elements at once (as updated), but only within its tab
+  {/* Browse Device button at the bottom */}
+  <button onClick={triggerFileInput} className="w-full py-3 rounded-lg bg-[#0f1520]">
+    Browse Device
+  </button>
+</div>
+\`\`\`
 
-## Recommended Fixes
+This would show all three elements at once, stacked vertically.
 
-1. **Update ProjectMediaUploader**:
-   - Remove the tabbed interface in `ProjectMediaUploader`
-   - Show all upload options at once
-   - Maintain the same functionality but with a different layout
+## Why the Change Didn't Work
 
-2. **Alternative: Direct UploadWidget Usage**:
-   - Modify `ProjectEditor` to use `UploadWidget` directly
-   - Pass the necessary props to maintain functionality
-   - Remove the intermediate `ProjectMediaUploader` component
+### Component Hierarchy Issue
 
-3. **Unified Approach**:
-   - Create a new component that combines the best of both
-   - Ensure consistent UI across all upload interfaces
-   - Maintain all required functionality
+The main issue is that we have two separate components that handle uploads:
 
-## Implementation Considerations
+1. `UploadWidget` - The base component that was updated to show all elements at once
+2. `ProjectMediaUploader` - A wrapper component used in the project creation page that implements its own tabbed interface
 
-When updating `ProjectMediaUploader`:
-- Preserve all existing functionality
-- Maintain proper state management
-- Ensure responsive design
-- Keep accessibility features
-- Preserve error handling
+The changes were made to `UploadWidget`, but `ProjectMediaUploader` doesn't use `UploadWidget` - it implements its own UI with tabs.
+
+### Implementation Mismatch
+
+Looking at the code:
+
+1. `components/admin/upload-widget.tsx` was updated to show all elements at once
+2. `components/admin/project-media-uploader.tsx` still uses a tabbed interface
+
+The project creation page uses `ProjectMediaUploader`, not `UploadWidget` directly, so the changes to `UploadWidget` don't affect the project creation page.
+
+## Solution
+
+To fix this, we need to either:
+
+1. Update `ProjectMediaUploader` to use the same layout as `UploadWidget`
+2. Update `ProjectMediaUploader` to use `UploadWidget` instead of implementing its own UI
+3. Replace all instances of `ProjectMediaUploader` with `UploadWidget`
+
+The simplest approach would be to modify `ProjectMediaUploader` to remove the tabs and show all elements at once, similar to the updated `UploadWidget`.
+
+## Implementation Plan
+
+1. Remove the `Tabs` component from `ProjectMediaUploader`
+2. Implement a layout similar to `UploadWidget` with all elements visible at once
+3. Keep the same functionality but change the presentation
+4. Ensure the drag & drop behavior still works correctly
+
+This should result in a consistent UI across all upload components in the application.
