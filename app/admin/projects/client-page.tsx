@@ -34,10 +34,10 @@ export default function ClientProjectsPage() {
   }, [isLoaded, isSignedIn, router])
 
   useEffect(() => {
-    if (isSignedIn) {
+    if (isLoaded && isSignedIn) {
       fetchProjects()
     }
-  }, [isSignedIn])
+  }, [isLoaded, isSignedIn])
 
   const fetchProjects = async () => {
     try {
