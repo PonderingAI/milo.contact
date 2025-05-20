@@ -9,7 +9,6 @@ import { Plus, Search, Filter, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ProjectCard } from "@/components/project-card"
 import TagFilter from "@/components/tag-filter"
-import AdminCheck from "@/components/admin/admin-check"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
 import type { Project } from "@/lib/project-data"
 
@@ -131,7 +130,7 @@ export default function ClientProjectsPage() {
   }
 
   return (
-    <AdminCheck>
+    <>
       <div className="container mx-auto p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <h1 className="text-3xl font-bold">Projects</h1>
@@ -240,6 +239,6 @@ export default function ClientProjectsPage() {
           </div>
         )}
       </div>
-    </AdminCheck>
+    </>
   )
 }
