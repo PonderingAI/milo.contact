@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Plus, Search, Filter, X } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ProjectCard } from "@/components/project-card"
-import TagFilter from "@/components/tag-filter"
+import SimpleTagFilter from "@/components/simple-tag-filter"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
 import type { Project } from "@/lib/project-data"
 
@@ -173,14 +173,19 @@ export default function ClientProjectsPage() {
 
               {showFilters && (
                 <div className="space-y-4 pt-2">
-                  <TagFilter
+                  <SimpleTagFilter
                     title="Categories"
                     tags={categories}
                     selectedTag={selectedCategory}
                     onChange={handleCategoryChange}
                   />
 
-                  <TagFilter title="Roles" tags={roles} selectedTag={selectedRole} onChange={handleRoleChange} />
+                  <SimpleTagFilter
+                    title="Roles"
+                    tags={roles}
+                    selectedTag={selectedRole}
+                    onChange={handleRoleChange}
+                  />
 
                   {(selectedCategory || selectedRole || searchQuery) && (
                     <div className="flex justify-end">
