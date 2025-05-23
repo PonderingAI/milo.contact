@@ -1,105 +1,103 @@
-"use client"
+"use client";
 
-import { useEffect, useState, useRef } from "react"
+import { useEffect, useState, useRef } from "react";
 
 interface FilmSegment {
-  id: number
-  x: number
-  y: number
-  scale: number
-  rotation: number
+  id: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
 }
 
-const TRAIL_AMOUNT = 25            // number of segments in the trail
-const EASING_FACTOR = 0.3          // “stickiness” – lower = slower catch-up
+const TRAIL_AMOUNT = 25; // number of segments in the trail
+const EASING_FACTOR = 0.3; // easing factor for smooth following
 
 export default function CustomCursor() {
-  const [position, setPosition] = useState({ x: -100, y: -100 })
-  const [currentRotation, setCurrentRotation] = useState(0)
-  const [isVisible, setIsVisible] = useState(false)
+  const [position, setPosition] = useState({ x: -100, y: -100 });
+  const [currentRotation, setCurrentRotation] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
+  const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]);
 
-  const requestRef   = useRef<number>()
-  const lastPosition = useRef({ x: -100, y: -100 })
+  const requestRef = useRef<number>();
+  const lastPositionRef = useRef({ x: -100, y: -100 });
 
-  /* ---------- initialise the trail once ---------- */
-  const [filmSegments, setFilmSegments] = useState<FilmSegment[]>(() =>
-    Array.from({ length: TRAIL_AMOUNT }, (_, i) => ({
+  // initialise segments once on mount
+  useEffect(() => {
+    const initial = Array.from({ length: TRAIL_AMOUNT }, (_, i) => ({
       id: i,
       x: -100,
       y: -100,
       scale: 1 - 0.04 * i,
       rotation: 0,
-    })),
-  )
+    }));
+    setFilmSegments(initial);
+  }, []);
 
-  /* ---------- mouse listeners & animation loop ---------- */
+  // mouse tracking + animation loop
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      const newX = e.clientX
-      const newY = e.clientY
+      const { clientX: x, clientY: y } = e;
+      const dx = x - lastPositionRef.current.x;
+      const dy = y - lastPositionRef.current.y;
 
-      const dx = newX - lastPosition.current.x
-      const dy = newY - lastPosition.current.y
-      if (dx !== 0 || dy !== 0) {
-        setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI))
+      if (dx || dy) {
+        setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI));
       }
 
-      setPosition({ x: newX, y: newY })
-      setIsVisible(true)
-      lastPosition.current = { x: newX, y: newY }
-    }
+      setPosition({ x, y });
+      setIsVisible(true);
+      lastPositionRef.current = { x, y };
+    };
 
-    const handleMouseLeave = () => setIsVisible(false)
+    const handleMouseLeave = () => setIsVisible(false);
 
-    /* --- one requestAnimationFrame loop — uses functional state update --- */
-    const animateTrail = () => {
-      setFilmSegments(prev => {
-        let leaderX = position.x
-        let leaderY = position.y
+    const animate = () => {
+      let leaderX = position.x;
+      let leaderY = position.y;
 
-        return prev.map((seg, index) => {
-          const dx = leaderX - seg.x
-          const dy = leaderY - seg.y
+      setFilmSegments(prev =>
+        prev.map((seg, index) => {
+          const dx = leaderX - seg.x;
+          const dy = leaderY - seg.y;
+          const newX = seg.x + dx * EASING_FACTOR;
+          const newY = seg.y + dy * EASING_FACTOR;
 
-          const newX = seg.x + dx * EASING_FACTOR
-          const newY = seg.y + dy * EASING_FACTOR
+          const movedX = newX - seg.x;
+          const movedY = newY - seg.y;
 
-          const movedX = newX - seg.x
-          const movedY = newY - seg.y
+          const rotation =
+            Math.abs(movedX) > 0.01 || Math.abs(movedY) > 0.01
+              ? Math.atan2(movedY, movedX) * (180 / Math.PI)
+              : index === 0
+              ? currentRotation
+              : seg.rotation;
 
-          let newRotation = seg.rotation
-          if (Math.abs(movedX) > 0.01 || Math.abs(movedY) > 0.01) {
-            newRotation = Math.atan2(movedY, movedX) * (180 / Math.PI)
-          } else if (index === 0) {
-            newRotation = currentRotation
-          }
+          leaderX = newX;
+          leaderY = newY;
 
-          leaderX = newX
-          leaderY = newY
+          return { ...seg, x: newX, y: newY, rotation };
+        }),
+      );
 
-          return { ...seg, x: newX, y: newY, rotation: newRotation }
-        })
-      })
+      requestRef.current = requestAnimationFrame(animate);
+    };
 
-      requestRef.current = requestAnimationFrame(animateTrail)
-    }
-
-    window.addEventListener("mousemove", handleMouseMove)
-    window.addEventListener("mouseleave", handleMouseLeave)
-    requestRef.current = requestAnimationFrame(animateTrail)
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseleave", handleMouseLeave);
+    requestRef.current = requestAnimationFrame(animate);
 
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove)
-      window.removeEventListener("mouseleave", handleMouseLeave)
-      if (requestRef.current) cancelAnimationFrame(requestRef.current)
-    }
-  }, [position, currentRotation])
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseleave", handleMouseLeave);
+      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
+  }, [position, currentRotation]);
 
-  /* ---------- render ---------- */
   return (
     <>
-      {/* goo filter for the difference-blend blob effect */}
-      <svg style={{ display: "none" }}>
+      {/* hidden SVG defs for goo filter */}
+      <svg xmlns="http://www.w3.org/2000/svg" style={{ display: "none" }}>
         <defs>
           <filter id="goo">
             <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
@@ -114,7 +112,7 @@ export default function CustomCursor() {
         </defs>
       </svg>
 
-      {/* full-viewport container – the segments position themselves via transform */}
+      {/* cursor container */}
       <div
         className="cursor-container"
         style={{
@@ -122,39 +120,48 @@ export default function CustomCursor() {
           filter: "url(#goo)",
           mixBlendMode: "difference",
           position: "fixed",
-          inset: 0,
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
           pointerEvents: "none",
           zIndex: 9999,
         }}
       >
-        {filmSegments.map(seg => (
+        {filmSegments.map(segment => (
           <div
-            key={seg.id}
+            key={segment.id}
             style={{
               position: "absolute",
-              width: 20,
-              height: 20,
-              transformOrigin: "center",
-              transform: `translate(${seg.x}px, ${seg.y}px) rotate(${seg.rotation}deg) scale(${seg.scale})`,
+              width: "20px",
+              height: "20px",
+              transformOrigin: "center center",
+              transform: `translate(${segment.x}px, ${segment.y}px) rotate(${segment.rotation}deg) scale(${segment.scale})`,
             }}
           >
-            {/* simple 20 × 20 “film frame” */}
-            <svg width="100%" height="100%" viewBox="-10 -10 20 20">
-              <rect x="-10" y="-10" width="20" height="20" fill="#fff" />
-              {/* edges */}
+            {/* film‑strip segment */}
+            <svg
+              width="100%"
+              height="100%"
+              viewBox="-10 -10 20 20"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <rect x="-10" y="-10" width="20" height="20" fill="white" />
+              {/* dark edges */}
               <rect x="-10" y="-10" width="3.5" height="20" fill="#222" />
               <rect x="6.5" y="-10" width="3.5" height="20" fill="#222" />
               {/* sprocket holes */}
-              {[-7, -1, 5].map(y => (
-                <>
-                  <rect key={`l-${y}`} x="-9" y={y} width="2" height="3" fill="#000" rx=".5" />
-                  <rect key={`r-${y}`} x="7" y={y} width="2" height="3" fill="#000" rx=".5" />
-                </>
-              ))}
+              <rect x="-9" y="-7" width="2" height="3" fill="#000" rx="0.5" />
+              <rect x="-9" y="-1" width="2" height="3" fill="#000" rx="0.5" />
+              <rect x="-9" y="5" width="2" height="3" fill="#000" rx="0.5" />
+              <rect x="7" y="-7" width="2" height="3" fill="#000" rx="0.5" />
+              <rect x="7" y="-1" width="2" height="3" fill="#000" rx="0.5" />
+              <rect x="7" y="5" width="2" height="3" fill="#000" rx="0.5" />
             </svg>
           </div>
         ))}
       </div>
     </>
-  )
+  );
 }
