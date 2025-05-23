@@ -11,6 +11,8 @@ export default function CustomCursor() {
   const trailsRef = useRef<{ x: number; y: number; opacity: number; rotation: number }[]>([])
   const requestRef = useRef<number>()
   const lastPositionRef = useRef({ x: -100, y: -100 }) // Ref for last mouse position
+  const canvasRef = useRef<HTMLCanvasElement>(null) // Added canvas ref
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null) // Added context ref
 
   // Initialize trails
   useEffect(() => {
@@ -18,6 +20,27 @@ export default function CustomCursor() {
       .fill(0)
       .map(() => ({ x: 0, y: 0, opacity: 0, rotation: 0 })) // Add rotation: 0
   }, [])
+
+  // Effect for canvas setup and resize handling
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (canvas) {
+      const ctx = canvas.getContext('2d')
+      ctxRef.current = ctx
+
+      const setCanvasDimensions = () => {
+        canvas.width = window.innerWidth
+        canvas.height = window.innerHeight
+        // Potential future redraw logic here
+      }
+      setCanvasDimensions() // Set initial size
+
+      window.addEventListener('resize', setCanvasDimensions)
+      return () => {
+        window.removeEventListener('resize', setCanvasDimensions)
+      }
+    }
+  }, []) // Empty dependency array to run once on mount and clean up on unmount
 
   useEffect(() => {
     // Initialize lastPositionRef with the initial position
@@ -46,7 +69,19 @@ export default function CustomCursor() {
 
     // Animation loop for the trail effect
     const animateTrail = () => {
-      // Update trail positions
+      const canvas = canvasRef.current;
+      const ctx = ctxRef.current;
+
+      if (!canvas || !ctx) {
+        requestRef.current = requestAnimationFrame(animateTrail); // Keep animation loop going
+        return;
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+      ctx.lineCap = 'round'; // Set default line cap
+      ctx.lineJoin = 'round'; // Set default line join
+
+      // Update trail positions (logic remains the same)
       const newTrails = [...trailsRef.current]
 
       // Removed displayedRotation lerping logic
@@ -63,6 +98,54 @@ export default function CustomCursor() {
       // Add current position to the front
       newTrails[0] = { x: position.x, y: position.y, opacity: 1, rotation: currentRotation } // Use currentRotation for trail point
       trailsRef.current = newTrails
+
+      // Draw trail segments on canvas
+      for (let i = trailsRef.current.length - 1; i >= 0; i--) {
+        const segment = trailsRef.current[i];
+        if (segment.opacity <= 0) continue;
+
+        ctx.globalAlpha = segment.opacity;
+
+        const segmentLength = 30; 
+        const filmWidth = 20;     
+        const edgeWidth = 3.5;    
+        const sprocketWidth = 2;
+        const sprocketHeight = 4;
+        const numSprocketsPerSide = 3; 
+        const sprocketColor = "rgba(50,50,50,0.8)"; 
+        const edgeColor = "rgba(100,100,100,0.7)";
+        const frameLineColor = "rgba(200,200,200,0.3)";
+        const frameLineWidth = 0.5;
+
+        ctx.save();
+        ctx.translate(segment.x, segment.y);
+        ctx.rotate(segment.rotation * (Math.PI / 180)); // Convert degrees to radians
+
+        // Draw Film Edges
+        ctx.fillStyle = edgeColor;
+        ctx.fillRect(-filmWidth / 2, -segmentLength / 2, edgeWidth, segmentLength);
+        ctx.fillRect(filmWidth / 2 - edgeWidth, -segmentLength / 2, edgeWidth, segmentLength);
+
+        // Draw Sprocket Holes
+        ctx.fillStyle = sprocketColor;
+        const sprocketSpacing = segmentLength / (numSprocketsPerSide + 1);
+        for (let j = 1; j <= numSprocketsPerSide; j++) {
+          const yPos = -segmentLength / 2 + j * sprocketSpacing - sprocketHeight / 2;
+          ctx.fillRect(-filmWidth / 2 + (edgeWidth - sprocketWidth) / 2, yPos, sprocketWidth, sprocketHeight);
+          ctx.fillRect(filmWidth / 2 - edgeWidth + (edgeWidth - sprocketWidth) / 2, yPos, sprocketWidth, sprocketHeight);
+        }
+
+        // Draw Frame Line
+        ctx.strokeStyle = frameLineColor;
+        ctx.lineWidth = frameLineWidth;
+        ctx.beginPath();
+        ctx.moveTo(-filmWidth / 2 + edgeWidth, 0);
+        ctx.lineTo(filmWidth / 2 - edgeWidth, 0);
+        ctx.stroke();
+
+        ctx.restore();
+      }
+      ctx.globalAlpha = 1.0; // Reset global alpha
 
       requestRef.current = requestAnimationFrame(animateTrail)
     }
@@ -88,47 +171,12 @@ export default function CustomCursor() {
 
   return (
     <div className="cursor-container" style={{ opacity: isVisible ? 1 : 0 }}>
+      <canvas
+        ref={canvasRef}
+        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 9998 }}
+      />
       {/* Main cursor element removed */}
-
-      {/* Trail elements */}
-      {trailsRef.current.map((trail, index) => (
-        <div
-          key={index}
-          className="cursor-trail"
-          style={{
-            left: `${trail.x}px`,
-            top: `${trail.y}px`,
-            opacity: trail.opacity,
-            transform: `translate(-50%, -50%) rotate(${trail.rotation}deg) scale(1)`, // Adjusted scale
-          }}
-        >
-          {/* New "Flat Film Strip" Trail Segment SVG */}
-          <svg width="20" height="30" viewBox="-10 -15 20 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Left film edge */}
-            <rect x="-10" y="-15" width="3.5" height="30" fill="rgba(100,100,100,0.6)"/>
-            {/* Sprocket holes for left edge */}
-            <rect x="-9" y="-12" width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-9" y="-5"  width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-9" y="2"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-9" y="9"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-
-            {/* Right film edge */}
-            <rect x="6.5" y="-15" width="3.5" height="30" fill="rgba(100,100,100,0.6)"/>
-            {/* Sprocket holes for right edge */}
-            <rect x="7" y="-12" width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="7" y="-5"  width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="7" y="2"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="7" y="9"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-
-            {/* Faint Frame lines in the transparent middle */}
-            <line x1="-6.5" y1="0" x2="6.5" y2="0" stroke="rgba(200,200,200,0.2)" strokeWidth="0.5"/>
-            <line x1="-6.5" y1="-14.5" x2="6.5" y2="-14.5" stroke="rgba(200,200,200,0.1)" strokeWidth="0.5"/>
-            <line x1="-6.5" y1="14.5" x2="6.5" y2="14.5" stroke="rgba(200,200,200,0.1)" strokeWidth="0.5"/>
-            
-            {/* Central transparent area - effectively created by the gap between edge rects */}
-          </svg>
-        </div>
-      ))}
+      {/* SVG trail elements rendering removed as canvas now handles it */}
     </div>
   )
 }
