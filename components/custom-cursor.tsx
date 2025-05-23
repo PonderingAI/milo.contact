@@ -63,10 +63,7 @@ export default function CustomCursor() {
         return prevDisplayedRotation + difference * lerpFactor;
       });
 
-      // Update trail positions
-      const newTrails = [...trailsRef.current]
-
-      // Shift all trails one position
+      // Shift all trails one position (operates on the newTrails declared above)
       for (let i = newTrails.length - 1; i > 0; i--) {
         newTrails[i] = {
           x: newTrails[i - 1].x,
