@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/utils/supabase/admin';
+import { createAdminClient } from '@/lib/supabase-server';
 import JSZip from 'jszip';
 import { PostgrestError } from '@supabase/supabase-js';
 

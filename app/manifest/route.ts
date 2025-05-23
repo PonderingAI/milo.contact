@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createAdminClient } from '@/utils/supabase/admin';
+import { createAdminClient } from '@/lib/supabase-server';
 import type { MetadataRoute } from "next";
 
 // Define default values, potentially from a config file or environment variables
