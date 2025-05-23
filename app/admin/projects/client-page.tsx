@@ -236,9 +236,14 @@ export default function ClientProjectsPage() {
             {filteredProjects.map((project) => (
               <ProjectCard
                 key={project.id}
-                project={project}
+                id={project.id}
+                title={project.title}
+                category={project.category}
+                role={project.role}
+                image={project.image}
                 isAdmin={true}
                 onEdit={() => router.push(`/admin/projects/${project.id}/edit`)}
+                link={`/projects/${project.id}`}
               />
             ))}
           </div>
