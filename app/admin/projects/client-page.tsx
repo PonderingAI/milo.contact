@@ -239,6 +239,7 @@ export default function ClientProjectsPage() {
                 project={project}
                 isAdmin={true}
                 onEdit={() => router.push(`/admin/projects/${project.id}/edit`)}
+                link={`/projects/${project.id}`}
               />
             ))}
           </div>
