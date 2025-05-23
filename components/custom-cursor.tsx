@@ -2,45 +2,40 @@
 
 import { useEffect, useState, useRef } from "react"
 
+interface FilmSegment {
+  id: number;
+  x: number;
+  y: number;
+  scale: number;
+  rotation: number;
+}
+
+const TRAIL_AMOUNT = 25; // Number of segments in the trail (Changed from 20)
+const EASING_FACTOR = 0.3; // For smooth following, adjust as needed (Changed from 0.2)
+
 export default function CustomCursor() {
   const [position, setPosition] = useState({ x: -100, y: -100 })
   const [currentRotation, setCurrentRotation] = useState(0) // Target rotation from mouse input
-  // Removed displayedRotation state: const [displayedRotation, setDisplayedRotation] = useState(0);
   const [isVisible, setIsVisible] = useState(false)
-  // Removed isClicking state: const [isClicking, setIsClicking] = useState(false);
-  const trailsRef = useRef<{ x: number; y: number; opacity: number; rotation: number }[]>([])
+  const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]); // New state for film segments
   const requestRef = useRef<number>()
   const lastPositionRef = useRef({ x: -100, y: -100 }) // Ref for last mouse position
-  const canvasRef = useRef<HTMLCanvasElement>(null) // Added canvas ref
-  const ctxRef = useRef<CanvasRenderingContext2D | null>(null) // Added context ref
+  // Removed trailsRef, canvasRef, ctxRef
 
-  // Initialize trails
+  // Initialize filmSegments state
   useEffect(() => {
-    trailsRef.current = Array(120) // Increased from 20 to 120
-      .fill(0)
-      .map(() => ({ x: 0, y: 0, opacity: 0, rotation: 0 })) // Add rotation: 0
-  }, [])
-
-  // Effect for canvas setup and resize handling
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (canvas) {
-      const ctx = canvas.getContext('2d')
-      ctxRef.current = ctx
-
-      const setCanvasDimensions = () => {
-        canvas.width = window.innerWidth
-        canvas.height = window.innerHeight
-        // Potential future redraw logic here
-      }
-      setCanvasDimensions() // Set initial size
-
-      window.addEventListener('resize', setCanvasDimensions)
-      return () => {
-        window.removeEventListener('resize', setCanvasDimensions)
-      }
+    const initialSegments: FilmSegment[] = [];
+    for (let i = 0; i < TRAIL_AMOUNT; i++) {
+      initialSegments.push({
+        id: i,
+        x: -100, // Initial off-screen position
+        y: -100, // Initial off-screen position
+        scale: 1 - 0.04 * i, // Example scaling (Changed from 0.05)
+        rotation: 0,
+      });
     }
-  }, []) // Empty dependency array to run once on mount and clean up on unmount
+    setFilmSegments(initialSegments);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   useEffect(() => {
     // Initialize lastPositionRef with the initial position
@@ -69,85 +64,50 @@ export default function CustomCursor() {
 
     // Animation loop for the trail effect
     const animateTrail = () => {
-      const canvas = canvasRef.current;
-      const ctx = ctxRef.current;
-
-      if (!canvas || !ctx) {
-        requestRef.current = requestAnimationFrame(animateTrail); // Keep animation loop going
+      if (filmSegments.length === 0) { // Guard if filmSegments not yet initialized
+        requestRef.current = requestAnimationFrame(animateTrail);
         return;
       }
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
-      ctx.lineCap = 'round'; // Set default line cap
-      ctx.lineJoin = 'round'; // Set default line join
+      let leaderX = position.x;
+      let leaderY = position.y;
+      // previousSegmentRotation from prompt is not used in the provided logic for updatedSegments.
+      // Each segment's rotation is based on its own movement or currentRotation for the head.
 
-      // Update trail positions (logic remains the same)
-      const newTrails = [...trailsRef.current]
+      const updatedSegments = filmSegments.map((segment, index) => {
+        const newSegmentState = { ...segment };
 
-      // Removed displayedRotation lerping logic
-      // Shift all trails one position (operates on the newTrails declared above)
-      for (let i = newTrails.length - 1; i > 0; i--) {
-        newTrails[i] = {
-          x: newTrails[i - 1].x,
-          y: newTrails[i - 1].y,
-          opacity: Math.max(0, 1 - (i / newTrails.length) * 1.0), // Adjusted opacity fade-out
-          rotation: newTrails[i - 1].rotation, // Carry over rotation
+        const dxToLeader = leaderX - newSegmentState.x;
+        const dyToLeader = leaderY - newSegmentState.y;
+
+        const newX = newSegmentState.x + dxToLeader * EASING_FACTOR;
+        const newY = newSegmentState.y + dyToLeader * EASING_FACTOR;
+
+        // Calculate actual movement of this segment in this frame
+        const actualSegmentDx = newX - newSegmentState.x;
+        const actualSegmentDy = newY - newSegmentState.y;
+        
+        newSegmentState.x = newX;
+        newSegmentState.y = newY;
+
+        // Update rotation based on its actual movement direction
+        if (Math.abs(actualSegmentDx) > 0.01 || Math.abs(actualSegmentDy) > 0.01) {
+          newSegmentState.rotation = Math.atan2(actualSegmentDy, actualSegmentDx) * (180 / Math.PI);
+        } else if (index === 0) {
+          // If mouse is stationary and first segment hasn't moved, use overall mouse direction
+          newSegmentState.rotation = currentRotation;
         }
-      }
+        // If no significant movement and not the first segment, retain its previous rotation implicitly
 
-      // Add current position to the front
-      newTrails[0] = { x: position.x, y: position.y, opacity: 1, rotation: currentRotation } // Use currentRotation for trail point
-      trailsRef.current = newTrails
+        // Update leader for the next segment in the trail
+        leaderX = newSegmentState.x;
+        leaderY = newSegmentState.y;
+        
+        return newSegmentState;
+      });
 
-      // Draw trail segments on canvas
-      for (let i = trailsRef.current.length - 1; i >= 0; i--) {
-        const segment = trailsRef.current[i];
-        if (segment.opacity <= 0) continue;
-
-        ctx.globalAlpha = segment.opacity;
-
-        const segmentLength = 30; 
-        const filmWidth = 20;     
-        const edgeWidth = 3.5;    
-        const sprocketWidth = 2;
-        const sprocketHeight = 4;
-        const numSprocketsPerSide = 3; 
-        const sprocketColor = "rgba(50,50,50,0.8)"; 
-        const edgeColor = "rgba(100,100,100,0.7)";
-        const frameLineColor = "rgba(200,200,200,0.3)";
-        const frameLineWidth = 0.5;
-
-        ctx.save();
-        ctx.translate(segment.x, segment.y);
-        ctx.rotate(segment.rotation * (Math.PI / 180)); // Convert degrees to radians
-
-        // Draw Film Edges
-        ctx.fillStyle = edgeColor;
-        ctx.fillRect(-filmWidth / 2, -segmentLength / 2, edgeWidth, segmentLength);
-        ctx.fillRect(filmWidth / 2 - edgeWidth, -segmentLength / 2, edgeWidth, segmentLength);
-
-        // Draw Sprocket Holes
-        ctx.fillStyle = sprocketColor;
-        const sprocketSpacing = segmentLength / (numSprocketsPerSide + 1);
-        for (let j = 1; j <= numSprocketsPerSide; j++) {
-          const yPos = -segmentLength / 2 + j * sprocketSpacing - sprocketHeight / 2;
-          ctx.fillRect(-filmWidth / 2 + (edgeWidth - sprocketWidth) / 2, yPos, sprocketWidth, sprocketHeight);
-          ctx.fillRect(filmWidth / 2 - edgeWidth + (edgeWidth - sprocketWidth) / 2, yPos, sprocketWidth, sprocketHeight);
-        }
-
-        // Draw Frame Line
-        ctx.strokeStyle = frameLineColor;
-        ctx.lineWidth = frameLineWidth;
-        ctx.beginPath();
-        ctx.moveTo(-filmWidth / 2 + edgeWidth, 0);
-        ctx.lineTo(filmWidth / 2 - edgeWidth, 0);
-        ctx.stroke();
-
-        ctx.restore();
-      }
-      ctx.globalAlpha = 1.0; // Reset global alpha
-
-      requestRef.current = requestAnimationFrame(animateTrail)
+      setFilmSegments(updatedSegments);
+      requestRef.current = requestAnimationFrame(animateTrail);
     }
 
     window.addEventListener("mousemove", handleMouseMove)
@@ -170,13 +130,69 @@ export default function CustomCursor() {
   // Removed the pathname check that was disabling the cursor on admin pages
 
   return (
-    <div className="cursor-container" style={{ opacity: isVisible ? 1 : 0 }}>
-      <canvas
-        ref={canvasRef}
-        style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 9998 }}
-      />
-      {/* Main cursor element removed */}
-      {/* SVG trail elements rendering removed as canvas now handles it */}
-    </div>
+    <> {/* Main fragment */}
+      <svg xmlns="http://www.w3.org/2000/svg" version="1.1" style={{ display: 'none' }}>
+        <defs>
+          <filter id="goo">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+            <feColorMatrix
+              in="blur"
+              mode="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 35 -15"
+              result="goo"
+            />
+            <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+          </filter>
+        </defs>
+      </svg>
+      <div
+        className="cursor-container"
+        style={{
+          opacity: isVisible ? 1 : 0,
+          filter: 'url(#goo)',
+          mixBlendMode: 'difference',
+          position: 'fixed', // Ensured from globals.css or inline
+          top: 0,
+          left: 0,
+          width: '100vw', 
+          height: '100vh',
+          pointerEvents: 'none', // Ensured from globals.css or inline
+          zIndex: 9999 // Ensured from globals.css or inline
+        }}
+      >
+        {filmSegments.map((segment) => (
+          <div
+            key={segment.id}
+            style={{
+              position: 'absolute',
+              top: 0, // Position is controlled by transform
+              left: 0, // Position is controlled by transform
+              width: '20px', // Set fixed width for the div
+              height: '20px', // Set fixed height for the div (should match SVG)
+              transformOrigin: 'center center', // Ensure rotation and scale happen around the center
+              transform: `translate(${segment.x}px, ${segment.y}px) rotate(${segment.rotation}deg) scale(${segment.scale})`,
+            }}
+          >
+            {/* Film Strip SVG for each segment */}
+            <svg width="100%" height="100%" viewBox="-10 -10 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect x="-10" y="-10" width="20" height="20" fill="white" />
+
+              {/* Film Edges (darker, drawn on top of white base) */}
+              <rect x="-10" y="-10" width="3.5" height="20" fill="#222" /> {/* Dark edge */}
+              <rect x="6.5" y="-10" width="3.5" height="20" fill="#222" /> {/* Dark edge */}
+
+              {/* Sprocket Holes (even darker) */}
+              <rect x="-9" y="-7" width="2" height="3" fill="#000000" rx="0.5"/>
+              <rect x="-9" y="-1" width="2" height="3" fill="#000000" rx="0.5"/>
+              <rect x="-9" y="5"  width="2" height="3" fill="#000000" rx="0.5"/>
+
+              <rect x="7" y="-7" width="2" height="3" fill="#000000" rx="0.5"/>
+              <rect x="7" y="-1" width="2" height="3" fill="#000000" rx="0.5"/>
+              <rect x="7" y="5"  width="2" height="3" fill="#000000" rx="0.5"/>
+            </svg>
+          </div>
+        ))}
+      </div>
+    </>
   )
 }
