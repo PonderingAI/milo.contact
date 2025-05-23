@@ -2,188 +2,159 @@
 
 import { useEffect, useState, useRef } from "react"
 
+interface FilmSegment {
+  id: number
+  x: number
+  y: number
+  scale: number
+  rotation: number
+}
+
+const TRAIL_AMOUNT = 25            // number of segments in the trail
+const EASING_FACTOR = 0.3          // “stickiness” – lower = slower catch-up
+
 export default function CustomCursor() {
   const [position, setPosition] = useState({ x: -100, y: -100 })
-  const [currentRotation, setCurrentRotation] = useState(0) // Target rotation from mouse input
-  const [displayedRotation, setDisplayedRotation] = useState(0) // Smoothed rotation for display
+  const [currentRotation, setCurrentRotation] = useState(0)
   const [isVisible, setIsVisible] = useState(false)
-  const [isClicking, setIsClicking] = useState(false)
-  const trailsRef = useRef<{ x: number; y: number; opacity: number; rotation: number }[]>([])
-  const requestRef = useRef<number>()
-  const lastPositionRef = useRef({ x: -100, y: -100 }) // Ref for last mouse position
 
-  // Initialize trails
+  const requestRef   = useRef<number>()
+  const lastPosition = useRef({ x: -100, y: -100 })
+
+  /* ---------- initialise the trail once ---------- */
+  const [filmSegments, setFilmSegments] = useState<FilmSegment[]>(() =>
+    Array.from({ length: TRAIL_AMOUNT }, (_, i) => ({
+      id: i,
+      x: -100,
+      y: -100,
+      scale: 1 - 0.04 * i,
+      rotation: 0,
+    })),
+  )
+
+  /* ---------- mouse listeners & animation loop ---------- */
   useEffect(() => {
-    trailsRef.current = Array(20)
-      .fill(0)
-      .map(() => ({ x: 0, y: 0, opacity: 0, rotation: 0 })) // Add rotation: 0
-  }, [])
-
-  useEffect(() => {
-    // Initialize lastPositionRef with the initial position
-    lastPositionRef.current = position
-
     const handleMouseMove = (e: MouseEvent) => {
       const newX = e.clientX
       const newY = e.clientY
-      const deltaX = newX - lastPositionRef.current.x
-      const deltaY = newY - lastPositionRef.current.y
 
-      if (deltaX !== 0 || deltaY !== 0) {
-        const angleInRadians = Math.atan2(deltaY, deltaX)
-        const angleInDegrees = angleInRadians * (180 / Math.PI)
-        setCurrentRotation(angleInDegrees)
+      const dx = newX - lastPosition.current.x
+      const dy = newY - lastPosition.current.y
+      if (dx !== 0 || dy !== 0) {
+        setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI))
       }
-      // If no movement, currentRotation remains unchanged.
 
       setPosition({ x: newX, y: newY })
       setIsVisible(true)
-      lastPositionRef.current = { x: newX, y: newY } // Update last position
+      lastPosition.current = { x: newX, y: newY }
     }
 
-    const handleMouseDown = () => setIsClicking(true)
-    const handleMouseUp = () => setIsClicking(false)
     const handleMouseLeave = () => setIsVisible(false)
 
-    // Animation loop for the trail effect
+    /* --- one requestAnimationFrame loop — uses functional state update --- */
     const animateTrail = () => {
-      // Update trail positions
-      const newTrails = [...trailsRef.current]
+      setFilmSegments(prev => {
+        let leaderX = position.x
+        let leaderY = position.y
 
-      // Shift all trails one position
-      // Lerp displayedRotation towards currentRotation
-      const lerpFactor = 0.15; 
-      setDisplayedRotation(prevDisplayedRotation => {
-        let difference = currentRotation - prevDisplayedRotation;
-        while (difference > 180) difference -= 360;
-        while (difference < -180) difference += 360;
-        if (Math.abs(difference) < 0.01) {
-            return currentRotation;
-        }
-        return prevDisplayedRotation + difference * lerpFactor;
-      });
+        return prev.map((seg, index) => {
+          const dx = leaderX - seg.x
+          const dy = leaderY - seg.y
 
-      // Shift all trails one position (operates on the newTrails declared above)
-      for (let i = newTrails.length - 1; i > 0; i--) {
-        newTrails[i] = {
-          x: newTrails[i - 1].x,
-          y: newTrails[i - 1].y,
-          opacity: Math.max(0, 1 - (i / newTrails.length) * 1.0), // Adjusted opacity fade-out
-          rotation: newTrails[i - 1].rotation, // Carry over rotation
-        }
-      }
+          const newX = seg.x + dx * EASING_FACTOR
+          const newY = seg.y + dy * EASING_FACTOR
 
-      // Add current position to the front
-      newTrails[0] = { x: position.x, y: position.y, opacity: 1, rotation: currentRotation } // Use currentRotation for trail point
-      trailsRef.current = newTrails
+          const movedX = newX - seg.x
+          const movedY = newY - seg.y
+
+          let newRotation = seg.rotation
+          if (Math.abs(movedX) > 0.01 || Math.abs(movedY) > 0.01) {
+            newRotation = Math.atan2(movedY, movedX) * (180 / Math.PI)
+          } else if (index === 0) {
+            newRotation = currentRotation
+          }
+
+          leaderX = newX
+          leaderY = newY
+
+          return { ...seg, x: newX, y: newY, rotation: newRotation }
+        })
+      })
 
       requestRef.current = requestAnimationFrame(animateTrail)
     }
 
     window.addEventListener("mousemove", handleMouseMove)
-    window.addEventListener("mousedown", handleMouseDown)
-    window.addEventListener("mouseup", handleMouseUp)
     window.addEventListener("mouseleave", handleMouseLeave)
-
     requestRef.current = requestAnimationFrame(animateTrail)
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove)
-      window.removeEventListener("mousedown", handleMouseDown)
-      window.removeEventListener("mouseup", handleMouseUp)
       window.removeEventListener("mouseleave", handleMouseLeave)
-
-      if (requestRef.current) {
-        cancelAnimationFrame(requestRef.current)
-      }
+      if (requestRef.current) cancelAnimationFrame(requestRef.current)
     }
-  }, [position])
+  }, [position, currentRotation])
 
-  // Removed the pathname check that was disabling the cursor on admin pages
-
+  /* ---------- render ---------- */
   return (
-    <div className="cursor-container" style={{ opacity: isVisible ? 1 : 0 }}>
-      {/* Main cursor */}
+    <>
+      {/* goo filter for the difference-blend blob effect */}
+      <svg style={{ display: "none" }}>
+        <defs>
+          <filter id="goo">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="6" result="blur" />
+            <feColorMatrix
+              in="blur"
+              mode="matrix"
+              values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 35 -15"
+              result="goo"
+            />
+            <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+          </filter>
+        </defs>
+      </svg>
+
+      {/* full-viewport container – the segments position themselves via transform */}
       <div
-        className={`custom-cursor ${isClicking ? "clicking" : ""}`}
+        className="cursor-container"
         style={{
-          left: `${position.x}px`,
-          top: `${position.y}px`,
-          // Apply rotation to the main cursor div container as well, so the SVG rotates around its own center
-          // The main SVG itself is centered via viewBox, then this div is positioned,
-          // and this transform ensures the whole thing rotates correctly while being centered on the mouse.
-          transform: `translate(-50%, -50%) rotate(${displayedRotation}deg)` // Use displayedRotation
+          opacity: isVisible ? 1 : 0,
+          filter: "url(#goo)",
+          mixBlendMode: "difference",
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          zIndex: 9999,
         }}
       >
-        {/* New "Projector-Style" Main Cursor SVG */}
-        <svg width="60" height="40" viewBox="-30 -20 60 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-          {/* No need for an outer <g> for rotation if applied to the div style */}
-          {/* Left Reel */}
-          <circle cx="-20" cy="0" r="12" fill="#777" stroke="#DDD" strokeWidth="1"/>
-          <circle cx="-20" cy="0" r="3" fill="#444"/>
-          <rect x="-24" y="-1" width="8" height="2" fill="#DDD" transform="rotate(30 -20 0)"/>
-          <rect x="-24" y="-1" width="8" height="2" fill="#DDD" transform="rotate(90 -20 0)"/>
-          <rect x="-24" y="-1" width="8" height="2" fill="#DDD" transform="rotate(150 -20 0)"/>
-
-          {/* Right Reel */}
-          <circle cx="20" cy="0" r="12" fill="#777" stroke="#DDD" strokeWidth="1"/>
-          <circle cx="20" cy="0" r="3" fill="#444"/>
-          <rect x="16" y="-1" width="8" height="2" fill="#DDD" transform="rotate(-30 20 0)"/>
-          <rect x="16" y="-1" width="8" height="2" fill="#DDD" transform="rotate(-90 20 0)"/>
-          <rect x="16" y="-1" width="8" height="2" fill="#DDD" transform="rotate(-150 20 0)"/>
-          
-          {/* Central Rolled Film Section */}
-          <circle cx="0" cy="0" r="10" fill="#555" stroke="#888" strokeWidth="0.5"/>
-          <circle cx="0" cy="0" r="8" fill="#666" stroke="#888" strokeWidth="0.5"/>
-          <circle cx="0" cy="0" r="6" fill="#555" stroke="#888" strokeWidth="0.5"/>
-          {/* Transparent strip representing the film path */}
-          <rect x="-2.5" y="-15" width="5" height="30" fill="rgba(255,255,255,0.1)" />
-          <rect x="-2.5" y="-15" width="5" height="30" stroke="rgba(200,200,200,0.2)" strokeWidth="0.2" />
-
-          {/* Optional: Lens-like element in the center, if desired */}
-          {/* <circle cx="0" cy="0" r="4" fill="rgba(150,200,255,0.2)" stroke="rgba(200,220,255,0.4)" strokeWidth="0.5"/> */}
-        </svg>
+        {filmSegments.map(seg => (
+          <div
+            key={seg.id}
+            style={{
+              position: "absolute",
+              width: 20,
+              height: 20,
+              transformOrigin: "center",
+              transform: `translate(${seg.x}px, ${seg.y}px) rotate(${seg.rotation}deg) scale(${seg.scale})`,
+            }}
+          >
+            {/* simple 20 × 20 “film frame” */}
+            <svg width="100%" height="100%" viewBox="-10 -10 20 20">
+              <rect x="-10" y="-10" width="20" height="20" fill="#fff" />
+              {/* edges */}
+              <rect x="-10" y="-10" width="3.5" height="20" fill="#222" />
+              <rect x="6.5" y="-10" width="3.5" height="20" fill="#222" />
+              {/* sprocket holes */}
+              {[-7, -1, 5].map(y => (
+                <>
+                  <rect key={`l-${y}`} x="-9" y={y} width="2" height="3" fill="#000" rx=".5" />
+                  <rect key={`r-${y}`} x="7" y={y} width="2" height="3" fill="#000" rx=".5" />
+                </>
+              ))}
+            </svg>
+          </div>
+        ))}
       </div>
-
-      {/* Trail elements */}
-      {trailsRef.current.map((trail, index) => (
-        <div
-          key={index}
-          className="cursor-trail"
-          style={{
-            left: `${trail.x}px`,
-            top: `${trail.y}px`,
-            opacity: trail.opacity,
-            transform: `translate(-50%, -50%) rotate(${trail.rotation}deg) scale(1)`, // Adjusted scale
-          }}
-        >
-          {/* New "Flat Film Strip" Trail Segment SVG */}
-          <svg width="20" height="30" viewBox="-10 -15 20 30" fill="none" xmlns="http://www.w3.org/2000/svg">
-            {/* Left film edge */}
-            <rect x="-10" y="-15" width="3.5" height="30" fill="rgba(100,100,100,0.6)"/>
-            {/* Sprocket holes for left edge */}
-            <rect x="-9" y="-12" width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-9" y="-5"  width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-9" y="2"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-9" y="9"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-
-            {/* Right film edge */}
-            <rect x="6.5" y="-15" width="3.5" height="30" fill="rgba(100,100,100,0.6)"/>
-            {/* Sprocket holes for right edge */}
-            <rect x="7" y="-12" width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="7" y="-5"  width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="7" y="2"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="7" y="9"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-
-            {/* Faint Frame lines in the transparent middle */}
-            <line x1="-6.5" y1="0" x2="6.5" y2="0" stroke="rgba(200,200,200,0.2)" strokeWidth="0.5"/>
-            <line x1="-6.5" y1="-14.5" x2="6.5" y2="-14.5" stroke="rgba(200,200,200,0.1)" strokeWidth="0.5"/>
-            <line x1="-6.5" y1="14.5" x2="6.5" y2="14.5" stroke="rgba(200,200,200,0.1)" strokeWidth="0.5"/>
-            
-            {/* Central transparent area - effectively created by the gap between edge rects */}
-          </svg>
-        </div>
-      ))}
-    </div>
+    </>
   )
 }

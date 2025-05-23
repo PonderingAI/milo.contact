@@ -39,9 +39,7 @@ body {
   z-index: 10000;
 }
 
-.custom-cursor.clicking {
-  transform: translate(-50%, -50%) scale(0.8);
-}
+/* Removed .custom-cursor.clicking rule */
 
 .cursor-trail {
   position: absolute;
