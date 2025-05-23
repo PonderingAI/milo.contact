@@ -79,6 +79,10 @@ export default function DynamicFavicons() {
       )}
 
       {/* Apple touch icons */}
+      {/* Generic Apple Touch Icon (should come before specific sizes) */}
+      {favicons["apple_touch_icon_png"] && (
+        <link rel="apple-touch-icon" href={favicons["apple_touch_icon_png"]} />
+      )}
       {favicons["apple_icon_57x57_png"] && (
         <link rel="apple-touch-icon" sizes="57x57" href={favicons["apple_icon_57x57_png"]} />
       )}

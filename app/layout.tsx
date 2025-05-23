@@ -27,7 +27,8 @@ function ErrorBoundary({ children, fallback }: { children: React.ReactNode; fall
 export const metadata = {
   title: "Milo Presedo - Film Production & Photography",
   description: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-    generator: 'v0.dev'
+  manifest: "/manifest", // Points to app/manifest/route.ts
+  generator: 'v0.dev'
 }
 
 async function getBackgroundColor() {
