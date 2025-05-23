@@ -4,22 +4,33 @@ import { useEffect, useState, useRef } from "react"
 
 export default function CustomCursor() {
   const [position, setPosition] = useState({ x: -100, y: -100 })
+  const [currentRotation, setCurrentRotation] = useState(0) // Added state for rotation
   const [isVisible, setIsVisible] = useState(false)
   const [isClicking, setIsClicking] = useState(false)
-  const trailsRef = useRef<{ x: number; y: number; opacity: number }[]>([])
+  const trailsRef = useRef<{ x: number; y: number; opacity: number; rotation: number }[]>([])
   const requestRef = useRef<number>()
+  const lastPositionRef = useRef({ x: -100, y: -100 }) // Ref for last mouse position
 
   // Initialize trails
   useEffect(() => {
     trailsRef.current = Array(20)
       .fill(0)
-      .map(() => ({ x: 0, y: 0, opacity: 0 }))
+      .map(() => ({ x: 0, y: 0, opacity: 0, rotation: 0 })) // Add rotation: 0
   }, [])
 
   useEffect(() => {
+    // Initialize lastPositionRef with the initial position
+    lastPositionRef.current = position
+
     const handleMouseMove = (e: MouseEvent) => {
-      setPosition({ x: e.clientX, y: e.clientY })
+      const newX = e.clientX
+      const newY = e.clientY
+      const deltaX = newX - lastPositionRef.current.x
+
+      setCurrentRotation(prevRotation => prevRotation + deltaX * 0.5) // Update rotation
+      setPosition({ x: newX, y: newY })
       setIsVisible(true)
+      lastPositionRef.current = { x: newX, y: newY } // Update last position
     }
 
     const handleMouseDown = () => setIsClicking(true)
@@ -37,11 +48,12 @@ export default function CustomCursor() {
           x: newTrails[i - 1].x,
           y: newTrails[i - 1].y,
           opacity: Math.max(0, 1 - (i / newTrails.length) * 1.5),
+          rotation: newTrails[i - 1].rotation, // Carry over rotation
         }
       }
 
       // Add current position to the front
-      newTrails[0] = { x: position.x, y: position.y, opacity: 1 }
+      newTrails[0] = { x: position.x, y: position.y, opacity: 1, rotation: currentRotation } // Use currentRotation
       trailsRef.current = newTrails
 
       requestRef.current = requestAnimationFrame(animateTrail)
@@ -78,13 +90,36 @@ export default function CustomCursor() {
           top: `${position.y}px`,
         }}
       >
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <circle cx="16" cy="16" r="15" stroke="white" strokeWidth="2" fill="transparent" />
-          <circle cx="16" cy="16" r="4" fill="white" />
-          <rect x="8" y="2" width="2" height="4" fill="white" />
-          <rect x="8" y="26" width="2" height="4" fill="white" />
-          <rect x="22" y="2" width="2" height="4" fill="white" />
-          <rect x="22" y="26" width="2" height="4" fill="white" />
+        {/* New Film Roll SVG with Rotatable Spools */}
+        <svg width="80" height="32" viewBox="-40 -16 80 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <g className="left-spool" transform={`rotate(${currentRotation} -25 0)`}>
+            <circle cx="-25" cy="0" r="15" stroke="white" strokeWidth="1.5" fill="rgba(0,0,0,0.3)"/>
+            <circle cx="-25" cy="0" r="5" fill="white"/>
+            <rect x="-30" y="-1" width="10" height="2" fill="white" transform="rotate(45 -25 0)"/>
+            <rect x="-30" y="-1" width="10" height="2" fill="white" transform="rotate(-45 -25 0)"/>
+          </g>
+
+          <g className="right-spool" transform={`rotate(${currentRotation} 25 0)`}>
+            <circle cx="25" cy="0" r="15" stroke="white" strokeWidth="1.5" fill="rgba(0,0,0,0.3)"/>
+            <circle cx="25" cy="0" r="5" fill="white"/>
+            <rect x="20" y="-1" width="10" height="2" fill="white" transform="rotate(45 25 0)"/>
+            <rect x="20" y="-1" width="10" height="2" fill="white" transform="rotate(-45 25 0)"/>
+          </g>
+
+          {/* Film Segment */}
+          <rect x="-15" y="-8" width="30" height="16" fill="rgba(150,150,150,0.4)"/>
+
+          {/* Sprocket Holes - Top */}
+          <rect x="-12" y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+          <rect x="-6"  y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+          <rect x="2"   y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+          <rect x="8"   y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+
+          {/* Sprocket Holes - Bottom */}
+          <rect x="-12" y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+          <rect x="-6"  y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+          <rect x="2"   y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+          <rect x="8"   y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
         </svg>
       </div>
 
@@ -97,15 +132,20 @@ export default function CustomCursor() {
             left: `${trail.x}px`,
             top: `${trail.y}px`,
             opacity: trail.opacity,
-            transform: `scale(${1 - index * 0.03})`,
+            transform: `scale(${1 - index * 0.03})`, // Keep existing scale
           }}
         >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <circle cx="12" cy="12" r="11" stroke="white" strokeWidth="1" fill="transparent" />
-            <rect x="6" y="2" width="1" height="2" fill="white" />
-            <rect x="6" y="20" width="1" height="2" fill="white" />
-            <rect x="17" y="2" width="1" height="2" fill="white" />
-            <rect x="17" y="20" width="1" height="2" fill="white" />
+          {/* New Film Strip Segment SVG for Trails */}
+          <svg width="20" height="20" viewBox="-10 -10 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="-10" y="-10" width="20" height="20" fill="rgba(220,220,220,0.3)" />
+            {/* Top Sprocket Holes */}
+            <rect x="-9" y="-9" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="-2" y="-9" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="5" y="-9" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            {/* Bottom Sprocket Holes */}
+            <rect x="-9" y="6" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="-2" y="6" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="5" y="6" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
           </svg>
         </div>
       ))}
