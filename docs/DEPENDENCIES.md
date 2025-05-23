@@ -24,15 +24,21 @@ The system automatically scans your project's dependencies and provides:
 
 ### Update Management
 
-The system supports three update modes:
+The system supports three update modes, which can be set globally or per-package:
 
-1. **Off**: No automatic updates will be applied
-2. **Security Only**: Only security-related updates will be applied
-3. **All Updates**: All available updates will be applied
+1.  **Off**: No automatic updates will be applied. The system will not attempt to update any dependencies unless specifically triggered by a Dependabot alert.
+2.  **Conservative**: Updates packages to their latest minor version if a newer minor version is available. This mode applies to both security updates and general dependency maintenance. All updates in this mode are subject to a verification process (build and tests) via the `safe-update` mechanism to ensure compatibility.
+3.  **Aggressive**: Updates packages to their latest available version. These updates are also subject to the same verification process (build and tests) via `safe-update` to prevent conflicts or breakages.
 
-These modes can be set globally or per-package.
+**Dependabot Alert Handling**: Packages with active Dependabot alerts are prioritized. The system will attempt to update them to the *Dependabot recommended version* if this information is available. If a specific recommended version is not provided by the alert, the system will attempt an update to the latest available version of the package. All Dependabot-triggered updates are processed through the `safe-update` mechanism, including its build and test verification steps, regardless of the global or per-package update mode settings.
 
-**Important**: Packages with Dependabot alerts will be updated automatically regardless of update mode settings to protect your application from security vulnerabilities.
+**Conflict Detection and `safe-update` Mechanism**:
+The system employs a robust `safe-update` mechanism to handle potential dependency conflicts and ensure application stability during updates. This process includes the following steps:
+1.  **Backup**: Before any changes are made, the current `package.json` file is backed up.
+2.  **Update Attempt**: The system attempts to update the specified dependency/dependencies according to the chosen mode.
+3.  **Verification**: After the update attempt, the system automatically runs a full application build and executes any configured automated tests.
+4.  **Rollback**: If the build process fails or any automated test fails, the `safe-update` mechanism automatically restores the `package.json` from the backup and rolls back the installed dependencies to their previous state.
+This ensures that problematic updates do not break the application, maintaining a stable development environment.
 
 ### Security Dashboard
 

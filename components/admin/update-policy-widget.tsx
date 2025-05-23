@@ -82,7 +82,7 @@ export function UpdatePolicyWidget({
             onChange={handleUpdateModeChange}
             options={[
               { value: "off", label: "Off" },
-              { value: "conservative", label: "Security" },
+              { value: "conservative", label: "Conservative" },
               { value: "aggressive", label: "Aggressive" },
             ]}
             className="relative z-10"

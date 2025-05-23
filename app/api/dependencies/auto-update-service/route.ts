@@ -85,34 +85,75 @@ export async function GET(request: Request) {
           .eq("package_name", dependency.name)
           .maybeSingle()
 
-        // Determine target version based on update mode and compatibility
-        let targetVersion = dependency.latest_version
+        let safeUpdateMode: string
+        let versionForUpdate: string | undefined
+        let versionToCheckForBreaking: string | undefined
+        let displayTargetVersion: string // For logging and DB update if successful without specific version return
 
-        if (compatibilityData && updateMode !== "aggressive") {
-          // For conservative mode, use the recommended version if available
-          if (compatibilityData.recommended_version) {
-            targetVersion = compatibilityData.recommended_version
-          }
-
-          // Check if target version is in breaking versions
-          const breakingVersions = compatibilityData.breaking_versions || {}
-          if (breakingVersions[targetVersion] && !forceUpdate) {
-            // Skip this update unless forced
+        if (dependency.has_dependabot_alert) {
+          safeUpdateMode = "specific"
+          versionForUpdate = dependency.dependabot_recommended_version || undefined
+          versionToCheckForBreaking = versionForUpdate // Check the specific version Dependabot wants
+          // If dependabot doesn't recommend a version, 'specific' mode will try 'latest'
+          // We'll use latest_version for display in this case.
+          displayTargetVersion = versionForUpdate || dependency.latest_version 
+        } else {
+          // Not a Dependabot alert, consider security updates or regular mode
+          if (dependency.has_security_update || updateMode === "conservative") {
+            safeUpdateMode = "minor"
+            versionForUpdate = undefined // safe-update handles 'minor' logic
+            // For breaking check, prefer recommended, fallback to latest if conservative,
+            // or just latest if it's a security update forcing minor.
+            versionToCheckForBreaking = compatibilityData?.recommended_version || dependency.latest_version
+            displayTargetVersion = versionToCheckForBreaking 
+          } else if (updateMode === "aggressive") {
+            safeUpdateMode = "latest"
+            versionForUpdate = undefined // safe-update handles 'latest' logic
+            versionToCheckForBreaking = dependency.latest_version
+            displayTargetVersion = dependency.latest_version
+          } else {
+            // updateMode is "off" and not forced by an alert, this case should be skipped by earlier checks
+            console.warn(`Skipping ${dependency.name} due to unexpected state: updateMode='${updateMode}', forceUpdate=${forceUpdate}`)
             continue
           }
         }
+        
+        // Check for breaking versions before proceeding
+        if (versionToCheckForBreaking && compatibilityData?.breaking_versions?.[versionToCheckForBreaking] && !forceUpdate) {
+          console.log(`Skipping update for ${dependency.name} to ${versionToCheckForBreaking} due to breaking version conflict (and not forced).`)
+          updateResults.push({
+            name: dependency.name,
+            from: dependency.current_version,
+            to: versionToCheckForBreaking,
+            success: false,
+            error: `Update to ${versionToCheckForBreaking} skipped due to breaking version conflict.`,
+            forcedUpdate: forceUpdate,
+            dependabotAlert: dependency.has_dependabot_alert,
+          })
+          continue
+        }
 
         // Perform the update
-        const updateResult = await updateDependency(dependency.name, targetVersion, forceUpdate)
+        const updateResult = await updateDependency(dependency.name, versionForUpdate, safeUpdateMode)
+        
+        let actualNewVersion = displayTargetVersion // Fallback for DB update
 
         if (updateResult.success) {
           updatedCount++
+          // Try to get the exact updated version from safe-update's response
+          if (updateResult.data?.updatedVersions?.[dependency.name]) {
+            actualNewVersion = updateResult.data.updatedVersions[dependency.name]
+          } else if (versionForUpdate) {
+            // If we sent a specific version and safe-update succeeded, assume that version was installed.
+            actualNewVersion = versionForUpdate
+          }
+          // Else, actualNewVersion remains displayTargetVersion, which is an estimate for 'minor'/'latest' modes
 
           // Update the dependency record
           await supabase
             .from("dependencies")
             .update({
-              current_version: targetVersion,
+              current_version: actualNewVersion, // Use the potentially more accurate version
               last_updated: new Date().toISOString(),
               has_security_update: false, // Reset after update
               has_dependabot_alert: false, // Reset after update
@@ -123,7 +164,7 @@ export async function GET(request: Request) {
         updateResults.push({
           name: dependency.name,
           from: dependency.current_version,
-          to: targetVersion,
+          to: actualNewVersion, // Log the version we believe was targeted or installed
           success: updateResult.success,
           error: updateResult.error,
           forcedUpdate: forceUpdate,
@@ -183,29 +224,61 @@ async function fetchCompatibilityData(packageName: string, currentVersion: strin
   }
 }
 
-async function updateDependency(packageName: string, targetVersion: string, force = false) {
+async function updateDependency(packageName: string, version: string | undefined, safeUpdateMode: string) {
   try {
-    // In a real implementation, this would call npm to update the package
-    // For this example, we'll simulate a successful update
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL
+    if (!siteUrl) {
+      throw new Error("NEXT_PUBLIC_SITE_URL is not set")
+    }
 
-    // Simulate some failures for testing
-    if (packageName.includes("problematic") && !force) {
+    const packagePayload: { name: string; version?: string } = { name: packageName }
+    if (version) {
+      packagePayload.version = version
+    }
+
+    const payload = {
+      packages: [packagePayload],
+      mode: safeUpdateMode,
+    }
+
+    const response = await fetch(`${siteUrl}/api/dependencies/safe-update`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (!response.ok) {
+      const errorBody = await response.text() // Use text() in case response is not JSON
+      console.error(
+        `Failed to update dependency ${packageName} via safe-update. Status: ${response.status}. Body: ${errorBody}`,
+      )
       return {
         success: false,
-        error: "Simulated failure for problematic package",
+        error: `Failed to update dependency ${packageName}: ${response.statusText}. Details: ${errorBody}`,
       }
     }
 
-    // In a real implementation, you would:
-    // 1. Run npm update or npm install for the package
-    // 2. Run tests to verify the update didn't break anything
-    // 3. If tests fail and mode is aggressive, try to fix or revert
+    const data = await response.json()
 
-    return {
-      success: true,
+    // Assuming the safe-update API returns a structure that indicates overall success
+    // and potentially per-package success. For now, let's assume 'data.success' reflects this.
+    if (data.success) {
+      return {
+        success: true,
+        data: data,
+      }
+    } else {
+      console.error(`safe-update reported failure for ${packageName}:`, data.error || "No specific error message")
+      return {
+        success: false,
+        error: data.error || `Update for ${packageName} failed as reported by safe-update.`,
+        data: data, // include the data for more context
+      }
     }
   } catch (error) {
-    console.error(`Error updating dependency ${packageName}:`, error)
+    console.error(`Error calling safe-update for dependency ${packageName}:`, error)
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
