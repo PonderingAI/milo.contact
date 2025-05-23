@@ -130,6 +130,3 @@ The site is deployed on Vercel. The app icons, media files, and site settings ar
 ## License
 
 All rights reserved. This code is not open for redistribution.
-\`\`\`
-
-Now, let's move CONTRIBUTING.md to docs:
