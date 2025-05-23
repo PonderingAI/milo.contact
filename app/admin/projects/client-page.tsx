@@ -241,6 +241,8 @@ export default function ClientProjectsPage() {
                 category={project.category}
                 role={project.role}
                 image={project.image}
+                is_public={project.is_public}
+                publish_date={project.publish_date}
                 isAdmin={true}
                 onEdit={() => router.push(`/admin/projects/${project.id}/edit`)}
                 link={`/projects/${project.id}`}
