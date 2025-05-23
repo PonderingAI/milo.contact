@@ -83,11 +83,26 @@ async function verifyApplication() {
 
 export async function POST(request: Request) {
   try {
-    const { packages, mode = "compatible", dryRun = false } = await request.json()
+    const { packages: packageInputs, mode = "compatible", dryRun = false } = await request.json()
 
-    if (!packages || !Array.isArray(packages) || packages.length === 0) {
-      return NextResponse.json({ error: "No packages specified for update" }, { status: 400 })
+    if (
+      !packageInputs ||
+      !Array.isArray(packageInputs) ||
+      packageInputs.length === 0 ||
+      !packageInputs.every((p) => typeof p === "object" && p !== null && typeof p.name === "string" && p.name.length > 0)
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Invalid 'packages' input. Expected an array of objects, each with a 'name' property. Optional 'version' property.",
+        },
+        { status: 400 },
+      )
     }
+    
+    // Extract package names for modes that operate on all packages uniformly
+    const packageNames = packageInputs.map(p => p.name);
+
 
     // Create a backup before making any changes
     const backup = await createBackup()
@@ -96,26 +111,40 @@ export async function POST(request: Request) {
     }
 
     // Log the update operation
-    console.log(`Starting ${dryRun ? "dry run " : ""}update of ${packages.length} packages in ${mode} mode`)
+    console.log(`Starting ${dryRun ? "dry run " : ""}update of ${packageInputs.length} packages in ${mode} mode`)
 
     let updateCommand
     let updateResult
 
     // Different update strategies based on mode
     switch (mode) {
+      case "specific":
+        if (packageInputs.some(p => typeof p.name !== 'string' || p.name.trim() === '')) {
+          return NextResponse.json({ error: "Invalid package format for 'specific' mode. All packages must have a 'name'." }, { status: 400 });
+        }
+        const specificPackagesCmd = packageInputs
+          .map((pkg) => {
+            if (pkg.version && typeof pkg.version === 'string' && pkg.version.trim() !== '') {
+              return `${pkg.name}@${pkg.version.trim()}`
+            }
+            return `${pkg.name}@latest` // Default to latest if no version specified
+          })
+          .join(" ")
+        updateCommand = `npm install ${specificPackagesCmd}`
+        break
       case "compatible":
         // Update to highest version that satisfies existing constraints
-        updateCommand = `npm update ${packages.join(" ")}`
+        updateCommand = `npm update ${packageNames.join(" ")}`
         break
 
       case "latest":
         // Update to latest version, ignoring existing constraints
-        updateCommand = `npm install ${packages.map((pkg) => `${pkg}@latest`).join(" ")}`
+        updateCommand = `npm install ${packageNames.map((pkgName) => `${pkgName}@latest`).join(" ")}`
         break
 
       case "minor":
         // Use npm-check-updates to update to latest minor version
-        updateCommand = `npx npm-check-updates -u --target minor ${packages.map((pkg) => `-f ${pkg}`).join(" ")}`
+        updateCommand = `npx npm-check-updates -u --target minor ${packageNames.map((pkgName) => `-f ${pkgName}`).join(" ")}`
         updateResult = await runCommand(updateCommand)
 
         if (updateResult.success) {
@@ -126,7 +155,7 @@ export async function POST(request: Request) {
 
       case "patch":
         // Use npm-check-updates to update to latest patch version
-        updateCommand = `npx npm-check-updates -u --target patch ${packages.map((pkg) => `-f ${pkg}`).join(" ")}`
+        updateCommand = `npx npm-check-updates -u --target patch ${packageNames.map((pkgName) => `-f ${pkgName}`).join(" ")}`
         updateResult = await runCommand(updateCommand)
 
         if (updateResult.success) {
@@ -139,7 +168,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: `Unknown update mode: ${mode}` }, { status: 400 })
     }
 
-    // If we haven't run the command yet (for non-ncu modes)
+    // If we haven't run the command yet (for non-ncu modes and specific mode)
     if (!updateResult) {
       updateResult = await runCommand(updateCommand)
     }
@@ -195,15 +224,17 @@ export async function POST(request: Request) {
       const packageJsonPath = path.join(process.cwd(), "package.json")
       const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"))
 
-      packages.forEach((pkg) => {
-        if (packageJson.dependencies && packageJson.dependencies[pkg]) {
-          updatedVersions[pkg] = packageJson.dependencies[pkg]
-        } else if (packageJson.devDependencies && packageJson.devDependencies[pkg]) {
-          updatedVersions[pkg] = packageJson.devDependencies[pkg]
+      packageInputs.forEach((pkg) => {
+        const pkgName = pkg.name
+        if (packageJson.dependencies && packageJson.dependencies[pkgName]) {
+          updatedVersions[pkgName] = packageJson.dependencies[pkgName]
+        } else if (packageJson.devDependencies && packageJson.devDependencies[pkgName]) {
+          updatedVersions[pkgName] = packageJson.devDependencies[pkgName]
         }
       })
     } catch (error) {
       console.error("Error reading updated versions:", error)
+      // Not a fatal error for the update itself, but log it
     }
 
     return NextResponse.json({

@@ -23,13 +23,24 @@ The Security Dashboard provides a visual interface for monitoring and managing t
 
 ### Update Policies
 
-The system supports three update modes:
+The system supports three update modes for managing dependencies:
 
-1. **Off**: No automatic updates will be applied
-2. **Security Only**: Only security-related updates will be applied
-3. **All Updates**: All available updates will be applied
+1.  **Off**: No automatic updates will be applied. The system will not attempt to update any dependencies unless specifically triggered by a Dependabot alert.
+2.  **Conservative**: Updates packages to their latest minor version if a newer minor version is available. This mode applies to both security updates and general dependency maintenance. All updates in this mode are subject to a verification process (build and tests) via the `safe-update` mechanism to ensure compatibility.
+3.  **Aggressive**: Updates packages to their latest available version. These updates are also subject to the same verification process (build and tests) via `safe-update` to prevent conflicts or breakages.
 
-**Important**: Packages with Dependabot alerts will be updated automatically regardless of update mode settings to protect your application from security vulnerabilities.
+**Dependabot Alert Handling**: Packages with active Dependabot alerts are prioritized. The system will attempt to update them to the *Dependabot recommended version* if this information is available. If a specific recommended version is not provided by the alert, the system will attempt an update to the latest available version of the package. All Dependabot-triggered updates are processed through the `safe-update` mechanism, including its build and test verification steps, regardless of the global or per-package update mode settings.
+
+### Conflict Detection and `safe-update` Mechanism
+
+To ensure that dependency updates do not compromise application stability, the system incorporates a `safe-update` mechanism. This mechanism is crucial for applying updates securely and reliably. The process involves:
+
+1.  **Backup**: Prior to attempting any update, the system creates a backup of the `package.json` file.
+2.  **Update Attempt**: The specified dependencies are updated according to the selected policy (Conservative, Aggressive, or as per a Dependabot alert).
+3.  **Verification**: Post-update, the system automatically triggers a full application build and runs all configured automated tests. This step is critical for detecting any breaking changes introduced by the update.
+4.  **Rollback**: If either the build or any test fails during the verification phase, the `safe-update` mechanism automatically reverts the changes. This includes restoring the `package.json` from its backup and rolling back the installed node modules to their pre-update state.
+
+This automated backup, verification, and rollback strategy ensures that security patches and other updates are applied safely, minimizing the risk of introducing regressions or breaking the application.
 
 ### Security Audit
 
