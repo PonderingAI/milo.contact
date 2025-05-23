@@ -1,135 +1,147 @@
-import { createAdminClient } from "@/lib/supabase-server"
-import { type NextRequest, NextResponse } from "next/server"
-import JSZip from "jszip"
+import { NextRequest, NextResponse } from 'next/server';
+import { createAdminClient } from '@/lib/supabase-server';
+import JSZip from 'jszip';
+import { PostgrestError } from '@supabase/supabase-js';
 
-export async function POST(request: NextRequest) {
+const expectedIconFilenames = [
+  'favicon.ico',
+  'favicon-16x16.png',
+  'favicon-32x32.png',
+  'favicon-96x96.png',
+  'apple-touch-icon.png',
+  'apple-icon-57x57.png',
+  'apple-icon-60x60.png',
+  'apple-icon-72x72.png',
+  'apple-icon-76x76.png',
+  'apple-icon-114x114.png',
+  'apple-icon-120x120.png',
+  'apple-icon-144x144.png',
+  'apple-icon-152x152.png',
+  'apple-icon-180x180.png',
+  'android-icon-36x36.png',
+  'android-icon-48x48.png',
+  'android-icon-72x72.png',
+  'android-icon-96x96.png',
+  'android-icon-144x144.png',
+  'android-icon-192x192.png',
+  'ms-icon-70x70.png',
+  'ms-icon-144x144.png',
+  'ms-icon-150x150.png',
+  'ms-icon-310x310.png',
+];
+
+export async function POST(req: NextRequest) {
+  const supabase = createAdminClient();
+
+  const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+  if (userError || !user) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+
+  // TODO: Add admin role check if necessary. For now, proceeding if a user is authenticated.
+  // This might involve checking a custom claim or a separate table for user roles.
+  // Example:
+  // const { data: userProfile, error: profileError } = await supabase
+  //   .from('user_profiles') // assuming a table 'user_profiles' with a 'role' column
+  //   .select('role')
+  //   .eq('user_id', user.id)
+  //   .single();
+  // if (profileError || !userProfile || userProfile.role !== 'admin') {
+  //   return NextResponse.json({ error: 'Forbidden: Admins only' }, { status: 403 });
+  // }
+
+
+  const formData = await req.formData();
+  const zipFile = formData.get('zipFile') as File;
+
+  if (!zipFile) {
+    return NextResponse.json({ error: 'ZIP file is required' }, { status: 400 });
+  }
+
+  if (zipFile.type !== 'application/zip' && zipFile.type !== 'application/x-zip-compressed') {
+    return NextResponse.json({ error: 'Invalid file type. Please upload a ZIP file.' }, { status: 400 });
+  }
+  
   try {
-    // Ensure we're properly parsing the multipart form data
-    const formData = await request.formData()
-    const zipFile = formData.get("zipFile") as File | null
+    const zip = new JSZip();
+    const zipData = await zipFile.arrayBuffer();
+    const loadedZip = await zip.loadAsync(zipData);
 
-    if (!zipFile) {
-      return NextResponse.json({ success: false, message: "No file provided" }, { status: 400 })
-    }
+    const uploadedIcons: { key: string; value: string }[] = [];
+    const errors: string[] = [];
+    const missingFiles: string[] = [];
 
-    // Check if file is a zip
-    if (!zipFile.name.endsWith(".zip") && zipFile.type !== "application/zip") {
-      return NextResponse.json({ success: false, message: "File must be a zip archive" }, { status: 400 })
-    }
+    for (const filename of expectedIconFilenames) {
+      const file = loadedZip.file(filename);
+      if (file) {
+        try {
+          const fileData = await file.async('nodebuffer'); 
+          const filePath = `icons/${filename}`; // Store in 'icons' folder within the 'public' bucket
 
-    const supabase = createAdminClient()
+          const { error: uploadError } = await supabase.storage
+            .from('public') 
+            .upload(filePath, fileData, {
+              contentType: file.unsafeOriginalName.endsWith('.png') ? 'image/png' : 'image/x-icon',
+              upsert: true,
+            });
 
-    // Ensure the public bucket exists
-    const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
+          if (uploadError) {
+            errors.push(`Failed to upload ${filename}: ${uploadError.message}`);
+            continue;
+          }
 
-    if (bucketsError) {
-      return NextResponse.json(
-        { success: false, message: `Error listing buckets: ${bucketsError.message}` },
-        { status: 500 },
-      )
-    }
+          const { data: publicUrlData } = supabase.storage
+            .from('public')
+            .getPublicUrl(filePath);
 
-    // Check if public bucket exists
-    const publicBucket = buckets?.find((bucket) => bucket.name === "public")
+          if (!publicUrlData || !publicUrlData.publicUrl) {
+            errors.push(`Failed to get public URL for ${filename}`);
+            continue;
+          }
+          
+          const settingKey = `icon_${filename.replace(/\./g, '_').replace(/-/g, '_')}`;
+          uploadedIcons.push({ key: settingKey, value: publicUrlData.publicUrl });
 
-    if (!publicBucket) {
-      // Create the public bucket
-      const { error: createError } = await supabase.storage.createBucket("public", {
-        public: true,
-        fileSizeLimit: 10485760, // 10MB
-      })
-
-      if (createError) {
-        return NextResponse.json(
-          { success: false, message: `Error creating bucket: ${createError.message}` },
-          { status: 500 },
-        )
+        } catch (e: any) {
+          errors.push(`Error processing ${filename}: ${e.message}`);
+        }
+      } else {
+        missingFiles.push(filename);
       }
     }
-
-    // Read the zip file
-    const arrayBuffer = await zipFile.arrayBuffer()
-    const zip = new JSZip()
-    const contents = await zip.loadAsync(arrayBuffer)
-
-    // Upload each file in the zip
-    const uploadedFiles: Record<string, string> = {}
-
-    for (const [filename, zipFile] of Object.entries(contents.files)) {
-      // Skip directories
-      if (zipFile.dir) continue
-
-      // Skip manifest.json and browserconfig.xml for now
-      if (filename === "manifest.json" || filename === "browserconfig.xml") continue
-
-      const blob = await zipFile.async("blob")
-
-      // Upload to Supabase Storage
-      const { data, error: uploadError } = await supabase.storage.from("public").upload(`icons/${filename}`, blob, {
-        cacheControl: "3600",
-        upsert: true,
-      })
-
-      if (uploadError) {
-        return NextResponse.json(
-          { success: false, message: `Failed to upload ${filename}: ${uploadError.message}` },
-          { status: 500 },
-        )
-      }
-
-      // Get public URL
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("public").getPublicUrl(`icons/${filename}`)
-
-      uploadedFiles[filename] = publicUrl
-
-      // Also add to the unified media library - FIX: Proper async/await error handling
-      try {
-        await supabase.from("media").insert({
-          filename: filename,
-          filepath: `icons/${filename}`,
-          filesize: blob.size,
-          filetype: "image",
-          public_url: publicUrl,
-          thumbnail_url: publicUrl,
-          tags: ["icon", "favicon"],
-          metadata: {
-            contentType: blob.type,
-            source: "favicon-generator",
-          },
-        })
-      } catch (err) {
-        console.error(`Error adding ${filename} to media library:`, err)
-        // Continue with the process even if media library insert fails
-      }
+    
+    let message = 'Icons processed.';
+    if (missingFiles.length > 0) {
+        message += ` Missing files from ZIP: ${missingFiles.join(', ')}.`;
     }
 
-    // Update site settings with the uploaded files
-    for (const [filename, url] of Object.entries(uploadedFiles)) {
-      const { error: settingError } = await supabase.from("site_settings").upsert({
-        key: `icon_${filename.replace(/[^a-zA-Z0-9]/g, "_")}`,
-        value: url,
-      })
 
-      if (settingError) {
-        console.error(`Error updating setting for ${filename}:`, settingError)
+    if (uploadedIcons.length > 0) {
+      const { error: dbError } = await supabase
+        .from('site_settings') // Ensure this table exists and has 'key' as primary or unique constraint
+        .upsert(uploadedIcons.map(icon => ({ key: icon.key, value: icon.value })), {
+            onConflict: 'key' 
+        });
+
+
+      if (dbError) {
+        errors.push(`Failed to update site_settings: ${dbError.message}`);
       }
+    } else if (errors.length === 0 && missingFiles.length === expectedIconFilenames.length) {
+      // No files were uploaded because none of the expected files were in the zip.
+      return NextResponse.json({ error: 'No expected icon files found in the ZIP.', missingFiles }, { status: 400 });
     }
 
-    return NextResponse.json({
-      success: true,
-      message: "App icons uploaded successfully",
-      files: uploadedFiles,
-    })
-  } catch (error) {
-    console.error("Error uploading app icons:", error)
-    return NextResponse.json(
-      {
-        success: false,
-        message: `Error uploading app icons: ${error instanceof Error ? error.message : String(error)}`,
-      },
-      { status: 500 },
-    )
+
+    if (errors.length > 0) {
+      return NextResponse.json({ message, error: errors.join('; '), uploadedIcons, missingFiles }, { status: 500 });
+    }
+
+    return NextResponse.json({ message: message + ' All found icons uploaded and settings updated successfully.', uploadedIcons, missingFiles }, { status: 200 });
+
+  } catch (error: any) {
+    console.error('Error processing ZIP file:', error);
+    return NextResponse.json({ error: `Error processing ZIP file: ${error.message}` }, { status: 500 });
   }
 }
