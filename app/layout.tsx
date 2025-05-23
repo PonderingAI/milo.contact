@@ -3,7 +3,8 @@ import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
 import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
-import CustomCursor from "@/components/custom-cursor"
+// Removed: import CustomCursor from "@/components/custom-cursor"
+import CustomCursorLoader from '@/components/custom-cursor-loader' // Added import for the new loader
 import DynamicFavicons from "@/components/dynamic-favicons"
 import SetupTablesPopup from "@/components/setup-tables-popup"
 import CookieConsent from "@/components/cookie-consent"
@@ -11,6 +12,9 @@ import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
 import { initErrorTracking } from "@/lib/error-tracking"
 import { createAdminClient } from "@/lib/supabase-server"
+
+// Removed: import dynamic from 'next/dynamic'
+// Removed: const DynamicCustomCursor = dynamic(() => import('@/components/custom-cursor'), { ssr: false })
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -75,7 +79,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </head>
         <body className={inter.className} style={{ backgroundColor }}>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
-            <CustomCursor />
+            <CustomCursorLoader />
             <DynamicFavicons />
             <Suspense>{children}</Suspense>
             <Analytics />
