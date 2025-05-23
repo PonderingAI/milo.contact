@@ -4,7 +4,8 @@ import { useEffect, useState, useRef } from "react"
 
 export default function CustomCursor() {
   const [position, setPosition] = useState({ x: -100, y: -100 })
-  const [currentRotation, setCurrentRotation] = useState(0) // Added state for rotation
+  const [currentRotation, setCurrentRotation] = useState(0) // Target rotation from mouse input
+  const [displayedRotation, setDisplayedRotation] = useState(0) // Smoothed rotation for display
   const [isVisible, setIsVisible] = useState(false)
   const [isClicking, setIsClicking] = useState(false)
   const trailsRef = useRef<{ x: number; y: number; opacity: number; rotation: number }[]>([])
@@ -26,8 +27,15 @@ export default function CustomCursor() {
       const newX = e.clientX
       const newY = e.clientY
       const deltaX = newX - lastPositionRef.current.x
+      const deltaY = newY - lastPositionRef.current.y
 
-      setCurrentRotation(prevRotation => prevRotation + deltaX * 0.5) // Update rotation
+      if (deltaX !== 0 || deltaY !== 0) {
+        const angleInRadians = Math.atan2(deltaY, deltaX)
+        const angleInDegrees = angleInRadians * (180 / Math.PI)
+        setCurrentRotation(angleInDegrees)
+      }
+      // If no movement, currentRotation remains unchanged.
+
       setPosition({ x: newX, y: newY })
       setIsVisible(true)
       lastPositionRef.current = { x: newX, y: newY } // Update last position
@@ -43,17 +51,33 @@ export default function CustomCursor() {
       const newTrails = [...trailsRef.current]
 
       // Shift all trails one position
+      // Lerp displayedRotation towards currentRotation
+      const lerpFactor = 0.15; 
+      setDisplayedRotation(prevDisplayedRotation => {
+        let difference = currentRotation - prevDisplayedRotation;
+        while (difference > 180) difference -= 360;
+        while (difference < -180) difference += 360;
+        if (Math.abs(difference) < 0.01) {
+            return currentRotation;
+        }
+        return prevDisplayedRotation + difference * lerpFactor;
+      });
+
+      // Update trail positions
+      const newTrails = [...trailsRef.current]
+
+      // Shift all trails one position
       for (let i = newTrails.length - 1; i > 0; i--) {
         newTrails[i] = {
           x: newTrails[i - 1].x,
           y: newTrails[i - 1].y,
-          opacity: Math.max(0, 1 - (i / newTrails.length) * 1.5),
+          opacity: Math.max(0, 1 - (i / newTrails.length) * 1.0), // Adjusted opacity fade-out
           rotation: newTrails[i - 1].rotation, // Carry over rotation
         }
       }
 
       // Add current position to the front
-      newTrails[0] = { x: position.x, y: position.y, opacity: 1, rotation: currentRotation } // Use currentRotation
+      newTrails[0] = { x: position.x, y: position.y, opacity: 1, rotation: currentRotation } // Use currentRotation for trail point
       trailsRef.current = newTrails
 
       requestRef.current = requestAnimationFrame(animateTrail)
@@ -88,38 +112,39 @@ export default function CustomCursor() {
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
+          // Apply rotation to the main cursor div container as well, so the SVG rotates around its own center
+          // The main SVG itself is centered via viewBox, then this div is positioned,
+          // and this transform ensures the whole thing rotates correctly while being centered on the mouse.
+          transform: `translate(-50%, -50%) rotate(${displayedRotation}deg)` // Use displayedRotation
         }}
       >
-        {/* New Film Roll SVG with Rotatable Spools */}
-        <svg width="80" height="32" viewBox="-40 -16 80 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <g className="left-spool" transform={`rotate(${currentRotation} -25 0)`}>
-            <circle cx="-25" cy="0" r="15" stroke="white" strokeWidth="1.5" fill="rgba(0,0,0,0.3)"/>
-            <circle cx="-25" cy="0" r="5" fill="white"/>
-            <rect x="-30" y="-1" width="10" height="2" fill="white" transform="rotate(45 -25 0)"/>
-            <rect x="-30" y="-1" width="10" height="2" fill="white" transform="rotate(-45 -25 0)"/>
-          </g>
+        {/* New "Projector-Style" Main Cursor SVG */}
+        <svg width="60" height="40" viewBox="-30 -20 60 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* No need for an outer <g> for rotation if applied to the div style */}
+          {/* Left Reel */}
+          <circle cx="-20" cy="0" r="12" fill="#777" stroke="#DDD" strokeWidth="1"/>
+          <circle cx="-20" cy="0" r="3" fill="#444"/>
+          <rect x="-24" y="-1" width="8" height="2" fill="#DDD" transform="rotate(30 -20 0)"/>
+          <rect x="-24" y="-1" width="8" height="2" fill="#DDD" transform="rotate(90 -20 0)"/>
+          <rect x="-24" y="-1" width="8" height="2" fill="#DDD" transform="rotate(150 -20 0)"/>
 
-          <g className="right-spool" transform={`rotate(${currentRotation} 25 0)`}>
-            <circle cx="25" cy="0" r="15" stroke="white" strokeWidth="1.5" fill="rgba(0,0,0,0.3)"/>
-            <circle cx="25" cy="0" r="5" fill="white"/>
-            <rect x="20" y="-1" width="10" height="2" fill="white" transform="rotate(45 25 0)"/>
-            <rect x="20" y="-1" width="10" height="2" fill="white" transform="rotate(-45 25 0)"/>
-          </g>
+          {/* Right Reel */}
+          <circle cx="20" cy="0" r="12" fill="#777" stroke="#DDD" strokeWidth="1"/>
+          <circle cx="20" cy="0" r="3" fill="#444"/>
+          <rect x="16" y="-1" width="8" height="2" fill="#DDD" transform="rotate(-30 20 0)"/>
+          <rect x="16" y="-1" width="8" height="2" fill="#DDD" transform="rotate(-90 20 0)"/>
+          <rect x="16" y="-1" width="8" height="2" fill="#DDD" transform="rotate(-150 20 0)"/>
+          
+          {/* Central Rolled Film Section */}
+          <circle cx="0" cy="0" r="10" fill="#555" stroke="#888" strokeWidth="0.5"/>
+          <circle cx="0" cy="0" r="8" fill="#666" stroke="#888" strokeWidth="0.5"/>
+          <circle cx="0" cy="0" r="6" fill="#555" stroke="#888" strokeWidth="0.5"/>
+          {/* Transparent strip representing the film path */}
+          <rect x="-2.5" y="-15" width="5" height="30" fill="rgba(255,255,255,0.1)" />
+          <rect x="-2.5" y="-15" width="5" height="30" stroke="rgba(200,200,200,0.2)" strokeWidth="0.2" />
 
-          {/* Film Segment */}
-          <rect x="-15" y="-8" width="30" height="16" fill="rgba(150,150,150,0.4)"/>
-
-          {/* Sprocket Holes - Top */}
-          <rect x="-12" y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
-          <rect x="-6"  y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
-          <rect x="2"   y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
-          <rect x="8"   y="-7" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
-
-          {/* Sprocket Holes - Bottom */}
-          <rect x="-12" y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
-          <rect x="-6"  y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
-          <rect x="2"   y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
-          <rect x="8"   y="5" width="4" height="2" fill="rgba(50,50,50,0.8)" rx="0.5"/>
+          {/* Optional: Lens-like element in the center, if desired */}
+          {/* <circle cx="0" cy="0" r="4" fill="rgba(150,200,255,0.2)" stroke="rgba(200,220,255,0.4)" strokeWidth="0.5"/> */}
         </svg>
       </div>
 
@@ -132,20 +157,33 @@ export default function CustomCursor() {
             left: `${trail.x}px`,
             top: `${trail.y}px`,
             opacity: trail.opacity,
-            transform: `scale(${1 - index * 0.03})`, // Keep existing scale
+            transform: `translate(-50%, -50%) rotate(${trail.rotation}deg) scale(1)`, // Adjusted scale
           }}
         >
-          {/* New Film Strip Segment SVG for Trails */}
-          <svg width="20" height="20" viewBox="-10 -10 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="-10" y="-10" width="20" height="20" fill="rgba(220,220,220,0.3)" />
-            {/* Top Sprocket Holes */}
-            <rect x="-9" y="-9" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-2" y="-9" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="5" y="-9" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            {/* Bottom Sprocket Holes */}
-            <rect x="-9" y="6" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="-2" y="6" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
-            <rect x="5" y="6" width="4" height="3" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+          {/* New "Flat Film Strip" Trail Segment SVG */}
+          <svg width="20" height="30" viewBox="-10 -15 20 30" fill="none" xmlns="http://www.w3.org/2000/svg">
+            {/* Left film edge */}
+            <rect x="-10" y="-15" width="3.5" height="30" fill="rgba(100,100,100,0.6)"/>
+            {/* Sprocket holes for left edge */}
+            <rect x="-9" y="-12" width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="-9" y="-5"  width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="-9" y="2"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="-9" y="9"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+
+            {/* Right film edge */}
+            <rect x="6.5" y="-15" width="3.5" height="30" fill="rgba(100,100,100,0.6)"/>
+            {/* Sprocket holes for right edge */}
+            <rect x="7" y="-12" width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="7" y="-5"  width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="7" y="2"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+            <rect x="7" y="9"   width="2" height="4" fill="rgba(50,50,50,0.7)" rx="0.5"/>
+
+            {/* Faint Frame lines in the transparent middle */}
+            <line x1="-6.5" y1="0" x2="6.5" y2="0" stroke="rgba(200,200,200,0.2)" strokeWidth="0.5"/>
+            <line x1="-6.5" y1="-14.5" x2="6.5" y2="-14.5" stroke="rgba(200,200,200,0.1)" strokeWidth="0.5"/>
+            <line x1="-6.5" y1="14.5" x2="6.5" y2="14.5" stroke="rgba(200,200,200,0.1)" strokeWidth="0.5"/>
+            
+            {/* Central transparent area - effectively created by the gap between edge rects */}
           </svg>
         </div>
       ))}
