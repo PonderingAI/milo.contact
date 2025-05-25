@@ -1230,26 +1230,73 @@ export default function UnifiedMediaLibrary({
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to delete media items")
+        let errorData;
+        let errorMessage;
+        try {
+          errorData = await response.json();
+          console.error("API deletion failed. Response status:", response.status, "Error data:", errorData); // Log full error data
+          errorMessage = errorData?.error || errorData?.message || `Failed to delete media items (status: ${response.status})`;
+          throw new Error(errorMessage);
+        } catch (jsonError) {
+          const errorText = await response.text();
+          console.error("API deletion failed. Response status:", response.status, "Response text:", errorText); // Log text if not JSON
+          errorMessage = `Failed to delete media items and parse error response (status: ${response.status}). Response: ${errorText}`;
+          throw new Error(errorMessage);
+        }
       }
 
-      toast.update(toastId, {
-        title: "Success",
-        description: `${itemsToDelete.length} media items deleted successfully.`,
-        variant: "default",
-      })
+      // If response.ok, then the API call was successful (even if some items in the batch failed)
+      // The API route /api/media/delete now returns a more detailed response
+      const resultData = await response.json();
+      console.log("Bulk delete API response:", resultData);
 
-      // Update local state
-      setMediaItems(prevItems => prevItems.filter(item => !itemsToDelete.find(del => del.id === item.id)))
-      setSelectedItems([])
+      // Dismiss the initial "Deleting..." toast
+      toast.dismiss(toastId);
+
+      if (resultData.success) {
+         toast({ // Changed from toast.update
+          title: "Success",
+          description: resultData.message || `${itemsToDelete.length} media items processed.`,
+          variant: "default",
+        });
+      } else {
+        // Some or all items failed, but the API call itself was okay
+        toast({ // Changed from toast.update
+          title: "Partial Deletion or Errors",
+          description: resultData.message || "Some items could not be deleted. Check console for details.",
+          variant: "warning", // Use warning for partial success or specific errors
+        });
+        // Log detailed results if available
+        if (resultData.results) {
+          console.warn("Detailed deletion results:", resultData.results);
+        }
+      }
+      
+      // Update local state based on successfully deleted items from response if possible,
+      // or just refresh all media as a simpler approach for now.
+      // For a more precise update:
+      const successfullyDeletedIds = resultData.results?.filter((r: any) => r.status === 'success').map((r: any) => r.id) || [];
+      if (successfullyDeletedIds.length > 0) {
+         setMediaItems(prevItems => prevItems.filter(item => !successfullyDeletedIds.includes(item.id)))
+      }
+      
+      if(resultData.results?.every((r: any) => r.status === 'success')) {
+        setSelectedItems([]) // Clear selection only if all were successful
+      } else {
+        // Keep selection for items that failed, or clear all - depends on desired UX
+        // For now, let's clear items that were successfully deleted from the selection
+        setSelectedItems(prevSelected => prevSelected.filter(item => !successfullyDeletedIds.includes(item.id)));
+      }
+
     } catch (error) {
-      console.error("Error deleting media items:", error)
-      toast.update(toastId, {
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete media items.",
+      console.error("Error during handleBulkDelete (client-side or network error):", error);
+      // This catch block handles errors from the fetch call itself (network error)
+      // or errors thrown from the !response.ok block
+      toast({ // Changed from toast.update
+        title: "Error Deleting Items",
+        description: error instanceof Error ? error.message : "An unknown client-side or network error occurred.",
         variant: "destructive",
-      })
+      });
     } finally {
       setIsBulkDeleteDialogOpen(false)
     }
@@ -1372,30 +1419,33 @@ export default function UnifiedMediaLibrary({
       <div
         key={item.id}
         id={`media-item-${item.id}`}
-        className={`bg-gray-900 rounded-lg overflow-hidden ${isSelected ? "ring-2 ring-blue-500" : ""}`}
+        className={`bg-gray-900 rounded-lg overflow-hidden cursor-pointer ${isSelected ? "ring-2 ring-blue-500" : ""}`}
         onClick={canSelect ? () => toggleItemSelection(item) : undefined}
       >
         <div
-          className="relative h-40 cursor-pointer"
-          // Preview click should be separate if selection is the primary action on main page
-          onClick={() => {
-            if (canSelect) {
-              toggleItemSelection(item);
-            } else if (isImage) { // Original behavior if not in a selectable mode (which is rare now)
-              setSelectedImage(item);
-            }
-          }}
+          className="relative h-40" // Removed cursor-pointer here as outer div handles click
+          // Removed redundant onClick from this inner div
         >
           {/* Visual cue for selection (checkbox) always visible if canSelect */}
           {canSelect && (
              <div className="absolute top-2 left-2 z-10">
               <div
+                role="checkbox"
+                aria-checked={isSelected}
+                tabIndex={0} // Make it focusable
                 className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
                   isSelected ? "bg-blue-500 border-blue-500" : "bg-black/30 border-white/50 group-hover:border-white"
                 }`}
-                onClick={(e) => { // Allow clicking checkbox directly without triggering outer div's onClick if needed
-                  e.stopPropagation();
+                onClick={(e: React.MouseEvent<HTMLDivElement>) => { 
+                  e.stopPropagation(); // Prevent card click when checkbox is clicked
                   toggleItemSelection(item);
+                }}
+                onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => { // Allow selection with Space/Enter
+                  if (e.key === ' ' || e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    toggleItemSelection(item);
+                  }
                 }}
               >
                 {isSelected && <Check className="h-3 w-3 text-white" />}
@@ -1439,11 +1489,11 @@ export default function UnifiedMediaLibrary({
           {/* Preview button - can be styled as an icon button */}
           {isImage && ( // Show preview option for images
             <button
-              onClick={(e) => {
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                 e.stopPropagation(); // Prevent selection toggle if clicking the preview button
                 setSelectedImage(item);
               }}
-              className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center hover:bg-gray-700/90 transition-colors"
+              className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center hover:bg-gray-700/90 transition-colors z-10"
               title="Preview image"
             >
               <ImageIcon size={12} className="mr-1" /> Preview
@@ -1481,9 +1531,9 @@ export default function UnifiedMediaLibrary({
               variant="outline"
               size="sm"
               className="flex items-center gap-1 text-xs"
-              onClick={(e) => {
-                e.stopPropagation()
-                handleCopyUrl(item.public_url)
+              onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                e.stopPropagation();
+                handleCopyUrl(item.public_url);
               }}
             >
               {copiedUrl === item.public_url ? (
@@ -1503,9 +1553,9 @@ export default function UnifiedMediaLibrary({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleEditMedia(item)
+                onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                  e.stopPropagation();
+                  handleEditMedia(item);
                 }}
                 className="h-8 w-8"
               >
@@ -1516,9 +1566,9 @@ export default function UnifiedMediaLibrary({
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  handleDeleteMedia(item.id, item.filepath, item.filetype)
+                onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
+                  e.stopPropagation();
+                  handleDeleteMedia(item.id, item.filepath, item.filetype);
                 }}
                 className="h-8 w-8"
               >
