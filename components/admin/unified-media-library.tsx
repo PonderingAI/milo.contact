@@ -1207,6 +1207,156 @@ export default function UnifiedMediaLibrary({
     }, 300)
   }
 
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return
+
+    const itemsToDelete = selectedItems.map(item => ({
+      id: item.id,
+      filepath: item.filepath,
+      filetype: item.filetype,
+    }))
+
+    // Show toast with loading state
+    const toastId = toast({
+      title: `Deleting ${itemsToDelete.length} media items...`,
+      description: "Please wait...",
+    }).id
+
+    try {
+      const response = await fetch("/api/media/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: itemsToDelete }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete media items")
+      }
+
+      toast.update(toastId, {
+        title: "Success",
+        description: `${itemsToDelete.length} media items deleted successfully.`,
+        variant: "default",
+      })
+
+      // Update local state
+      setMediaItems(prevItems => prevItems.filter(item => !itemsToDelete.find(del => del.id === item.id)))
+      setSelectedItems([])
+    } catch (error) {
+      console.error("Error deleting media items:", error)
+      toast.update(toastId, {
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete media items.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsBulkDeleteDialogOpen(false)
+    }
+  }
+
+  const handleBulkAddTag = async () => {
+    if (selectedItems.length === 0 || !bulkTagInput.trim()) return
+
+    const tagToAdd = bulkTagInput.trim()
+    let successCount = 0
+    let errorCount = 0
+
+    const toastId = toast({
+      title: `Adding tag "${tagToAdd}" to ${selectedItems.length} items...`,
+      description: "Processing...",
+    }).id
+
+    for (const item of selectedItems) {
+      const currentTags = item.tags || []
+      if (currentTags.includes(tagToAdd)) {
+        // Optionally, count as success or skip
+        // successCount++;
+        continue // Tag already exists
+      }
+      const newTags = [...currentTags, tagToAdd]
+
+      try {
+        const response = await supabase
+          .from("media")
+          .update({ tags: newTags, filename: item.filename }) // filename is often required by policies/triggers
+          .eq("id", item.id)
+
+        if (response.error) {
+          throw response.error
+        }
+        successCount++
+      } catch (err) {
+        console.error(`Failed to add tag to item ${item.id}:`, err)
+        errorCount++
+      }
+    }
+
+    toast.update(toastId, {
+      title: errorCount > 0 ? "Partial Success" : "Success",
+      description: `Tag "${tagToAdd}" added to ${successCount} items. ${errorCount > 0 ? `${errorCount} items failed.` : ''}`,
+      variant: errorCount > 0 ? "warning" : "default",
+    })
+
+    if (successCount > 0) {
+      fetchMedia() // Refresh all media to show updated tags
+    }
+    setSelectedItems([])
+    setBulkTagInput("")
+    setIsBulkAddTagDialogOpen(false)
+  }
+
+  const handleBulkRemoveTag = async () => {
+    if (selectedItems.length === 0 || !bulkTagInput.trim()) return
+
+    const tagToRemove = bulkTagInput.trim()
+    let successCount = 0
+    let errorCount = 0
+
+    const toastId = toast({
+      title: `Removing tag "${tagToRemove}" from ${selectedItems.length} items...`,
+      description: "Processing...",
+    }).id
+
+    for (const item of selectedItems) {
+      const currentTags = item.tags || []
+      if (!currentTags.includes(tagToRemove)) {
+        // Optionally, count as success or skip
+        // successCount++;
+        continue // Tag doesn't exist
+      }
+      const newTags = currentTags.filter(tag => tag !== tagToRemove)
+
+      try {
+        const response = await supabase
+          .from("media")
+          .update({ tags: newTags, filename: item.filename }) // filename might be required
+          .eq("id", item.id)
+
+        if (response.error) {
+          throw response.error
+        }
+        successCount++
+      } catch (err) {
+        console.error(`Failed to remove tag from item ${item.id}:`, err)
+        errorCount++
+      }
+    }
+
+    toast.update(toastId, {
+      title: errorCount > 0 ? "Partial Success" : "Success",
+      description: `Tag "${tagToRemove}" removed from ${successCount} items. ${errorCount > 0 ? `${errorCount} items failed.` : ''}`,
+      variant: errorCount > 0 ? "warning" : "default",
+    })
+
+    if (successCount > 0) {
+      fetchMedia() // Refresh all media
+    }
+    setSelectedItems([])
+    setBulkTagInput("")
+    setIsBulkRemoveTagDialogOpen(false)
+  }
+
   function renderMediaItem(item: MediaItem) {
     const isVimeo = item.filetype === "vimeo"
     const isYoutube = item.filetype === "youtube"
@@ -1974,156 +2124,6 @@ export default function UnifiedMediaLibrary({
       </Dialog>
     </div>
   )
-
-  const handleBulkDelete = async () => {
-    if (selectedItems.length === 0) return
-
-    const itemsToDelete = selectedItems.map(item => ({
-      id: item.id,
-      filepath: item.filepath,
-      filetype: item.filetype,
-    }))
-
-    // Show toast with loading state
-    const toastId = toast({
-      title: `Deleting ${itemsToDelete.length} media items...`,
-      description: "Please wait...",
-    }).id
-
-    try {
-      const response = await fetch("/api/media/delete", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ items: itemsToDelete }),
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to delete media items")
-      }
-
-      toast.update(toastId, {
-        title: "Success",
-        description: `${itemsToDelete.length} media items deleted successfully.`,
-        variant: "default",
-      })
-
-      // Update local state
-      setMediaItems(prevItems => prevItems.filter(item => !itemsToDelete.find(del => del.id === item.id)))
-      setSelectedItems([])
-    } catch (error) {
-      console.error("Error deleting media items:", error)
-      toast.update(toastId, {
-        title: "Error",
-        description: error instanceof Error ? error.message : "Failed to delete media items.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsBulkDeleteDialogOpen(false)
-    }
-  }
-
-  const handleBulkAddTag = async () => {
-    if (selectedItems.length === 0 || !bulkTagInput.trim()) return
-
-    const tagToAdd = bulkTagInput.trim()
-    let successCount = 0
-    let errorCount = 0
-
-    const toastId = toast({
-      title: `Adding tag "${tagToAdd}" to ${selectedItems.length} items...`,
-      description: "Processing...",
-    }).id
-
-    for (const item of selectedItems) {
-      const currentTags = item.tags || []
-      if (currentTags.includes(tagToAdd)) {
-        // Optionally, count as success or skip
-        // successCount++;
-        continue // Tag already exists
-      }
-      const newTags = [...currentTags, tagToAdd]
-
-      try {
-        const response = await supabase
-          .from("media")
-          .update({ tags: newTags, filename: item.filename }) // filename is often required by policies/triggers
-          .eq("id", item.id)
-
-        if (response.error) {
-          throw response.error
-        }
-        successCount++
-      } catch (err) {
-        console.error(`Failed to add tag to item ${item.id}:`, err)
-        errorCount++
-      }
-    }
-
-    toast.update(toastId, {
-      title: errorCount > 0 ? "Partial Success" : "Success",
-      description: `Tag "${tagToAdd}" added to ${successCount} items. ${errorCount > 0 ? `${errorCount} items failed.` : ''}`,
-      variant: errorCount > 0 ? "warning" : "default",
-    })
-
-    if (successCount > 0) {
-      fetchMedia() // Refresh all media to show updated tags
-    }
-    setSelectedItems([])
-    setBulkTagInput("")
-    setIsBulkAddTagDialogOpen(false)
-  }
-
-  const handleBulkRemoveTag = async () => {
-    if (selectedItems.length === 0 || !bulkTagInput.trim()) return
-
-    const tagToRemove = bulkTagInput.trim()
-    let successCount = 0
-    let errorCount = 0
-
-    const toastId = toast({
-      title: `Removing tag "${tagToRemove}" from ${selectedItems.length} items...`,
-      description: "Processing...",
-    }).id
-
-    for (const item of selectedItems) {
-      const currentTags = item.tags || []
-      if (!currentTags.includes(tagToRemove)) {
-        // Optionally, count as success or skip
-        // successCount++;
-        continue // Tag doesn't exist
-      }
-      const newTags = currentTags.filter(tag => tag !== tagToRemove)
-
-      try {
-        const response = await supabase
-          .from("media")
-          .update({ tags: newTags, filename: item.filename }) // filename might be required
-          .eq("id", item.id)
-
-        if (response.error) {
-          throw response.error
-        }
-        successCount++
-      } catch (err) {
-        console.error(`Failed to remove tag from item ${item.id}:`, err)
-        errorCount++
-      }
-    }
-
-    toast.update(toastId, {
-      title: errorCount > 0 ? "Partial Success" : "Success",
-      description: `Tag "${tagToRemove}" removed from ${successCount} items. ${errorCount > 0 ? `${errorCount} items failed.` : ''}`,
-      variant: errorCount > 0 ? "warning" : "default",
-    })
-
-    if (successCount > 0) {
-      fetchMedia() // Refresh all media
-    }
-    setSelectedItems([])
-    setBulkTagInput("")
-    setIsBulkRemoveTagDialogOpen(false)
-  }
 
   function renderMediaGrid() {
     if (loading) {
