@@ -68,9 +68,9 @@ interface UploadStatus {
 
 interface UnifiedMediaLibraryProps {
   selectionMode?: "single" | "multiple" | "none"
-  onSelect?: (urls: string[]) => void
+  onSelect?: (selected: MediaItem[]) => void // Changed to MediaItem[]
   mediaTypeFilter?: "image" | "video" | "all"
-  initialSelectedItems?: string[]
+  initialSelectedItems?: MediaItem[] // Changed to MediaItem[]
 }
 
 export default function UnifiedMediaLibrary({
@@ -98,7 +98,7 @@ export default function UnifiedMediaLibrary({
   const [isProcessingQueue, setIsProcessingQueue] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const [duplicateItems, setDuplicateItems] = useState<Record<string, string>>({}) // Maps file/URL to existing item ID
-  const [selectedItems, setSelectedItems] = useState<string[]>(initialSelectedItems || [])
+  const [selectedItems, setSelectedItems] = useState<MediaItem[]>(initialSelectedItems || []) // Changed to MediaItem[]
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropAreaRef = useRef<HTMLDivElement>(null)
   const supabase = createClientComponentClient()
@@ -114,6 +114,12 @@ export default function UnifiedMediaLibrary({
   const [imageLoadError, setImageLoadError] = useState<Record<string, boolean>>({})
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false)
   const [currentDuplicates, setCurrentDuplicates] = useState<{ url: string; existingItem: any }[]>([])
+
+  // State for bulk operations
+  const [isBulkDeleteDialogOpen, setIsBulkDeleteDialogOpen] = useState(false)
+  const [isBulkAddTagDialogOpen, setIsBulkAddTagDialogOpen] = useState(false)
+  const [isBulkRemoveTagDialogOpen, setIsBulkRemoveTagDialogOpen] = useState(false)
+  const [bulkTagInput, setBulkTagInput] = useState("")
 
   useEffect(() => {
     fetchMedia()
@@ -131,8 +137,15 @@ export default function UnifiedMediaLibrary({
 
   // Initialize selected items from props
   useEffect(() => {
-    if (initialSelectedItems && initialSelectedItems.length > 0) {
+    // Ensure initialSelectedItems are full MediaItem objects if provided
+    if (initialSelectedItems && initialSelectedItems.length > 0 && initialSelectedItems.every(item => typeof item === 'object' && item.id)) {
       setSelectedItems(initialSelectedItems)
+    } else if (initialSelectedItems && initialSelectedItems.length > 0) {
+      // This case should ideally not happen if props are passed correctly.
+      // If initialSelectedItems are URLs, we'd need to find the full MediaItem objects.
+      // For now, we'll log a warning and initialize as empty.
+      console.warn("InitialSelectedItems are not full MediaItem objects. Please update the prop.")
+      setSelectedItems([])
     }
   }, [initialSelectedItems])
 
@@ -350,8 +363,8 @@ export default function UnifiedMediaLibrary({
           }
 
           // If in selection mode, select the duplicate
-          if (selectionMode !== "none" && duplicateCheckResult.existingItem?.public_url) {
-            toggleItemSelection(duplicateCheckResult.existingItem.public_url)
+          if (selectionMode !== "none" && duplicateCheckResult.existingItem) {
+            toggleItemSelection(duplicateCheckResult.existingItem)
           }
 
           setUploadingFile(false)
@@ -406,8 +419,8 @@ export default function UnifiedMediaLibrary({
           }
 
           // If in selection mode, select the duplicate
-          if (selectionMode !== "none" && result.existingFile?.public_url) {
-            toggleItemSelection(result.existingFile.public_url)
+          if (selectionMode !== "none" && result.existingFile) {
+            toggleItemSelection(result.existingFile)
           }
         } else {
           toast({
@@ -416,8 +429,13 @@ export default function UnifiedMediaLibrary({
           })
 
           // If in selection mode, select the new file
-          if (selectionMode !== "none" && result.publicUrl) {
-            toggleItemSelection(result.publicUrl)
+          // Assuming result contains the full MediaItem on successful upload
+          if (selectionMode !== "none" && result.mediaItem) {
+             toggleItemSelection(result.mediaItem)
+          } else if (selectionMode !== "none" && result.publicUrl) {
+            // Fallback if full mediaItem is not in result, though it should be
+            const newItem = mediaItems.find(mi => mi.public_url === result.publicUrl);
+            if (newItem) toggleItemSelection(newItem);
           }
         }
 
@@ -590,8 +608,8 @@ export default function UnifiedMediaLibrary({
               }))
 
               // If in selection mode, select the duplicate
-              if (selectionMode !== "none" && duplicateCheckResult.existingItem?.public_url) {
-                toggleItemSelection(duplicateCheckResult.existingItem.public_url)
+              if (selectionMode !== "none" && duplicateCheckResult.existingItem) {
+                toggleItemSelection(duplicateCheckResult.existingItem)
               }
 
               return
@@ -666,8 +684,8 @@ export default function UnifiedMediaLibrary({
               }))
 
               // If in selection mode, select the duplicate
-              if (selectionMode !== "none" && result.existingFile?.public_url) {
-                toggleItemSelection(result.existingFile.public_url)
+              if (selectionMode !== "none" && result.existingFile) {
+                toggleItemSelection(result.existingFile)
               }
             } else {
               // Success
@@ -683,8 +701,13 @@ export default function UnifiedMediaLibrary({
               })
 
               // If in selection mode, select the new file
-              if (selectionMode !== "none" && result.publicUrl) {
-                toggleItemSelection(result.publicUrl)
+              // Assuming result.mediaItem contains the full MediaItem object
+              if (selectionMode !== "none" && result.mediaItem) {
+                toggleItemSelection(result.mediaItem)
+              } else if (selectionMode !== "none" && result.publicUrl) {
+                 // Fallback if full mediaItem is not in result
+                const newItem = mediaItems.find(mi => mi.public_url === result.publicUrl);
+                if (newItem) toggleItemSelection(newItem);
               }
             }
           } catch (error) {
@@ -839,8 +862,8 @@ export default function UnifiedMediaLibrary({
             }))
 
             // If in selection mode, select the duplicate
-            if (selectionMode !== "none" && duplicateCheckResult.existingItem?.public_url) {
-              toggleItemSelection(duplicateCheckResult.existingItem.public_url)
+            if (selectionMode !== "none" && duplicateCheckResult.existingItem) {
+              toggleItemSelection(duplicateCheckResult.existingItem)
             }
 
             continue
@@ -879,8 +902,8 @@ export default function UnifiedMediaLibrary({
             }))
 
             // If in selection mode, select the duplicate
-            if (selectionMode !== "none" && result.existingVideo?.public_url) {
-              toggleItemSelection(result.existingVideo.public_url)
+            if (selectionMode !== "none" && result.existingVideo) {
+              toggleItemSelection(result.existingVideo)
             }
 
             continue
@@ -892,8 +915,13 @@ export default function UnifiedMediaLibrary({
           else if (result.platform === "linkedin") results.linkedin++
 
           // If in selection mode, select the new video
-          if (selectionMode !== "none" && result.url) {
-            toggleItemSelection(result.url)
+          // Assuming result.videoItem contains the full MediaItem object
+          if (selectionMode !== "none" && result.videoItem) {
+            toggleItemSelection(result.videoItem)
+          } else if (selectionMode !== "none" && result.url) {
+            // Fallback if full videoItem is not in result
+            const newItem = mediaItems.find(mi => mi.public_url === result.url);
+            if (newItem) toggleItemSelection(newItem);
           }
 
           successCount++
@@ -957,31 +985,26 @@ export default function UnifiedMediaLibrary({
     }
   }
 
-  const toggleItemSelection = (url: string) => {
-    if (selectionMode === "none") return
+  const toggleItemSelection = (itemToToggle: MediaItem) => {
+    // When selectionMode is "none", it implies we are on the main /admin/media page,
+    // where selection should always be enabled for bulk actions.
+    const currentSelectionMode = selectionMode === "none" ? "multiple" : selectionMode;
 
-    if (selectionMode === "single") {
-      // In single selection mode, replace the current selection
-      setSelectedItems([url])
-    } else {
-      // In multiple selection mode, toggle the selection
-      if (selectedItems.includes(url)) {
-        setSelectedItems(selectedItems.filter((item) => item !== url))
-      } else {
-        setSelectedItems([...selectedItems, url])
-      }
+    if (currentSelectionMode === "single") {
+      setSelectedItems([itemToToggle])
+    } else { // "multiple"
+      setSelectedItems((prevSelectedItems) =>
+        prevSelectedItems.find(item => item.id === itemToToggle.id)
+          ? prevSelectedItems.filter((item) => item.id !== itemToToggle.id)
+          : [...prevSelectedItems, itemToToggle],
+      )
     }
-
-    // Log selection for debugging
-    console.log(
-      "Selected items:",
-      selectionMode === "single"
-        ? [url]
-        : selectedItems.includes(url)
-          ? selectedItems.filter((item) => item !== url)
-          : [...selectedItems, url],
-    )
   }
+
+  // Effect to log selection changes for debugging
+  useEffect(() => {
+    console.log("Selected items changed:", selectedItems)
+  }, [selectedItems])
 
   const handleConfirmSelection = () => {
     if (onSelect && selectedItems.length > 0) {
@@ -1190,19 +1213,45 @@ export default function UnifiedMediaLibrary({
     const isLinkedin = item.filetype === "linkedin"
     const isImage = item.filetype === "image"
     const hasImageError = imageLoadError[item.id]
-    const isSelected = selectedItems.includes(item.public_url)
+    const isSelected = selectedItems.some(selected => selected.id === item.id)
+    // Selection is now always possible on the main page (selectionMode === "none")
+    const canSelect = selectionMode !== "none" || selectionMode === "none";
+
 
     return (
       <div
         key={item.id}
         id={`media-item-${item.id}`}
         className={`bg-gray-900 rounded-lg overflow-hidden ${isSelected ? "ring-2 ring-blue-500" : ""}`}
-        onClick={selectionMode !== "none" ? () => toggleItemSelection(item.public_url) : undefined}
+        onClick={canSelect ? () => toggleItemSelection(item) : undefined}
       >
         <div
           className="relative h-40 cursor-pointer"
-          onClick={() => (isImage && selectionMode === "none" ? setSelectedImage(item) : null)}
+          // Preview click should be separate if selection is the primary action on main page
+          onClick={() => {
+            if (canSelect) {
+              toggleItemSelection(item);
+            } else if (isImage) { // Original behavior if not in a selectable mode (which is rare now)
+              setSelectedImage(item);
+            }
+          }}
         >
+          {/* Visual cue for selection (checkbox) always visible if canSelect */}
+          {canSelect && (
+             <div className="absolute top-2 left-2 z-10">
+              <div
+                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                  isSelected ? "bg-blue-500 border-blue-500" : "bg-black/30 border-white/50 group-hover:border-white"
+                }`}
+                onClick={(e) => { // Allow clicking checkbox directly without triggering outer div's onClick if needed
+                  e.stopPropagation();
+                  toggleItemSelection(item);
+                }}
+              >
+                {isSelected && <Check className="h-3 w-3 text-white" />}
+              </div>
+            </div>
+          )}
           {item.thumbnail_url && !hasImageError ? (
             <Image
               src={item.thumbnail_url || "/placeholder.svg"}
@@ -1237,19 +1286,18 @@ export default function UnifiedMediaLibrary({
           {isLinkedin && (
             <div className="absolute top-2 right-2 bg-blue-800 text-white text-xs px-2 py-1 rounded">LinkedIn</div>
           )}
-          {isImage && selectionMode === "none" && (
-            <div className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center">
-              <ImageIcon size={12} className="mr-1" /> Click to preview
-            </div>
-          )}
-          {selectionMode !== "none" && (
-            <div className="absolute top-2 left-2">
-              <div
-                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? "bg-blue-500 border-blue-500" : "border-white/50"}`}
-              >
-                {isSelected && <Check className="h-3 w-3 text-white" />}
-              </div>
-            </div>
+          {/* Preview button - can be styled as an icon button */}
+          {isImage && ( // Show preview option for images
+            <button
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent selection toggle if clicking the preview button
+                setSelectedImage(item);
+              }}
+              className="absolute bottom-2 right-2 bg-gray-800/70 text-white text-xs px-2 py-1 rounded flex items-center hover:bg-gray-700/90 transition-colors"
+              title="Preview image"
+            >
+              <ImageIcon size={12} className="mr-1" /> Preview
+            </button>
           )}
         </div>
         <div className="p-3">
@@ -1565,12 +1613,57 @@ export default function UnifiedMediaLibrary({
         </TabsContent>
       </Tabs>
 
-      {/* Selection controls */}
-      {selectionMode !== "none" && (
-        <div className="fixed bottom-4 right-4 bg-gray-900 p-3 rounded-lg shadow-lg flex items-center gap-3">
+      {/* Selection controls (used when component is embedded for selection) */}
+      {selectionMode !== "none" && selectionMode !== "single" && selectionMode !== "multiple" && ( // This condition might need adjustment based on final design
+        <div className="fixed bottom-4 right-4 bg-gray-900 p-3 rounded-lg shadow-lg flex items-center gap-3 z-50">
           <span className="text-sm text-gray-300">{selectedItems.length} items selected</span>
           <Button onClick={handleConfirmSelection} disabled={selectedItems.length === 0}>
             Confirm Selection
+          </Button>
+        </div>
+      )}
+
+      {/* Bulk Actions UI */}
+      {selectedItems.length > 0 && (
+        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900 p-3 rounded-lg shadow-xl flex items-center gap-3 z-50 border border-gray-700">
+          <span className="text-sm text-gray-300 pl-2">
+            {selectedItems.length} item{selectedItems.length > 1 ? "s" : ""} selected
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setIsBulkDeleteDialogOpen(true)}
+            className="flex items-center gap-1.5"
+          >
+            <Trash2 size={16} />
+            Delete
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setBulkTagInput("")
+              setIsBulkAddTagDialogOpen(true)
+            }}
+            className="flex items-center gap-1.5"
+          >
+            <Plus size={16} />
+            Add Tag
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setBulkTagInput("")
+              setIsBulkRemoveTagDialogOpen(true)
+            }}
+            className="flex items-center gap-1.5"
+          >
+            <X size={16} />
+            Remove Tag
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedItems([])} className="text-gray-400 hover:text-white">
+            Clear Selection
           </Button>
         </div>
       )}
@@ -1776,7 +1869,7 @@ export default function UnifiedMediaLibrary({
             <DialogDescription>The following videos already exist in your media library</DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[60vh] overflow-y-auto">
+          <div className="max-h-[60vh] overflow-y-auto pr-1">
             {currentDuplicates.map((item, index) => (
               <div key={index} className="mb-3 p-3 bg-gray-900 rounded-md flex items-center justify-between">
                 <div>
@@ -1794,14 +1887,243 @@ export default function UnifiedMediaLibrary({
         </DialogContent>
       </Dialog>
 
-      <div className="fixed bottom-4 right-4">
+      <div className="fixed bottom-4 right-4 z-40"> {/* Ensure refresh button is not overlapped by bulk actions bar */}
         <Button onClick={fetchMedia} className="bg-blue-600 hover:bg-blue-700">
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh Media
         </Button>
       </div>
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <Dialog open={isBulkDeleteDialogOpen} onOpenChange={setIsBulkDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Bulk Deletion</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {selectedItems.length} selected media item
+              {selectedItems.length > 1 ? "s" : ""}? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIsBulkDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleBulkDelete}>
+              Delete {selectedItems.length} Item{selectedItems.length > 1 ? "s" : ""}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Add Tag Dialog */}
+      <Dialog open={isBulkAddTagDialogOpen} onOpenChange={setIsBulkAddTagDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add Tag to Selected Items</DialogTitle>
+            <DialogDescription>
+              Enter the tag you want to add to {selectedItems.length} selected item
+              {selectedItems.length > 1 ? "s" : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-4">
+            <Input
+              placeholder="Enter tag name"
+              value={bulkTagInput}
+              onChange={(e) => setBulkTagInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && bulkTagInput.trim() && handleBulkAddTag()}
+            />
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIsBulkAddTagDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkAddTag} disabled={!bulkTagInput.trim()}>
+              Add Tag
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Remove Tag Dialog */}
+      <Dialog open={isBulkRemoveTagDialogOpen} onOpenChange={setIsBulkRemoveTagDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Remove Tag from Selected Items</DialogTitle>
+            <DialogDescription>
+              Enter the tag you want to remove from {selectedItems.length} selected item
+              {selectedItems.length > 1 ? "s" : ""}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 mt-4">
+            <Input
+              placeholder="Enter tag name"
+              value={bulkTagInput}
+              onChange={(e) => setBulkTagInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && bulkTagInput.trim() && handleBulkRemoveTag()}
+            />
+          </div>
+          <div className="flex justify-end gap-2 mt-4">
+            <Button variant="outline" onClick={() => setIsBulkRemoveTagDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkRemoveTag} disabled={!bulkTagInput.trim()}>
+              Remove Tag
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
+
+  const handleBulkDelete = async () => {
+    if (selectedItems.length === 0) return
+
+    const itemsToDelete = selectedItems.map(item => ({
+      id: item.id,
+      filepath: item.filepath,
+      filetype: item.filetype,
+    }))
+
+    // Show toast with loading state
+    const toastId = toast({
+      title: `Deleting ${itemsToDelete.length} media items...`,
+      description: "Please wait...",
+    }).id
+
+    try {
+      const response = await fetch("/api/media/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ items: itemsToDelete }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to delete media items")
+      }
+
+      toast.update(toastId, {
+        title: "Success",
+        description: `${itemsToDelete.length} media items deleted successfully.`,
+        variant: "default",
+      })
+
+      // Update local state
+      setMediaItems(prevItems => prevItems.filter(item => !itemsToDelete.find(del => del.id === item.id)))
+      setSelectedItems([])
+    } catch (error) {
+      console.error("Error deleting media items:", error)
+      toast.update(toastId, {
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to delete media items.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsBulkDeleteDialogOpen(false)
+    }
+  }
+
+  const handleBulkAddTag = async () => {
+    if (selectedItems.length === 0 || !bulkTagInput.trim()) return
+
+    const tagToAdd = bulkTagInput.trim()
+    let successCount = 0
+    let errorCount = 0
+
+    const toastId = toast({
+      title: `Adding tag "${tagToAdd}" to ${selectedItems.length} items...`,
+      description: "Processing...",
+    }).id
+
+    for (const item of selectedItems) {
+      const currentTags = item.tags || []
+      if (currentTags.includes(tagToAdd)) {
+        // Optionally, count as success or skip
+        // successCount++;
+        continue // Tag already exists
+      }
+      const newTags = [...currentTags, tagToAdd]
+
+      try {
+        const response = await supabase
+          .from("media")
+          .update({ tags: newTags, filename: item.filename }) // filename is often required by policies/triggers
+          .eq("id", item.id)
+
+        if (response.error) {
+          throw response.error
+        }
+        successCount++
+      } catch (err) {
+        console.error(`Failed to add tag to item ${item.id}:`, err)
+        errorCount++
+      }
+    }
+
+    toast.update(toastId, {
+      title: errorCount > 0 ? "Partial Success" : "Success",
+      description: `Tag "${tagToAdd}" added to ${successCount} items. ${errorCount > 0 ? `${errorCount} items failed.` : ''}`,
+      variant: errorCount > 0 ? "warning" : "default",
+    })
+
+    if (successCount > 0) {
+      fetchMedia() // Refresh all media to show updated tags
+    }
+    setSelectedItems([])
+    setBulkTagInput("")
+    setIsBulkAddTagDialogOpen(false)
+  }
+
+  const handleBulkRemoveTag = async () => {
+    if (selectedItems.length === 0 || !bulkTagInput.trim()) return
+
+    const tagToRemove = bulkTagInput.trim()
+    let successCount = 0
+    let errorCount = 0
+
+    const toastId = toast({
+      title: `Removing tag "${tagToRemove}" from ${selectedItems.length} items...`,
+      description: "Processing...",
+    }).id
+
+    for (const item of selectedItems) {
+      const currentTags = item.tags || []
+      if (!currentTags.includes(tagToRemove)) {
+        // Optionally, count as success or skip
+        // successCount++;
+        continue // Tag doesn't exist
+      }
+      const newTags = currentTags.filter(tag => tag !== tagToRemove)
+
+      try {
+        const response = await supabase
+          .from("media")
+          .update({ tags: newTags, filename: item.filename }) // filename might be required
+          .eq("id", item.id)
+
+        if (response.error) {
+          throw response.error
+        }
+        successCount++
+      } catch (err) {
+        console.error(`Failed to remove tag from item ${item.id}:`, err)
+        errorCount++
+      }
+    }
+
+    toast.update(toastId, {
+      title: errorCount > 0 ? "Partial Success" : "Success",
+      description: `Tag "${tagToRemove}" removed from ${successCount} items. ${errorCount > 0 ? `${errorCount} items failed.` : ''}`,
+      variant: errorCount > 0 ? "warning" : "default",
+    })
+
+    if (successCount > 0) {
+      fetchMedia() // Refresh all media
+    }
+    setSelectedItems([])
+    setBulkTagInput("")
+    setIsBulkRemoveTagDialogOpen(false)
+  }
 
   function renderMediaGrid() {
     if (loading) {
@@ -1825,7 +2147,9 @@ export default function UnifiedMediaLibrary({
     }
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">{filteredMedia.map(renderMediaItem)}</div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-20">{/* Added padding-bottom for bulk actions bar */}
+        {filteredMedia.map(renderMediaItem)}
+      </div>
     )
   }
 }
