@@ -1,6 +1,5 @@
 "use client"
 
-// First, let's update the imports to include the MediaSelector component
 import type React from "react"
 import { useState, useRef } from "react"
 import { Button } from "@/components/ui/button"
@@ -29,7 +28,6 @@ async function calculateFileHashClient(file: File): Promise<string> {
   return hashHex
 }
 
-// Replace the entire component with the updated version
 export default function UnifiedMediaInput({
   identifier,
   onMediaAdded,
@@ -188,11 +186,14 @@ export default function UnifiedMediaInput({
     }
   }
 
-  const handleVideoUrlInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleVideoUrlInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setVideoUrlInput(e.target.value)
   }
 
-  const handleSubmitVideoUrl = () => {
+  const handleSubmitVideoUrl = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
     const urls = videoUrlInput
       .split(/[\n,\s]+/)
       .map((url) => url.trim())
@@ -214,6 +215,18 @@ export default function UnifiedMediaInput({
       onMediaAdded(selectedUrls)
       toast({ title: "Media Selected", description: `${selectedUrls.length} media item(s) added from library.` })
     }
+  }
+
+  const handleBrowseMediaClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsMediaLibraryOpen(true)
+  }
+
+  const handleBrowseDeviceClick = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    fileInputRef.current?.click()
   }
 
   // Material You inspired design
@@ -243,8 +256,9 @@ export default function UnifiedMediaInput({
           <div className="flex flex-col items-center space-y-4">
             {/* Top section - Browse Media Library */}
             <Button
+              type="button"
               variant="ghost"
-              onClick={() => setIsMediaLibraryOpen(true)}
+              onClick={handleBrowseMediaClick}
               className="w-full text-sm text-gray-300 hover:bg-slate-800/50 rounded-md py-2"
             >
               Browse Media Library
@@ -256,18 +270,26 @@ export default function UnifiedMediaInput({
             {/* Middle section - URL input */}
             <div className="w-full flex items-center space-x-2">
               <Input
+                type="text"
                 value={videoUrlInput}
-                onChange={(e) => setVideoUrlInput(e.target.value)}
+                onChange={handleVideoUrlInputChange}
                 placeholder="Paste video URL..."
                 className="flex-grow bg-transparent border-gray-800 text-sm"
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && videoUrlInput.trim()) {
+                  if (e.key === "Enter") {
                     e.preventDefault()
-                    handleSubmitVideoUrl()
+                    if (videoUrlInput.trim()) {
+                      handleSubmitVideoUrl(e as unknown as React.MouseEvent)
+                    }
                   }
                 }}
               />
-              <Button onClick={handleSubmitVideoUrl} size="sm" className="bg-blue-600/80 hover:bg-blue-600 text-white">
+              <Button
+                type="button"
+                onClick={handleSubmitVideoUrl}
+                size="sm"
+                className="bg-blue-600/80 hover:bg-blue-600 text-white"
+              >
                 <ArrowRight size={16} />
               </Button>
             </div>
@@ -277,8 +299,9 @@ export default function UnifiedMediaInput({
 
             {/* Bottom section - Browse Device */}
             <Button
+              type="button"
               variant="ghost"
-              onClick={() => fileInputRef.current?.click()}
+              onClick={handleBrowseDeviceClick}
               className="w-full text-sm text-gray-300 hover:bg-slate-800/50 rounded-md py-2"
             >
               Browse Device

@@ -1,5 +1,7 @@
 "use client"
 
+import type React from "react"
+
 /**
  * Universal Media Selector Component
  *
@@ -46,7 +48,7 @@
  * - initialGridSize: number - Initial size of grid items (50-150, default: 100)
  */
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -98,7 +100,8 @@ export function MediaSelector({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [gridSize, setGridSize] = useState(initialGridSize)
-  const [debouncedGridSize, setDebouncedGridSize] = useState(initialGridSize)
+  const [gridSizeCSS, setGridSizeCSS] = useState(`${initialGridSize}px`)
+  const sliderTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Filtering state
   const [mediaTypeFilter, setMediaTypeFilter] = useState<string[]>([])
@@ -129,13 +132,24 @@ export function MediaSelector({
     }
   }, [open])
 
-  // Debounce grid size changes to improve performance
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedGridSize(gridSize)
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [gridSize])
+  // Handle grid size changes with CSS transitions for smooth visual updates
+  const handleGridSizeChange = useCallback((value: number[]) => {
+    const newSize = value[0]
+    setGridSize(newSize)
+
+    // Use CSS transitions for smooth visual updates
+    setGridSizeCSS(`${newSize}px`)
+
+    // Debounce the actual filtering/rendering
+    if (sliderTimeoutRef.current) {
+      clearTimeout(sliderTimeoutRef.current)
+    }
+
+    sliderTimeoutRef.current = setTimeout(() => {
+      // This will trigger any heavy re-renders
+      setGridSize(newSize)
+    }, 50)
+  }, [])
 
   // Extract available tags and sources from media
   useEffect(() => {
@@ -247,7 +261,11 @@ export function MediaSelector({
     }
   }
 
-  const handleSelect = (url: string) => {
+  const handleSelect = (e: React.MouseEvent, url: string) => {
+    // Prevent default to avoid any form submission
+    e.preventDefault()
+    e.stopPropagation()
+
     if (multiple) {
       // For multiple selection, toggle the selection
       setSelectedItems((prev) => {
@@ -274,7 +292,11 @@ export function MediaSelector({
     }
   }
 
-  const handleConfirmSelection = () => {
+  const handleConfirmSelection = (e: React.MouseEvent) => {
+    // Prevent default to avoid any form submission
+    e.preventDefault()
+    e.stopPropagation()
+
     if (multiple) {
       onSelect(selectedItems)
     } else if (selectedItems.length > 0) {
@@ -331,7 +353,10 @@ export function MediaSelector({
   }
 
   // Clear all filters
-  const clearFilters = () => {
+  const clearFilters = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
     setMediaTypeFilter([])
     setTagFilters([])
     setSourceFilters([])
@@ -346,18 +371,26 @@ export function MediaSelector({
   // Calculate grid columns based on grid size
   const gridColumns = useMemo(() => {
     // Smaller grid size = more columns
-    if (debouncedGridSize <= 60) return "grid-cols-8 md:grid-cols-10 lg:grid-cols-12"
-    if (debouncedGridSize <= 80) return "grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
-    if (debouncedGridSize <= 100) return "grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
-    if (debouncedGridSize <= 120) return "grid-cols-3 md:grid-cols-5 lg:grid-cols-6"
+    if (gridSize <= 60) return "grid-cols-8 md:grid-cols-10 lg:grid-cols-12"
+    if (gridSize <= 80) return "grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
+    if (gridSize <= 100) return "grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+    if (gridSize <= 120) return "grid-cols-3 md:grid-cols-5 lg:grid-cols-6"
     return "grid-cols-2 md:grid-cols-4 lg:grid-cols-5"
-  }, [debouncedGridSize])
+  }, [gridSize])
 
   // If we have a button label, render with trigger
   if (controlledOpen === undefined && buttonLabel) {
     return (
       <>
-        <Button variant="outline" className={`justify-start ${className}`} onClick={() => setOpen(true)}>
+        <Button
+          variant="outline"
+          className={`justify-start ${className}`}
+          onClick={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setOpen(true)
+          }}
+        >
           {buttonLabel}
         </Button>
         <MediaSelectorDialog />
@@ -400,7 +433,11 @@ export function MediaSelector({
                           variant="ghost"
                           size="sm"
                           className="absolute right-1 top-1 h-7 w-7 p-0"
-                          onClick={() => setSearchQuery("")}
+                          onClick={(e) => {
+                            e.preventDefault()
+                            e.stopPropagation()
+                            setSearchQuery("")
+                          }}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -421,8 +458,8 @@ export function MediaSelector({
                       value={[gridSize]}
                       min={50}
                       max={150}
-                      step={10}
-                      onValueChange={(value) => setGridSize(value[0])}
+                      step={5}
+                      onValueChange={handleGridSizeChange}
                       className="w-full"
                     />
                   </div>
@@ -556,8 +593,12 @@ export function MediaSelector({
                             className={`relative aspect-square overflow-hidden cursor-pointer transition-all ${
                               selectedItems.includes(item.public_url) ? "ring-2 ring-primary" : "hover:opacity-90"
                             }`}
-                            style={{ width: `${debouncedGridSize}px`, height: `${debouncedGridSize}px` }}
-                            onClick={() => handleSelect(item.public_url)}
+                            style={{
+                              width: gridSizeCSS,
+                              height: gridSizeCSS,
+                              transition: "width 0.2s ease, height 0.2s ease",
+                            }}
+                            onClick={(e) => handleSelect(e, item.public_url)}
                           >
                             {itemIsVideo ? (
                               thumbnailUrl ? (
