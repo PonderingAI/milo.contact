@@ -320,7 +320,13 @@ export default function UnifiedMediaInput({
                 className="flex-grow bg-slate-800/60 border-slate-700 placeholder-slate-500 min-h-[60px] rounded-md text-slate-200 focus:ring-blue-500 focus:border-blue-500"
                 rows={3}
               />
-              <Button onClick={handleSubmitVideoUrl} variant="secondary" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold self-start mt-1 px-4 py-2 rounded-md">
+              <Button 
+                onClick={handleSubmitVideoUrl} 
+                variant="secondary" 
+                size="sm" 
+                className="hover:bg-blue-700 text-white font-semibold self-start mt-1 px-4 py-2 rounded-md" 
+                style={{ backgroundColor: '#2563EB' }}
+              >
                 Add Links
               </Button>
             </div>
