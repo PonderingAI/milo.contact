@@ -194,7 +194,7 @@ The changes will focus on:
 No other files will be modified to minimize impact on the rest of the system.
 \`\`\`
 
-```typescriptreact file="components/admin/project-form.tsx"
+\`\`\`typescriptreact file="components/admin/project-form.tsx"
 [v0-no-op-code-block-prefix]"use client"
 
 import type React from "react"

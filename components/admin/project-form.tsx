@@ -1009,8 +1009,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             onMediaAdded={handleMainMediaSelect}
             onVideoUrlSubmit={addMainVideoUrl}
             folder="projects"
-            isLoading={isProcessingVideo || isSubmitting}
-            title="Main Media"
+            isLoading={isProcessingVideo || isSubmitting} 
           />
 
           {/* BTS upload area */}
@@ -1019,7 +1018,6 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             onMediaAdded={handleBtsMediaSelect}
             onVideoUrlSubmit={addBtsVideoUrl}
             folder="bts"
-            title="Behind The Scenes Media"
             isLoading={isLoadingBtsImages || isSubmitting}
           />
         </div>
