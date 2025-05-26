@@ -16,7 +16,7 @@ import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X, ArrowLeft, Save } f
 import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import ProjectMediaUploader from "@/components/admin/project-media-uploader"
+import UnifiedMediaInput from "@/components/admin/unified-media-input"
 
 interface ProjectEditorProps {
   project?: {
@@ -922,22 +922,21 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           {/* Left column - Upload areas */}
           <div className="space-y-4">
             {/* Main upload area */}
-            <ProjectMediaUploader
-              title="Main"
-              onMediaSelect={handleMainMediaSelect}
+            <UnifiedMediaInput
+              identifier="main"
+              onMediaAdded={handleMainMediaSelect}
               onVideoUrlSubmit={addMainVideoUrl}
-              mediaType="all"
               folder="projects"
+              isLoading={isProcessingVideo || isSubmitting}
             />
 
             {/* BTS upload area */}
-            <ProjectMediaUploader
-              title="BTS"
-              onMediaSelect={handleBtsMediaSelect}
+            <UnifiedMediaInput
+              identifier="bts"
+              onMediaAdded={handleBtsMediaSelect}
               onVideoUrlSubmit={addBtsVideoUrl}
-              mediaType="all"
               folder="bts"
-              isLoading={isLoadingBtsImages}
+              isLoading={isLoadingBtsImages || isSubmitting}
             />
           </div>
 

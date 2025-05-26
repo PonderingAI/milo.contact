@@ -246,16 +246,18 @@ export default function UnifiedMediaInput({
 
   return (
     <div
-      className={`border-2 border-dashed rounded-lg p-4 text-center transition-all duration-150 ease-in-out relative ${isDraggingOver ? "border-blue-500 bg-blue-900/20 scale-105" : "border-gray-700 hover:border-gray-600"} ${className}`}
+      className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-150 ease-in-out relative ${isDraggingOver ? "border-blue-600/70 bg-slate-800/60 scale-105" : "border-gray-800 hover:border-gray-700/80"} ${className}`}
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
-      {isUploading && (
-        <div className="absolute inset-0 bg-black/50 flex flex-col items-center justify-center z-20 rounded-lg">
+      {(isUploading || isLoading) && (
+        <div className="absolute inset-0 bg-black/70 flex flex-col items-center justify-center z-20 rounded-lg">
           <UploadCloud className="h-12 w-12 text-blue-400 animate-pulse mb-2" />
-          <p className="text-lg font-semibold text-white">Uploading...</p>
+          <p className="text-lg font-semibold text-white">
+            {isUploading ? "Uploading..." : "Processing..."}
+          </p>
         </div>
       )}
 
@@ -265,42 +267,41 @@ export default function UnifiedMediaInput({
           <p className="text-xl font-semibold text-blue-300">Drop files to upload</p>
         </div>
       ) : (
-        <div className="space-y-3 divide-y divide-gray-700/50">
+        <div className="space-y-6"> {/* Adjusted space-y and removed divide-y */}
           {/* Section 1: Browse Media Library */}
           <div className="pt-2 pb-3">
-            <Button variant="outline" onClick={handleOpenMediaLibrary} className="w-full bg-gray-800/50 hover:bg-gray-700/50 border-gray-700">
+            <Button variant="outline" onClick={handleOpenMediaLibrary} className="w-full bg-slate-700/50 hover:bg-slate-600/50 border-slate-600/70 text-slate-200 hover:text-white rounded-md">
               <Search className="mr-2 h-5 w-5" /> Browse Media Library
             </Button>
           </div>
 
           {/* Section 2: Paste Video Links */}
+          {/* Consider adding <hr className="border-slate-700/60" /> if needed after visual review */}
           <div className="pt-3 pb-3">
             <label htmlFor={`${identifier}-videoUrlInput`} className="sr-only">Paste Video Links</label>
-            <div className="flex items-start space-x-2"> {/* items-start for Textarea alignment */}
-              <ListVideo className="h-6 w-6 text-gray-400 flex-shrink-0 mt-2" /> {/* Changed Icon and added mt for alignment */}
+            <div className="flex items-start space-x-2">
+              <ListVideo className="h-6 w-6 text-slate-400 flex-shrink-0 mt-2" />
               <Textarea
                 id={`${identifier}-videoUrlInput`}
                 value={videoUrlInput}
                 onChange={handleVideoUrlInputChange}
                 placeholder="Paste YouTube, Vimeo, etc. links. One URL per line, or separated by commas/spaces."
-                className="flex-grow bg-gray-800/50 border-gray-700 placeholder-gray-500 min-h-[60px]" // min-h for better UX
-                rows={3} // Suggest initial rows
-                // onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmitVideoUrl(); }}} // Optional: submit on Enter if not Shift+Enter
+                className="flex-grow bg-slate-800/60 border-slate-700 placeholder-slate-500 min-h-[60px] rounded-md text-slate-200 focus:ring-blue-500 focus:border-blue-500"
+                rows={3}
               />
-              <Button onClick={handleSubmitVideoUrl} variant="secondary" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white self-start mt-1"> {/* self-start and mt for alignment */}
+              <Button onClick={handleSubmitVideoUrl} variant="secondary" size="sm" className="bg-blue-600 hover:bg-blue-700 text-white font-semibold self-start mt-1 px-4 py-2 rounded-md">
                 Add Links
               </Button>
             </div>
           </div>
 
           {/* Section 3: Browse Device */}
+          {/* Consider adding <hr className="border-slate-700/60" /> if needed after visual review */}
           <div className="pt-3">
-            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full bg-gray-800/50 hover:bg-gray-700/50 border-gray-700">
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()} className="w-full bg-slate-700/50 hover:bg-slate-600/50 border-slate-600/70 text-slate-200 hover:text-white rounded-md">
               <ImagePlus className="mr-2 h-5 w-5" /> Browse Device Files
             </Button>
             <input
-              ref={fileInputRef}
-              ref={fileInputRef}
               type="file"
               multiple
               onChange={handleDeviceFileBrowse}
