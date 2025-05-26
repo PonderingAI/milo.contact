@@ -22,6 +22,7 @@ interface UnifiedMediaInputProps {
   showImages?: boolean
   showVideos?: boolean
   multiple?: boolean
+  squareVideos?: boolean
 }
 
 export function UnifiedMediaInput({
@@ -37,6 +38,7 @@ export function UnifiedMediaInput({
   showImages = true,
   showVideos = true,
   multiple = false,
+  squareVideos = true,
 }: UnifiedMediaInputProps) {
   const [urlInput, setUrlInput] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -200,6 +202,7 @@ export function UnifiedMediaInput({
         showImages={showImages}
         showVideos={showVideos}
         multiple={multiple}
+        squareVideos={squareVideos}
       />
     </div>
   )

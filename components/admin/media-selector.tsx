@@ -1,11 +1,58 @@
 "use client"
 
+/**
+ * Universal Media Selector Component
+ *
+ * This component provides a flexible media selection interface with filtering, search,
+ * and multiple selection capabilities.
+ *
+ * IMPLEMENTATION OPTIONS:
+ *
+ * 1. Direct usage (one-click open):
+ *    <MediaSelector
+ *      open={isOpen}
+ *      onOpenChange={setIsOpen}
+ *      onSelect={handleMediaSelect}
+ *    />
+ *
+ * 2. With a trigger button:
+ *    <MediaSelector
+ *      buttonLabel="Select Media"
+ *      onSelect={handleMediaSelect}
+ *    />
+ *
+ * 3. Inside another component:
+ *    <Button onClick={() => setIsOpen(true)}>Open Media</Button>
+ *    <MediaSelector
+ *      open={isOpen}
+ *      onOpenChange={setIsOpen}
+ *      onSelect={handleMediaSelect}
+ *    />
+ *
+ * COMMON PROPS:
+ * - onSelect: (url: string | string[]) => void - Required callback when media is selected
+ * - multiple: boolean - Allow selecting multiple items (default: false)
+ * - showImages: boolean - Show image media (default: true)
+ * - showVideos: boolean - Show video media (default: true)
+ * - squareVideos: boolean - Crop videos to square aspect ratio (default: false)
+ * - maxSelections: number - Maximum number of items that can be selected (default: 100)
+ *
+ * ADVANCED PROPS:
+ * - currentValue: string | string[] - Pre-selected media items
+ * - className: string - Additional CSS classes for the trigger button
+ * - buttonLabel: string - Text for the trigger button (if using option 2)
+ * - open: boolean - Controlled open state (if using option 1 or 3)
+ * - onOpenChange: (open: boolean) => void - Controlled state handler
+ * - initialGridSize: number - Initial size of grid items (50-150, default: 100)
+ */
+
 import { useState, useEffect, useMemo } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Loader2, Search, X, Check, Film, ImageIcon } from "lucide-react"
+import { Slider } from "@/components/ui/slider"
+import { Loader2, Search, X, Check, Film, ImageIcon, Grid3X3 } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
@@ -17,11 +64,13 @@ interface MediaSelectorProps {
   showImages?: boolean
   showVideos?: boolean
   multiple?: boolean
+  squareVideos?: boolean
   buttonLabel?: string
   maxSelections?: number
   className?: string
   open?: boolean
   onOpenChange?: (open: boolean) => void
+  initialGridSize?: number
 }
 
 export function MediaSelector({
@@ -30,11 +79,13 @@ export function MediaSelector({
   showImages = true,
   showVideos = true,
   multiple = false,
-  buttonLabel = "Browse Media Library",
+  squareVideos = false,
+  buttonLabel,
   maxSelections = 100,
   className = "",
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  initialGridSize = 100,
 }: MediaSelectorProps) {
   // Use controlled state if provided, otherwise use internal state
   const [internalOpen, setInternalOpen] = useState(false)
@@ -46,6 +97,7 @@ export function MediaSelector({
   const [filteredMedia, setFilteredMedia] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedItems, setSelectedItems] = useState<string[]>([])
+  const [gridSize, setGridSize] = useState(initialGridSize)
 
   // Filtering state
   const [mediaTypeFilter, setMediaTypeFilter] = useState<string[]>([])
@@ -277,6 +329,16 @@ export function MediaSelector({
     return mediaTypeFilter.length + tagFilters.length + sourceFilters.length
   }, [mediaTypeFilter, tagFilters, sourceFilters])
 
+  // Calculate grid columns based on grid size
+  const gridColumns = useMemo(() => {
+    // Smaller grid size = more columns
+    if (gridSize <= 60) return "grid-cols-8 md:grid-cols-10 lg:grid-cols-12"
+    if (gridSize <= 80) return "grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
+    if (gridSize <= 100) return "grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+    if (gridSize <= 120) return "grid-cols-3 md:grid-cols-5 lg:grid-cols-6"
+    return "grid-cols-2 md:grid-cols-4 lg:grid-cols-5"
+  }, [gridSize])
+
   // If we have a button label, render with trigger
   if (controlledOpen === undefined && buttonLabel) {
     return (
@@ -299,6 +361,9 @@ export function MediaSelector({
           <div className="flex flex-col h-full">
             <DialogHeader className="px-6 py-4 border-b">
               <DialogTitle>Media Library</DialogTitle>
+              <DialogDescription>
+                Select media items from your library. {multiple ? "You can select multiple items." : ""}
+              </DialogDescription>
             </DialogHeader>
 
             <div className="flex flex-1 overflow-hidden">
@@ -327,6 +392,25 @@ export function MediaSelector({
                         </Button>
                       )}
                     </div>
+                  </div>
+
+                  {/* Grid Size Slider */}
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label className="text-sm font-medium">Grid Size</Label>
+                      <div className="flex items-center gap-2">
+                        <Grid3X3 className="h-4 w-4 text-muted-foreground" />
+                        <span className="text-xs text-muted-foreground">{gridSize}px</span>
+                      </div>
+                    </div>
+                    <Slider
+                      value={[gridSize]}
+                      min={50}
+                      max={150}
+                      step={10}
+                      onValueChange={(value) => setGridSize(value[0])}
+                      className="w-full"
+                    />
                   </div>
 
                   {/* Media Type Filter */}
@@ -447,7 +531,7 @@ export function MediaSelector({
                       <p className="text-sm">Try adjusting your filters or search</p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+                    <div className={`grid ${gridColumns} gap-4`}>
                       {filteredMedia.map((item) => {
                         const itemIsVideo = isVideo(item)
                         const thumbnailUrl = itemIsVideo ? getVideoThumbnail(item) : null
@@ -455,23 +539,31 @@ export function MediaSelector({
                         return (
                           <div
                             key={item.id}
-                            className={`relative ${itemIsVideo ? "aspect-video" : "aspect-square"} rounded-md overflow-hidden border cursor-pointer transition-all ${
+                            className={`relative aspect-square rounded-md overflow-hidden border cursor-pointer transition-all ${
                               selectedItems.includes(item.public_url)
                                 ? "ring-2 ring-primary border-primary"
                                 : "hover:opacity-90"
                             }`}
+                            style={{ width: `${gridSize}px`, height: `${gridSize}px` }}
                             onClick={() => handleSelect(item.public_url)}
                           >
                             {itemIsVideo ? (
                               thumbnailUrl ? (
-                                <img
-                                  src={thumbnailUrl || "/placeholder.svg"}
-                                  alt={item.filename}
-                                  className="w-full h-full object-cover"
-                                  onError={(e) => {
-                                    e.currentTarget.src = "/placeholder.svg"
-                                  }}
-                                />
+                                <div className="w-full h-full relative">
+                                  <img
+                                    src={thumbnailUrl || "/placeholder.svg"}
+                                    alt={item.filename}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      e.currentTarget.src = "/placeholder.svg"
+                                    }}
+                                  />
+                                  <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="bg-black/30 rounded-full p-2">
+                                      <Film className="h-5 w-5 text-white" />
+                                    </div>
+                                  </div>
+                                </div>
                               ) : (
                                 <div className="w-full h-full flex items-center justify-center bg-gray-800">
                                   <Film className="h-8 w-8 text-gray-400" />
