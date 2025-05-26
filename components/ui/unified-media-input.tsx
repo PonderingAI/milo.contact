@@ -20,6 +20,9 @@ interface UnifiedMediaInputProps {
   label?: string
   description?: string
   className?: string
+  showImages?: boolean
+  showVideos?: boolean
+  multiple?: boolean
 }
 
 export function UnifiedMediaInput({
@@ -32,6 +35,9 @@ export function UnifiedMediaInput({
   label = "Media",
   description = "Upload an image or video, or enter a URL",
   className = "",
+  showImages = true,
+  showVideos = true,
+  multiple = false,
 }: UnifiedMediaInputProps) {
   const [urlInput, setUrlInput] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -99,8 +105,16 @@ export function UnifiedMediaInput({
     }
   }
 
-  const handleMediaSelect = (mediaUrl: string) => {
-    onChange(mediaUrl)
+  const handleMediaSelect = (mediaUrl: string | string[]) => {
+    // Handle both single and multiple selections
+    if (Array.isArray(mediaUrl)) {
+      if (mediaUrl.length > 0) {
+        onChange(mediaUrl[0]) // For now, just use the first one
+      }
+    } else {
+      onChange(mediaUrl)
+    }
+
     setIsDialogOpen(false)
     if (onBlur) onBlur()
   }
@@ -182,7 +196,12 @@ export function UnifiedMediaInput({
               <DialogHeader>
                 <DialogTitle>Select Media</DialogTitle>
               </DialogHeader>
-              <MediaSelector onSelect={handleMediaSelect} />
+              <MediaSelector
+                onSelect={handleMediaSelect}
+                showImages={showImages}
+                showVideos={showVideos}
+                multiple={multiple}
+              />
             </DialogContent>
           </Dialog>
         </div>
@@ -192,3 +211,5 @@ export function UnifiedMediaInput({
     </div>
   )
 }
+
+export default UnifiedMediaInput
