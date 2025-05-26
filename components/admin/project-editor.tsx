@@ -924,6 +924,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
             {/* Main upload area */}
             <UnifiedMediaInput
               identifier="main"
+              title="Main Media"
               onMediaAdded={handleMainMediaSelect}
               onVideoUrlSubmit={addMainVideoUrl}
               folder="projects"
@@ -933,6 +934,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
             {/* BTS upload area */}
             <UnifiedMediaInput
               identifier="bts"
+              title="Behind The Scenes Media"
               onMediaAdded={handleBtsMediaSelect}
               onVideoUrlSubmit={addBtsVideoUrl}
               folder="bts"

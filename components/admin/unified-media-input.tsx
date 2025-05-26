@@ -1,7 +1,7 @@
 "use client";
 
 import type React from "react";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input"; // Will be replaced by Textarea for video URLs but keep for file input styling if needed elsewhere
 import { Textarea } from "@/components/ui/textarea"; // Added for multi-URL input
@@ -51,6 +51,7 @@ interface UnifiedMediaInputProps {
   className?: string;
   // Add other necessary props from ProjectMediaUploader if needed, e.g., folder
   folder?: string;
+  title?: string;
 }
 
 export default function UnifiedMediaInput({
@@ -60,32 +61,58 @@ export default function UnifiedMediaInput({
   isLoading = false,
   className = "",
   folder = "default-folder", // Default folder, ProjectForm should pass 'projects' or 'bts'
+  title,
 }: UnifiedMediaInputProps) {
   const [isDraggingOver, setIsDraggingOver] = useState(false);
   const [videoUrlInput, setVideoUrlInput] = useState("");
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const dragLeaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const [isUploading, setIsUploading] = useState(false); // For direct uploads
 
   const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
+    if (dragLeaveTimeoutRef.current) {
+      clearTimeout(dragLeaveTimeoutRef.current);
+      dragLeaveTimeoutRef.current = null;
+    }
     setIsDraggingOver(true);
   };
 
   const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    // Only set to false if not dragging over a child element (tricky, might need refinement or rely on drop/end)
-    // For simplicity now, this might cause flickering if not handled carefully with pointer-events: none on children
-    setIsDraggingOver(false);
+    // Clear any existing timeout to prevent premature state changes if re-entering quickly
+    if (dragLeaveTimeoutRef.current) {
+      clearTimeout(dragLeaveTimeoutRef.current);
+    }
+    dragLeaveTimeoutRef.current = setTimeout(() => {
+      setIsDraggingOver(false);
+    }, 50); // A small delay like 50ms
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation(); // Necessary to allow dropping
-    setIsDraggingOver(true); // Keep it true while dragging over
+    e.stopPropagation();
+    if (dragLeaveTimeoutRef.current) {
+      clearTimeout(dragLeaveTimeoutRef.current);
+      dragLeaveTimeoutRef.current = null;
+    }
+    // Only set state if it's not already true, to avoid unnecessary re-renders.
+    // This is an optimization and not strictly part of the bug fix itself.
+    if (!isDraggingOver) { 
+      setIsDraggingOver(true);
+    }
   };
+
+  useEffect(() => {
+    return () => {
+      if (dragLeaveTimeoutRef.current) {
+        clearTimeout(dragLeaveTimeoutRef.current);
+      }
+    };
+  }, []); // Empty dependency array means this runs on mount and cleans up on unmount
 
   const processFilesForUpload = async (files: FileList | File[]) => {
     const validFiles = Array.from(files); // Convert FileList to Array if necessary
@@ -247,6 +274,7 @@ export default function UnifiedMediaInput({
   return (
     <div
       className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-150 ease-in-out relative ${isDraggingOver ? "border-blue-600/70 bg-slate-800/60 scale-105" : "border-gray-800 hover:border-gray-700/80"} ${className}`}
+      style={{ border: '3px solid red', backgroundColor: 'rgba(255, 0, 0, 0.1)' }} // DIAGNOSTIC STYLE ADDED
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -268,6 +296,9 @@ export default function UnifiedMediaInput({
         </div>
       ) : (
         <div className="space-y-6"> {/* Adjusted space-y and removed divide-y */}
+          {title && (
+            <h3 className="text-xl font-semibold text-slate-200 mb-4 text-left">{title}</h3>
+          )}
           {/* Section 1: Browse Media Library */}
           <div className="pt-2 pb-3">
             <Button variant="outline" onClick={handleOpenMediaLibrary} className="w-full bg-slate-700/50 hover:bg-slate-600/50 border-slate-600/70 text-slate-200 hover:text-white rounded-md">
@@ -302,6 +333,7 @@ export default function UnifiedMediaInput({
               <ImagePlus className="mr-2 h-5 w-5" /> Browse Device Files
             </Button>
             <input
+              ref={fileInputRef}
               type="file"
               multiple
               onChange={handleDeviceFileBrowse}
