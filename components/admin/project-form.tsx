@@ -936,6 +936,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
                 projectId: project.id,
                 images: allBtsMedia,
                 replaceExisting: true, // Add this flag to indicate we want to replace existing media
+                skipSortOrder: true, // Add this flag to skip sort_order if the column doesn't exist
               }),
             })
 
@@ -1011,6 +1012,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             onVideoUrlSubmit={addMainVideoUrl}
             folder="projects"
             isLoading={isProcessingVideo || isSubmitting}
+            multiple={true}
           />
 
           {/* BTS upload area */}
@@ -1020,6 +1022,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             onVideoUrlSubmit={addBtsVideoUrl}
             folder="bts"
             isLoading={isLoadingBtsImages || isSubmitting}
+            multiple={true}
           />
         </div>
 
