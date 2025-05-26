@@ -274,7 +274,6 @@ export default function UnifiedMediaInput({
   return (
     <div
       className={`border-2 border-dashed rounded-lg p-6 text-center transition-all duration-150 ease-in-out relative ${isDraggingOver ? "border-blue-600/70 bg-slate-800/60 scale-105" : "border-gray-800 hover:border-gray-700/80"} ${className}`}
-      style={{ border: '3px solid red', backgroundColor: 'rgba(255, 0, 0, 0.1)' }} // DIAGNOSTIC STYLE ADDED
       onDragEnter={handleDragEnter}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
@@ -301,7 +300,7 @@ export default function UnifiedMediaInput({
           )}
           {/* Section 1: Browse Media Library */}
           <div className="pt-2 pb-3">
-            <Button variant="outline" onClick={handleOpenMediaLibrary} className="w-full bg-slate-700/50 hover:bg-slate-600/50 border-slate-600/70 text-slate-200 hover:text-white rounded-md">
+            <Button variant="outline" onClick={handleOpenMediaLibrary} className="w-full !bg-slate-700/50 hover:bg-slate-600/50 border-slate-600/70 text-slate-200 hover:text-white rounded-md">
               <Search className="mr-2 h-5 w-5" /> Browse Media Library
             </Button>
           </div>
@@ -324,8 +323,7 @@ export default function UnifiedMediaInput({
                 onClick={handleSubmitVideoUrl} 
                 variant="secondary" 
                 size="sm" 
-                className="hover:bg-blue-700 text-white font-semibold self-start mt-1 px-4 py-2 rounded-md" 
-                style={{ backgroundColor: '#2563EB' }}
+                className="!bg-blue-600 hover:bg-blue-700 text-white font-semibold self-start mt-1 px-4 py-2 rounded-md"
               >
                 Add Links
               </Button>
