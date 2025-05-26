@@ -18,7 +18,7 @@ interface MediaSelectorProps {
   buttonLabel?: string
 }
 
-export function MediaSelector({
+export default function MediaSelector({
   onSelect,
   currentValue = "",
   mediaType = "all",
@@ -392,6 +392,3 @@ export function MediaSelector({
     </Dialog>
   )
 }
-
-// Also export as default for backward compatibility
-export default MediaSelector
