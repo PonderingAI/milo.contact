@@ -3,15 +3,13 @@
 import { useState, useEffect, useMemo } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Loader2, Search, X, Check, Film, ImageIcon, SlidersHorizontal } from "lucide-react"
-import { extractVideoInfo } from "@/lib/utils"
+import { Loader2, Search, X, Check, Film, ImageIcon } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface MediaSelectorProps {
   onSelect: (url: string | string[]) => void
@@ -22,6 +20,8 @@ interface MediaSelectorProps {
   buttonLabel?: string
   maxSelections?: number
   className?: string
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 
 export function MediaSelector({
@@ -33,20 +33,22 @@ export function MediaSelector({
   buttonLabel = "Browse Media Library",
   maxSelections = 100,
   className = "",
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
 }: MediaSelectorProps) {
-  const [open, setOpen] = useState(false)
+  // Use controlled state if provided, otherwise use internal state
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = controlledOpen !== undefined ? controlledOpen : internalOpen
+  const setOpen = controlledOnOpenChange || setInternalOpen
+
   const [loading, setLoading] = useState(false)
   const [media, setMedia] = useState<any[]>([])
   const [filteredMedia, setFilteredMedia] = useState<any[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedItems, setSelectedItems] = useState<string[]>([])
-  const [videoUrl, setVideoUrl] = useState("")
-  const [uploadingVideo, setUploadingVideo] = useState(false)
 
   // Filtering state
-  const [mediaTypeFilter, setMediaTypeFilter] = useState<string[]>(
-    showImages && showVideos ? [] : showImages ? ["image"] : ["video"],
-  )
+  const [mediaTypeFilter, setMediaTypeFilter] = useState<string[]>([])
   const [tagFilters, setTagFilters] = useState<string[]>([])
   const [sourceFilters, setSourceFilters] = useState<string[]>([])
   const [availableTags, setAvailableTags] = useState<string[]>([])
@@ -215,75 +217,6 @@ export function MediaSelector({
     setOpen(false)
   }
 
-  const handleAddVideoUrl = async () => {
-    if (!videoUrl) {
-      toast({
-        title: "Missing URL",
-        description: "Please enter a video URL",
-        variant: "destructive",
-      })
-      return
-    }
-
-    try {
-      setUploadingVideo(true)
-
-      // Extract video info
-      const videoInfo = extractVideoInfo(videoUrl)
-
-      if (!videoInfo) {
-        toast({
-          title: "Invalid URL",
-          description: "Please enter a valid Vimeo, YouTube, or LinkedIn video URL",
-          variant: "destructive",
-        })
-        return
-      }
-
-      // Add to media table
-      const { data, error } = await supabase
-        .from("media")
-        .insert({
-          filename: `${videoInfo.platform} Video ${videoInfo.id}`,
-          filepath: videoUrl,
-          filesize: 0, // Size is not applicable for external videos
-          filetype: videoInfo.platform,
-          public_url: videoUrl,
-          tags: ["video", videoInfo.platform],
-        })
-        .select()
-
-      if (error) {
-        throw error
-      }
-
-      // Refresh media list
-      loadMedia()
-
-      // Clear input
-      setVideoUrl("")
-
-      // Select the newly added video
-      if (data && data.length > 0) {
-        handleSelect(data[0].public_url)
-      }
-
-      toast({
-        title: "Video added",
-        description: "Video URL has been added to your media library",
-      })
-    } catch (error: any) {
-      console.error("Error adding video URL:", error)
-      toast({
-        title: "Error adding video",
-        description: error.message,
-        variant: "destructive",
-      })
-    } finally {
-      setUploadingVideo(false)
-    }
-  }
-
   // Function to get video thumbnail URL
   const getVideoThumbnail = (item: any) => {
     // First check if there's a thumbnail_url in the item
@@ -344,70 +277,72 @@ export function MediaSelector({
     return mediaTypeFilter.length + tagFilters.length + sourceFilters.length
   }, [mediaTypeFilter, tagFilters, sourceFilters])
 
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" className={`justify-start ${className}`}>
+  // If we have a button label, render with trigger
+  if (controlledOpen === undefined && buttonLabel) {
+    return (
+      <>
+        <Button variant="outline" className={`justify-start ${className}`} onClick={() => setOpen(true)}>
           {buttonLabel}
         </Button>
-      </DialogTrigger>
-      <DialogContent className="sm:max-w-[800px] max-h-[80vh] overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>Media Library</DialogTitle>
-        </DialogHeader>
+        <MediaSelectorDialog />
+      </>
+    )
+  }
 
-        <div className="space-y-4">
-          {/* Search and filter bar */}
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search media..."
-                className="pl-8"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              {searchQuery && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="absolute right-1 top-1 h-7 w-7 p-0"
-                  onClick={() => setSearchQuery("")}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
+  // Otherwise just render the dialog
+  return <MediaSelectorDialog />
 
-            {/* Filters */}
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-1">
-                  <SlidersHorizontal className="h-4 w-4" />
-                  Filters
-                  {activeFilterCount > 0 && (
-                    <Badge variant="secondary" className="ml-1 h-5 px-1.5">
-                      {activeFilterCount}
-                    </Badge>
-                  )}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-80">
-                <div className="space-y-4">
-                  <h4 className="font-medium">Filter Media</h4>
+  function MediaSelectorDialog() {
+    return (
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-[90vw] w-[1200px] h-[85vh] p-0 overflow-hidden">
+          <div className="flex flex-col h-full">
+            <DialogHeader className="px-6 py-4 border-b">
+              <DialogTitle>Media Library</DialogTitle>
+            </DialogHeader>
+
+            <div className="flex flex-1 overflow-hidden">
+              {/* Sidebar with filters */}
+              <div className="w-64 border-r p-4 overflow-y-auto">
+                <div className="space-y-6">
+                  {/* Search */}
+                  <div>
+                    <Label className="text-sm font-medium mb-2 block">Search</Label>
+                    <div className="relative">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search media..."
+                        className="pl-8 h-9"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                      {searchQuery && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="absolute right-1 top-1 h-7 w-7 p-0"
+                          onClick={() => setSearchQuery("")}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
 
                   {/* Media Type Filter */}
                   {showImages && showVideos && (
-                    <div className="space-y-2">
-                      <h5 className="text-sm font-medium">Media Type</h5>
-                      <div className="flex flex-wrap gap-2">
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Media Type</Label>
+                      <div className="space-y-2">
                         <div className="flex items-center space-x-2">
                           <Checkbox
                             id="filter-images"
                             checked={mediaTypeFilter.includes("image")}
                             onCheckedChange={() => toggleFilter("mediaType", "image")}
                           />
-                          <Label htmlFor="filter-images">Images</Label>
+                          <Label htmlFor="filter-images" className="text-sm font-normal cursor-pointer">
+                            Images
+                          </Label>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Checkbox
@@ -415,216 +350,172 @@ export function MediaSelector({
                             checked={mediaTypeFilter.includes("video")}
                             onCheckedChange={() => toggleFilter("mediaType", "video")}
                           />
-                          <Label htmlFor="filter-videos">Videos</Label>
+                          <Label htmlFor="filter-videos" className="text-sm font-normal cursor-pointer">
+                            Videos
+                          </Label>
                         </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tags Filter */}
-                  {availableTags.length > 0 && (
-                    <div className="space-y-2">
-                      <h5 className="text-sm font-medium">Tags</h5>
-                      <div className="flex flex-wrap gap-2 max-h-32 overflow-y-auto">
-                        {availableTags.map((tag) => (
-                          <Badge
-                            key={tag}
-                            variant={tagFilters.includes(tag) ? "default" : "outline"}
-                            className="cursor-pointer"
-                            onClick={() => toggleFilter("tag", tag)}
-                          >
-                            {tag}
-                          </Badge>
-                        ))}
                       </div>
                     </div>
                   )}
 
                   {/* Source Filter */}
                   {availableSources.length > 0 && (
-                    <div className="space-y-2">
-                      <h5 className="text-sm font-medium">Source</h5>
-                      <div className="flex flex-wrap gap-2">
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Source</Label>
+                      <div className="space-y-2">
                         {availableSources.map((source) => (
-                          <Badge
-                            key={source}
-                            variant={sourceFilters.includes(source) ? "default" : "outline"}
-                            className="cursor-pointer"
-                            onClick={() => toggleFilter("source", source)}
-                          >
-                            {source}
-                          </Badge>
+                          <div key={source} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`source-${source}`}
+                              checked={sourceFilters.includes(source)}
+                              onCheckedChange={() => toggleFilter("source", source)}
+                            />
+                            <Label htmlFor={`source-${source}`} className="text-sm font-normal cursor-pointer">
+                              {source.charAt(0).toUpperCase() + source.slice(1)}
+                            </Label>
+                          </div>
                         ))}
                       </div>
                     </div>
                   )}
 
+                  {/* Tags Filter */}
+                  {availableTags.length > 0 && (
+                    <div>
+                      <Label className="text-sm font-medium mb-2 block">Tags</Label>
+                      <ScrollArea className="h-48">
+                        <div className="space-y-2">
+                          {availableTags.map((tag) => (
+                            <div key={tag} className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`tag-${tag}`}
+                                checked={tagFilters.includes(tag)}
+                                onCheckedChange={() => toggleFilter("tag", tag)}
+                              />
+                              <Label htmlFor={`tag-${tag}`} className="text-sm font-normal cursor-pointer">
+                                {tag}
+                              </Label>
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
+                    </div>
+                  )}
+
                   {/* Clear Filters */}
                   {activeFilterCount > 0 && (
-                    <Button variant="ghost" size="sm" onClick={clearFilters} className="w-full mt-2">
-                      Clear All Filters
+                    <Button variant="outline" size="sm" onClick={clearFilters} className="w-full">
+                      Clear All Filters ({activeFilterCount})
                     </Button>
                   )}
                 </div>
-              </PopoverContent>
-            </Popover>
-
-            {/* Add Video URL (only if videos are enabled) */}
-            {showVideos && (
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <Film className="h-4 w-4 mr-2" />
-                    Add Video
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-80">
-                  <div className="space-y-4">
-                    <h4 className="font-medium">Add Video URL</h4>
-                    <div className="flex flex-col gap-2">
-                      <Input
-                        placeholder="Enter Vimeo, YouTube, or LinkedIn video URL"
-                        value={videoUrl}
-                        onChange={(e) => setVideoUrl(e.target.value)}
-                      />
-                      <Button onClick={handleAddVideoUrl} disabled={uploadingVideo} className="w-full">
-                        {uploadingVideo ? (
-                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                        ) : (
-                          <Film className="h-4 w-4 mr-2" />
-                        )}
-                        Add Video
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Enter a Vimeo, YouTube, or LinkedIn video URL to add it to your media library.
-                    </p>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
-
-            {/* Confirm Selection (only for multiple selection) */}
-            {multiple && (
-              <Button onClick={handleConfirmSelection} disabled={selectedItems.length === 0} size="sm">
-                Confirm ({selectedItems.length})
-              </Button>
-            )}
-          </div>
-
-          {/* Active filters display */}
-          {activeFilterCount > 0 && (
-            <div className="flex flex-wrap gap-1 items-center">
-              <span className="text-xs text-muted-foreground">Active filters:</span>
-              {mediaTypeFilter.map((filter) => (
-                <Badge key={filter} variant="secondary" className="text-xs">
-                  {filter}
-                  <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => toggleFilter("mediaType", filter)} />
-                </Badge>
-              ))}
-              {tagFilters.map((filter) => (
-                <Badge key={filter} variant="secondary" className="text-xs">
-                  {filter}
-                  <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => toggleFilter("tag", filter)} />
-                </Badge>
-              ))}
-              {sourceFilters.map((filter) => (
-                <Badge key={filter} variant="secondary" className="text-xs">
-                  {filter}
-                  <X className="h-3 w-3 ml-1 cursor-pointer" onClick={() => toggleFilter("source", filter)} />
-                </Badge>
-              ))}
-              <Button variant="ghost" size="sm" className="h-5 text-xs px-1.5" onClick={clearFilters}>
-                Clear all
-              </Button>
-            </div>
-          )}
-
-          {/* Media Grid */}
-          <div className="space-y-4">
-            {loading ? (
-              <div className="flex justify-center py-8">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               </div>
-            ) : filteredMedia.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                <div className="mx-auto h-12 w-12 mb-2 opacity-20 flex justify-center">
-                  {mediaTypeFilter.includes("video") && !mediaTypeFilter.includes("image") ? (
-                    <Film className="h-12 w-12" />
-                  ) : (
-                    <ImageIcon className="h-12 w-12" />
+
+              {/* Main content area */}
+              <div className="flex-1 flex flex-col">
+                {/* Header with selection info */}
+                <div className="px-6 py-3 border-b flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    {loading ? "Loading..." : `${filteredMedia.length} items`}
+                    {selectedItems.length > 0 && ` • ${selectedItems.length} selected`}
+                  </div>
+
+                  {/* Confirm Selection (only for multiple selection) */}
+                  {multiple && (
+                    <Button onClick={handleConfirmSelection} disabled={selectedItems.length === 0} size="sm">
+                      Confirm Selection ({selectedItems.length})
+                    </Button>
                   )}
                 </div>
-                <p>No media found</p>
-                <p className="text-sm">Try adjusting your filters or search</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
-                {filteredMedia.map((item) => {
-                  const itemIsVideo = isVideo(item)
-                  const thumbnailUrl = itemIsVideo ? getVideoThumbnail(item) : null
 
-                  return (
-                    <div
-                      key={item.id}
-                      className={`relative ${itemIsVideo ? "aspect-video" : "aspect-square"} rounded-md overflow-hidden border cursor-pointer transition-all ${
-                        selectedItems.includes(item.public_url)
-                          ? "ring-2 ring-primary border-primary"
-                          : "hover:opacity-90"
-                      }`}
-                      onClick={() => handleSelect(item.public_url)}
-                    >
-                      {itemIsVideo ? (
-                        thumbnailUrl ? (
-                          <img
-                            src={thumbnailUrl || "/placeholder.svg"}
-                            alt={item.filename}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.currentTarget.src = "/placeholder.svg"
-                            }}
-                          />
+                {/* Media Grid */}
+                <ScrollArea className="flex-1 p-6">
+                  {loading ? (
+                    <div className="flex justify-center py-8">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  ) : filteredMedia.length === 0 ? (
+                    <div className="text-center py-8 text-muted-foreground">
+                      <div className="mx-auto h-12 w-12 mb-2 opacity-20 flex justify-center">
+                        {mediaTypeFilter.includes("video") && !mediaTypeFilter.includes("image") ? (
+                          <Film className="h-12 w-12" />
                         ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-gray-800">
-                            <Film className="h-12 w-12 text-gray-400" />
-                          </div>
-                        )
-                      ) : (
-                        <img
-                          src={item.public_url || "/placeholder.svg"}
-                          alt={item.filename}
-                          className="w-full h-full object-cover"
-                          onError={(e) => {
-                            e.currentTarget.src = "/placeholder.svg"
-                          }}
-                        />
-                      )}
-
-                      {selectedItems.includes(item.public_url) && (
-                        <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
-                          <Check className="h-4 w-4" />
-                        </div>
-                      )}
-
-                      <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-1 text-xs">
-                        <div className="truncate">{item.filename}</div>
-                        {item.filetype && (
-                          <div className="flex items-center gap-1 mt-0.5">
-                            {itemIsVideo ? <Film className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
-                            <span className="text-[10px] opacity-80">{item.filetype}</span>
-                          </div>
+                          <ImageIcon className="h-12 w-12" />
                         )}
                       </div>
+                      <p>No media found</p>
+                      <p className="text-sm">Try adjusting your filters or search</p>
                     </div>
-                  )
-                })}
+                  ) : (
+                    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-4">
+                      {filteredMedia.map((item) => {
+                        const itemIsVideo = isVideo(item)
+                        const thumbnailUrl = itemIsVideo ? getVideoThumbnail(item) : null
+
+                        return (
+                          <div
+                            key={item.id}
+                            className={`relative ${itemIsVideo ? "aspect-video" : "aspect-square"} rounded-md overflow-hidden border cursor-pointer transition-all ${
+                              selectedItems.includes(item.public_url)
+                                ? "ring-2 ring-primary border-primary"
+                                : "hover:opacity-90"
+                            }`}
+                            onClick={() => handleSelect(item.public_url)}
+                          >
+                            {itemIsVideo ? (
+                              thumbnailUrl ? (
+                                <img
+                                  src={thumbnailUrl || "/placeholder.svg"}
+                                  alt={item.filename}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    e.currentTarget.src = "/placeholder.svg"
+                                  }}
+                                />
+                              ) : (
+                                <div className="w-full h-full flex items-center justify-center bg-gray-800">
+                                  <Film className="h-8 w-8 text-gray-400" />
+                                </div>
+                              )
+                            ) : (
+                              <img
+                                src={item.public_url || "/placeholder.svg"}
+                                alt={item.filename}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  e.currentTarget.src = "/placeholder.svg"
+                                }}
+                              />
+                            )}
+
+                            {selectedItems.includes(item.public_url) && (
+                              <div className="absolute top-2 right-2 bg-primary text-primary-foreground rounded-full p-1">
+                                <Check className="h-4 w-4" />
+                              </div>
+                            )}
+
+                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-1">
+                              <div className="truncate text-xs">{item.filename}</div>
+                              {item.filetype && (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  {itemIsVideo ? <Film className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
+                                  <span className="text-[10px] opacity-80">{item.filetype}</span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </ScrollArea>
               </div>
-            )}
+            </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
+        </DialogContent>
+      </Dialog>
+    )
+  }
 }
 
 // Default export for backward compatibility

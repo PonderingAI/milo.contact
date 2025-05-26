@@ -5,7 +5,6 @@ import type React from "react"
 import { useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { MediaSelector } from "@/components/admin/media-selector"
 import { extractVideoInfo } from "@/lib/utils"
 import { X, Upload, Link, ImageIcon } from "lucide-react"
@@ -115,7 +114,6 @@ export function UnifiedMediaInput({
       onChange(mediaUrl)
     }
 
-    setIsDialogOpen(false)
     if (onBlur) onBlur()
   }
 
@@ -185,29 +183,24 @@ export function UnifiedMediaInput({
             <span className="text-xs">Upload</span>
           </Button>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="secondary" size="sm" className="h-8 px-2">
-                <ImageIcon className="h-3.5 w-3.5 mr-1" />
-                <span className="text-xs">Browse Media</span>
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>Select Media</DialogTitle>
-              </DialogHeader>
-              <MediaSelector
-                onSelect={handleMediaSelect}
-                showImages={showImages}
-                showVideos={showVideos}
-                multiple={multiple}
-              />
-            </DialogContent>
-          </Dialog>
+          <Button variant="secondary" size="sm" className="h-8 px-2" onClick={() => setIsDialogOpen(true)}>
+            <ImageIcon className="h-3.5 w-3.5 mr-1" />
+            <span className="text-xs">Browse Media</span>
+          </Button>
         </div>
       </div>
 
       {description && <p className="text-xs text-gray-500">{description}</p>}
+
+      {/* Media Selector Dialog */}
+      <MediaSelector
+        open={isDialogOpen}
+        onOpenChange={setIsDialogOpen}
+        onSelect={handleMediaSelect}
+        showImages={showImages}
+        showVideos={showVideos}
+        multiple={multiple}
+      />
     </div>
   )
 }

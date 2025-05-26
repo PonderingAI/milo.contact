@@ -10,6 +10,26 @@ import { UploadCloud, ArrowRight } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import MediaSelector from "./media-selector" // Import the correct component for media browsing
 
+interface UnifiedMediaInputProps {
+  identifier: string
+  onMediaAdded: (urls: string[]) => void
+  onVideoUrlSubmit: (url: string) => void
+  isLoading?: boolean
+  className?: string
+  folder?: string
+}
+
+async function calculateFileHashClient(file: File): Promise<string> {
+  const subtle = window.crypto.subtle
+  const buffer = await file.arrayBuffer()
+  const digest = await subtle.digest("SHA-256", buffer)
+
+  // Convert the ArrayBuffer to a string
+  const hashArray = Array.from(new Uint8Array(digest))
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
+  return hashHex
+}
+
 // Replace the entire component with the updated version
 export default function UnifiedMediaInput({
   identifier,
