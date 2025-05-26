@@ -46,7 +46,7 @@
  * - initialGridSize: number - Initial size of grid items (50-150, default: 100)
  */
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
@@ -98,6 +98,7 @@ export function MediaSelector({
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedItems, setSelectedItems] = useState<string[]>([])
   const [gridSize, setGridSize] = useState(initialGridSize)
+  const [debouncedGridSize, setDebouncedGridSize] = useState(initialGridSize)
 
   // Filtering state
   const [mediaTypeFilter, setMediaTypeFilter] = useState<string[]>([])
@@ -128,6 +129,14 @@ export function MediaSelector({
     }
   }, [open])
 
+  // Debounce grid size changes to improve performance
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedGridSize(gridSize)
+    }, 100)
+    return () => clearTimeout(timer)
+  }, [gridSize])
+
   // Extract available tags and sources from media
   useEffect(() => {
     if (media.length > 0) {
@@ -151,8 +160,8 @@ export function MediaSelector({
     }
   }, [media])
 
-  // Apply filters and search
-  useEffect(() => {
+  // Memoize the filtered media to improve performance
+  const getFilteredMedia = useCallback(() => {
     let filtered = [...media]
 
     // Apply media type filter
@@ -194,8 +203,13 @@ export function MediaSelector({
       })
     }
 
-    setFilteredMedia(filtered)
+    return filtered
   }, [media, searchQuery, mediaTypeFilter, tagFilters, sourceFilters])
+
+  // Update filtered media when filters change
+  useEffect(() => {
+    setFilteredMedia(getFilteredMedia())
+  }, [getFilteredMedia])
 
   const loadMedia = async () => {
     try {
@@ -332,12 +346,12 @@ export function MediaSelector({
   // Calculate grid columns based on grid size
   const gridColumns = useMemo(() => {
     // Smaller grid size = more columns
-    if (gridSize <= 60) return "grid-cols-8 md:grid-cols-10 lg:grid-cols-12"
-    if (gridSize <= 80) return "grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
-    if (gridSize <= 100) return "grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
-    if (gridSize <= 120) return "grid-cols-3 md:grid-cols-5 lg:grid-cols-6"
+    if (debouncedGridSize <= 60) return "grid-cols-8 md:grid-cols-10 lg:grid-cols-12"
+    if (debouncedGridSize <= 80) return "grid-cols-6 md:grid-cols-8 lg:grid-cols-10"
+    if (debouncedGridSize <= 100) return "grid-cols-4 md:grid-cols-6 lg:grid-cols-8"
+    if (debouncedGridSize <= 120) return "grid-cols-3 md:grid-cols-5 lg:grid-cols-6"
     return "grid-cols-2 md:grid-cols-4 lg:grid-cols-5"
-  }, [gridSize])
+  }, [debouncedGridSize])
 
   // If we have a button label, render with trigger
   if (controlledOpen === undefined && buttonLabel) {
@@ -513,7 +527,7 @@ export function MediaSelector({
                 </div>
 
                 {/* Media Grid */}
-                <ScrollArea className="flex-1 p-6">
+                <ScrollArea className="flex-1">
                   {loading ? (
                     <div className="flex justify-center py-8">
                       <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -531,7 +545,7 @@ export function MediaSelector({
                       <p className="text-sm">Try adjusting your filters or search</p>
                     </div>
                   ) : (
-                    <div className={`grid ${gridColumns} gap-4`}>
+                    <div className={`grid ${gridColumns} gap-1 p-1`}>
                       {filteredMedia.map((item) => {
                         const itemIsVideo = isVideo(item)
                         const thumbnailUrl = itemIsVideo ? getVideoThumbnail(item) : null
@@ -539,12 +553,10 @@ export function MediaSelector({
                         return (
                           <div
                             key={item.id}
-                            className={`relative aspect-square rounded-md overflow-hidden border cursor-pointer transition-all ${
-                              selectedItems.includes(item.public_url)
-                                ? "ring-2 ring-primary border-primary"
-                                : "hover:opacity-90"
+                            className={`relative aspect-square overflow-hidden cursor-pointer transition-all ${
+                              selectedItems.includes(item.public_url) ? "ring-2 ring-primary" : "hover:opacity-90"
                             }`}
-                            style={{ width: `${gridSize}px`, height: `${gridSize}px` }}
+                            style={{ width: `${debouncedGridSize}px`, height: `${debouncedGridSize}px` }}
                             onClick={() => handleSelect(item.public_url)}
                           >
                             {itemIsVideo ? (
@@ -588,12 +600,6 @@ export function MediaSelector({
 
                             <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white p-1">
                               <div className="truncate text-xs">{item.filename}</div>
-                              {item.filetype && (
-                                <div className="flex items-center gap-1 mt-0.5">
-                                  {itemIsVideo ? <Film className="h-3 w-3" /> : <ImageIcon className="h-3 w-3" />}
-                                  <span className="text-[10px] opacity-80">{item.filetype}</span>
-                                </div>
-                              )}
                             </div>
                           </div>
                         )
