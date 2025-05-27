@@ -320,7 +320,8 @@ function MediaUploader({
           <MediaSelector
             onSelect={handleMediaSelect}
             currentValue={mediaType === "image" ? preview || "" : videoUrl}
-            mediaType={mediaType === "image" ? "images" : "videos"}
+            showImages={mediaType === "image"}
+            showVideos={mediaType === "video"}
             buttonLabel={`Browse Media Library (${mediaType === "image" ? "Images" : "Videos"})`}
           />
         </div>

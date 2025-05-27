@@ -11,12 +11,11 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X } from 'lucide-react'
+import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X } from "lucide-react"
 import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-// import ProjectMediaUploader from "@/components/admin/project-media-uploader"; // Removed
-import UnifiedMediaInput from "@/components/admin/unified-media-input"; // Added
+import UnifiedMediaInput from "@/components/admin/unified-media-input"
 
 interface ProjectFormProps {
   project?: {
@@ -36,7 +35,9 @@ interface ProjectFormProps {
   mode: "create" | "edit"
 }
 
+// Change from export function to export default function
 export default function ProjectForm({ project, mode }: ProjectFormProps) {
+  // Keep all the existing implementation exactly as it was
   const [formData, setFormData] = useState({
     title: project?.title || "",
     category: project?.category || "",
@@ -846,16 +847,16 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
         // Save BTS images and videos if any
         if ((btsImages.length > 0 || btsVideos.length > 0) && responseData.data && responseData.data[0]) {
-          const projectId = responseData.data[0].id;
-          const allBtsMedia = [...btsImages, ...btsVideos];
-          
+          const projectId = responseData.data[0].id
+          const allBtsMedia = [...btsImages, ...btsVideos]
+
           try {
-            setIsSubmitting(true); // Keep the submitting state active
+            setIsSubmitting(true) // Keep the submitting state active
             const toastId = toast({
               title: "Saving BTS media",
               description: "Uploading behind-the-scenes media...",
-            }).id;
-            
+            }).id
+
             const btsResponse = await fetch("/api/projects/bts-images", {
               method: "POST",
               headers: {
@@ -865,34 +866,34 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
                 projectId,
                 images: allBtsMedia,
               }),
-            });
-            
-            const btsResult = await btsResponse.json();
-            
+            })
+
+            const btsResult = await btsResponse.json()
+
             if (!btsResponse.ok) {
-              console.error("Error saving BTS media:", btsResult);
+              console.error("Error saving BTS media:", btsResult)
               toast({
                 id: toastId,
                 title: "Warning",
                 description: "Project created but some BTS media couldn't be saved. You can add them later.",
                 variant: "destructive",
-              });
+              })
             } else {
               toast({
                 id: toastId,
                 title: "Success",
                 description: `Project created with ${allBtsMedia.length} BTS media items`,
-              });
+              })
             }
           } catch (btsError) {
-            console.error("Error saving BTS media:", btsError);
+            console.error("Error saving BTS media:", btsError)
             toast({
               title: "Warning",
               description: "Project created but BTS media couldn't be saved. You can add them later.",
               variant: "destructive",
-            });
+            })
           } finally {
-            setIsSubmitting(false);
+            setIsSubmitting(false)
           }
         }
 
@@ -918,14 +919,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         // Update BTS images and videos if any
         if (project?.id) {
           try {
-            setIsSubmitting(true); // Keep the submitting state active
+            setIsSubmitting(true) // Keep the submitting state active
             const toastId = toast({
               title: "Updating BTS media",
               description: "Updating behind-the-scenes media...",
-            }).id;
-            
-            const allBtsMedia = [...btsImages, ...btsVideos];
-            
+            }).id
+
+            const allBtsMedia = [...btsImages, ...btsVideos]
+
             const btsResponse = await fetch("/api/projects/bts-images", {
               method: "POST",
               headers: {
@@ -935,35 +936,36 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
                 projectId: project.id,
                 images: allBtsMedia,
                 replaceExisting: true, // Add this flag to indicate we want to replace existing media
+                skipSortOrder: true, // Add this flag to skip sort_order if the column doesn't exist
               }),
-            });
-            
-            const btsResult = await btsResponse.json();
-            
+            })
+
+            const btsResult = await btsResponse.json()
+
             if (!btsResponse.ok) {
-              console.error("Error updating BTS media:", btsResult);
+              console.error("Error updating BTS media:", btsResult)
               toast({
                 id: toastId,
                 title: "Warning",
                 description: "Project updated but some BTS media couldn't be saved.",
                 variant: "destructive",
-              });
+              })
             } else {
               toast({
                 id: toastId,
                 title: "Success",
                 description: `Project updated with ${allBtsMedia.length} BTS media items`,
-              });
+              })
             }
           } catch (btsError) {
-            console.error("Error updating BTS media:", btsError);
+            console.error("Error updating BTS media:", btsError)
             toast({
               title: "Warning",
               description: "Project updated but BTS media couldn't be saved.",
               variant: "destructive",
-            });
+            })
           } finally {
-            setIsSubmitting(false);
+            setIsSubmitting(false)
           }
         }
 
@@ -1010,7 +1012,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             onVideoUrlSubmit={addMainVideoUrl}
             folder="projects"
             isLoading={isProcessingVideo || isSubmitting}
-            title="Main Media"
+            multiple={true}
           />
 
           {/* BTS upload area */}
@@ -1019,8 +1021,8 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             onMediaAdded={handleBtsMediaSelect}
             onVideoUrlSubmit={addBtsVideoUrl}
             folder="bts"
-            title="Behind The Scenes Media"
             isLoading={isLoadingBtsImages || isSubmitting}
+            multiple={true}
           />
         </div>
 
