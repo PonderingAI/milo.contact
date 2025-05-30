@@ -61,7 +61,7 @@ const tools = [
     name: 'Your Tool Name',
     description: 'A brief description of what your tool does.',
     icon: YourIcon,
-    status: 'beta', // 'stable', 'beta', or 'experimental'
+    status: 'stable', // 'stable', 'beta', or 'experimental'
     tags: ['Category', 'Another Category']
   }
 ];
