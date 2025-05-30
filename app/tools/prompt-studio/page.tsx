@@ -12,7 +12,7 @@ import { MetadataEditor } from "@/components/metadata-editor"
 import { QuickRatingInput } from "@/components/quick-rating-input"
 import { Button } from "@/components/ui/button"
 import { cleanPromptForExport } from "@/lib/utils"
-import type { Prompt } from "@/lib/types"
+import type { Prompt, ExportPrompt } from "@/lib/types"
 import { ArrowLeft, Save, Upload, Plus, Trash2 } from "lucide-react"
 
 export default function PromptStudioPage() {
@@ -106,49 +106,86 @@ export default function PromptStudioPage() {
         const content = event.target?.result as string
         if (content) {
           try {
-            // Try to parse and convert the imported data
-            const importedData = JSON.parse(content)
+            console.log("Importing file content:", content.substring(0, 200))
+            const importedData = JSON.parse(content) as ExportPrompt[]
+            console.log("Parsed imported data:", importedData)
 
-            // Convert from export format back to internal format if needed
-            const convertedPrompts = importedData.map((item: any) => {
-              if (item.prompt && !item.text) {
-                // Convert from export format
-                return {
-                  ...item,
-                  text: item.prompt,
-                  promptId: crypto.randomUUID(),
-                  createdAt: new Date().toISOString(),
-                  updatedAt: new Date().toISOString(),
+            if (!Array.isArray(importedData)) {
+              throw new Error("Invalid format: expected an array of prompts")
+            }
+
+            // Clear existing data first
+            clearAllData()
+
+            // Process each imported prompt
+            importedData.forEach((exportPrompt, index) => {
+              console.log(`Processing import ${index + 1}:`, exportPrompt)
+
+              // Get the prompt text (could be 'prompt' or 'text' field)
+              const promptText = exportPrompt.prompt || (exportPrompt as any).text
+              if (!promptText) {
+                console.warn("Skipping prompt without text:", exportPrompt)
+                return
+              }
+
+              // Add the prompt first
+              const newPrompt = addPromptToStore(promptText)
+              console.log("Added prompt:", newPrompt?.promptId)
+
+              if (newPrompt) {
+                // Prepare metadata updates
+                const metadata: Partial<Prompt> = {}
+
+                if (exportPrompt.rating !== undefined && exportPrompt.rating !== null) {
+                  metadata.rating = exportPrompt.rating
+                }
+                if (exportPrompt.notes) {
+                  metadata.notes = exportPrompt.notes
+                }
+                if (exportPrompt.tags && Array.isArray(exportPrompt.tags)) {
+                  metadata.tags = exportPrompt.tags
+                }
+                if (exportPrompt.model) {
+                  metadata.model = exportPrompt.model
+                }
+                if (exportPrompt.negativePrompt) {
+                  metadata.negativePrompt = exportPrompt.negativePrompt
+                }
+                if (exportPrompt.category) {
+                  metadata.category = exportPrompt.category
+                }
+                if (exportPrompt.aspectRatio) {
+                  metadata.aspectRatio = exportPrompt.aspectRatio
+                }
+                if (exportPrompt.steps !== undefined && exportPrompt.steps !== null) {
+                  metadata.steps = exportPrompt.steps
+                }
+                if (exportPrompt.seed !== undefined && exportPrompt.seed !== null) {
+                  metadata.seed = exportPrompt.seed
+                }
+                if (exportPrompt.cfgScale !== undefined && exportPrompt.cfgScale !== null) {
+                  metadata.cfgScale = exportPrompt.cfgScale
+                }
+
+                // Update with metadata if there's any
+                if (Object.keys(metadata).length > 0) {
+                  console.log("Updating prompt with metadata:", newPrompt.promptId, metadata)
+                  // Use setTimeout to ensure the prompt is fully added before updating
+                  setTimeout(
+                    () => {
+                      updatePrompt(newPrompt.promptId, metadata)
+                    },
+                    50 * (index + 1),
+                  ) // Stagger updates to avoid race conditions
                 }
               }
-              return item
             })
 
-            // For simplicity, replace all prompts with imported ones
-            clearAllData()
-            convertedPrompts.forEach((prompt: any) => {
-              addPromptToStore(prompt.text || prompt.prompt)
-              if (prompt.rating || prompt.notes || prompt.tags) {
-                // Update with metadata after adding
-                setTimeout(() => {
-                  updatePrompt(prompt.promptId, {
-                    rating: prompt.rating || 0,
-                    notes: prompt.notes,
-                    tags: prompt.tags,
-                    model: prompt.model,
-                    negativePrompt: prompt.negativePrompt,
-                    category: prompt.category,
-                    aspectRatio: prompt.aspectRatio,
-                    steps: prompt.steps,
-                    seed: prompt.seed,
-                    cfgScale: prompt.cfgScale,
-                  })
-                }, 10)
-              }
-            })
-
-            alert("Prompts imported successfully!")
+            setTimeout(() => {
+              alert(`Successfully imported ${importedData.length} prompts!`)
+            }, 100 * importedData.length)
           } catch (error) {
+            console.error("Import error:", error)
             alert("Failed to import prompts. Please check the file format.")
           }
         }
