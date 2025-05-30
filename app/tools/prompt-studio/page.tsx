@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useCallback, useRef } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import Link from "next/link"
 import { usePromptsStore } from "@/hooks/use-prompts-store"
 import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
@@ -26,24 +26,43 @@ export default function PromptStudioPage() {
     deletePrompt,
     clearAllData,
     hasUnsavedChanges,
+    isLoaded,
   } = usePromptsStore()
 
   const [ratingTargetPrompt, setRatingTargetPrompt] = useState<Prompt | null>(null)
   const [activePanel, setActivePanel] = useState<"list" | "editor">("list")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Debug effect to log prompts changes
+  useEffect(() => {
+    console.log(
+      "Prompts changed:",
+      prompts.length,
+      prompts.map((p) => ({ id: p.promptId, text: p.text.substring(0, 30) })),
+    )
+  }, [prompts])
+
   // Handle adding a new prompt
   const handleAddNewPrompt = useCallback(
     (text: string) => {
-      console.log("Adding new prompt:", text)
-      const newPrompt = addPromptToStore(text)
-      console.log("New prompt created:", newPrompt)
+      console.log("handleAddNewPrompt called with:", text)
+
+      if (!text.trim()) {
+        console.log("Empty text, not adding")
+        return
+      }
+
+      const newPrompt = addPromptToStore(text.trim())
+      console.log("addPromptToStore returned:", newPrompt)
 
       if (newPrompt) {
-        // Use setTimeout to ensure the prompt is added to state before showing rating modal
+        // Use a longer timeout to ensure the prompt is fully added to state
         setTimeout(() => {
+          console.log("Setting rating target prompt:", newPrompt.promptId)
           setRatingTargetPrompt(newPrompt)
-        }, 50)
+        }, 100)
+      } else {
+        console.log("No prompt was created")
       }
     },
     [addPromptToStore],
@@ -51,6 +70,7 @@ export default function PromptStudioPage() {
 
   // Handle exporting prompts with simplified format
   const handleExport = useCallback(() => {
+    console.log("Exporting prompts, count:", prompts.length)
     // Sort prompts by rating (descending) and clean for export
     const sortedPrompts = [...prompts].sort((a, b) => b.rating - a.rating).map((prompt) => cleanPromptForExport(prompt))
 
@@ -210,6 +230,15 @@ export default function PromptStudioPage() {
     !!ratingTargetPrompt, // Disable keyboard shortcuts when rating modal is open
   )
 
+  // Show loading state
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-black text-neutral-100 flex items-center justify-center">
+        <div>Loading...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-black text-neutral-100 flex flex-col">
       <header className="border-b border-neutral-800 p-4">
@@ -221,6 +250,7 @@ export default function PromptStudioPage() {
             </Link>
             <h1 className="font-serif text-2xl">Prompt Studio</h1>
             {hasUnsavedChanges && <span className="text-yellow-400 text-sm">● Unsaved changes</span>}
+            <span className="text-neutral-500 text-sm">({prompts.length} prompts)</span>
           </div>
           <div className="flex items-center space-x-2">
             <Button
@@ -312,7 +342,7 @@ export default function PromptStudioPage() {
               if (inputElement) {
                 inputElement.focus()
               }
-            }, 100) // Increased timeout
+            }, 100)
           }
         }}
         initialRating={ratingTargetPrompt?.rating || 0}

@@ -10,35 +10,49 @@ export function usePromptsStore() {
   const [isLoaded, setIsLoaded] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
-  // Load prompts from sessionStorage on mount (not localStorage)
+  // Load prompts from sessionStorage on mount ONLY
   useEffect(() => {
     const loadPrompts = () => {
       try {
         const savedPrompts = sessionStorage.getItem("prompts")
+        console.log("Loading prompts from sessionStorage:", savedPrompts)
+
         if (savedPrompts) {
           const parsedPrompts = JSON.parse(savedPrompts) as Prompt[]
+          console.log("Parsed prompts:", parsedPrompts.length)
           setPrompts(parsedPrompts)
 
           // Select the first prompt if available
-          if (parsedPrompts.length > 0 && !selectedPromptId) {
+          if (parsedPrompts.length > 0) {
             setSelectedPromptId(parsedPrompts[0].promptId)
           }
+        } else {
+          console.log("No saved prompts found")
+          setPrompts([])
         }
         setIsLoaded(true)
       } catch (error) {
         console.error("Failed to load prompts from sessionStorage:", error)
+        setPrompts([])
         setIsLoaded(true)
       }
     }
 
     loadPrompts()
-  }, [selectedPromptId])
+  }, []) // Remove selectedPromptId dependency - only run on mount
 
-  // Save prompts to sessionStorage whenever they change
+  // Save prompts to sessionStorage whenever they change (but only after initial load)
   useEffect(() => {
-    if (isLoaded && prompts.length > 0) {
-      sessionStorage.setItem("prompts", JSON.stringify(prompts))
-      setHasUnsavedChanges(true)
+    if (isLoaded) {
+      if (prompts.length > 0) {
+        console.log("Saving prompts to sessionStorage:", prompts.length)
+        sessionStorage.setItem("prompts", JSON.stringify(prompts))
+        setHasUnsavedChanges(true)
+      } else {
+        console.log("Clearing sessionStorage - no prompts")
+        sessionStorage.removeItem("prompts")
+        setHasUnsavedChanges(false)
+      }
     }
   }, [prompts, isLoaded])
 
@@ -61,48 +75,64 @@ export function usePromptsStore() {
 
   // Add a new prompt
   const addPrompt = useCallback((text: string): Prompt | undefined => {
-    if (!text.trim()) return undefined
+    if (!text.trim()) {
+      console.log("Empty text, not adding prompt")
+      return undefined
+    }
 
     const newPrompt = createPrompt(text.trim())
+    console.log("Creating new prompt:", newPrompt.promptId, newPrompt.text.substring(0, 50))
+
     setPrompts((prev) => {
       const updated = [newPrompt, ...prev]
-      console.log("Adding prompt:", newPrompt.promptId, "Total prompts:", updated.length)
+      console.log("Updated prompts array length:", updated.length)
       return updated
     })
+
     setSelectedPromptId(newPrompt.promptId)
-    setHasUnsavedChanges(true) // Explicitly set this
+    console.log("Set selected prompt ID:", newPrompt.promptId)
+
     return newPrompt
   }, [])
 
   // Update a prompt
   const updatePrompt = useCallback((promptId: string, updates: Partial<Prompt>) => {
+    console.log("Updating prompt:", promptId, updates)
     setPrompts((prev) => {
       const updated = prev.map((p) => {
         if (p.promptId === promptId) {
-          return {
+          const updatedPrompt = {
             ...p,
             ...updates,
             updatedAt: new Date().toISOString(),
           }
+          console.log("Updated prompt:", updatedPrompt.promptId)
+          return updatedPrompt
         }
         return p
       })
-      console.log("Updated prompt:", promptId, "Total prompts:", updated.length)
+      console.log("Total prompts after update:", updated.length)
       return updated
     })
-    setHasUnsavedChanges(true)
   }, [])
 
   // Delete a prompt
   const deletePrompt = useCallback(
     (promptId: string) => {
-      setPrompts((prev) => prev.filter((p) => p.promptId !== promptId))
+      console.log("Deleting prompt:", promptId)
+      setPrompts((prev) => {
+        const filtered = prev.filter((p) => p.promptId !== promptId)
+        console.log("Prompts after deletion:", filtered.length)
+        return filtered
+      })
 
       // If the deleted prompt was selected, select another one
       if (selectedPromptId === promptId) {
         setSelectedPromptId((prev) => {
           const remainingPrompts = prompts.filter((p) => p.promptId !== promptId)
-          return remainingPrompts.length > 0 ? remainingPrompts[0].promptId : null
+          const newSelected = remainingPrompts.length > 0 ? remainingPrompts[0].promptId : null
+          console.log("New selected prompt after deletion:", newSelected)
+          return newSelected
         })
       }
     },
@@ -111,6 +141,7 @@ export function usePromptsStore() {
 
   // Export prompts to JSON
   const exportPrompts = useCallback(() => {
+    console.log("Exporting prompts:", prompts.length)
     // Sort prompts by rating (descending)
     const sortedPrompts = [...prompts].sort((a, b) => b.rating - a.rating).map((prompt) => cleanObject(prompt))
 
@@ -138,6 +169,7 @@ export function usePromptsStore() {
   const importPrompts = useCallback((jsonData: string) => {
     try {
       const importedPrompts = JSON.parse(jsonData) as Prompt[]
+      console.log("Importing prompts:", importedPrompts.length)
       setPrompts((prev) => mergePrompts(prev, importedPrompts))
       return true
     } catch (error) {
@@ -148,6 +180,7 @@ export function usePromptsStore() {
 
   // Clear all data (for testing or reset)
   const clearAllData = useCallback(() => {
+    console.log("Clearing all data")
     setPrompts([])
     setSelectedPromptId(null)
     setHasUnsavedChanges(false)
