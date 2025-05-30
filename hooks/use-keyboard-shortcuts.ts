@@ -2,99 +2,54 @@
 
 import { useEffect, useCallback } from "react"
 
-interface UseKeyboardShortcutsProps {
-  onNewPromptFocus: () => void
-  onSave: () => void
-  onImport: () => void
-  onNextPrompt: () => void
-  onPrevPrompt: () => void
-  onFocusList: () => void
-  onFocusEditor: () => void
-  canNavigatePrompts: boolean // True if prompt list has focus or is active
+type KeyboardShortcutHandler = (e: KeyboardEvent) => void
+
+interface KeyboardShortcutsConfig {
+  [key: string]: KeyboardShortcutHandler
 }
 
-export function useKeyboardShortcuts({
-  onNewPromptFocus,
-  onSave,
-  onImport,
-  onNextPrompt,
-  onPrevPrompt,
-  onFocusList,
-  onFocusEditor,
-  canNavigatePrompts,
-}: UseKeyboardShortcutsProps) {
+export function useKeyboardShortcuts(shortcuts: KeyboardShortcutsConfig, dependencies: any[] = [], isDisabled = false) {
   const handleKeyDown = useCallback(
-    (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement
-      const isEditingText = target.tagName === "INPUT" || target.tagName === "TEXTAREA"
+    (e: KeyboardEvent) => {
+      if (isDisabled) return
 
-      // Global shortcuts
-      if (event.ctrlKey || event.metaKey) {
-        switch (event.key.toLowerCase()) {
-          case "n":
-            event.preventDefault()
-            onNewPromptFocus()
-            break
-          case "s":
-            event.preventDefault()
-            onSave()
-            break
-          case "o": // Typically for Open/Import
-            event.preventDefault()
-            onImport()
-            break
-        }
+      // Skip if user is typing in an input, textarea, or contentEditable element
+      if (
+        e.target instanceof HTMLInputElement ||
+        e.target instanceof HTMLTextAreaElement ||
+        (e.target instanceof HTMLElement && e.target.isContentEditable)
+      ) {
+        // Allow specific shortcuts even in input fields
+        const isGlobalShortcut =
+          (e.ctrlKey && e.key === "n") || // Ctrl+N
+          (e.ctrlKey && e.key === "s") || // Ctrl+S
+          (e.ctrlKey && e.key === "o") // Ctrl+O
+
+        if (!isGlobalShortcut) return
       }
 
-      // Navigation shortcuts (only if not editing text, unless it's specific navigation keys)
-      if (!isEditingText || ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Tab"].includes(event.key)) {
-        switch (event.key) {
-          case "ArrowUp":
-            if (canNavigatePrompts && !isEditingText) {
-              // Allow arrow up/down in textareas
-              event.preventDefault()
-              onPrevPrompt()
-            }
-            break
-          case "ArrowDown":
-            if (canNavigatePrompts && !isEditingText) {
-              event.preventDefault()
-              onNextPrompt()
-            }
-            break
-          case "ArrowLeft":
-          case "Tab": // Shift+Tab for previous
-            if (event.shiftKey && event.key === "Tab") {
-              // Shift+Tab
-              // Potentially move focus from editor to list
-              if (document.activeElement && document.activeElement.closest('[data-panel="editor"]')) {
-                event.preventDefault()
-                onFocusList()
-              }
-            } else if (event.key === "ArrowLeft" || event.key === "Tab") {
-              // Potentially move focus from list to editor
-              if (document.activeElement && document.activeElement.closest('[data-panel="list"]')) {
-                event.preventDefault()
-                onFocusEditor()
-              }
-            }
-            break
-          case "ArrowRight":
-            if (document.activeElement && document.activeElement.closest('[data-panel="list"]')) {
-              event.preventDefault()
-              onFocusEditor()
-            }
-            break
-        }
+      // Generate shortcut key
+      let shortcutKey = ""
+      if (e.ctrlKey) shortcutKey += "ctrl+"
+      if (e.altKey) shortcutKey += "alt+"
+      if (e.shiftKey) shortcutKey += "shift+"
+      if (e.metaKey) shortcutKey += "meta+"
+      shortcutKey += e.key.toLowerCase()
+
+      // Check if we have a handler for this shortcut
+      const handler = shortcuts[shortcutKey]
+      if (handler) {
+        e.preventDefault()
+        handler(e)
       }
     },
-    [onNewPromptFocus, onSave, onImport, onNextPrompt, onPrevPrompt, onFocusList, onFocusEditor, canNavigatePrompts],
+    [shortcuts, isDisabled, ...dependencies],
   )
 
   useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown)
     return () => {
-      document.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("keydown", handleKeyDown)
     }
   }, [handleKeyDown])
 }

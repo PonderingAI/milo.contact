@@ -2,265 +2,229 @@
 
 import type React from "react"
 
-import { useState, useRef, useEffect, useCallback } from "react"
+import { useState, useCallback, useRef } from "react"
+import Link from "next/link"
+import { usePromptsStore } from "@/hooks/use-prompts-store"
+import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
 import { PromptInput } from "@/components/prompt-input"
 import { PromptList } from "@/components/prompt-list"
 import { MetadataEditor } from "@/components/metadata-editor"
-import { usePromptsStore } from "@/hooks/use-prompts-store"
-import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
-import { Button } from "@/components/ui/button"
-import { Download, Upload, Loader2, ArrowLeft } from "lucide-react"
-import { cn } from "@/lib/utils"
 import { QuickRatingInput } from "@/components/quick-rating-input"
+import { Button } from "@/components/ui/button"
 import type { Prompt } from "@/lib/types"
-import Link from "next/link"
+import { ArrowLeft, Save, Upload, Plus } from "lucide-react"
 
 export default function PromptStudioPage() {
   const {
     prompts,
     selectedPromptId,
     selectedPrompt,
-    isLoading,
+    setSelectedPromptId,
     addPrompt: addPromptToStore,
     updatePrompt,
     deletePrompt,
-    selectPrompt,
     exportPrompts,
     importPrompts,
   } = usePromptsStore()
 
-  const [activePanel, setActivePanel] = useState<"list" | "editor">("list")
-  const [isRatingModeActive, setIsRatingModeActive] = useState(false)
   const [ratingTargetPrompt, setRatingTargetPrompt] = useState<Prompt | null>(null)
+  const [activePanel, setActivePanel] = useState<"list" | "editor">("list")
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const newPromptInputRef = useRef<HTMLInputElement>(null)
-  const notesInputRef = useRef<HTMLTextAreaElement>(null)
-  const promptListRef = useRef<HTMLUListElement>(null)
-  const editorPanelRef = useRef<HTMLDivElement>(null)
-  const importFileRef = useRef<HTMLInputElement>(null)
-
-  const promptItemRefs = useRef<(HTMLLIElement | null)[]>([])
-  useEffect(() => {
-    promptItemRefs.current = promptItemRefs.current.slice(0, prompts.length)
-  }, [prompts.length])
-
-  const getItemRef = (index: number) => (element: HTMLLIElement | null) => {
-    promptItemRefs.current[index] = element
-  }
-
-  const focusPromptListItem = useCallback(
-    (id: string | null) => {
-      if (!id) return
-      const index = prompts.findIndex((p) => p.promptId === id)
-      if (index !== -1 && promptItemRefs.current[index]) {
-        promptItemRefs.current[index]?.focus()
-      }
-    },
-    [prompts],
-  )
-
-  const handleNewPromptFocus = useCallback(() => {
-    newPromptInputRef.current?.focus()
-  }, [])
-
-  const handleImportClick = () => {
-    importFileRef.current?.click()
-  }
-
-  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      importPrompts(file)
-    }
-  }
-
-  const handleSelectPrompt = useCallback(
-    (id: string) => {
-      selectPrompt(id)
-      setActivePanel("editor")
-    },
-    [selectPrompt],
-  )
-
-  const navigatePrompts = (direction: "next" | "prev") => {
-    if (prompts.length === 0) return
-    const currentIndex = selectedPromptId ? prompts.findIndex((p) => p.promptId === selectedPromptId) : -1
-    let nextIndex
-    if (direction === "next") {
-      nextIndex = currentIndex === -1 ? 0 : Math.min(prompts.length - 1, currentIndex + 1)
-    } else {
-      nextIndex = currentIndex === -1 ? prompts.length - 1 : Math.max(0, currentIndex - 1)
-    }
-    const nextPromptId = prompts[nextIndex]?.promptId
-    if (nextPromptId) {
-      selectPrompt(nextPromptId)
-      focusPromptListItem(nextPromptId)
-    }
-  }
-
-  const focusListPanel = useCallback(() => {
-    setActivePanel("list")
-    if (selectedPromptId) {
-      focusPromptListItem(selectedPromptId)
-    } else if (prompts.length > 0) {
-      focusPromptListItem(prompts[0].promptId)
-    }
-  }, [selectedPromptId, prompts, focusPromptListItem])
-
-  const focusEditorPanel = useCallback(() => {
-    setActivePanel("editor")
-    if (selectedPrompt && notesInputRef.current) {
-      notesInputRef.current.focus()
-    } else if (selectedPrompt && editorPanelRef.current) {
-      editorPanelRef.current.focus()
-    }
-  }, [selectedPrompt])
-
+  // Handle adding a new prompt
   const handleAddNewPrompt = useCallback(
     (text: string) => {
-      const newPromptObject = addPromptToStore(text)
-      if (newPromptObject) {
-        setRatingTargetPrompt(newPromptObject)
-        setIsRatingModeActive(true)
-        selectPrompt(newPromptObject.promptId)
+      const newPrompt = addPromptToStore(text)
+      if (newPrompt) {
+        setRatingTargetPrompt(newPrompt)
       }
     },
-    [addPromptToStore, selectPrompt],
+    [addPromptToStore],
   )
 
-  const handleConfirmRating = useCallback(
-    (newRating: number) => {
-      if (ratingTargetPrompt) {
-        updatePrompt(ratingTargetPrompt.promptId, { rating: newRating })
-      }
-      setIsRatingModeActive(false)
-      setRatingTargetPrompt(null)
-      setTimeout(() => newPromptInputRef.current?.focus(), 0)
-    },
-    [ratingTargetPrompt, updatePrompt],
-  )
-
-  const handleCancelRating = useCallback(() => {
-    setIsRatingModeActive(false)
-    setRatingTargetPrompt(null)
-    setTimeout(() => newPromptInputRef.current?.focus(), 0)
+  // Handle importing prompts
+  const handleImport = useCallback(() => {
+    fileInputRef.current?.click()
   }, [])
 
-  useKeyboardShortcuts({
-    onNewPromptFocus: handleNewPromptFocus,
-    onSave: exportPrompts,
-    onImport: handleImportClick,
-    onNextPrompt: () => !isRatingModeActive && navigatePrompts("next"),
-    onPrevPrompt: () => !isRatingModeActive && navigatePrompts("prev"),
-    onFocusList: () => !isRatingModeActive && focusListPanel(),
-    onFocusEditor: () => !isRatingModeActive && focusEditorPanel(),
-    canNavigatePrompts: activePanel === "list" && !isRatingModeActive,
-  })
+  const handleFileChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0]
+      if (!file) return
 
-  useEffect(() => {
-    if (isRatingModeActive) {
-      return
-    }
+      const reader = new FileReader()
+      reader.onload = (event) => {
+        const content = event.target?.result as string
+        if (content) {
+          const success = importPrompts(content)
+          if (success) {
+            alert("Prompts imported successfully!")
+          } else {
+            alert("Failed to import prompts. Please check the file format.")
+          }
+        }
+      }
+      reader.readAsText(file)
 
-    if (activePanel === "list" && selectedPromptId) {
-      focusPromptListItem(selectedPromptId)
-    } else if (activePanel === "editor" && selectedPrompt && notesInputRef.current) {
-      notesInputRef.current.focus()
-    }
-  }, [activePanel, selectedPromptId, selectedPrompt, focusPromptListItem, isRatingModeActive])
+      // Reset the input so the same file can be selected again
+      e.target.value = ""
+    },
+    [importPrompts],
+  )
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-brand-background">
-        <Loader2 className="w-12 h-12 text-brand-accent animate-spin" />
-        <p className="ml-4 text-xl font-serif text-brand-headline">Loading Prompts...</p>
-      </div>
-    )
-  }
+  // Keyboard shortcuts
+  useKeyboardShortcuts(
+    {
+      "ctrl+n": () => {
+        const inputElement = document.querySelector('input[type="text"]') as HTMLInputElement
+        if (inputElement) {
+          inputElement.focus()
+        }
+      },
+      "ctrl+s": exportPrompts,
+      "ctrl+o": handleImport,
+      arrowup: () => {
+        if (activePanel === "list" && selectedPromptId) {
+          const currentIndex = prompts.findIndex((p) => p.promptId === selectedPromptId)
+          if (currentIndex > 0) {
+            setSelectedPromptId(prompts[currentIndex - 1].promptId)
+          }
+        }
+      },
+      arrowdown: () => {
+        if (activePanel === "list" && selectedPromptId) {
+          const currentIndex = prompts.findIndex((p) => p.promptId === selectedPromptId)
+          if (currentIndex < prompts.length - 1) {
+            setSelectedPromptId(prompts[currentIndex + 1].promptId)
+          }
+        }
+      },
+      arrowright: () => {
+        if (activePanel === "list" && selectedPrompt) {
+          setActivePanel("editor")
+          // Focus the notes textarea
+          setTimeout(() => {
+            const notesTextarea = document.querySelector("textarea#notes") as HTMLTextAreaElement
+            if (notesTextarea) {
+              notesTextarea.focus()
+            }
+          }, 10)
+        }
+      },
+      arrowleft: () => {
+        if (activePanel === "editor") {
+          setActivePanel("list")
+          // Focus the selected prompt
+          setTimeout(() => {
+            const selectedElement = document.querySelector(`[data-prompt-id="${selectedPromptId}"]`) as HTMLElement
+            if (selectedElement) {
+              selectedElement.focus()
+            }
+          }, 10)
+        }
+      },
+      tab: () => {
+        setActivePanel((prev) => (prev === "list" ? "editor" : "list"))
+      },
+      "shift+tab": () => {
+        setActivePanel((prev) => (prev === "editor" ? "list" : "editor"))
+      },
+    },
+    [prompts, selectedPromptId, selectedPrompt, activePanel],
+    !!ratingTargetPrompt, // Disable keyboard shortcuts when rating modal is open
+  )
 
   return (
-    <div className="flex flex-col h-screen bg-brand-background text-brand-text overflow-hidden">
-      <header className="p-3 border-b border-brand-surface flex justify-between items-center">
-        <div className="flex items-center gap-4">
-          <Button asChild variant="ghost" size="sm" className="text-brand-text hover:text-brand-accent">
-            <Link href="/tools">
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              Back to Tools
+    <div className="min-h-screen bg-black text-neutral-100 flex flex-col">
+      <header className="border-b border-neutral-800 p-4">
+        <div className="container mx-auto flex justify-between items-center">
+          <div className="flex items-center space-x-4">
+            <Link href="/tools" className="text-neutral-400 hover:text-neutral-100 transition-colors">
+              <ArrowLeft className="h-5 w-5" />
+              <span className="sr-only">Back to Tools</span>
             </Link>
-          </Button>
-          <h1 className="text-3xl font-serif font-bold text-brand-headline">Prompt Studio</h1>
-        </div>
-        <div className="flex gap-2">
-          <Button
-            onClick={exportPrompts}
-            variant="outline"
-            size="sm"
-            className="border-brand-accent text-brand-accent hover:bg-brand-accent hover:text-brand-background"
-          >
-            <Download className="w-4 h-4 mr-2" /> Export All
-          </Button>
-          <Button
-            onClick={handleImportClick}
-            variant="outline"
-            size="sm"
-            className="border-brand-accent text-brand-accent hover:bg-brand-accent hover:text-brand-background"
-          >
-            <Upload className="w-4 h-4 mr-2" /> Import
-          </Button>
-          <input type="file" ref={importFileRef} onChange={handleFileImport} accept=".json" className="hidden" />
+            <h1 className="font-serif text-2xl">Prompt Studio</h1>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleImport}
+              className="bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportPrompts}
+              className="bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                const inputElement = document.querySelector('input[type="text"]') as HTMLInputElement
+                if (inputElement) {
+                  inputElement.focus()
+                }
+              }}
+              className="bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New (Ctrl+N)
+            </Button>
+          </div>
         </div>
       </header>
 
-      <PromptInput onAddPrompt={handleAddNewPrompt} inputRef={newPromptInputRef} />
+      <div className="container mx-auto p-4 flex-1 flex flex-col">
+        <PromptInput onAddPrompt={handleAddNewPrompt} />
 
-      <main className="flex flex-1 overflow-hidden">
-        <aside
-          data-panel="editor"
-          className={cn(
-            "w-1/3 border-r border-brand-surface overflow-y-auto transition-all duration-300 ease-in-out",
-            activePanel === "editor" ? "ring-1 ring-brand-accent shadow-lg" : "opacity-75",
-          )}
-          onClick={() => !isRatingModeActive && setActivePanel("editor")}
-        >
-          <MetadataEditor
-            prompt={selectedPrompt}
-            onUpdatePrompt={updatePrompt}
-            onDeletePrompt={deletePrompt}
-            notesInputRef={notesInputRef}
-            editorPanelRef={editorPanelRef}
-          />
-        </aside>
+        <div className="flex-1 flex gap-4 h-[calc(100vh-180px)]">
+          <div className="w-1/3 bg-neutral-900 border border-neutral-800 rounded-md overflow-hidden">
+            <MetadataEditor prompt={selectedPrompt} onUpdate={updatePrompt} onDelete={deletePrompt} />
+          </div>
+          <div className="w-2/3 bg-neutral-900 border border-neutral-800 rounded-md overflow-hidden">
+            <PromptList
+              prompts={prompts}
+              selectedPromptId={selectedPromptId}
+              onSelectPrompt={(id) => {
+                setSelectedPromptId(id)
+                setActivePanel("editor")
+              }}
+            />
+          </div>
+        </div>
+      </div>
 
-        <section
-          data-panel="list"
-          className={cn(
-            "w-2/3 flex flex-col overflow-y-auto transition-all duration-300 ease-in-out",
-            activePanel === "list" ? "ring-1 ring-brand-accent shadow-lg" : "opacity-75",
-          )}
-          onClick={() => !isRatingModeActive && setActivePanel("list")}
-        >
-          <PromptList
-            prompts={prompts}
-            selectedPromptId={selectedPromptId}
-            onSelectPrompt={handleSelectPrompt}
-            listRef={promptListRef}
-            getItemRef={getItemRef}
-          />
-        </section>
-      </main>
-      <footer className="p-2 border-t border-brand-surface text-center text-xs text-neutral-500">
-        Arrow keys to navigate prompts. Ctrl/Cmd+N for New, Ctrl/Cmd+S to Save, Ctrl/Cmd+O to Import. Tab/Arrows to
-        switch panels.
-      </footer>
+      {/* Hidden file input for importing */}
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} accept=".json" className="hidden" />
 
-      {isRatingModeActive && ratingTargetPrompt && (
-        <QuickRatingInput
-          promptText={ratingTargetPrompt.text}
-          currentRating={ratingTargetPrompt.rating}
-          onConfirmRating={handleConfirmRating}
-          onCancel={handleCancelRating}
-        />
-      )}
+      {/* Quick rating modal */}
+      <QuickRatingInput
+        isOpen={!!ratingTargetPrompt}
+        onClose={() => setRatingTargetPrompt(null)}
+        onSubmit={(rating) => {
+          if (ratingTargetPrompt) {
+            updatePrompt(ratingTargetPrompt.promptId, { rating })
+            setRatingTargetPrompt(null)
+
+            // Focus back on the prompt input
+            setTimeout(() => {
+              const inputElement = document.querySelector('input[type="text"]') as HTMLInputElement
+              if (inputElement) {
+                inputElement.focus()
+              }
+            }, 10)
+          }
+        }}
+        initialRating={ratingTargetPrompt?.rating || 0}
+      />
     </div>
   )
 }

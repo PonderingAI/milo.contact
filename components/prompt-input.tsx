@@ -1,53 +1,51 @@
 "use client"
 
-import type React from "react"
-
-import { useState, type KeyboardEvent } from "react"
-import { Input } from "@/components/ui/input"
+import { useState, useRef, type KeyboardEvent, type FormEvent } from "react"
 import { Button } from "@/components/ui/button"
-import { PlusCircle } from "lucide-react"
-import type { Prompt } from "@/lib/types" // Import Prompt type
+import { Input } from "@/components/ui/input"
 
 interface PromptInputProps {
-  onAddPrompt: (text: string) => Prompt | undefined // Changed return type
-  inputRef?: React.RefObject<HTMLInputElement>
+  onAddPrompt: (text: string) => void
 }
 
-export function PromptInput({ onAddPrompt, inputRef }: PromptInputProps) {
+export function PromptInput({ onAddPrompt }: PromptInputProps) {
   const [text, setText] = useState("")
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const handleSubmit = () => {
-    const newPromptObject = onAddPrompt(text) // Now receives the object
-    if (newPromptObject) {
-      setText("") // Clear input only if prompt was added
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault()
+    if (text.trim()) {
+      onAddPrompt(text)
+      setText("")
     }
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
+    if (e.key === "Enter" && text.trim()) {
       e.preventDefault()
-      handleSubmit()
+      onAddPrompt(text)
+      setText("")
     }
   }
 
   return (
-    <div className="flex gap-2 p-4 border-b border-brand-surface">
+    <form onSubmit={handleSubmit} className="flex items-center space-x-2 mb-4">
       <Input
         ref={inputRef}
         type="text"
-        placeholder="Paste or type a new prompt... (Enter to add)"
+        placeholder="Paste or type a new prompt..."
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={handleKeyDown}
-        className="flex-grow bg-brand-surface border-neutral-700 focus:ring-brand-accent focus:border-brand-accent text-brand-text placeholder:text-neutral-500"
+        className="flex-1 bg-neutral-900 border-neutral-700 text-neutral-100 placeholder:text-neutral-500 focus:ring-offset-neutral-900 focus:ring-teal-800"
       />
       <Button
-        onClick={handleSubmit}
+        type="submit"
         variant="outline"
-        className="border-brand-accent text-brand-accentText hover:bg-brand-accent hover:text-brand-background"
+        className="bg-neutral-800 border-neutral-700 text-neutral-100 hover:bg-neutral-700 hover:text-neutral-50"
       >
-        <PlusCircle className="w-4 h-4 mr-2" /> Add
+        Add
       </Button>
-    </div>
+    </form>
   )
 }

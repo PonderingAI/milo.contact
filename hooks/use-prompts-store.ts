@@ -1,127 +1,134 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import type { Prompt } from "@/lib/types"
-import { generateNewPrompt, cleanPromptForExport } from "@/lib/utils"
-
-const LOCAL_STORAGE_KEY = "cinematicPrompts"
+import { createPrompt, cleanObject, mergePrompts } from "@/lib/utils"
 
 export function usePromptsStore() {
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoaded, setIsLoaded] = useState(false)
 
+  // Load prompts from localStorage on mount
   useEffect(() => {
-    try {
-      const storedPrompts = localStorage.getItem(LOCAL_STORAGE_KEY)
-      if (storedPrompts) {
-        setPrompts(JSON.parse(storedPrompts))
-      }
-    } catch (error) {
-      console.error("Failed to load prompts from local storage:", error)
-    }
-    setIsLoading(false)
-  }, [])
-
-  useEffect(() => {
-    if (!isLoading) {
+    const loadPrompts = () => {
       try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(prompts))
+        const savedPrompts = localStorage.getItem("prompts")
+        if (savedPrompts) {
+          const parsedPrompts = JSON.parse(savedPrompts) as Prompt[]
+          setPrompts(parsedPrompts)
+
+          // Select the first prompt if available
+          if (parsedPrompts.length > 0 && !selectedPromptId) {
+            setSelectedPromptId(parsedPrompts[0].promptId)
+          }
+        }
+        setIsLoaded(true)
       } catch (error) {
-        console.error("Failed to save prompts to local storage:", error)
+        console.error("Failed to load prompts from localStorage:", error)
+        setIsLoaded(true)
       }
     }
-  }, [prompts, isLoading])
 
+    loadPrompts()
+  }, [selectedPromptId])
+
+  // Save prompts to localStorage whenever they change
+  useEffect(() => {
+    if (isLoaded && prompts.length > 0) {
+      localStorage.setItem("prompts", JSON.stringify(prompts))
+    }
+  }, [prompts, isLoaded])
+
+  // Get the selected prompt
+  const selectedPrompt = prompts.find((p) => p.promptId === selectedPromptId) || null
+
+  // Add a new prompt
   const addPrompt = useCallback((text: string): Prompt | undefined => {
     if (!text.trim()) return undefined
-    const newPrompt = generateNewPrompt(text)
-    setPrompts((prev) => [newPrompt, ...prev]) // Add to top
-    // setSelectedPromptId(newPrompt.promptId) // Let the page component handle selection for rating flow
-    return newPrompt // Return the full prompt object
+
+    const newPrompt = createPrompt(text.trim())
+    setPrompts((prev) => [newPrompt, ...prev])
+    setSelectedPromptId(newPrompt.promptId)
+    return newPrompt
   }, [])
 
+  // Update a prompt
   const updatePrompt = useCallback((promptId: string, updates: Partial<Prompt>) => {
     setPrompts((prev) =>
-      prev.map((p) => (p.promptId === promptId ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p)),
+      prev.map((p) => {
+        if (p.promptId === promptId) {
+          return {
+            ...p,
+            ...updates,
+            updatedAt: new Date().toISOString(),
+          }
+        }
+        return p
+      }),
     )
   }, [])
 
+  // Delete a prompt
   const deletePrompt = useCallback(
     (promptId: string) => {
       setPrompts((prev) => prev.filter((p) => p.promptId !== promptId))
+
+      // If the deleted prompt was selected, select another one
       if (selectedPromptId === promptId) {
-        setSelectedPromptId(null)
+        setSelectedPromptId((prev) => {
+          const remainingPrompts = prompts.filter((p) => p.promptId !== promptId)
+          return remainingPrompts.length > 0 ? remainingPrompts[0].promptId : null
+        })
       }
     },
-    [selectedPromptId],
+    [prompts, selectedPromptId],
   )
 
-  const selectPrompt = useCallback((promptId: string | null) => {
-    setSelectedPromptId(promptId)
-  }, [])
-
-  const selectedPrompt = prompts.find((p) => p.promptId === selectedPromptId) || null
-
+  // Export prompts to JSON
   const exportPrompts = useCallback(() => {
-    const sortedPrompts = [...prompts].sort((a, b) => b.rating - a.rating)
-    const cleanedPrompts = sortedPrompts.map(cleanPromptForExport)
-    const jsonString = JSON.stringify(cleanedPrompts, null, 2)
+    // Sort prompts by rating (descending)
+    const sortedPrompts = [...prompts].sort((a, b) => b.rating - a.rating).map((prompt) => cleanObject(prompt))
 
-    // Create a blob and download link
-    const blob = new Blob([jsonString], { type: "application/json" })
+    const json = JSON.stringify(sortedPrompts, null, 2)
+    const blob = new Blob([json], { type: "application/json" })
     const url = URL.createObjectURL(blob)
 
-    // Create a download link and trigger it
-    const link = document.createElement("a")
-    link.href = url
-    link.download = `prompts-${new Date().toISOString().split("T")[0]}.json`
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `prompts-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
 
-    // Append to body, click, and clean up
-    document.body.appendChild(link)
-    link.click()
-
-    // Small timeout before cleanup to ensure download starts
+    // Clean up
     setTimeout(() => {
-      document.body.removeChild(link)
+      document.body.removeChild(a)
       URL.revokeObjectURL(url)
     }, 100)
   }, [prompts])
 
-  const importPrompts = useCallback((file: File) => {
-    const reader = new FileReader()
-    reader.onload = (event) => {
-      try {
-        const jsonString = event.target?.result as string
-        const importedPrompts = JSON.parse(jsonString) as Prompt[]
-
-        setPrompts((prevPrompts) => {
-          const existingIds = new Set(prevPrompts.map((p) => p.promptId))
-          const newPrompts = importedPrompts.filter((p) => !existingIds.has(p.promptId))
-          const updatedPrompts = prevPrompts.map((existingP) => {
-            const importedP = importedPrompts.find((p) => p.promptId === existingP.promptId)
-            return importedP ? { ...existingP, ...importedP, updatedAt: new Date().toISOString() } : existingP
-          })
-          return [...updatedPrompts, ...newPrompts]
-        })
-      } catch (error) {
-        console.error("Failed to import prompts:", error)
-        alert("Error importing file. Please ensure it's a valid JSON export.")
-      }
+  // Import prompts from JSON
+  const importPrompts = useCallback((jsonData: string) => {
+    try {
+      const importedPrompts = JSON.parse(jsonData) as Prompt[]
+      setPrompts((prev) => mergePrompts(prev, importedPrompts))
+      return true
+    } catch (error) {
+      console.error("Failed to import prompts:", error)
+      return false
     }
-    reader.readAsText(file)
   }, [])
 
   return {
     prompts,
     selectedPromptId,
     selectedPrompt,
-    isLoading,
+    setSelectedPromptId,
     addPrompt,
     updatePrompt,
     deletePrompt,
-    selectPrompt,
     exportPrompts,
     importPrompts,
+    isLoaded,
   }
 }

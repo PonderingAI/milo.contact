@@ -1,40 +1,38 @@
 "use client"
 
-import type React from "react"
-import { useState, useEffect, useRef, type KeyboardEvent } from "react"
+import { useState, useRef, useEffect, type KeyboardEvent } from "react"
+import { Dialog, DialogContent } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
+import { Label } from "@/components/ui/label"
 
 interface QuickRatingInputProps {
-  promptText: string
-  currentRating: number
-  onConfirmRating: (newRating: number) => void
-  onCancel: () => void // Optional: if Esc should cancel
+  isOpen: boolean
+  onClose: () => void
+  onSubmit: (rating: number) => void
+  initialRating?: number
 }
 
-export function QuickRatingInput({ promptText, currentRating, onConfirmRating, onCancel }: QuickRatingInputProps) {
-  const [ratingStr, setRatingStr] = useState(currentRating.toString())
+export function QuickRatingInput({ isOpen, onClose, onSubmit, initialRating = 0 }: QuickRatingInputProps) {
+  const [rating, setRating] = useState<string>(initialRating.toString())
   const inputRef = useRef<HTMLInputElement>(null)
 
+  // Focus the input when the dialog opens
   useEffect(() => {
-    inputRef.current?.focus()
-    inputRef.current?.select() // Select current text for easy overwrite
-  }, [])
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    // Allow numbers, one decimal point, and up to 2 decimal places
-    if (/^\d*\.?\d{0,2}$/.test(value) || value === "") {
-      setRatingStr(value)
+    if (isOpen && inputRef.current) {
+      setTimeout(() => {
+        inputRef.current?.focus()
+        inputRef.current?.select()
+      }, 50)
     }
-  }
+  }, [isOpen])
 
   const handleSubmit = () => {
-    let newRating = Number.parseFloat(ratingStr)
-    if (isNaN(newRating)) {
-      newRating = currentRating // Or some default, or show error
+    const parsedRating = Number.parseFloat(rating)
+    if (!isNaN(parsedRating) && parsedRating >= 0 && parsedRating <= 10) {
+      onSubmit(parsedRating)
+      onClose()
     }
-    newRating = Math.max(0, Math.min(10, newRating)) // Clamp between 0 and 10
-    onConfirmRating(newRating)
   }
 
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
@@ -42,30 +40,48 @@ export function QuickRatingInput({ promptText, currentRating, onConfirmRating, o
       e.preventDefault()
       handleSubmit()
     } else if (e.key === "Escape") {
-      e.preventDefault()
-      if (onCancel) onCancel()
+      onClose()
     }
   }
 
   return (
-    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-brand-surface p-6 rounded-lg shadow-xl w-full max-w-sm border border-brand-accent/50">
-        <p className="text-sm text-neutral-400 mb-1">Rate prompt:</p>
-        <p className="text-brand-text font-medium truncate mb-3" title={promptText}>
-          {promptText}
-        </p>
-        <Input
-          ref={inputRef}
-          type="text" // Use text to allow decimal input easily
-          value={ratingStr}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          placeholder="0-10 (e.g., 7.5)"
-          className="text-center text-2xl font-bold bg-neutral-800 border-neutral-700 focus:ring-brand-accent focus:border-brand-accent text-brand-text placeholder:text-neutral-500 h-14"
-          inputMode="decimal" // Hint for mobile keyboards
-        />
-        <p className="text-xs text-neutral-500 mt-3 text-center">Press Enter to confirm, Esc to cancel.</p>
-      </div>
-    </div>
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-[300px] bg-neutral-900 border-neutral-800 text-neutral-100">
+        <div className="space-y-4 py-2">
+          <div className="space-y-2">
+            <Label htmlFor="quick-rating" className="text-neutral-300">
+              Rating (0-10)
+            </Label>
+            <Input
+              ref={inputRef}
+              id="quick-rating"
+              type="number"
+              min="0"
+              max="10"
+              step="0.1"
+              value={rating}
+              onChange={(e) => setRating(e.target.value)}
+              onKeyDown={handleKeyDown}
+              className="bg-neutral-800 border-neutral-700 text-neutral-100 focus:ring-teal-800 focus:ring-offset-neutral-900"
+            />
+          </div>
+          <div className="flex justify-end space-x-2">
+            <Button
+              variant="outline"
+              onClick={onClose}
+              className="bg-neutral-800 border-neutral-700 text-neutral-300 hover:bg-neutral-700"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              className="bg-neutral-800 border-neutral-700 text-teal-400 hover:bg-neutral-700 hover:text-teal-300"
+            >
+              Save
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }

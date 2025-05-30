@@ -1,257 +1,104 @@
-"use client"
-
-import type React from "react"
-
-import { useState, useRef, useEffect, useCallback } from "react"
-import { PromptInput } from "@/components/prompt-input"
-import { PromptList } from "@/components/prompt-list"
-import { MetadataEditor } from "@/components/metadata-editor"
-import { usePromptsStore } from "@/hooks/use-prompts-store"
-import { useKeyboardShortcuts } from "@/hooks/use-keyboard-shortcuts"
+import { Suspense } from "react"
+import HeroSection from "@/components/hero-section"
+import AboutSection from "@/components/about-section"
+import ContactSection from "@/components/contact-section"
+import ProjectsSection from "@/components/projects-section"
+import { getProjects, isDatabaseSetup } from "@/lib/project-data"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Download, Upload, Loader2 } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { QuickRatingInput } from "@/components/quick-rating-input"
-import type { Prompt } from "@/lib/types" // Import Prompt type
+import { createServerClient } from "@/lib/supabase-server"
 
-export default function CinematicPromptPage() {
-  const {
-    prompts,
-    selectedPromptId,
-    selectedPrompt,
-    isLoading,
-    addPrompt: addPromptToStore,
-    updatePrompt,
-    deletePrompt,
-    selectPrompt,
-    exportPrompts,
-    importPrompts,
-  } = usePromptsStore()
+async function getLatestProject() {
+  try {
+    const supabase = createServerClient()
 
-  const [activePanel, setActivePanel] = useState<"list" | "editor">("list")
-  const [isRatingModeActive, setIsRatingModeActive] = useState(false)
-  const [ratingTargetPrompt, setRatingTargetPrompt] = useState<Prompt | null>(null) // Changed type
+    // Get the latest project with a thumbnail_url instead of video_url
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .not("thumbnail_url", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(1)
 
-  const newPromptInputRef = useRef<HTMLInputElement>(null)
-  const notesInputRef = useRef<HTMLTextAreaElement>(null)
-  const promptListRef = useRef<HTMLUListElement>(null)
-  const editorPanelRef = useRef<HTMLDivElement>(null)
-  const importFileRef = useRef<HTMLInputElement>(null)
+    if (error) {
+      console.error("Error fetching latest project:", error)
+      return null
+    }
 
-  const promptItemRefs = useRef<(HTMLLIElement | null)[]>([])
-  useEffect(() => {
-    promptItemRefs.current = promptItemRefs.current.slice(0, prompts.length)
-  }, [prompts.length])
-
-  const getItemRef = (index: number) => (element: HTMLLIElement | null) => {
-    promptItemRefs.current[index] = element
+    // Return the first item if it exists, otherwise null
+    const project = data && data.length > 0 ? data[0] : null
+    return project
+  } catch (error) {
+    console.error("Error in getLatestProject:", error)
+    return null
   }
+}
 
-  const focusPromptListItem = useCallback(
-    (id: string | null) => {
-      if (!id) return
-      const index = prompts.findIndex((p) => p.promptId === id)
-      if (index !== -1 && promptItemRefs.current[index]) {
-        promptItemRefs.current[index]?.focus()
-      }
-    },
-    [prompts],
-  )
+// In the HomePage component, ensure we're passing the latest project to HeroSection
+export default async function HomePage() {
+  // Get all projects
+  const projects = await getProjects()
 
-  const handleNewPromptFocus = useCallback(() => {
-    newPromptInputRef.current?.focus()
-  }, [])
+  // Get the latest project (first in the array since they're ordered by created_at desc)
+  const latestProject = projects.length > 0 ? projects[0] : null
 
-  const handleImportClick = () => {
-    importFileRef.current?.click()
-  }
+  console.log("Latest project for hero:", latestProject?.title)
 
-  const handleFileImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      importPrompts(file)
-    }
-  }
+  // Check if database is set up
+  const dbSetup = await isDatabaseSetup()
 
-  const handleSelectPrompt = useCallback(
-    (id: string) => {
-      selectPrompt(id)
-      setActivePanel("editor")
-    },
-    [selectPrompt],
-  )
+  // Get projects - this will return mock data if the database isn't set up
+  // Get the latest project with video
+  // const latestProject = await getLatestProject()
 
-  const navigatePrompts = (direction: "next" | "prev") => {
-    if (prompts.length === 0) return
-    const currentIndex = selectedPromptId ? prompts.findIndex((p) => p.promptId === selectedPromptId) : -1
-    let nextIndex
-    if (direction === "next") {
-      nextIndex = currentIndex === -1 ? 0 : Math.min(prompts.length - 1, currentIndex + 1)
-    } else {
-      nextIndex = currentIndex === -1 ? prompts.length - 1 : Math.max(0, currentIndex - 1)
-    }
-    const nextPromptId = prompts[nextIndex]?.promptId
-    if (nextPromptId) {
-      selectPrompt(nextPromptId)
-      focusPromptListItem(nextPromptId)
-    }
-  }
-
-  const focusListPanel = useCallback(() => {
-    setActivePanel("list")
-    if (selectedPromptId) {
-      focusPromptListItem(selectedPromptId)
-    } else if (prompts.length > 0) {
-      focusPromptListItem(prompts[0].promptId)
-    }
-  }, [selectedPromptId, prompts, focusPromptListItem])
-
-  const focusEditorPanel = useCallback(() => {
-    setActivePanel("editor")
-    if (selectedPrompt && notesInputRef.current) {
-      notesInputRef.current.focus()
-    } else if (selectedPrompt && editorPanelRef.current) {
-      editorPanelRef.current.focus()
-    }
-  }, [selectedPrompt])
-
-  const handleAddNewPrompt = useCallback(
-    (text: string) => {
-      const newPromptObject = addPromptToStore(text) // Now receives the full Prompt object
-      if (newPromptObject) {
-        setRatingTargetPrompt(newPromptObject) // Use the returned object directly
-        setIsRatingModeActive(true)
-        selectPrompt(newPromptObject.promptId) // Select the new prompt
-      }
-    },
-    [addPromptToStore, selectPrompt], // Removed `prompts` from deps as it's not needed here anymore
-  )
-
-  const handleConfirmRating = useCallback(
-    (newRating: number) => {
-      if (ratingTargetPrompt) {
-        updatePrompt(ratingTargetPrompt.promptId, { rating: newRating })
-      }
-      setIsRatingModeActive(false)
-      setRatingTargetPrompt(null)
-      setTimeout(() => newPromptInputRef.current?.focus(), 0)
-    },
-    [ratingTargetPrompt, updatePrompt],
-  )
-
-  const handleCancelRating = useCallback(() => {
-    setIsRatingModeActive(false)
-    setRatingTargetPrompt(null)
-    setTimeout(() => newPromptInputRef.current?.focus(), 0)
-  }, [])
-
-  useKeyboardShortcuts({
-    onNewPromptFocus: handleNewPromptFocus,
-    onSave: exportPrompts,
-    onImport: handleImportClick,
-    onNextPrompt: () => !isRatingModeActive && navigatePrompts("next"),
-    onPrevPrompt: () => !isRatingModeActive && navigatePrompts("prev"),
-    onFocusList: () => !isRatingModeActive && focusListPanel(),
-    onFocusEditor: () => !isRatingModeActive && focusEditorPanel(),
-    canNavigatePrompts: activePanel === "list" && !isRatingModeActive,
-  })
-
-  useEffect(() => {
-    if (isRatingModeActive) {
-      return
-    }
-
-    if (activePanel === "list" && selectedPromptId) {
-      focusPromptListItem(selectedPromptId)
-    } else if (activePanel === "editor" && selectedPrompt && notesInputRef.current) {
-      notesInputRef.current.focus()
-    }
-  }, [activePanel, selectedPromptId, selectedPrompt, focusPromptListItem, isRatingModeActive])
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-brand-background">
-        <Loader2 className="w-12 h-12 text-brand-accent animate-spin" />
-        <p className="ml-4 text-xl font-serif text-brand-headline">Loading Prompts...</p>
-      </div>
-    )
-  }
+  // Check if we have real projects from the database
+  const hasRealProjects = dbSetup && projects.length > 0
 
   return (
-    <div className="flex flex-col h-screen bg-brand-background text-brand-text overflow-hidden">
-      <header className="p-3 border-b border-brand-surface flex justify-between items-center">
-        <h1 className="text-3xl font-serif font-bold text-brand-headline">Prompt Studio</h1>
-        <div className="flex gap-2">
-          <Button
-            onClick={exportPrompts}
-            variant="outline"
-            size="sm"
-            className="border-brand-accent text-brand-accentText hover:bg-brand-accent hover:text-brand-background"
-          >
-            <Download className="w-4 h-4 mr-2" /> Export All
-          </Button>
-          <Button
-            onClick={handleImportClick}
-            variant="outline"
-            size="sm"
-            className="border-brand-accent text-brand-accentText hover:bg-brand-accent hover:text-brand-background"
-          >
-            <Upload className="w-4 h-4 mr-2" /> Import
-          </Button>
-          <input type="file" ref={importFileRef} onChange={handleFileImport} accept=".json" className="hidden" />
+    <main className="min-h-screen bg-black text-white">
+      <HeroSection latestProject={latestProject} />
+
+      <div className="container mx-auto px-4 py-24">
+        {!dbSetup && (
+          <div className="mb-12 p-6 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+            <h2 className="text-xl font-bold mb-2">Database Setup Required</h2>
+            <p className="mb-4">
+              Your portfolio database needs to be set up before all features will work correctly. This will create the
+              necessary tables and default settings.
+            </p>
+            <Button asChild>
+              <Link href="/setup">Run Setup</Link>
+            </Button>
+          </div>
+        )}
+
+        {/* Projects Section with client-side search and filtering */}
+        <Suspense fallback={<div className="h-96 bg-gray-900 rounded-lg animate-pulse mb-24"></div>}>
+          <ProjectsSection projects={projects} />
+        </Suspense>
+
+        <AboutSection />
+        <ContactSection />
+      </div>
+
+      <footer className="border-t border-gray-800 py-8">
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <p className="text-gray-400">© {new Date().getFullYear()} Milo Presedo. All rights reserved.</p>
+            <div className="flex gap-6 mt-4 md:mt-0">
+              <a href="https://instagram.com/milo.presedo" className="text-gray-400 hover:text-white">
+                Instagram
+              </a>
+              <a href="https://chatgpt.com/g/g-vOF4lzRBG-milo" className="text-gray-400 hover:text-white">
+                ChatGPT
+              </a>
+              <a href="mailto:milo.presedo@mailbox.org" className="text-gray-400 hover:text-white">
+                Email
+              </a>
+            </div>
+          </div>
         </div>
-      </header>
-
-      <PromptInput onAddPrompt={handleAddNewPrompt} inputRef={newPromptInputRef} />
-
-      <main className="flex flex-1 overflow-hidden">
-        <aside
-          data-panel="editor"
-          className={cn(
-            "w-1/3 border-r border-brand-surface overflow-y-auto transition-all duration-300 ease-in-out",
-            activePanel === "editor" ? "ring-1 ring-brand-accent shadow-lg" : "opacity-75",
-          )}
-          onClick={() => !isRatingModeActive && setActivePanel("editor")}
-        >
-          <MetadataEditor
-            prompt={selectedPrompt}
-            onUpdatePrompt={updatePrompt}
-            onDeletePrompt={deletePrompt}
-            notesInputRef={notesInputRef}
-            editorPanelRef={editorPanelRef}
-          />
-        </aside>
-
-        <section
-          data-panel="list"
-          className={cn(
-            "w-2/3 flex flex-col overflow-y-auto transition-all duration-300 ease-in-out",
-            activePanel === "list" ? "ring-1 ring-brand-accent shadow-lg" : "opacity-75",
-          )}
-          onClick={() => !isRatingModeActive && setActivePanel("list")}
-        >
-          <PromptList
-            prompts={prompts}
-            selectedPromptId={selectedPromptId}
-            onSelectPrompt={handleSelectPrompt}
-            listRef={promptListRef}
-            getItemRef={getItemRef}
-          />
-        </section>
-      </main>
-      <footer className="p-2 border-t border-brand-surface text-center text-xs text-neutral-500">
-        Arrow keys to navigate prompts. Ctrl/Cmd+N for New, Ctrl/Cmd+S to Save, Ctrl/Cmd+O to Import. Tab/Arrows to
-        switch panels.
       </footer>
-
-      {isRatingModeActive && ratingTargetPrompt && (
-        <QuickRatingInput
-          promptText={ratingTargetPrompt.text}
-          currentRating={ratingTargetPrompt.rating}
-          onConfirmRating={handleConfirmRating}
-          onCancel={handleCancelRating}
-        />
-      )}
-    </div>
+    </main>
   )
 }

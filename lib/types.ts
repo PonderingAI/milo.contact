@@ -1,12 +1,11 @@
 export interface Prompt {
   promptId: string
   text: string
-  rating: number // 0-10
+  rating: number
   notes?: string
-  createdAt: string // ISO Date string
-  updatedAt: string // ISO Date string
+  createdAt: string
+  updatedAt: string
   tags?: string[]
-  // Optional fields
   model?: string
   negativePrompt?: string
   category?: string

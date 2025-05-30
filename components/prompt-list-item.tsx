@@ -1,46 +1,44 @@
 "use client"
 
-import React from "react"
-
+import { memo } from "react"
 import type { Prompt } from "@/lib/types"
-import { cn } from "@/lib/utils"
-import { Star } from "lucide-react"
 
 interface PromptListItemProps {
   prompt: Prompt
   isSelected: boolean
-  onSelect: () => void
-  itemRef?: (element: HTMLLIElement | null) => void
+  onClick: () => void
 }
 
-export const PromptListItem = React.memo(function PromptListItem({
-  prompt,
-  isSelected,
-  onSelect,
-  itemRef,
-}: PromptListItemProps) {
+export const PromptListItem = memo(function PromptListItem({ prompt, isSelected, onClick }: PromptListItemProps) {
   return (
-    <li
-      ref={itemRef}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") onSelect()
-      }}
+    <div
+      onClick={onClick}
+      className={`p-4 border-b border-neutral-800 cursor-pointer transition-all duration-200 ${
+        isSelected ? "bg-neutral-800 ring-1 ring-teal-800" : "bg-neutral-900 hover:bg-neutral-800"
+      }`}
+      data-prompt-id={prompt.promptId}
+      role="button"
       tabIndex={0}
-      className={cn(
-        "p-3 cursor-pointer border-b border-neutral-800 hover:bg-neutral-800/50 focus:bg-neutral-800/60 focus:outline-none transition-all duration-150 ease-in-out",
-        "focus:ring-2 focus:ring-inset focus:ring-brand-accent",
-        isSelected && "bg-neutral-800/70 border-l-2 border-brand-accent",
-      )}
       aria-selected={isSelected}
     >
-      <p className={cn("text-sm text-brand-text truncate", isSelected && "text-brand-accentText")}>{prompt.text}</p>
-      <div className="flex items-center text-xs text-neutral-400 mt-1">
-        <Star
-          className={cn("w-3 h-3 mr-1", prompt.rating > 0 ? "text-yellow-500 fill-yellow-500" : "text-neutral-600")}
-        />
-        <span>{prompt.rating.toFixed(1)}/10</span>
+      <div className="flex justify-between items-start mb-2">
+        <p className="text-neutral-100 font-medium line-clamp-2">{prompt.text}</p>
+        <div className="ml-2 px-2 py-1 bg-neutral-800 rounded text-sm font-mono text-teal-400">
+          {prompt.rating.toFixed(1)}
+        </div>
       </div>
-    </li>
+
+      {prompt.notes && <p className="text-neutral-400 text-sm line-clamp-1">{prompt.notes}</p>}
+
+      {prompt.tags && prompt.tags.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {prompt.tags.map((tag) => (
+            <span key={tag} className="px-1.5 py-0.5 bg-neutral-800 text-neutral-300 text-xs rounded">
+              {tag}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   )
 })

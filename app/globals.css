@@ -2,71 +2,147 @@
 @tailwind components;
 @tailwind utilities;
 
-@layer base {
-  :root {
-    --font-inter: "Inter";
-    --font-playfair-display: "Playfair Display";
+:root {
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-serif: "Playfair Display", serif;
+}
 
-    --background: 0 0% 3.9%; /* #0A0A0A */
-    --foreground: 0 0% 98%; /* #FAFAFA */
+html {
+  scroll-behavior: smooth;
+}
 
-    --card: 0 0% 3.9%;
-    --card-foreground: 0 0% 98%;
+body {
+  @apply bg-black text-white;
+  cursor: none;
+}
 
-    --popover: 0 0% 3.9%;
-    --popover-foreground: 0 0% 98%;
+.font-serif {
+  font-family: var(--font-serif);
+}
 
-    --primary: 0 0% 98%;
-    --primary-foreground: 0 0% 9%;
+/* Custom cursor styles */
+.cursor-container {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  transition: opacity 0.3s ease;
+}
 
-    --secondary: 0 0% 14.9%;
-    --secondary-foreground: 0 0% 98%;
+.custom-cursor {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  transition: transform 0.1s ease;
+  z-index: 10000;
+}
 
-    --muted: 0 0% 14.9%;
-    --muted-foreground: 0 0% 63.9%;
+/* Removed .custom-cursor.clicking rule */
 
-    --accent: 170 30% 43%; /* Muted Teal - #4A908A */
-    --accent-foreground: 0 0% 3.9%;
+.cursor-trail {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  z-index: 9999;
+  transition: opacity 0.2s ease;
+}
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
+/* Hide default cursor on all elements */
+html,
+body,
+* {
+  cursor: none !important;
+}
 
-    --border: 0 0% 14.9%;
-    --input: 0 0% 14.9%;
-    --ring: 170 30% 43%; /* Muted Teal for focus rings */
-
-    --radius: 0.5rem;
+/* But show default cursor on mobile devices */
+@media (max-width: 768px) {
+  html,
+  body,
+  * {
+    cursor: auto !important;
   }
 
+  .cursor-container {
+    display: none;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 3.9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 0 0% 96.1%;
+    --secondary-foreground: 0 0% 9%;
+    --muted: 0 0% 96.1%;
+    --muted-foreground: 0 0% 45.1%;
+    --accent: 0 0% 96.1%;
+    --accent-foreground: 0 0% 9%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 0 0% 89.8%;
+    --input: 0 0% 89.8%;
+    --ring: 0 0% 3.9%;
+    --chart-1: 12 76% 61%;
+    --chart-2: 173 58% 39%;
+    --chart-3: 197 37% 24%;
+    --chart-4: 43 74% 66%;
+    --chart-5: 27 87% 67%;
+    --radius: 0.5rem;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 240 5.3% 26.1%;
+    --sidebar-primary: 240 5.9% 10%;
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 240 4.8% 95.9%;
+    --sidebar-accent-foreground: 240 5.9% 10%;
+    --sidebar-border: 220 13% 91%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
   .dark {
-    /* Keeping the same variables as :root for a forced dark theme */
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
-
     --card: 0 0% 3.9%;
     --card-foreground: 0 0% 98%;
-
     --popover: 0 0% 3.9%;
     --popover-foreground: 0 0% 98%;
-
     --primary: 0 0% 98%;
     --primary-foreground: 0 0% 9%;
-
     --secondary: 0 0% 14.9%;
     --secondary-foreground: 0 0% 98%;
-
     --muted: 0 0% 14.9%;
     --muted-foreground: 0 0% 63.9%;
-
-    --accent: 170 30% 43%;
-    --accent-foreground: 0 0% 3.9%;
-
+    --accent: 0 0% 14.9%;
+    --accent-foreground: 0 0% 98%;
     --destructive: 0 62.8% 30.6%;
     --destructive-foreground: 0 0% 98%;
-
     --border: 0 0% 14.9%;
     --input: 0 0% 14.9%;
-    --ring: 170 30% 43%;
+    --ring: 0 0% 83.1%;
+    --chart-1: 220 70% 50%;
+    --chart-2: 160 60% 45%;
+    --chart-3: 30 80% 55%;
+    --chart-4: 280 65% 60%;
+    --chart-5: 340 75% 55%;
+    --sidebar-background: 240 5.9% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
   }
 }
 
@@ -76,30 +152,151 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-inter);
-  }
-  h1,
-  h2,
-  h3,
-  h4,
-  h5,
-  h6 {
-    @apply font-serif text-brand-headline;
   }
 }
 
-/* Custom scrollbar for a more cinematic feel */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+/* Project grid styles */
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
 }
-::-webkit-scrollbar-track {
-  background: hsl(var(--background) / 0.5);
+
+.project-card {
+  position: relative;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  aspect-ratio: 16 / 9;
+  transition: transform 0.3s ease;
 }
-::-webkit-scrollbar-thumb {
-  background: hsl(var(--muted));
-  border-radius: 4px;
+
+.project-card:hover {
+  transform: translateY(-5px);
 }
-::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--accent) / 0.8);
+
+.project-role {
+  position: absolute;
+  bottom: 1rem;
+  left: 1rem;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  z-index: 20;
 }
+
+/* BTS Gallery Cluster */
+.bts-gallery-cluster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  grid-auto-rows: 150px;
+  grid-auto-flow: dense;
+  gap: 1rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.bts-item {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  cursor: pointer;
+  transition: transform 0.3s ease;
+}
+
+.bts-item:hover {
+  transform: scale(1.03);
+}
+
+.bts-item.small {
+  grid-column: span 1;
+  grid-row: span 1;
+}
+
+.bts-item.medium {
+  grid-column: span 2;
+  grid-row: span 1;
+}
+
+.bts-item.large {
+  grid-column: span 2;
+  grid-row: span 2;
+}
+
+.bts-item.square {
+  aspect-ratio: 1;
+}
+
+.bts-item.portrait {
+  aspect-ratio: 2 / 3;
+}
+
+.bts-item.landscape {
+  aspect-ratio: 16 / 9;
+}
+
+/* Category tabs */
+.category-tabs {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 2rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.category-tab {
+  padding: 0.5rem 1rem;
+  border-radius: 9999px;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.category-tab.active {
+  background: white;
+  color: black;
+}
+
+/* Backend setup guide */
+.backend-guide {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.step-container {
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  border-radius: 0.5rem;
+  background-color: #111;
+  border: 1px solid #333;
+}
+
+.step-number {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 9999px;
+  background-color: white;
+  color: black;
+  font-weight: bold;
+  margin-right: 0.75rem;
+}
+
+.code-block {
+  background-color: #1a1a1a;
+  padding: 1rem;
+  border-radius: 0.25rem;
+  overflow-x: auto;
+  margin: 1rem 0;
+  font-family: monospace;
+}
+
+/* Check for any global CSS that might be creating this text */
+/* Look for ::before pseudo-elements that might be adding this text */
+
+/* Remove this rule or similar that's creating the "Milo Presedo" text */
+/* .some-class::before {
+  content: "Milo Presedo";
+   other styles 
+} */
