@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { Sparkles, ArrowLeft, Palette, Code, Zap, Camera, Search } from "lucide-react"
+import { Sparkles, ArrowLeft, Search } from "lucide-react"
 import ToolsSearchBar from "@/components/tools-search-bar"
 import ToolsTagFilter from "@/components/tools-tag-filter"
 
@@ -13,32 +13,7 @@ const tools = [
     description: "Organize, rate, and manage your AI image generation prompts with an intuitive interface.",
     icon: Sparkles,
     status: "stable",
-    tags: ["AI", "Image Generation", "Prompts"],
-  },
-  // Add more tools here as they're developed
-  {
-    id: "color-palette-generator",
-    name: "Color Palette Generator",
-    description: "Generate beautiful color palettes for your creative projects.",
-    icon: Palette,
-    status: "coming-soon",
-    tags: ["Design", "Colors", "Creative"],
-  },
-  {
-    id: "code-formatter",
-    name: "Code Formatter",
-    description: "Format and beautify your code with support for multiple languages.",
-    icon: Code,
-    status: "coming-soon",
-    tags: ["Development", "Code", "Productivity"],
-  },
-  {
-    id: "cinema-calculator",
-    name: "Cinema Calculator",
-    description: "Calculate aspect ratios, frame rates, and other cinema-related measurements.",
-    icon: Camera,
-    status: "coming-soon",
-    tags: ["Cinema", "Film", "Calculations"],
+    tags: ["AI"],
   },
 ]
 
@@ -78,8 +53,6 @@ export default function ToolsPage() {
         return "bg-yellow-900/30 border-yellow-900/50 text-yellow-400"
       case "experimental":
         return "bg-red-900/30 border-red-900/50 text-red-400"
-      case "coming-soon":
-        return "bg-blue-900/30 border-blue-900/50 text-blue-400"
       default:
         return "bg-teal-900/30 border-teal-900/50 text-teal-400"
     }
@@ -121,7 +94,7 @@ export default function ToolsPage() {
         )}
 
         {/* Tools Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredTools.map((tool) => (
             <div
               key={tool.id}
@@ -132,9 +105,7 @@ export default function ToolsPage() {
                   <div className="p-2 bg-neutral-800 rounded-md">
                     <tool.icon className="h-6 w-6 text-teal-400" />
                   </div>
-                  <div className={`px-2 py-1 border rounded text-xs ${getStatusColor(tool.status)}`}>
-                    {tool.status === "coming-soon" ? "Coming Soon" : tool.status}
-                  </div>
+                  <div className={`px-2 py-1 border rounded text-xs ${getStatusColor(tool.status)}`}>{tool.status}</div>
                 </div>
                 <h2 className="font-serif text-xl mb-2">{tool.name}</h2>
                 <p className="text-neutral-400 mb-4">{tool.description}</p>
@@ -145,38 +116,15 @@ export default function ToolsPage() {
                     </span>
                   ))}
                 </div>
-                {tool.status === "coming-soon" ? (
-                  <div className="block w-full py-2 text-center bg-neutral-800 text-neutral-500 rounded cursor-not-allowed">
-                    Coming Soon
-                  </div>
-                ) : (
-                  <Link
-                    href={`/tools/${tool.id}`}
-                    className="block w-full py-2 text-center bg-neutral-800 hover:bg-neutral-700 text-neutral-100 rounded transition-colors"
-                  >
-                    Launch Tool
-                  </Link>
-                )}
+                <Link
+                  href={`/tools/${tool.id}`}
+                  className="block w-full py-2 text-center bg-neutral-800 hover:bg-neutral-700 text-neutral-100 rounded transition-colors"
+                >
+                  Launch Tool
+                </Link>
               </div>
             </div>
           ))}
-
-          {/* Add New Tool Card - Only show for developers */}
-          <div className="bg-neutral-900 border border-dashed border-neutral-800 rounded-lg overflow-hidden hover:border-neutral-700 transition-colors">
-            <div className="p-6 flex flex-col items-center justify-center h-full text-center">
-              <div className="p-4 mb-4 rounded-full bg-neutral-800">
-                <Zap className="h-8 w-8 text-neutral-500" />
-              </div>
-              <h2 className="font-serif text-xl mb-2">More Tools Coming</h2>
-              <p className="text-neutral-400 mb-6">New tools are being developed regularly. Check back soon!</p>
-              <Link
-                href="/docs/TOOLS-DEVELOPMENT.md"
-                className="block w-full py-2 text-center bg-neutral-800 hover:bg-neutral-700 text-neutral-100 rounded transition-colors"
-              >
-                Developer Docs
-              </Link>
-            </div>
-          </div>
         </div>
 
         {/* No Results */}
