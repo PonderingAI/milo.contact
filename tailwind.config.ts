@@ -1,13 +1,15 @@
 import type { Config } from "tailwindcss"
 
-const config: Config = {
+const config = {
   darkMode: ["class"],
   content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    "./pages/**/*.{ts,tsx}",
+    "./components/**/*.{ts,tsx}",
+    "./app/**/*.{ts,tsx}",
+    "./src/**/*.{ts,tsx}",
     "*.{js,ts,jsx,tsx,mdx}",
   ],
+  prefix: "",
   theme: {
     container: {
       center: true,
@@ -17,6 +19,10 @@ const config: Config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-inter)", "sans-serif"],
+        serif: ["var(--font-playfair-display)", "serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -51,6 +57,16 @@ const config: Config = {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        // Cinematic theme colors
+        brand: {
+          background: "#0A0A0A", // Deep black/dark gray
+          surface: "#111111", // Slightly lighter surface
+          text: "#E0E0E0", // Off-white text
+          headline: "#FFFFFF", // Pure white for headlines
+          accent: "#4A908A", // Muted Teal (approx HSL: 170, 30%, 43%)
+          accentHover: "#5EAEAA", // Slightly lighter muted teal for hover
+          accentText: "#A0D9D3", // Lighter teal for text on dark backgrounds
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -74,6 +90,6 @@ const config: Config = {
     },
   },
   plugins: [require("tailwindcss-animate")],
-}
+} satisfies Config
 
 export default config

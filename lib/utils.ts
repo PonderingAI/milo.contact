@@ -1,39 +1,57 @@
-import { type ClassValue, clsx } from "clsx"
+import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
+import { v4 as uuidv4 } from "uuid"
+import type { Prompt, OptionalPromptFields } from "./types"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
-// Add the missing extractVideoInfo function
-export function extractVideoInfo(url: string) {
-  // YouTube
-  const youtubeRegex = /(?:youtube\.com\/(?:[^/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?/\s]{11})/i
-  const youtubeMatch = url.match(youtubeRegex)
+export function generateNewPrompt(text: string): Prompt {
+  const now = new Date().toISOString()
+  return {
+    promptId: uuidv4(),
+    text,
+    rating: 0,
+    notes: "",
+    createdAt: now,
+    updatedAt: now,
+    tags: [],
+  }
+}
 
-  if (youtubeMatch && youtubeMatch[1]) {
-    return {
-      type: "youtube",
-      id: youtubeMatch[1],
-      url: `https://www.youtube.com/embed/${youtubeMatch[1]}`,
-      thumbnail: `https://img.youtube.com/vi/${youtubeMatch[1]}/maxresdefault.jpg`,
-    }
+export function cleanPromptForExport(prompt: Prompt): Partial<Prompt> {
+  const cleanedPrompt: Partial<Prompt> = {
+    promptId: prompt.promptId,
+    text: prompt.text,
+    rating: prompt.rating,
+    createdAt: prompt.createdAt,
+    updatedAt: prompt.updatedAt,
   }
 
-  // Vimeo
-  const vimeoRegex =
-    /(?:vimeo\.com\/(?:channels\/(?:\w+\/)?|groups\/(?:[^/]*)\/videos\/|album\/(?:\d+)\/video\/|)(\d+)(?:$|\/|\?))/i
-  const vimeoMatch = url.match(vimeoRegex)
-
-  if (vimeoMatch && vimeoMatch[1]) {
-    return {
-      type: "vimeo",
-      id: vimeoMatch[1],
-      url: `https://player.vimeo.com/video/${vimeoMatch[1]}`,
-      thumbnail: "", // Vimeo requires API call to get thumbnail
-    }
+  if (prompt.notes && prompt.notes.trim() !== "") {
+    cleanedPrompt.notes = prompt.notes
+  }
+  if (prompt.tags && prompt.tags.length > 0) {
+    cleanedPrompt.tags = prompt.tags
   }
 
-  // If no match found
-  return null
+  const optionalFields: (keyof OptionalPromptFields)[] = [
+    "model",
+    "negativePrompt",
+    "category",
+    "aspectRatio",
+    "steps",
+    "seed",
+    "cfgScale",
+  ]
+
+  optionalFields.forEach((field) => {
+    const value = prompt[field as keyof Prompt]
+    if (value !== undefined && value !== null && (typeof value !== "string" || value.trim() !== "")) {
+      ;(cleanedPrompt as any)[field] = value
+    }
+  })
+
+  return cleanedPrompt
 }
