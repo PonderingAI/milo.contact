@@ -64,15 +64,20 @@ export function usePromptsStore() {
     if (!text.trim()) return undefined
 
     const newPrompt = createPrompt(text.trim())
-    setPrompts((prev) => [newPrompt, ...prev])
+    setPrompts((prev) => {
+      const updated = [newPrompt, ...prev]
+      console.log("Adding prompt:", newPrompt.promptId, "Total prompts:", updated.length)
+      return updated
+    })
     setSelectedPromptId(newPrompt.promptId)
+    setHasUnsavedChanges(true) // Explicitly set this
     return newPrompt
   }, [])
 
   // Update a prompt
   const updatePrompt = useCallback((promptId: string, updates: Partial<Prompt>) => {
-    setPrompts((prev) =>
-      prev.map((p) => {
+    setPrompts((prev) => {
+      const updated = prev.map((p) => {
         if (p.promptId === promptId) {
           return {
             ...p,
@@ -81,8 +86,11 @@ export function usePromptsStore() {
           }
         }
         return p
-      }),
-    )
+      })
+      console.log("Updated prompt:", promptId, "Total prompts:", updated.length)
+      return updated
+    })
+    setHasUnsavedChanges(true)
   }, [])
 
   // Delete a prompt

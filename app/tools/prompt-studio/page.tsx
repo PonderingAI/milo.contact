@@ -35,9 +35,15 @@ export default function PromptStudioPage() {
   // Handle adding a new prompt
   const handleAddNewPrompt = useCallback(
     (text: string) => {
+      console.log("Adding new prompt:", text)
       const newPrompt = addPromptToStore(text)
+      console.log("New prompt created:", newPrompt)
+
       if (newPrompt) {
-        setRatingTargetPrompt(newPrompt)
+        // Use setTimeout to ensure the prompt is added to state before showing rating modal
+        setTimeout(() => {
+          setRatingTargetPrompt(newPrompt)
+        }, 50)
       }
     },
     [addPromptToStore],
@@ -290,8 +296,12 @@ export default function PromptStudioPage() {
       {/* Quick rating modal */}
       <QuickRatingInput
         isOpen={!!ratingTargetPrompt}
-        onClose={() => setRatingTargetPrompt(null)}
+        onClose={() => {
+          console.log("Closing rating modal")
+          setRatingTargetPrompt(null)
+        }}
         onSubmit={(rating) => {
+          console.log("Submitting rating:", rating, "for prompt:", ratingTargetPrompt?.promptId)
           if (ratingTargetPrompt) {
             updatePrompt(ratingTargetPrompt.promptId, { rating })
             setRatingTargetPrompt(null)
@@ -302,7 +312,7 @@ export default function PromptStudioPage() {
               if (inputElement) {
                 inputElement.focus()
               }
-            }, 10)
+            }, 100) // Increased timeout
           }
         }}
         initialRating={ratingTargetPrompt?.rating || 0}

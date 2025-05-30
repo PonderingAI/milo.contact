@@ -15,7 +15,8 @@ export function PromptInput({ onAddPrompt }: PromptInputProps) {
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (text.trim()) {
-      onAddPrompt(text)
+      console.log("Submitting prompt:", text.trim())
+      onAddPrompt(text.trim())
       setText("")
     }
   }
@@ -23,7 +24,8 @@ export function PromptInput({ onAddPrompt }: PromptInputProps) {
   const handleKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && text.trim()) {
       e.preventDefault()
-      onAddPrompt(text)
+      console.log("Enter pressed, submitting prompt:", text.trim())
+      onAddPrompt(text.trim())
       setText("")
     }
   }
