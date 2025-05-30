@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { formatDate } from "@/lib/utils"
 
 interface MetadataEditorProps {
   prompt: Prompt | null
@@ -61,8 +60,7 @@ export function MetadataEditor({ prompt, onUpdate, onDelete }: MetadataEditorPro
     <ScrollArea className="h-full">
       <div className="p-4 space-y-6">
         <div>
-          <h3 className="font-serif text-xl text-neutral-100 mb-2">Prompt</h3>
-          <p className="text-neutral-200 mb-4">{prompt.text}</p>
+          <h3 className="font-serif text-xl text-neutral-100 mb-4">Metadata Editor</h3>
         </div>
 
         <div className="space-y-2">
@@ -203,11 +201,6 @@ export function MetadataEditor({ prompt, onUpdate, onDelete }: MetadataEditorPro
               className="bg-neutral-900 border-neutral-700 text-neutral-100 focus:ring-teal-800 focus:ring-offset-neutral-900"
             />
           </div>
-        </div>
-
-        <div className="pt-4 border-t border-neutral-800 text-sm text-neutral-500">
-          <p>Created: {formatDate(prompt.createdAt)}</p>
-          <p>Updated: {formatDate(prompt.updatedAt)}</p>
         </div>
 
         <div className="pt-4">

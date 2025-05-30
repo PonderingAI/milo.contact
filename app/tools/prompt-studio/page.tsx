@@ -11,8 +11,9 @@ import { PromptList } from "@/components/prompt-list"
 import { MetadataEditor } from "@/components/metadata-editor"
 import { QuickRatingInput } from "@/components/quick-rating-input"
 import { Button } from "@/components/ui/button"
+import { cleanPromptForExport } from "@/lib/utils"
 import type { Prompt } from "@/lib/types"
-import { ArrowLeft, Save, Upload, Plus } from "lucide-react"
+import { ArrowLeft, Save, Upload, Plus, Trash2 } from "lucide-react"
 
 export default function PromptStudioPage() {
   const {
@@ -23,8 +24,8 @@ export default function PromptStudioPage() {
     addPrompt: addPromptToStore,
     updatePrompt,
     deletePrompt,
-    exportPrompts,
-    importPrompts,
+    clearAllData,
+    hasUnsavedChanges,
   } = usePromptsStore()
 
   const [ratingTargetPrompt, setRatingTargetPrompt] = useState<Prompt | null>(null)
@@ -42,6 +43,28 @@ export default function PromptStudioPage() {
     [addPromptToStore],
   )
 
+  // Handle exporting prompts with simplified format
+  const handleExport = useCallback(() => {
+    // Sort prompts by rating (descending) and clean for export
+    const sortedPrompts = [...prompts].sort((a, b) => b.rating - a.rating).map((prompt) => cleanPromptForExport(prompt))
+
+    const json = JSON.stringify(sortedPrompts, null, 2)
+    const blob = new Blob([json], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `prompts-export-${new Date().toISOString().slice(0, 10)}.json`
+    document.body.appendChild(a)
+    a.click()
+
+    // Clean up
+    setTimeout(() => {
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }, 100)
+  }, [prompts])
+
   // Handle importing prompts
   const handleImport = useCallback(() => {
     fileInputRef.current?.click()
@@ -56,10 +79,50 @@ export default function PromptStudioPage() {
       reader.onload = (event) => {
         const content = event.target?.result as string
         if (content) {
-          const success = importPrompts(content)
-          if (success) {
+          try {
+            // Try to parse and convert the imported data
+            const importedData = JSON.parse(content)
+
+            // Convert from export format back to internal format if needed
+            const convertedPrompts = importedData.map((item: any) => {
+              if (item.prompt && !item.text) {
+                // Convert from export format
+                return {
+                  ...item,
+                  text: item.prompt,
+                  promptId: crypto.randomUUID(),
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                }
+              }
+              return item
+            })
+
+            // For simplicity, replace all prompts with imported ones
+            clearAllData()
+            convertedPrompts.forEach((prompt: any) => {
+              addPromptToStore(prompt.text || prompt.prompt)
+              if (prompt.rating || prompt.notes || prompt.tags) {
+                // Update with metadata after adding
+                setTimeout(() => {
+                  updatePrompt(prompt.promptId, {
+                    rating: prompt.rating || 0,
+                    notes: prompt.notes,
+                    tags: prompt.tags,
+                    model: prompt.model,
+                    negativePrompt: prompt.negativePrompt,
+                    category: prompt.category,
+                    aspectRatio: prompt.aspectRatio,
+                    steps: prompt.steps,
+                    seed: prompt.seed,
+                    cfgScale: prompt.cfgScale,
+                  })
+                }, 10)
+              }
+            })
+
             alert("Prompts imported successfully!")
-          } else {
+          } catch (error) {
             alert("Failed to import prompts. Please check the file format.")
           }
         }
@@ -69,8 +132,15 @@ export default function PromptStudioPage() {
       // Reset the input so the same file can be selected again
       e.target.value = ""
     },
-    [importPrompts],
+    [addPromptToStore, updatePrompt, clearAllData],
   )
+
+  // Handle clearing all data
+  const handleClearAll = useCallback(() => {
+    if (window.confirm("Are you sure you want to clear all prompts? This action cannot be undone.")) {
+      clearAllData()
+    }
+  }, [clearAllData])
 
   // Keyboard shortcuts
   useKeyboardShortcuts(
@@ -81,7 +151,7 @@ export default function PromptStudioPage() {
           inputElement.focus()
         }
       },
-      "ctrl+s": exportPrompts,
+      "ctrl+s": handleExport,
       "ctrl+o": handleImport,
       arrowup: () => {
         if (activePanel === "list" && selectedPromptId) {
@@ -130,7 +200,7 @@ export default function PromptStudioPage() {
         setActivePanel((prev) => (prev === "editor" ? "list" : "editor"))
       },
     },
-    [prompts, selectedPromptId, selectedPrompt, activePanel],
+    [prompts, selectedPromptId, selectedPrompt, activePanel, handleExport],
     !!ratingTargetPrompt, // Disable keyboard shortcuts when rating modal is open
   )
 
@@ -144,6 +214,7 @@ export default function PromptStudioPage() {
               <span className="sr-only">Back to Tools</span>
             </Link>
             <h1 className="font-serif text-2xl">Prompt Studio</h1>
+            {hasUnsavedChanges && <span className="text-yellow-400 text-sm">● Unsaved changes</span>}
           </div>
           <div className="flex items-center space-x-2">
             <Button
@@ -158,11 +229,22 @@ export default function PromptStudioPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={exportPrompts}
-              className="bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800"
+              onClick={handleExport}
+              disabled={prompts.length === 0}
+              className="bg-neutral-900 border-neutral-800 text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
             >
               <Save className="h-4 w-4 mr-2" />
               Export
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearAll}
+              disabled={prompts.length === 0}
+              className="bg-red-900/30 border-red-800 text-red-300 hover:bg-red-900/50 disabled:opacity-50"
+            >
+              <Trash2 className="h-4 w-4 mr-2" />
+              Clear All
             </Button>
             <Button
               variant="outline"

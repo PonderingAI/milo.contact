@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { v4 as uuidv4 } from "uuid"
-import type { Prompt, OptionalPromptFields } from "./types"
+import type { Prompt, OptionalPromptFields, ExportPrompt } from "./types"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -96,42 +96,44 @@ export function extractVideoInfo(source: string): {
 }
 
 /**
- * Clean prompt for export by removing empty fields
+ * Clean prompt for export by removing empty fields and converting to export format
  */
-export function cleanPromptForExport(prompt: Prompt): Partial<Prompt> {
-  const cleanedPrompt: Partial<Prompt> = {
-    promptId: prompt.promptId,
-    text: prompt.text,
+export function cleanPromptForExport(prompt: Prompt): ExportPrompt {
+  const exportPrompt: ExportPrompt = {
+    prompt: prompt.text, // Changed from 'text' to 'prompt'
     rating: prompt.rating,
-    createdAt: prompt.createdAt,
-    updatedAt: prompt.updatedAt,
   }
 
+  // Only include fields that have values
   if (prompt.notes && prompt.notes.trim() !== "") {
-    cleanedPrompt.notes = prompt.notes
+    exportPrompt.notes = prompt.notes
   }
   if (prompt.tags && prompt.tags.length > 0) {
-    cleanedPrompt.tags = prompt.tags
+    exportPrompt.tags = prompt.tags
+  }
+  if (prompt.model && prompt.model.trim() !== "") {
+    exportPrompt.model = prompt.model
+  }
+  if (prompt.negativePrompt && prompt.negativePrompt.trim() !== "") {
+    exportPrompt.negativePrompt = prompt.negativePrompt
+  }
+  if (prompt.category && prompt.category.trim() !== "") {
+    exportPrompt.category = prompt.category
+  }
+  if (prompt.aspectRatio && prompt.aspectRatio.trim() !== "") {
+    exportPrompt.aspectRatio = prompt.aspectRatio
+  }
+  if (prompt.steps !== undefined && prompt.steps !== null) {
+    exportPrompt.steps = prompt.steps
+  }
+  if (prompt.seed !== undefined && prompt.seed !== null) {
+    exportPrompt.seed = prompt.seed
+  }
+  if (prompt.cfgScale !== undefined && prompt.cfgScale !== null) {
+    exportPrompt.cfgScale = prompt.cfgScale
   }
 
-  const optionalFields: (keyof OptionalPromptFields)[] = [
-    "model",
-    "negativePrompt",
-    "category",
-    "aspectRatio",
-    "steps",
-    "seed",
-    "cfgScale",
-  ]
-
-  optionalFields.forEach((field) => {
-    const value = prompt[field as keyof Prompt]
-    if (value !== undefined && value !== null && (typeof value !== "string" || value.trim() !== "")) {
-      ;(cleanedPrompt as any)[field] = value
-    }
-  })
-
-  return cleanedPrompt
+  return exportPrompt
 }
 
 /**

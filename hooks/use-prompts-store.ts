@@ -8,12 +8,13 @@ export function usePromptsStore() {
   const [prompts, setPrompts] = useState<Prompt[]>([])
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null)
   const [isLoaded, setIsLoaded] = useState(false)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
-  // Load prompts from localStorage on mount
+  // Load prompts from sessionStorage on mount (not localStorage)
   useEffect(() => {
     const loadPrompts = () => {
       try {
-        const savedPrompts = localStorage.getItem("prompts")
+        const savedPrompts = sessionStorage.getItem("prompts")
         if (savedPrompts) {
           const parsedPrompts = JSON.parse(savedPrompts) as Prompt[]
           setPrompts(parsedPrompts)
@@ -25,7 +26,7 @@ export function usePromptsStore() {
         }
         setIsLoaded(true)
       } catch (error) {
-        console.error("Failed to load prompts from localStorage:", error)
+        console.error("Failed to load prompts from sessionStorage:", error)
         setIsLoaded(true)
       }
     }
@@ -33,12 +34,27 @@ export function usePromptsStore() {
     loadPrompts()
   }, [selectedPromptId])
 
-  // Save prompts to localStorage whenever they change
+  // Save prompts to sessionStorage whenever they change
   useEffect(() => {
     if (isLoaded && prompts.length > 0) {
-      localStorage.setItem("prompts", JSON.stringify(prompts))
+      sessionStorage.setItem("prompts", JSON.stringify(prompts))
+      setHasUnsavedChanges(true)
     }
   }, [prompts, isLoaded])
+
+  // Add beforeunload event listener to warn about unsaved changes
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (hasUnsavedChanges && prompts.length > 0) {
+        e.preventDefault()
+        e.returnValue = "You have unsaved prompts. Are you sure you want to leave? Your data will be lost."
+        return "You have unsaved prompts. Are you sure you want to leave? Your data will be lost."
+      }
+    }
+
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [hasUnsavedChanges, prompts.length])
 
   // Get the selected prompt
   const selectedPrompt = prompts.find((p) => p.promptId === selectedPromptId) || null
@@ -105,6 +121,9 @@ export function usePromptsStore() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     }, 100)
+
+    // Mark as saved after export
+    setHasUnsavedChanges(false)
   }, [prompts])
 
   // Import prompts from JSON
@@ -119,6 +138,14 @@ export function usePromptsStore() {
     }
   }, [])
 
+  // Clear all data (for testing or reset)
+  const clearAllData = useCallback(() => {
+    setPrompts([])
+    setSelectedPromptId(null)
+    setHasUnsavedChanges(false)
+    sessionStorage.removeItem("prompts")
+  }, [])
+
   return {
     prompts,
     selectedPromptId,
@@ -129,6 +156,8 @@ export function usePromptsStore() {
     deletePrompt,
     exportPrompts,
     importPrompts,
+    clearAllData,
+    hasUnsavedChanges,
     isLoaded,
   }
 }
