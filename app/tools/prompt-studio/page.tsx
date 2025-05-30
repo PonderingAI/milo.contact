@@ -114,8 +114,9 @@ export default function PromptStudioPage() {
               throw new Error("Invalid format: expected an array of prompts")
             }
 
-            // Clear existing data first
-            clearAllData()
+            const existingTexts = new Set(prompts.map((p) => p.text.toLowerCase().trim()))
+            let addedCount = 0
+            let skippedCount = 0
 
             // Process each imported prompt
             importedData.forEach((exportPrompt, index) => {
@@ -125,6 +126,15 @@ export default function PromptStudioPage() {
               const promptText = exportPrompt.prompt || (exportPrompt as any).text
               if (!promptText) {
                 console.warn("Skipping prompt without text:", exportPrompt)
+                skippedCount++
+                return
+              }
+
+              // Check if this prompt already exists (case-insensitive)
+              const normalizedText = promptText.toLowerCase().trim()
+              if (existingTexts.has(normalizedText)) {
+                console.log("Skipping duplicate prompt:", promptText.substring(0, 50))
+                skippedCount++
                 return
               }
 
@@ -133,6 +143,9 @@ export default function PromptStudioPage() {
               console.log("Added prompt:", newPrompt?.promptId)
 
               if (newPrompt) {
+                addedCount++
+                existingTexts.add(normalizedText) // Track this new prompt to avoid duplicates within the import
+
                 // Prepare metadata updates
                 const metadata: Partial<Prompt> = {}
 
@@ -181,9 +194,7 @@ export default function PromptStudioPage() {
               }
             })
 
-            setTimeout(() => {
-              alert(`Successfully imported ${importedData.length} prompts!`)
-            }, 100 * importedData.length)
+            console.log(`Import completed: ${addedCount} added, ${skippedCount} skipped (duplicates)`)
           } catch (error) {
             console.error("Import error:", error)
             alert("Failed to import prompts. Please check the file format.")
@@ -195,7 +206,7 @@ export default function PromptStudioPage() {
       // Reset the input so the same file can be selected again
       e.target.value = ""
     },
-    [addPromptToStore, updatePrompt, clearAllData],
+    [addPromptToStore, updatePrompt, prompts],
   )
 
   // Handle clearing all data
