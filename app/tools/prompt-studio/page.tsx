@@ -25,6 +25,7 @@ export default function PromptStudioPage() {
     updatePrompt,
     deletePrompt,
     clearAllData,
+    markAsSaved,
     hasUnsavedChanges,
     isLoaded,
   } = usePromptsStore()
@@ -89,7 +90,11 @@ export default function PromptStudioPage() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     }, 100)
-  }, [prompts])
+
+    // Mark as saved after successful export
+    markAsSaved()
+    console.log("Export completed, marked as saved")
+  }, [prompts, markAsSaved])
 
   // Handle importing prompts
   const handleImport = useCallback(() => {

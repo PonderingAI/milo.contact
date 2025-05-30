@@ -187,6 +187,12 @@ export function usePromptsStore() {
     sessionStorage.removeItem("prompts")
   }, [])
 
+  // Mark as saved (for external use, like after export)
+  const markAsSaved = useCallback(() => {
+    console.log("Marking as saved")
+    setHasUnsavedChanges(false)
+  }, [])
+
   return {
     prompts,
     selectedPromptId,
@@ -198,6 +204,7 @@ export function usePromptsStore() {
     exportPrompts,
     importPrompts,
     clearAllData,
+    markAsSaved,
     hasUnsavedChanges,
     isLoaded,
   }
