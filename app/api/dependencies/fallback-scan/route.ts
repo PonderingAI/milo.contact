@@ -1,11 +1,40 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-sync"
+import { auth } from "@clerk/nextjs"
 import fs from "fs"
 import path from "path"
 
 export async function POST() {
   try {
-    const supabase = createAdminClient()
+    // Check if user is authenticated
+    const { userId } = auth()
+    if (!userId) {
+      return NextResponse.json({ 
+        error: "Unauthorized", 
+        message: "You must be signed in to perform this action",
+        debug_userIdFromAuth: null 
+      }, { status: 401 })
+    }
+    
+    // Get authenticated Supabase client that syncs Clerk with Supabase
+    const supabase = await getRouteHandlerSupabaseClient()
+    
+    // Check if user has admin role
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+    
+    if (roleError || !roleData || roleData.length === 0) {
+      return NextResponse.json({ 
+        error: "Permission denied", 
+        message: "Admin role required to scan dependencies",
+        debug_userIdFromAuth: userId,
+        supabaseError: roleError?.message || "No admin role found",
+        supabaseCode: roleError?.code || "PERMISSION_DENIED"
+      }, { status: 403 })
+    }
 
     // Check if dependencies table exists
     try {
@@ -18,6 +47,7 @@ export async function POST() {
           {
             error: "Error checking if table exists",
             message: tableError.message,
+            debug_userIdFromAuth: userId
           },
           { status: 500 },
         )
@@ -28,6 +58,7 @@ export async function POST() {
           {
             error: "Dependencies table does not exist",
             message: "Please set up the dependencies table first",
+            debug_userIdFromAuth: userId
           },
           { status: 404 },
         )
@@ -37,6 +68,7 @@ export async function POST() {
         {
           error: "Error checking if table exists",
           message: tableCheckError instanceof Error ? tableCheckError.message : String(tableCheckError),
+          debug_userIdFromAuth: userId
         },
         { status: 500 },
       )
@@ -53,6 +85,7 @@ export async function POST() {
         {
           error: "Error reading package.json",
           message: err instanceof Error ? err.message : String(err),
+          debug_userIdFromAuth: userId
         },
         { status: 500 },
       )
@@ -152,14 +185,19 @@ export async function POST() {
       updated: updatedCount,
       errors: errorCount,
       total: allDependencies.length,
+      debug_userIdFromAuth: userId
     })
   } catch (error) {
     console.error("Error in fallback scan:", error)
+    const { userId } = auth()
+    
     return NextResponse.json(
       {
         error: "Failed to scan dependencies",
         message: "An unexpected error occurred while scanning dependencies",
         details: error instanceof Error ? error.message : String(error),
+        stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined,
+        debug_userIdFromAuth: userId
       },
       { status: 500 },
     )

@@ -1,186 +1,122 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
-import fs from "fs"
-import path from "path"
-
-// Helper function to check if a table exists without using RPC
-async function checkTableExists(supabase, tableName) {
-  try {
-    // Query the information_schema to check if the table exists
-    const { data, error } = await supabase
-      .from("information_schema.tables")
-      .select("table_name")
-      .eq("table_schema", "public")
-      .eq("table_name", tableName)
-      .single()
-
-    if (error) {
-      console.error(`Error checking if ${tableName} exists:`, error)
-      return false
-    }
-
-    return !!data
-  } catch (error) {
-    console.error(`Error in checkTableExists for ${tableName}:`, error)
-    return false
-  }
-}
-
-// Helper function to get dependencies from package.json
-async function getDependenciesFromPackageJson() {
-  try {
-    // Try to read package.json directly from the file system
-    const packageJsonPath = path.join(process.cwd(), "package.json")
-    const packageJsonContent = fs.readFileSync(packageJsonPath, "utf8")
-    const packageJson = JSON.parse(packageJsonContent)
-
-    return {
-      dependencies: Object.entries(packageJson.dependencies || {}).map(([name, version]) => ({
-        name,
-        current_version: version.toString().replace(/^\^|~/, ""),
-        is_dev: false,
-      })),
-      devDependencies: Object.entries(packageJson.devDependencies || {}).map(([name, version]) => ({
-        name,
-        current_version: version.toString().replace(/^\^|~/, ""),
-        is_dev: true,
-      })),
-    }
-  } catch (error) {
-    console.error("Error reading package.json:", error)
-    return { dependencies: [], devDependencies: [] }
-  }
-}
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-sync"
+import { auth } from "@clerk/nextjs"
 
 export async function GET() {
   try {
-    const supabase = createAdminClient()
-
-    // First, check if we can connect to Supabase at all
+    // Check if user is authenticated
+    const { userId } = auth()
+    if (!userId) {
+      return NextResponse.json({ 
+        error: "Unauthorized", 
+        message: "You must be signed in to view dependencies",
+        debug_userIdFromAuth: null 
+      }, { status: 401 })
+    }
+    
+    // Get authenticated Supabase client that syncs Clerk with Supabase
+    const supabase = await getRouteHandlerSupabaseClient()
+    
+    // Check if user has admin role
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+    
+    if (roleError || !roleData || roleData.length === 0) {
+      return NextResponse.json({ 
+        error: "Permission denied", 
+        message: "Admin role required to view dependencies",
+        debug_userIdFromAuth: userId,
+        supabaseError: roleError?.message || "No admin role found",
+        supabaseCode: roleError?.code || "PERMISSION_DENIED"
+      }, { status: 403 })
+    }
+    
+    // Check if dependencies table exists
     try {
-      const { error: connectionError } = await supabase.from("_dummy_query_").select("*").limit(1)
+      const { data: tableExists, error: tableError } = await supabase.rpc("check_table_exists", {
+        table_name: "dependencies",
+      })
 
-      // If we get a specific error about relation not existing, connection is working
-      if (connectionError && !connectionError.message.includes("does not exist")) {
-        console.error("Supabase connection error:", connectionError)
-        throw new Error("Failed to connect to Supabase")
-      }
-    } catch (connectionError) {
-      // If this is not a "relation does not exist" error, there's a connection issue
-      if (
-        connectionError instanceof Error &&
-        !connectionError.message.includes("does not exist") &&
-        !connectionError.message.includes("_dummy_query_")
-      ) {
-        console.error("Supabase connection test failed:", connectionError)
+      if (tableError) {
         return NextResponse.json(
           {
-            error: "Database connection failed",
-            message: "Could not connect to the database. Please check your connection settings.",
-            details: connectionError instanceof Error ? connectionError.message : String(connectionError),
+            error: "Error checking if table exists",
+            message: tableError.message,
+            debug_userIdFromAuth: userId
           },
           { status: 500 },
         )
       }
-    }
 
-    // Check if dependencies table exists
-    const dependenciesTableExists = await checkTableExists(supabase, "dependencies")
-    const settingsTableExists = await checkTableExists(supabase, "dependency_settings")
-    const auditsTableExists = await checkTableExists(supabase, "security_audits")
-
-    const allTablesExist = dependenciesTableExists && settingsTableExists && auditsTableExists
-
-    // If tables don't exist, return appropriate error with SQL file path
-    if (!allTablesExist) {
-      const missingTables = []
-      if (!dependenciesTableExists) missingTables.push("dependencies")
-      if (!settingsTableExists) missingTables.push("dependency_settings")
-      if (!auditsTableExists) missingTables.push("security_audits")
-
+      if (!tableExists) {
+        return NextResponse.json(
+          {
+            error: "Dependencies table does not exist",
+            message: "Please set up the dependencies table first",
+            debug_userIdFromAuth: userId
+          },
+          { status: 404 },
+        )
+      }
+    } catch (tableCheckError) {
       return NextResponse.json(
         {
-          error: "Dependency tables do not exist",
-          message: "The dependency system tables have not been set up. Please set up the tables first.",
-          tableExists: false,
-          setupNeeded: true,
-          setupMessage: "The dependency management system needs to be set up. Please run the setup process.",
-          sqlFilePath: "/docs/setup/dependency-tables.sql",
-          missingTables,
-        },
-        { status: 404 },
-      )
-    }
-
-    // Get dependencies from database
-    const { data: dbDeps, error: fetchError } = await supabase.from("dependencies").select("*")
-
-    if (fetchError) {
-      console.error("Error fetching dependencies from database:", fetchError)
-      return NextResponse.json(
-        {
-          error: "Failed to fetch dependencies from database",
-          message: "There was an error retrieving dependencies from the database.",
-          details: fetchError.message,
+          error: "Error checking if table exists",
+          message: tableCheckError instanceof Error ? tableCheckError.message : String(tableCheckError),
+          debug_userIdFromAuth: userId
         },
         { status: 500 },
       )
     }
 
-    // If no dependencies in database, return empty array with clear message
-    if (!dbDeps || dbDeps.length === 0) {
-      // Try to get dependencies from package.json as a fallback
-      const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
-      const allDeps = [...dependencies, ...devDependencies]
+    // Get dependencies from database
+    const { data, error } = await supabase
+      .from("dependencies")
+      .select("*")
+      .order("name", { ascending: true })
 
-      if (allDeps.length > 0) {
-        return NextResponse.json({
-          dependencies: allDeps.map((dep) => ({
-            id: dep.name,
-            name: dep.name,
-            current_version: dep.current_version,
-            latest_version: dep.current_version, // We don't know the latest version
-            outdated: false, // We don't know if it's outdated
-            locked: false,
-            has_security_update: false, // We don't know if it has security issues
-            is_dev: dep.is_dev,
-            description: "Loaded from package.json",
-            update_mode: "global",
-          })),
-          message: "Dependencies loaded from package.json. Run a security scan for complete information.",
-          loadedFrom: "package.json",
-          tableExists: true,
-        })
-      }
-
-      return NextResponse.json({
-        dependencies: [],
-        tableExists: true,
-        message: "No dependencies found in database. Please run a dependency scan.",
-        empty: true,
-      })
+    if (error) {
+      return NextResponse.json(
+        {
+          error: "Failed to fetch dependencies",
+          message: error.message,
+          debug_userIdFromAuth: userId
+        },
+        { status: 500 },
+      )
     }
 
-    // Calculate security score
-    const vulnerableDeps = dbDeps.filter((d) => d.has_security_update).length
-    const outdatedDeps = dbDeps.filter((d) => d.outdated).length
-    const securityScore = Math.max(0, Math.min(100, 100 - vulnerableDeps * 10 - outdatedDeps * 5))
+    // Get dependency settings
+    const { data: settings, error: settingsError } = await supabase
+      .from("dependency_settings")
+      .select("*")
+      .limit(1)
+      .single()
+
+    if (settingsError && !settingsError.message.includes("No rows found")) {
+      console.warn("Error fetching dependency settings:", settingsError)
+    }
 
     return NextResponse.json({
-      dependencies: dbDeps,
-      vulnerabilities: vulnerableDeps,
-      outdatedPackages: outdatedDeps,
-      securityScore,
-      lastScan: new Date().toISOString(),
-      tableExists: true,
+      dependencies: data || [],
+      settings: settings || { update_mode: "conservative", auto_update_enabled: false },
+      count: data ? data.length : 0,
+      timestamp: new Date().toISOString(),
     })
   } catch (error) {
-    console.error("Error in dependencies API:", error)
+    console.error("Error in list dependencies API:", error)
+    const { userId } = auth()
+    
     return NextResponse.json(
       {
-        error: "An unexpected error occurred",
-        message: "There was an unexpected error processing your request.",
+        error: "Failed to list dependencies",
+        message: "An unexpected error occurred while listing dependencies",
         details: error instanceof Error ? error.message : String(error),
+        stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined,
+        debug_userIdFromAuth: userId
       },
       { status: 500 },
     )
