@@ -1,8 +1,38 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-sync"
+import { auth } from "@clerk/nextjs"
 
 export async function POST(request: Request) {
   try {
+    // Check if user is authenticated
+    const { userId } = auth()
+    if (!userId) {
+      return NextResponse.json({ 
+        error: "Unauthorized", 
+        debug_userIdFromAuth: null 
+      }, { status: 401 })
+    }
+    
+    // Get authenticated Supabase client that syncs Clerk with Supabase
+    const supabase = await getRouteHandlerSupabaseClient()
+    
+    // Check if user has admin role
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+    
+    if (roleError || !roleData || roleData.length === 0) {
+      return NextResponse.json({ 
+        error: "Permission denied. Admin role required.",
+        debug_userIdFromAuth: userId,
+        supabaseError: roleError?.message || "No admin role found",
+        supabaseCode: roleError?.code || "PERMISSION_DENIED"
+      }, { status: 403 })
+    }
+
+    // Parse and validate project data
     const projectData = await request.json()
 
     console.log("Received project data:", projectData)
@@ -25,15 +55,13 @@ export async function POST(request: Request) {
           error: `Missing required fields: ${missingFields.join(", ")}`,
           details: "Please fill in all required fields before submitting.",
           receivedData: projectData,
+          debug_userIdFromAuth: userId
         },
         { status: 400 },
       )
     }
 
-    // Use the admin client to bypass RLS
-    const supabase = createAdminClient()
-
-    // Insert the project
+    // Insert the project using the authenticated client
     const { data, error } = await supabase.from("projects").insert([projectData]).select()
 
     if (error) {
@@ -45,6 +73,9 @@ export async function POST(request: Request) {
           details: "Database error: " + error.message,
           code: error.code,
           hint: error.hint,
+          debug_userIdFromAuth: userId,
+          supabaseError: error.message,
+          supabaseCode: error.code
         },
         { status: 500 },
       )
@@ -57,11 +88,16 @@ export async function POST(request: Request) {
     })
   } catch (error) {
     console.error("Unexpected error creating project:", error)
+    const { userId } = auth()
+    
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error occurred",
         details: "There was an unexpected error processing your request.",
+        debug_userIdFromAuth: userId,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+        stack: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
       },
       { status: 500 },
     )

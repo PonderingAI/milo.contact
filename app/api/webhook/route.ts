@@ -1,49 +1,154 @@
-import type { WebhookEvent } from "@clerk/nextjs/server"
+import { NextRequest, NextResponse } from "next/server"
+import { Webhook } from "svix"
 import { headers } from "next/headers"
-import { NextResponse } from "next/server"
+import { WebhookEvent } from "@clerk/nextjs/server"
+import { syncUserRoles, syncClerkUserToSupabase, ensureUserHasRole } from "@/lib/auth-sync"
 
-export async function POST(req: Request) {
-  // Get the headers
-  const headerPayload = headers()
-  const svix_id = headerPayload.get("svix-id")
-  const svix_timestamp = headerPayload.get("svix-timestamp")
-  const svix_signature = headerPayload.get("svix-signature")
-
-  // If there are no headers, error out
-  if (!svix_id || !svix_timestamp || !svix_signature) {
-    return new NextResponse("Error: Missing svix headers", {
-      status: 400,
-    })
-  }
-
-  // Get the body
-  const payload = await req.json()
-
+/**
+ * Clerk webhook handler
+ * 
+ * Handles Clerk webhook events and synchronizes user data between Clerk and Supabase
+ * - Creates users in Supabase when they're created in Clerk
+ * - Syncs roles when users sign in or metadata changes
+ * - Assigns admin role to superAdmin users automatically
+ * 
+ * Configure your Clerk webhook to send events to this endpoint:
+ * - user.created
+ * - user.updated
+ * - session.created
+ * - organization.membership.created (if using organizations)
+ */
+export async function POST(req: NextRequest) {
   try {
-    // Log the webhook event
-    console.log(`Webhook received: ${payload.type}`)
+    // Get the webhook signature from the headers
+    const headerPayload = headers()
+    const svix_id = headerPayload.get("svix-id")
+    const svix_timestamp = headerPayload.get("svix-timestamp")
+    const svix_signature = headerPayload.get("svix-signature")
 
-    // Process the webhook based on the event type
-    const event = payload as WebhookEvent
-
-    switch (event.type) {
-      case "user.created":
-        console.log(`User created: ${event.data.id}`)
-        // Add your logic here
-        break
-      case "user.updated":
-        console.log(`User updated: ${event.data.id}`)
-        // Add your logic here
-        break
-      case "user.deleted":
-        console.log(`User deleted: ${event.data.id}`)
-        // Add your logic here
-        break
+    // If there's no signature, return an error
+    if (!svix_id || !svix_timestamp || !svix_signature) {
+      return NextResponse.json({ error: "Missing svix headers" }, { status: 400 })
     }
 
-    return NextResponse.json({ success: true })
+    // Get the webhook secret from environment variables
+    const webhookSecret = process.env.CLERK_WEBHOOK_SECRET
+    
+    if (!webhookSecret) {
+      console.error("Missing CLERK_WEBHOOK_SECRET environment variable")
+      return NextResponse.json(
+        { error: "Webhook secret not configured" },
+        { status: 500 }
+      )
+    }
+
+    // Get the raw body
+    const payload = await req.text()
+    
+    // Create a new Svix instance with the webhook secret
+    const wh = new Webhook(webhookSecret)
+    
+    let evt: WebhookEvent
+    
+    // Verify the webhook signature
+    try {
+      evt = wh.verify(payload, {
+        "svix-id": svix_id,
+        "svix-timestamp": svix_timestamp,
+        "svix-signature": svix_signature,
+      }) as WebhookEvent
+    } catch (err) {
+      console.error("Error verifying webhook:", err)
+      return NextResponse.json(
+        { error: "Invalid webhook signature" },
+        { status: 400 }
+      )
+    }
+
+    // Get the event type and data
+    const { type, data } = evt
+    
+    // Log the event type for debugging
+    console.log(`Webhook event received: ${type}`)
+
+    // Handle different event types
+    switch (type) {
+      case "user.created": {
+        // A new user was created in Clerk
+        const { id: userId } = data
+        
+        // Create the user in Supabase with the same ID
+        await syncClerkUserToSupabase(userId)
+        
+        // Check if user has superAdmin in metadata and assign admin role if needed
+        if (data.public_metadata?.superAdmin === true) {
+          await ensureUserHasRole(userId, 'admin')
+        }
+        
+        // Sync any other roles from Clerk metadata
+        if (Array.isArray(data.public_metadata?.roles)) {
+          const roles = data.public_metadata.roles as string[]
+          if (roles.includes('admin')) {
+            await ensureUserHasRole(userId, 'admin')
+          }
+        }
+        
+        return NextResponse.json({ success: true, event: "user.created" })
+      }
+      
+      case "user.updated": {
+        // User data was updated in Clerk
+        const { id: userId } = data
+        
+        // Check if public_metadata was changed
+        const metadataChanged = data.public_metadata !== undefined
+        
+        if (metadataChanged) {
+          // Sync all roles from Clerk to Supabase
+          await syncUserRoles(userId)
+          
+          // Special handling for superAdmin
+          if (data.public_metadata?.superAdmin === true) {
+            await ensureUserHasRole(userId, 'admin')
+          }
+        }
+        
+        return NextResponse.json({ success: true, event: "user.updated" })
+      }
+      
+      case "session.created": {
+        // User signed in - sync their roles
+        const { user_id: userId } = data
+        
+        if (userId) {
+          await syncUserRoles(userId)
+        }
+        
+        return NextResponse.json({ success: true, event: "session.created" })
+      }
+      
+      case "organization.membership.created": {
+        // Handle organization memberships if using Clerk Organizations
+        // This is a placeholder for organization-based role assignment
+        return NextResponse.json({ success: true, event: "organization.membership.created" })
+      }
+      
+      // Add other event handlers as needed
+      
+      default: {
+        // For any other events, just acknowledge receipt
+        return NextResponse.json({ success: true, event: type })
+      }
+    }
   } catch (error) {
-    console.error("Error processing webhook:", error)
-    return NextResponse.json({ success: false, error: "Error processing webhook" }, { status: 500 })
+    console.error("Error handling webhook:", error)
+    return NextResponse.json(
+      { 
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
+        stack: process.env.NODE_ENV === "development" ? (error instanceof Error ? error.stack : undefined) : undefined
+      },
+      { status: 500 }
+    )
   }
 }

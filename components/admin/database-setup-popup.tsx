@@ -123,6 +123,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -175,6 +182,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -296,6 +310,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -361,6 +382,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -415,6 +443,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -498,6 +533,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -570,6 +612,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -621,13 +670,20 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'admins_manage_settings'
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'admins_manage_dep_settings'
   ) THEN
-    CREATE POLICY "admins_manage_settings"
+    CREATE POLICY "admins_manage_dep_settings"
     ON dependency_settings
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -696,6 +752,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -751,6 +814,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -812,6 +882,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -880,6 +957,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
