@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getRouteHandlerSupabaseClient } from "@/lib/auth-sync"
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs"
 
 // GET handler to retrieve dependency settings
