@@ -7,7 +7,7 @@
 
 import { createClientComponentClient, createServerComponentClient, createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { SupabaseClient } from "@supabase/supabase-js"
-import { cookies, headers } from "next/headers"
+import { cookies } from "next/headers"
 import { clerkClient, currentUser, auth } from "@clerk/nextjs"
 import { NextRequest, NextResponse } from "next/server"
 
