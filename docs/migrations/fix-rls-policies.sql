@@ -77,14 +77,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -101,14 +101,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -125,14 +125,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -149,14 +149,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -173,14 +173,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -197,14 +197,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -221,14 +221,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -245,14 +245,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -269,14 +269,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -293,14 +293,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -317,14 +317,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
@@ -341,14 +341,14 @@ TO authenticated
 USING (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 )
 WITH CHECK (
   EXISTS (
     SELECT 1 FROM user_roles
-    WHERE user_id = auth.uid() 
+    WHERE user_id = auth.uid()::TEXT
     AND role = 'admin'
   )
 );
