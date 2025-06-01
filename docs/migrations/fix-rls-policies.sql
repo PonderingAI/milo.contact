@@ -1,3 +1,25 @@
+DROP POLICY IF EXISTS admins_read_messages ON contact_messages;
+DROP POLICY IF EXISTS admins_manage_dependency_settings ON dependency_settings;
+DROP POLICY IF EXISTS admins_manage_security_audits ON security_audits;
+DROP POLICY IF EXISTS admins_manage_settings ON site_settings;
+DROP POLICY IF EXISTS admins_manage_projects ON projects;
+DROP POLICY IF EXISTS admins_manage_media ON media;
+DROP POLICY IF EXISTS admins_manage_bts_images ON bts_images;
+DROP POLICY IF EXISTS admins_update_messages ON contact_messages;
+DROP POLICY IF EXISTS admins_manage_dependencies ON dependencies;
+-- Assuming the second 'admins_manage_settings' on 'dependency_settings' is distinct,
+-- or if not, this will safely do nothing if already dropped or if it was the same as the first.
+-- If the script differentiates them (e.g. by 'USING' or 'WITH CHECK' clauses), specific policy names might be needed.
+-- For now, we'll assume the name is sufficient.
+DROP POLICY IF EXISTS admins_manage_settings ON dependency_settings;
+DROP POLICY IF EXISTS admins_manage_compatibility ON dependency_compatibility;
+-- Similar assumption for the second 'admins_manage_audits' on 'security_audits'.
+DROP POLICY IF EXISTS admins_manage_audits ON security_audits;
+DROP POLICY IF EXISTS admins_manage_widget_types ON widget_types;
+DROP POLICY IF EXISTS admins_manage_user_widgets ON user_widgets;
+
+-- -- End of pre-script modifications --
+-- Original script starts below --
 -- Fix RLS Policies Migration Script
 -- This script addresses multiple issues:
 -- 1. Changes user_id column type in user_roles from UUID to TEXT for Clerk compatibility.
