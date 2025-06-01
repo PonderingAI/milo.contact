@@ -1,10 +1,47 @@
 -- Fix RLS Policies Migration Script
--- This script adds missing WITH CHECK clauses to RLS policies
--- It is safe to run on existing data and won't cause any data loss
--- It only modifies policies, not tables or data
+-- This script addresses multiple issues:
+-- 1. Changes user_id column type in user_roles from UUID to TEXT for Clerk compatibility.
+-- 2. Adds missing WITH CHECK clauses to RLS policies for proper INSERT/UPDATE operations.
+-- It is designed to be safe to run on existing data and won't cause any data loss.
+-- It only modifies policies and the user_roles table schema, not other tables or their data.
 
 -- Enable UUID extension if not already enabled (required for some tables)
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- =============================================
+-- Fix user_roles table: Change user_id from UUID to TEXT
+-- This is crucial for Clerk compatibility as Clerk user IDs are strings.
+-- This process is designed to be data-safe.
+-- =============================================
+DO $$
+BEGIN
+    -- Drop policies that depend on the user_id column or user_roles table
+    DROP POLICY IF EXISTS admins_manage_roles ON user_roles;
+    DROP POLICY IF EXISTS users_read_own_roles ON user_roles;
+
+    -- Drop the unique constraint that includes user_id
+    -- The constraint name is typically 'tablename_columnname_columnname_key'
+    ALTER TABLE user_roles DROP CONSTRAINT IF EXISTS user_roles_user_id_role_key;
+
+    -- Rename the old user_id column
+    ALTER TABLE user_roles RENAME COLUMN user_id TO old_user_id_uuid;
+
+    -- Add the new user_id column as TEXT
+    ALTER TABLE user_roles ADD COLUMN user_id TEXT;
+
+    -- Copy data from the old column to the new one, casting UUIDs to TEXT
+    -- This preserves existing user_id data.
+    UPDATE user_roles SET user_id = old_user_id_uuid::TEXT;
+
+    -- Set the new user_id column as NOT NULL
+    ALTER TABLE user_roles ALTER COLUMN user_id SET NOT NULL;
+
+    -- Drop the old user_id column
+    ALTER TABLE user_roles DROP COLUMN old_user_id_uuid;
+
+    -- Recreate the unique constraint on the new user_id and role columns
+    ALTER TABLE user_roles ADD CONSTRAINT user_roles_user_id_role_key UNIQUE (user_id, role);
+END $$;
 
 -- =============================================
 -- Fix user_roles table policies

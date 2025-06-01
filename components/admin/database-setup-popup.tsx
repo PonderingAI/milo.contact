@@ -82,7 +82,7 @@ export function DatabaseSetupPopup({
       sql: `
 CREATE TABLE IF NOT EXISTS user_roles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL,
+  user_id TEXT NOT NULL,
   role TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, role)
@@ -670,9 +670,9 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'admins_manage_dep_settings'
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'admins_manage_settings'
   ) THEN
-    CREATE POLICY "admins_manage_dep_settings"
+    CREATE POLICY "admins_manage_settings"
     ON dependency_settings
     FOR ALL
     TO authenticated
