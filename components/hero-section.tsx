@@ -1,6 +1,5 @@
 import { createServerClient } from "@/lib/supabase-server"
 import VideoBackground from "./video-background"
-import { fontSerif } from "@/lib/fonts"
 import { extractVideoInfo } from "@/lib/utils"
 
 interface HeroSectionProps {
@@ -113,7 +112,7 @@ export default async function HeroSection({ latestProject }: HeroSectionProps) {
 
       {/* Bottom Left Text */}
       <div className="absolute bottom-8 left-8 z-10 max-w-md text-left">
-        <h1 className={`text-3xl md:text-4xl font-bold mb-2 ${fontSerif.variable} font-serif`}>
+        <h1 className="text-3xl md:text-4xl font-bold mb-2 font-serif">
           {settings.hero_heading}
         </h1>
         <p className="text-sm md:text-base text-gray-200 leading-snug">{settings.hero_subheading}</p>

@@ -7,16 +7,25 @@ Next.js 15 portfolio website with advanced database management system. Built wit
 
 ### Package Management (Use in order)
 ```bash
+# Development
 pnpm install                    # Primary method
-npm install --legacy-peer-deps  # If pnpm fails
+
+# Production/Vercel builds  
+npm install --legacy-peer-deps  # Use this for deployment
+
+# Clean install when conflicts occur
+rm -rf node_modules package-lock.json pnpm-lock.yaml && pnpm install
 ```
 
 ### Development Workflow
 ```bash
 pnpm run dev                    # Start development server
-pnpm run build                  # Test production build
+pnpm run build                  # Test production build  
 pnpm run lint                   # Check code quality
 pnpm run test                   # Run test suite
+
+# Vercel build command setting:
+npm install --legacy-peer-deps && npm run build
 ```
 
 ### Database Operations
@@ -38,11 +47,13 @@ npm run db:test basic           # Create test database
 ### Required React Version
 ```json
 {
-  "react": "^18.3.1",
-  "react-dom": "^18.3.1"
+  "react": "18.3.1",
+  "react-dom": "18.3.1",
+  "@types/react": "18.3.12",
+  "@types/react-dom": "18.3.1"
 }
 ```
-**Never use React 19** - causes dependency conflicts
+**Never use React 19** - causes dependency conflicts with @vercel/analytics and other packages
 
 ## 🏗️ Architecture Patterns
 
@@ -82,10 +93,12 @@ try {
 ## 🔧 Common Issues & Solutions
 
 ### Build Failures
-1. **Syntax errors**: Check for missing brackets/semicolons
-2. **Import errors**: Verify all imports have proper types
-3. **Dependency conflicts**: Use React 18.3.1
-4. **Missing node_modules**: Re-run pnpm install
+1. **Dependency conflicts**: Ensure React 18.3.1 exact version, remove conflicting packages
+2. **Vercel builds**: Use `npm install --legacy-peer-deps && npm run build` as build command
+3. **Syntax errors**: Check for missing brackets/semicolons  
+4. **Import errors**: Verify all imports have proper types
+5. **Missing node_modules**: Clean install with `rm -rf node_modules *.lock && pnpm install`
+6. **React version conflicts**: Check with `npm ls react react-dom` and fix package.json
 
 ### Database Errors
 1. **NOT NULL constraint**: Use 3-step migration process

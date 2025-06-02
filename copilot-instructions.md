@@ -7,31 +7,36 @@ This is a portfolio website built with Next.js, TypeScript, Tailwind CSS, and Su
 
 ### Package Management
 - **Use pnpm as primary package manager**: The project uses `pnpm` for faster installs and better disk space usage
-- **Always use `--legacy-peer-deps` with npm**: If pnpm fails, use `npm install --legacy-peer-deps` 
-- **React 18.3.1 is the target version**: Avoid React 19 due to compatibility issues with many dependencies
+- **ALWAYS use exact React 18.3.1**: `"react": "18.3.1"`, `"react-dom": "18.3.1"`, and `"@types/react": "18.3.12"`
+- **For Vercel deployment**: Use `npm install --legacy-peer-deps` in build settings if pnpm fails
+- **NEVER use "latest" versions**: Always specify exact or caret versions to avoid conflicts
 - **Remove problematic dependencies**: Never include non-Next.js framework dependencies:
   - ❌ `@remix-run/react`, `@sveltejs/kit`, `svelte`, `vue`, `vue-router`
   - ❌ Node.js core modules in dependencies: `fs`, `path`, `crypto`, `util`, `child_process`
-  - ❌ `latest` versions that cause conflicts
+  - ❌ Any package that requires React 19 when using React 18.3.1
 
 ### Build System
-- **Use pnpm for development**: `pnpm dev`, `pnpm build`, `pnpm start`
+- **Development**: Use `pnpm dev`, `pnpm build`, `pnpm start`
+- **Production/Vercel**: Configure build command as `npm install --legacy-peer-deps && npm run build`
 - **Critical build commands**:
   ```bash
   pnpm install           # Install dependencies
-  pnpm run build         # Build application
+  pnpm run build         # Build application  
   pnpm run dev           # Development server
   pnpm run lint          # Lint code
   pnpm run test          # Run tests
   ```
 - **Dependency conflict resolution**:
   ```bash
-  # If pnpm fails, use npm with legacy peer deps
-  npm install --legacy-peer-deps
-  
-  # For stubborn conflicts, clean install
+  # Clean install when package.json changes
   rm -rf node_modules package-lock.json pnpm-lock.yaml
   pnpm install
+  
+  # For stubborn conflicts in production
+  npm install --legacy-peer-deps
+  
+  # Verify no React version conflicts
+  npm ls react react-dom
   ```
 
 ### Database Management
@@ -72,14 +77,16 @@ app/api/database/
 ### Common Issues & Solutions
 
 1. **Dependency conflicts**: 
-   - Use React 18.3.1, not React 19
-   - Remove framework-specific dependencies
-   - Use `--legacy-peer-deps` if needed
+   - Use exact React 18.3.1, never React 19
+   - Remove framework-specific dependencies (@remix-run/react, @sveltejs/kit, etc.)
+   - Use specific versions instead of "latest"
+   - For Vercel builds: `npm install --legacy-peer-deps && npm run build`
 
 2. **Build failures**:
-   - Check for syntax errors first
+   - Clean install: `rm -rf node_modules *.lock && pnpm install`
+   - Check React versions: `npm ls react react-dom`
    - Ensure all imports are properly typed
-   - Remove unused dependencies
+   - Remove unused dependencies from package.json
 
 3. **Database migration errors**:
    - Handle NOT NULL constraints properly for existing tables
