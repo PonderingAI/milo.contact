@@ -32,6 +32,8 @@ export default function CompactDatabaseManager() {
   const [selectedMissingTables, setSelectedMissingTables] = useState<string[]>([])
   const [selectedExistingTables, setSelectedExistingTables] = useState<string[]>([])
   const [showMigrationPopup, setShowMigrationPopup] = useState(false)
+  const [showManualSetupPopup, setShowManualSetupPopup] = useState(false)
+  const [manualSetupSQL, setManualSetupSQL] = useState("")
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -84,8 +86,9 @@ export default function CompactDatabaseManager() {
       } else {
         // Handle case where manual execution is needed
         if (result.needsManualExecution && result.setupSql) {
-          // Show a popup with instructions
-          showManualExecutionPopup(result.setupSql)
+          // Show the React-based popup with instructions
+          setManualSetupSQL(result.setupSql)
+          setShowManualSetupPopup(true)
         } else {
           toast({
             title: "Error",
@@ -103,35 +106,6 @@ export default function CompactDatabaseManager() {
     } finally {
       setExecuting(false)
     }
-  }
-
-  const showManualExecutionPopup = (setupSql: string) => {
-    // Create a temporary popup div
-    const popupHtml = `
-      <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        <div style="background: white; border-radius: 8px; padding: 24px; max-width: 600px; max-height: 80vh; overflow-y: auto; margin: 20px;">
-          <h3 style="margin: 0 0 16px 0; color: #1f2937; font-size: 18px; font-weight: 600;">Manual Setup Required</h3>
-          <p style="margin: 0 0 16px 0; color: #6b7280; line-height: 1.5;">Your database doesn't have the required exec_sql function. Please copy and run the following SQL in your Supabase SQL Editor:</p>
-          <textarea readonly style="width: 100%; height: 200px; margin: 0 0 16px 0; padding: 12px; border: 1px solid #d1d5db; border-radius: 4px; font-family: 'Monaco', 'Consolas', monospace; font-size: 12px; background: #f9fafb;">${setupSql}</textarea>
-          <div style="display: flex; gap: 8px;">
-            <button onclick="navigator.clipboard.writeText(\`${setupSql.replace(/`/g, '\\`')}\`); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy SQL', 2000)" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy SQL</button>
-            <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Close</button>
-          </div>
-        </div>
-      </div>
-    `
-    
-    // Remove any existing popup
-    const existingPopup = document.querySelector('[data-manual-execution-popup]')
-    if (existingPopup) {
-      existingPopup.remove()
-    }
-    
-    // Add new popup
-    const popup = document.createElement('div')
-    popup.setAttribute('data-manual-execution-popup', 'true')
-    popup.innerHTML = popupHtml
-    document.body.appendChild(popup)
   }
 
   const copyToClipboard = async (text: string) => {
@@ -235,8 +209,13 @@ export default function CompactDatabaseManager() {
   }
 
   const showMigrationSQLPopup = () => {
-    if (databaseStatus?.updateScript) {
+    if (databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0) {
       setShowMigrationPopup(true)
+    } else {
+      toast({
+        title: "No Migration Needed",
+        description: "Database is already up to date",
+      })
     }
   }
 
@@ -309,15 +288,16 @@ export default function CompactDatabaseManager() {
       </div>
 
       {/* Migration Alert */}
-      {databaseStatus?.updateScript && (
-        <Alert className="border-yellow-200 bg-yellow-50">
-          <Info className="h-4 w-4" />
-          <AlertDescription className="flex items-center justify-between">
+      {databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0 && (
+        <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800">
+          <Info className="h-4 w-4 text-yellow-600" />
+          <AlertDescription className="flex items-center justify-between text-yellow-800">
             <span>Database schema updates are available for existing tables.</span>
             <Button 
               size="sm" 
               variant="outline"
               onClick={showMigrationSQLPopup}
+              className="border-yellow-300 hover:bg-yellow-100"
             >
               <Zap className="h-4 w-4 mr-1" />
               View Migration SQL
@@ -518,7 +498,7 @@ export default function CompactDatabaseManager() {
       </div>
 
       {/* Migration Popup */}
-      {showMigrationPopup && databaseStatus?.updateScript && (
+      {showMigrationPopup && databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0 && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
             <CardHeader>
@@ -573,6 +553,60 @@ export default function CompactDatabaseManager() {
               
               <Textarea
                 value={databaseStatus.updateScript}
+                readOnly
+                className="font-mono text-sm"
+                rows={12}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Manual Setup Popup */}
+      {showManualSetupPopup && manualSetupSQL && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                Manual Setup Required
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowManualSetupPopup(false)}
+                >
+                  ×
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  Your database doesn't have the required exec_sql function. Please copy and run the following SQL in your Supabase SQL Editor:
+                </AlertDescription>
+              </Alert>
+              
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(manualSetupSQL)}
+                >
+                  <Copy className="h-4 w-4 mr-1" />
+                  Copy SQL
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadSQL(manualSetupSQL, "manual-setup.sql")}
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download
+                </Button>
+              </div>
+              
+              <Textarea
+                value={manualSetupSQL}
                 readOnly
                 className="font-mono text-sm"
                 rows={12}
