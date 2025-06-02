@@ -19,6 +19,7 @@ import { AlertCircle, Copy, Check, Database, RefreshCw, X, Trash2 } from "lucide
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { toast } from "@/components/ui/use-toast"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { getAllTables, TableConfig } from "@/lib/database/schema"
 
 // Define the table configuration type
 interface TableConfig {
@@ -73,8 +74,8 @@ export function DatabaseSetupPopup({
   // Use a ref to prevent multiple simultaneous checks
   const isCheckingRef = useRef(false)
 
-  // Define all possible tables with their SQL
-  const allTables: TableConfig[] = [
+  // Get all tables from centralized schema
+  const allTables: TableConfig[] = getAllTables()
     {
       name: "user_roles",
       displayName: "User Roles",

@@ -330,6 +330,297 @@ END $$;`,
     ],
     indexes: ["idx_projects_is_public", "idx_projects_publish_date"],
     policies: ["public_read_projects", "admins_manage_projects"]
+  },
+
+  media: {
+    name: "media",
+    displayName: "Media Files",
+    description: "Stores media files and assets",
+    sql: `
+CREATE TABLE IF NOT EXISTS media (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  filename TEXT NOT NULL,
+  original_filename TEXT,
+  file_path TEXT NOT NULL,
+  file_size INTEGER,
+  mime_type TEXT,
+  width INTEGER,
+  height INTEGER,
+  alt_text TEXT,
+  caption TEXT,
+  uploaded_by TEXT,
+  project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_media_project_id ON media(project_id);
+CREATE INDEX IF NOT EXISTS idx_media_mime_type ON media(mime_type);
+CREATE INDEX IF NOT EXISTS idx_media_uploaded_by ON media(uploaded_by);
+
+-- Add RLS policies
+ALTER TABLE media ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'media' AND policyname = 'public_read_media'
+  ) THEN
+    CREATE POLICY "public_read_media"
+    ON media
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage media
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'media' AND policyname = 'admins_manage_media'
+  ) THEN
+    CREATE POLICY "admins_manage_media"
+    ON media
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;`,
+    dependencies: ["user_roles", "projects"],
+    required: false,
+    category: "media",
+    version: 1,
+    columns: [
+      { name: "id", type: "UUID", constraints: ["PRIMARY KEY"], default: "uuid_generate_v4()" },
+      { name: "filename", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "original_filename", type: "TEXT" },
+      { name: "file_path", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "file_size", type: "INTEGER" },
+      { name: "mime_type", type: "TEXT" },
+      { name: "width", type: "INTEGER" },
+      { name: "height", type: "INTEGER" },
+      { name: "alt_text", type: "TEXT" },
+      { name: "caption", type: "TEXT" },
+      { name: "uploaded_by", type: "TEXT" },
+      { name: "project_id", type: "UUID" },
+      { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
+      { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
+    ],
+    indexes: ["idx_media_project_id", "idx_media_mime_type", "idx_media_uploaded_by"],
+    policies: ["public_read_media", "admins_manage_media"]
+  },
+
+  dependencies: {
+    name: "dependencies",
+    displayName: "Dependencies",
+    description: "Stores information about project dependencies",
+    sql: `
+CREATE TABLE IF NOT EXISTS dependencies (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  package_name TEXT NOT NULL,
+  version TEXT NOT NULL,
+  dev_dependency BOOLEAN DEFAULT false,
+  description TEXT,
+  homepage TEXT,
+  repository TEXT,
+  license TEXT,
+  last_checked TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_dependencies_project_id ON dependencies(project_id);
+CREATE INDEX IF NOT EXISTS idx_dependencies_package_name ON dependencies(package_name);
+CREATE INDEX IF NOT EXISTS idx_dependencies_dev_dependency ON dependencies(dev_dependency);
+
+-- Add RLS policies
+ALTER TABLE dependencies ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependencies' AND policyname = 'public_read_dependencies'
+  ) THEN
+    CREATE POLICY "public_read_dependencies"
+    ON dependencies
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage dependencies
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependencies' AND policyname = 'admins_manage_dependencies'
+  ) THEN
+    CREATE POLICY "admins_manage_dependencies"
+    ON dependencies
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;`,
+    dependencies: ["user_roles", "projects"],
+    required: false,
+    category: "dependencies",
+    version: 1,
+    columns: [
+      { name: "id", type: "UUID", constraints: ["PRIMARY KEY"], default: "uuid_generate_v4()" },
+      { name: "project_id", type: "UUID" },
+      { name: "package_name", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "version", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "dev_dependency", type: "BOOLEAN", default: "false" },
+      { name: "description", type: "TEXT" },
+      { name: "homepage", type: "TEXT" },
+      { name: "repository", type: "TEXT" },
+      { name: "license", type: "TEXT" },
+      { name: "last_checked", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
+      { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
+      { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
+    ],
+    indexes: ["idx_dependencies_project_id", "idx_dependencies_package_name", "idx_dependencies_dev_dependency"],
+    policies: ["public_read_dependencies", "admins_manage_dependencies"]
+  },
+
+  security_audits: {
+    name: "security_audits",
+    displayName: "Security Audits",
+    description: "Stores security audit logs and findings",
+    sql: `
+CREATE TABLE IF NOT EXISTS security_audits (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  audit_type TEXT NOT NULL,
+  severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+  title TEXT NOT NULL,
+  description TEXT,
+  affected_table TEXT,
+  affected_column TEXT,
+  remediation TEXT,
+  status TEXT DEFAULT 'open' CHECK (status IN ('open', 'investigating', 'resolved', 'false_positive')),
+  audited_by TEXT,
+  resolved_by TEXT,
+  resolved_at TIMESTAMP WITH TIME ZONE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_security_audits_audit_type ON security_audits(audit_type);
+CREATE INDEX IF NOT EXISTS idx_security_audits_severity ON security_audits(severity);
+CREATE INDEX IF NOT EXISTS idx_security_audits_status ON security_audits(status);
+CREATE INDEX IF NOT EXISTS idx_security_audits_created_at ON security_audits(created_at);
+
+-- Add RLS policies
+ALTER TABLE security_audits ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access to non-sensitive audit information
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'security_audits' AND policyname = 'public_read_audits'
+  ) THEN
+    CREATE POLICY "public_read_audits"
+    ON security_audits
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage security audits
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'security_audits' AND policyname = 'admins_manage_audits'
+  ) THEN
+    CREATE POLICY "admins_manage_audits"
+    ON security_audits
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;`,
+    dependencies: ["user_roles"],
+    required: false,
+    category: "security",
+    version: 1,
+    columns: [
+      { name: "id", type: "UUID", constraints: ["PRIMARY KEY"], default: "uuid_generate_v4()" },
+      { name: "audit_type", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "severity", type: "TEXT", constraints: ["NOT NULL", "CHECK (severity IN ('low', 'medium', 'high', 'critical'))"] },
+      { name: "title", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "description", type: "TEXT" },
+      { name: "affected_table", type: "TEXT" },
+      { name: "affected_column", type: "TEXT" },
+      { name: "remediation", type: "TEXT" },
+      { name: "status", type: "TEXT", default: "'open'", constraints: ["CHECK (status IN ('open', 'investigating', 'resolved', 'false_positive'))"] },
+      { name: "audited_by", type: "TEXT" },
+      { name: "resolved_by", type: "TEXT" },
+      { name: "resolved_at", type: "TIMESTAMP WITH TIME ZONE" },
+      { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
+      { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
+    ],
+    indexes: ["idx_security_audits_audit_type", "idx_security_audits_severity", "idx_security_audits_status", "idx_security_audits_created_at"],
+    policies: ["public_read_audits", "admins_manage_audits"]
   }
 }
 

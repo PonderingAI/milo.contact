@@ -7,7 +7,13 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "jest"
+    "test": "jest",
+    "db:help": "node scripts/db-cli.js help",
+    "db:status": "node scripts/db-cli.js status",
+    "db:validate": "node scripts/db-cli.js validate",
+    "db:generate": "node scripts/db-cli.js generate",
+    "db:test": "node scripts/db-cli.js test",
+    "db:setup": "node scripts/db-cli.js generate basic"
   },
   "dependencies": {
     "@clerk/nextjs": "latest",
