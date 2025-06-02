@@ -1,0 +1,157 @@
+# Windsurf AI Editor Rules for milo.contact
+
+## 🎯 Project Overview
+Next.js 15 portfolio website with advanced database management system. Built with TypeScript, Tailwind CSS, and Supabase.
+
+## 🛠️ Essential Commands
+
+### Package Management (Use in order)
+```bash
+pnpm install                    # Primary method
+npm install --legacy-peer-deps  # If pnpm fails
+```
+
+### Development Workflow
+```bash
+pnpm run dev                    # Start development server
+pnpm run build                  # Test production build
+pnpm run lint                   # Check code quality
+pnpm run test                   # Run test suite
+```
+
+### Database Operations
+```bash
+npm run db:validate             # Check database health
+npm run db:generate full        # Generate SQL scripts
+npm run db:test basic           # Create test database
+```
+
+## 🚫 Critical Restrictions
+
+### Never Install These Dependencies
+- `@remix-run/react` (Remix framework)
+- `@sveltejs/kit`, `svelte` (Svelte framework)  
+- `vue`, `vue-router` (Vue framework)
+- `fs`, `path`, `crypto`, `util`, `child_process` (Node core modules)
+- Any package with version `"latest"`
+
+### Required React Version
+```json
+{
+  "react": "^18.3.1",
+  "react-dom": "^18.3.1"
+}
+```
+**Never use React 19** - causes dependency conflicts
+
+## 🏗️ Architecture Patterns
+
+### Database Management
+- **Schema**: Centralized in `lib/database/schema.ts`
+- **Migrations**: Handle NOT NULL columns safely:
+  1. Add column as nullable
+  2. Update existing rows
+  3. Add NOT NULL constraint
+- **Testing**: Use predefined configurations
+
+### Code Structure
+```typescript
+// Supabase client pattern
+import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+
+const supabase = createClientComponentClient()
+
+// Error handling pattern
+try {
+  const { data, error } = await supabase.from('table').select()
+  if (error) throw error
+  return data
+} catch (error) {
+  console.error('Operation failed:', error)
+  throw error
+}
+```
+
+### Component Patterns
+- Functional components with hooks
+- TypeScript interfaces for props
+- Tailwind CSS for styling
+- React.memo for performance
+- Error boundaries for reliability
+
+## 🔧 Common Issues & Solutions
+
+### Build Failures
+1. **Syntax errors**: Check for missing brackets/semicolons
+2. **Import errors**: Verify all imports have proper types
+3. **Dependency conflicts**: Use React 18.3.1
+4. **Missing node_modules**: Re-run pnpm install
+
+### Database Errors
+1. **NOT NULL constraint**: Use 3-step migration process
+2. **Missing tables**: Generate SQL with `npm run db:generate`
+3. **Schema validation**: Run `npm run db:validate`
+
+### Environment Issues
+1. **Font loading blocked**: Use Tailwind fallback fonts
+2. **API endpoints**: Check Supabase configuration
+3. **Build timeouts**: Increase timeout or use simpler builds
+
+## 📁 Key File Locations
+
+```
+lib/database/
+  ├── schema.ts              # All table definitions
+  ├── validator.ts           # Database validation logic
+  └── testing.ts             # Test configurations
+
+components/admin/
+  └── compact-database-manager.tsx  # Main database UI
+
+app/api/database/
+  ├── validate/route.ts      # Validation endpoint
+  └── testing/route.ts       # Testing endpoint
+
+docs/
+  ├── ENHANCED-DATABASE-MANAGEMENT.md
+  └── IMPLEMENTATION-SUMMARY.md
+```
+
+## ⚡ Performance Rules
+- Auto-refresh max 30 seconds
+- Lazy load heavy components
+- Minimize API calls
+- Use React.memo strategically
+- Handle loading states properly
+
+## 🧪 Testing Guidelines
+- Unit tests for utilities in `lib/`
+- Integration tests for API routes
+- Mock Supabase for safe testing
+- Use test database configurations
+- Test builds before committing
+
+## 🎨 Code Style
+- TypeScript strict mode
+- Functional components
+- Clear variable names
+- Comprehensive error handling
+- Minimal prop drilling
+- Composition over inheritance
+
+## 🚀 Deployment Checklist
+1. ✅ `pnpm run build` succeeds
+2. ✅ `pnpm run lint` passes
+3. ✅ `pnpm run test` passes
+4. ✅ No syntax errors
+5. ✅ Database validation works
+6. ✅ All imports resolve
+
+## 💡 AI Assistant Tips
+- Always check `package.json` before adding dependencies
+- Test database changes with validation system
+- Use existing patterns instead of creating new ones
+- Prioritize minimal, surgical changes
+- Document any breaking changes clearly
+
+Remember: Stability and developer experience are top priorities!

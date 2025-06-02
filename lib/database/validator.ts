@@ -265,21 +265,53 @@ export class DatabaseValidator {
             sql += `    WHERE table_name = '${tableName}' AND column_name = '${columnName}'\n`
             sql += `  ) THEN\n`
             
-            let alterSql = `    ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${column.type}`
+            // Check if column has NOT NULL constraint
+            const hasNotNull = column.constraints?.includes("NOT NULL")
+            const hasDefault = column.default
             
-            if (column.constraints) {
-              for (const constraint of column.constraints) {
-                if (constraint !== "PRIMARY KEY") { // Skip primary key in ALTER
-                  alterSql += ` ${constraint}`
+            if (hasNotNull && !hasDefault) {
+              // For NOT NULL columns without default, add as nullable first
+              sql += `    -- Adding as nullable first to avoid constraint violation\n`
+              let alterSql = `    ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${column.type}`
+              sql += `${alterSql};\n`
+              
+              // Add a default value for existing rows (empty string for TEXT, 0 for numbers, etc.)
+              let defaultValue = "''"
+              if (column.type.toUpperCase().includes("INTEGER") || column.type.toUpperCase().includes("BIGINT")) {
+                defaultValue = "0"
+              } else if (column.type.toUpperCase().includes("BOOLEAN")) {
+                defaultValue = "false"
+              } else if (column.type.toUpperCase().includes("UUID")) {
+                defaultValue = "uuid_generate_v4()"
+              } else if (column.type.toUpperCase().includes("TIMESTAMP")) {
+                defaultValue = "NOW()"
+              }
+              
+              sql += `    -- Update existing rows with default value\n`
+              sql += `    UPDATE ${tableName} SET ${columnName} = ${defaultValue} WHERE ${columnName} IS NULL;\n`
+              
+              // Now add the NOT NULL constraint
+              sql += `    -- Now add NOT NULL constraint\n`
+              sql += `    ALTER TABLE ${tableName} ALTER COLUMN ${columnName} SET NOT NULL;\n`
+            } else {
+              // For nullable columns or columns with defaults, add normally
+              let alterSql = `    ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${column.type}`
+              
+              if (column.constraints) {
+                for (const constraint of column.constraints) {
+                  if (constraint !== "PRIMARY KEY") { // Skip primary key in ALTER
+                    alterSql += ` ${constraint}`
+                  }
                 }
               }
+              
+              if (column.default) {
+                alterSql += ` DEFAULT ${column.default}`
+              }
+              
+              sql += `${alterSql};\n`
             }
             
-            if (column.default) {
-              alterSql += ` DEFAULT ${column.default}`
-            }
-            
-            sql += `${alterSql};\n`
             sql += `  END IF;\n`
             sql += `END $$;\n\n`
           }

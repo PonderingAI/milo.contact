@@ -1,0 +1,99 @@
+# Cursor AI Editor Rules for milo.contact
+
+## Project Context
+Portfolio website with Next.js 15, TypeScript, Tailwind CSS, and Supabase. Features comprehensive database management system with centralized schema, validation, and testing.
+
+## Core Development Rules
+
+### Package Management Priority
+1. **Primary**: `pnpm` for all operations
+2. **Fallback**: `npm install --legacy-peer-deps` if pnpm fails
+3. **Never use**: `yarn` or plain `npm install`
+
+### Critical Dependencies
+```json
+{
+  "react": "^18.3.1",
+  "react-dom": "^18.3.1", 
+  "next": "15.2.4",
+  "@supabase/auth-helpers-nextjs": "^0.10.0",
+  "@supabase/supabase-js": "^2.45.4"
+}
+```
+
+### Forbidden Dependencies
+- ❌ `@remix-run/react`, `@sveltejs/kit`, `svelte`, `vue`
+- ❌ Node core modules: `fs`, `path`, `crypto`, `util`, `child_process`
+- ❌ Any dependency with version `"latest"`
+
+### Build Commands
+```bash
+pnpm install                    # Install dependencies
+pnpm run dev                    # Development server
+pnpm run build                  # Production build
+pnpm run lint                   # ESLint check
+pnpm run test                   # Jest tests
+```
+
+### Database Schema Rules
+- **Single source**: `lib/database/schema.ts`
+- **Migration safety**: Handle NOT NULL columns properly
+- **Testing**: Use predefined configurations (minimal/basic/full/development)
+
+### Code Quality Standards
+- TypeScript strict mode
+- Proper error handling with try-catch
+- Client-side: `createClientComponentClient()`
+- Component composition over inheritance
+
+### Common Fixes
+1. **React 19 conflicts**: Downgrade to React 18.3.1
+2. **Missing .bin directory**: Re-run pnpm install
+3. **NOT NULL migration errors**: Add column as nullable first, then set NOT NULL
+4. **Font loading blocks**: Use Tailwind fallback fonts
+
+### File Organization
+```
+lib/database/               # Database management
+components/admin/           # Admin UI components  
+app/api/database/          # Database API routes
+tests/                     # Test files
+docs/                      # Documentation
+```
+
+### AI Assistant Commands
+```bash
+# Quick setup
+pnpm install && pnpm run dev
+
+# Database management
+npm run db:validate
+npm run db:generate basic
+npm run db:test minimal
+
+# Health check
+pnpm run build
+pnpm run lint
+git status --porcelain
+```
+
+## Code Style Preferences
+- Functional components with hooks
+- TypeScript interfaces over types
+- Tailwind CSS classes
+- Clear error messages
+- Minimal prop drilling
+
+## Performance Guidelines
+- Auto-refresh every 30 seconds max
+- Lazy load heavy components
+- Use React.memo for expensive renders
+- Minimize API calls
+
+## Testing Strategy
+- Unit tests for utilities
+- Integration tests for APIs
+- Mock Supabase for testing
+- Test database configs for safe testing
+
+Remember: Prioritize stability and developer experience. Always test builds before committing.
