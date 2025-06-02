@@ -1,10 +1,11 @@
+/**
+ * Test-specific layout without Google Fonts to avoid network issues during testing
+ */
 import type React from "react"
-import "./globals.css"
+import "../globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
-import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
-// Removed: import CustomCursor from "@/components/custom-cursor"
-import CustomCursorLoader from '@/components/custom-cursor-loader' // Added import for the new loader
+import CustomCursorLoader from '@/components/custom-cursor-loader'
 import SetupTablesPopup from "@/components/setup-tables-popup"
 import CookieConsent from "@/components/cookie-consent"
 import { Analytics } from "@vercel/analytics/react"
@@ -12,11 +13,6 @@ import { Suspense } from "react"
 import { initErrorTracking } from "@/lib/error-tracking"
 import { createAdminClient } from "@/lib/supabase-server"
 import { getFaviconMetadata } from "@/lib/favicon-metadata"
-
-// Removed: import dynamic from 'next/dynamic'
-// Removed: const DynamicCustomCursor = dynamic(() => import('@/components/custom-cursor'), { ssr: false })
-
-const inter = Inter({ subsets: ["latin"] })
 
 // Add this ErrorBoundary component
 function ErrorBoundary({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }) {
@@ -35,7 +31,7 @@ export async function generateMetadata(): Promise<any> {
   return {
     title: "Milo Presedo - Film Production & Photography",
     description: "Director of Photography, Camera Assistant, Drone & Underwater Operator",
-    manifest: "/manifest", // Points to app/manifest/route.ts
+    manifest: "/manifest",
     generator: 'v0.dev',
     // Merge custom favicon metadata with base metadata
     ...faviconMetadata
@@ -84,7 +80,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
           <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         </head>
-        <body className={inter.className} style={{ backgroundColor }}>
+        <body style={{ backgroundColor }}>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
             <CustomCursorLoader />
             <Suspense>{children}</Suspense>
