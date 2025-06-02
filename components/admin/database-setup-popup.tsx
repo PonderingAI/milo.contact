@@ -82,7 +82,7 @@ export function DatabaseSetupPopup({
       sql: `
 CREATE TABLE IF NOT EXISTS user_roles (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id UUID NOT NULL,
+  user_id TEXT NOT NULL,
   role TEXT NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   UNIQUE(user_id, role)
@@ -118,6 +118,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -175,6 +182,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -296,6 +310,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -361,6 +382,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -415,6 +443,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -498,6 +533,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -570,6 +612,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -628,6 +677,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -696,6 +752,13 @@ BEGIN
         WHERE user_id = auth.uid() 
         AND role = 'admin'
       )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
     );
   END IF;
 EXCEPTION WHEN OTHERS THEN
@@ -751,6 +814,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -812,6 +882,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
@@ -880,6 +957,13 @@ BEGIN
     FOR ALL
     TO authenticated
     USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
       EXISTS (
         SELECT 1 FROM user_roles
         WHERE user_id = auth.uid() 
