@@ -104,7 +104,12 @@ export async function POST(request: Request) {
     }
 
     // Return success response with inserted data
-    return NextResponse.json(data)
+    return NextResponse.json({
+      success: true,
+      data: data || [],
+      message: `Successfully ${data?.length || 0} BTS images processed`,
+      count: data?.length || 0
+    })
   } catch (error) {
     console.error("Error processing request:", error)
     const { userId } = auth()
