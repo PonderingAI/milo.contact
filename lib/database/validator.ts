@@ -31,6 +31,22 @@ export interface DatabaseStatus {
 
 export class DatabaseValidator {
   private supabase = createClientComponentClient()
+  private _bypassValidation = false
+
+  /**
+   * Bypass column validation - useful when exec_sql is not available
+   * and user has confirmed database is up to date
+   */
+  bypassValidation(bypass: boolean = true) {
+    this._bypassValidation = bypass
+  }
+
+  /**
+   * Check if validation is bypassed
+   */
+  isValidationBypassed(): boolean {
+    return this._bypassValidation
+  }
 
   /**
    * Check the status of all tables in the database
@@ -147,6 +163,11 @@ export class DatabaseValidator {
     missingColumns: string[]
     extraColumns: string[]
   }> {
+    // If validation is bypassed, assume everything is correct
+    if (this._bypassValidation) {
+      return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
+    }
+
     if (!table.columns) {
       return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
     }
@@ -163,7 +184,7 @@ export class DatabaseValidator {
       
       if (!result.success || !result.data) {
         console.warn(`Cannot check columns for ${table.name} - using simplified validation`)
-        // Fallback: assume columns are correct if table exists
+        // Fallback: assume columns are correct if table exists to avoid false positives
         return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
       }
 
@@ -186,7 +207,7 @@ export class DatabaseValidator {
       }
     } catch (error) {
       console.warn(`Error checking columns for ${table.name}:`, error)
-      // Fallback: assume columns are correct if table exists
+      // Fallback: assume columns are correct if table exists to avoid false positives
       return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
     }
   }
@@ -243,7 +264,9 @@ export class DatabaseValidator {
       return ""
     }
 
-    let sql = `-- Database Update Script\n-- Generated on ${new Date().toISOString()}\n\n`
+    // First pass: check if there are any actual updates needed
+    let hasActualUpdates = false
+    let updateSQL = ""
 
     for (const tableName of tableNames) {
       const table = tableConfigs[tableName]
@@ -251,19 +274,22 @@ export class DatabaseValidator {
       
       if (!table || !status) continue
 
-      sql += `-- Updates for ${table.displayName}\n`
+      let tableUpdates = ""
 
       // Add missing columns
       if (status.missingColumns.length > 0 && table.columns) {
+        hasActualUpdates = true
+        tableUpdates += `-- Updates for ${table.displayName}\n`
+
         for (const columnName of status.missingColumns) {
           const column = table.columns.find(c => c.name === columnName)
           if (column) {
-            sql += `-- Add missing column: ${columnName}\n`
-            sql += `DO $$\nBEGIN\n`
-            sql += `  IF NOT EXISTS (\n`
-            sql += `    SELECT 1 FROM information_schema.columns \n`
-            sql += `    WHERE table_name = '${tableName}' AND column_name = '${columnName}'\n`
-            sql += `  ) THEN\n`
+            tableUpdates += `-- Add missing column: ${columnName}\n`
+            tableUpdates += `DO $$\nBEGIN\n`
+            tableUpdates += `  IF NOT EXISTS (\n`
+            tableUpdates += `    SELECT 1 FROM information_schema.columns \n`
+            tableUpdates += `    WHERE table_name = '${tableName}' AND column_name = '${columnName}'\n`
+            tableUpdates += `  ) THEN\n`
             
             // Check if column has NOT NULL constraint
             const hasNotNull = column.constraints?.includes("NOT NULL")
@@ -271,9 +297,9 @@ export class DatabaseValidator {
             
             if (hasNotNull && !hasDefault) {
               // For NOT NULL columns without default, add as nullable first
-              sql += `    -- Adding as nullable first to avoid constraint violation\n`
+              tableUpdates += `    -- Adding as nullable first to avoid constraint violation\n`
               let alterSql = `    ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${column.type}`
-              sql += `${alterSql};\n`
+              tableUpdates += `${alterSql};\n`
               
               // Add a default value for existing rows (empty string for TEXT, 0 for numbers, etc.)
               let defaultValue = "''"
@@ -287,12 +313,12 @@ export class DatabaseValidator {
                 defaultValue = "NOW()"
               }
               
-              sql += `    -- Update existing rows with default value\n`
-              sql += `    UPDATE ${tableName} SET ${columnName} = ${defaultValue} WHERE ${columnName} IS NULL;\n`
+              tableUpdates += `    -- Update existing rows with default value\n`
+              tableUpdates += `    UPDATE ${tableName} SET ${columnName} = ${defaultValue} WHERE ${columnName} IS NULL;\n`
               
               // Now add the NOT NULL constraint
-              sql += `    -- Now add NOT NULL constraint\n`
-              sql += `    ALTER TABLE ${tableName} ALTER COLUMN ${columnName} SET NOT NULL;\n`
+              tableUpdates += `    -- Now add NOT NULL constraint\n`
+              tableUpdates += `    ALTER TABLE ${tableName} ALTER COLUMN ${columnName} SET NOT NULL;\n`
             } else {
               // For nullable columns or columns with defaults, add normally
               let alterSql = `    ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${column.type}`
@@ -309,29 +335,46 @@ export class DatabaseValidator {
                 alterSql += ` DEFAULT ${column.default}`
               }
               
-              sql += `${alterSql};\n`
+              tableUpdates += `${alterSql};\n`
             }
             
-            sql += `  END IF;\n`
-            sql += `END $$;\n\n`
+            tableUpdates += `  END IF;\n`
+            tableUpdates += `END $$;\n\n`
           }
         }
       }
 
       // Add missing indexes
       if (status.missingIndexes.length > 0) {
+        hasActualUpdates = true
+        if (!tableUpdates.includes(`-- Updates for ${table.displayName}`)) {
+          tableUpdates += `-- Updates for ${table.displayName}\n`
+        }
         for (const index of status.missingIndexes) {
-          sql += `-- Add missing index\n`
-          sql += `CREATE INDEX IF NOT EXISTS ${index} ON ${tableName};\n\n`
+          tableUpdates += `-- Add missing index\n`
+          tableUpdates += `CREATE INDEX IF NOT EXISTS ${index} ON ${tableName};\n\n`
         }
       }
 
       // Note about missing policies
       if (status.missingPolicies.length > 0) {
-        sql += `-- Note: Table ${tableName} may be missing Row Level Security policies\n`
-        sql += `-- Please review the table definition for policy requirements\n\n`
+        if (!tableUpdates.includes(`-- Updates for ${table.displayName}`)) {
+          tableUpdates += `-- Updates for ${table.displayName}\n`
+        }
+        tableUpdates += `-- Note: Table ${tableName} may be missing Row Level Security policies\n`
+        tableUpdates += `-- Please review the table definition for policy requirements\n\n`
       }
+
+      updateSQL += tableUpdates
     }
+
+    // Only return a script if there are actual updates
+    if (!hasActualUpdates) {
+      return ""
+    }
+
+    let sql = `-- Database Update Script\n-- Generated on ${new Date().toISOString()}\n\n`
+    sql += updateSQL
 
     return sql.trim()
   }

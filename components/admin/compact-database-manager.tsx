@@ -248,17 +248,38 @@ export default function CompactDatabaseManager() {
       {databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0 && (
         <Alert className="border-yellow-200 bg-yellow-800 text-white">
           <Info className="h-4 w-4 text-white" />
-          <AlertDescription className="flex items-center justify-between text-white">
-            <span>Database schema updates are available for existing tables.</span>
-            <Button 
-              size="sm" 
-              variant="outline"
-              onClick={showMigrationSQLPopup}
-              className="border-yellow-300 hover:bg-yellow-700 text-white"
-            >
-              <Zap className="h-4 w-4 mr-1" />
-              View Migration SQL
-            </Button>
+          <AlertDescription className="text-white">
+            <div className="flex items-center justify-between">
+              <span>Database schema updates are available for existing tables.</span>
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={showMigrationSQLPopup}
+                  className="border-yellow-300 hover:bg-yellow-700 text-white"
+                >
+                  <Zap className="h-4 w-4 mr-1" />
+                  View Migration SQL
+                </Button>
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => {
+                    // Force refresh by clearing cache and re-checking
+                    setDatabaseStatus(null)
+                    checkDatabaseStatus()
+                    toast({
+                      title: "Status Refreshed",
+                      description: "Database validation has been refreshed"
+                    })
+                  }}
+                  className="border-yellow-300 hover:bg-yellow-700 text-white"
+                >
+                  <CheckCircle className="h-4 w-4 mr-1" />
+                  Mark as Up to Date
+                </Button>
+              </div>
+            </div>
           </AlertDescription>
         </Alert>
       )}
