@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const supabase = createRouteHandlerClient({ cookies })
 
     if (!projectId || !images || !Array.isArray(images)) {
-      return new NextResponse("Project ID and images are required", { status: 400 })
+      return NextResponse.json({ error: "Project ID and images are required" }, { status: 400 })
     }
 
     // Check if sort_order column exists
@@ -37,7 +37,7 @@ export async function POST(request: Request) {
 
       if (deleteError) {
         console.error("Error deleting existing BTS images:", deleteError)
-        return new NextResponse("Error deleting existing BTS images", { status: 500 })
+        return NextResponse.json({ error: "Error deleting existing BTS images" }, { status: 500 })
       }
     }
 
@@ -55,12 +55,12 @@ export async function POST(request: Request) {
 
     if (error) {
       console.error("Error inserting BTS images:", error)
-      return new NextResponse("Error inserting BTS images", { status: 500 })
+      return NextResponse.json({ error: "Error inserting BTS images" }, { status: 500 })
     }
 
     return NextResponse.json(data)
   } catch (error) {
     console.error("Error processing request:", error)
-    return new NextResponse("Internal Server Error", { status: 500 })
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }
