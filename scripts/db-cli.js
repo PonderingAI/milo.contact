@@ -204,7 +204,7 @@ async function showStatus() {
     'lib/database/schema.ts',
     'lib/database/validator.ts', 
     'lib/database/testing.ts',
-    'components/admin/enhanced-database-manager.tsx'
+    'components/admin/compact-database-manager.tsx'
   ]
   
   log('System Files:', 'cyan')
