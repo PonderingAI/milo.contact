@@ -993,17 +993,37 @@ export default function UnifiedMediaLibrary({
     if (currentSelectionMode === "single") {
       setSelectedItems([itemToToggle])
     } else { // "multiple"
-      setSelectedItems((prevSelectedItems) =>
-        prevSelectedItems.find(item => item.id === itemToToggle.id)
-          ? prevSelectedItems.filter((item) => item.id !== itemToToggle.id)
-          : [...prevSelectedItems, itemToToggle],
-      )
+      setSelectedItems((prevSelectedItems) => {
+        // Check if this item is already selected by ID, public_url, or filepath
+        const isAlreadySelected = prevSelectedItems.some(item => 
+          item.id === itemToToggle.id || 
+          item.public_url === itemToToggle.public_url || 
+          item.filepath === itemToToggle.filepath
+        )
+        
+        if (isAlreadySelected) {
+          // Item is selected (or a duplicate is selected), remove all matching items
+          return prevSelectedItems.filter((item) => 
+            item.id !== itemToToggle.id && 
+            item.public_url !== itemToToggle.public_url && 
+            item.filepath !== itemToToggle.filepath
+          )
+        } else {
+          // Item is not selected, add it (and remove any duplicates first)
+          const deduplicatedItems = prevSelectedItems.filter(item => 
+            item.public_url !== itemToToggle.public_url && 
+            item.filepath !== itemToToggle.filepath
+          )
+          return [...deduplicatedItems, itemToToggle]
+        }
+      })
     }
   }
 
   // Effect to log selection changes for debugging
   useEffect(() => {
     console.log("Selected items changed:", selectedItems)
+  }, [selectedItems])
   }, [selectedItems])
 
   const handleConfirmSelection = () => {
@@ -1404,13 +1424,56 @@ export default function UnifiedMediaLibrary({
     setIsBulkRemoveTagDialogOpen(false)
   }
 
+  const handleCleanupDuplicates = async () => {
+    const confirmCleanup = window.confirm("This will remove duplicate media items from the database. Are you sure you want to continue?")
+    if (!confirmCleanup) return
+
+    const toastId = toast({
+      title: "Cleaning up duplicates...",
+      description: "This may take a moment",
+    }).id
+
+    try {
+      const response = await fetch("/api/cleanup-media-duplicates", {
+        method: "POST",
+      })
+
+      const result = await response.json()
+
+      if (!response.ok) {
+        throw new Error(result.error || "Failed to cleanup duplicates")
+      }
+
+      toast.update(toastId, {
+        title: "Cleanup Complete",
+        description: `${result.duplicatesRemoved} duplicate items removed`,
+        variant: "default",
+      })
+
+      // Refresh the media list
+      fetchMedia()
+    } catch (error) {
+      console.error("Error cleaning up duplicates:", error)
+      toast.update(toastId, {
+        title: "Cleanup Failed",
+        description: error instanceof Error ? error.message : "An error occurred",
+        variant: "destructive",
+      })
+    }
+  }
+
   function renderMediaItem(item: MediaItem) {
     const isVimeo = item.filetype === "vimeo"
     const isYoutube = item.filetype === "youtube"
     const isLinkedin = item.filetype === "linkedin"
     const isImage = item.filetype === "image"
     const hasImageError = imageLoadError[item.id]
-    const isSelected = selectedItems.some(selected => selected.id === item.id)
+    // Check selection by ID, public_url, or filepath to handle duplicates better
+    const isSelected = selectedItems.some(selected => 
+      selected.id === item.id || 
+      selected.public_url === item.public_url || 
+      selected.filepath === item.filepath
+    )
     // Selection is now always possible on the main page (selectionMode === "none")
     const canSelect = selectionMode !== "none" || selectionMode === "none";
 
@@ -2087,7 +2150,11 @@ export default function UnifiedMediaLibrary({
         </DialogContent>
       </Dialog>
 
-      <div className="fixed bottom-4 right-4 z-40"> {/* Ensure refresh button is not overlapped by bulk actions bar */}
+      <div className="fixed bottom-4 right-4 z-40 flex gap-2"> {/* Ensure refresh button is not overlapped by bulk actions bar */}
+        <Button onClick={handleCleanupDuplicates} variant="outline" className="bg-yellow-600 hover:bg-yellow-700">
+          <AlertCircle className="h-4 w-4 mr-2" />
+          Cleanup Duplicates
+        </Button>
         <Button onClick={fetchMedia} className="bg-blue-600 hover:bg-blue-700">
           <RefreshCw className="h-4 w-4 mr-2" />
           Refresh Media

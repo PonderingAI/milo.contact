@@ -37,19 +37,27 @@ export async function checkFileDuplicate(
     // Build a query to check for duplicates using multiple criteria
     let query = supabase.from("media").select("id, filename, filepath, public_url, filetype, metadata")
 
-    // Check by hash (most reliable)
+    // Build OR conditions array to avoid SQL injection
+    const orConditions: string[] = []
+
+    // Check by hash (most reliable) - use ->> for text extraction from JSON
     if (fileHash) {
-      query = query.or(`metadata->fileHash.eq.${fileHash}`)
+      orConditions.push(`metadata->>fileHash.eq."${fileHash.replace(/"/g, '""')}"`)
     }
 
     // Also check by filename as fallback
     if (filename) {
-      query = query.or(`filename.eq.${filename}`)
+      orConditions.push(`filename.eq."${filename.replace(/"/g, '""')}"`)
     }
 
     // Also check by filepath if provided
     if (filepath) {
-      query = query.or(`filepath.eq.${filepath}`)
+      orConditions.push(`filepath.eq."${filepath.replace(/"/g, '""')}"`)
+    }
+
+    // Apply OR conditions if any exist
+    if (orConditions.length > 0) {
+      query = query.or(orConditions.join(','))
     }
 
     // Execute the query
@@ -143,18 +151,28 @@ export async function checkUrlDuplicate(url: string): Promise<DuplicateCheckResu
     // Build a query to check for duplicates using multiple criteria
     let query = supabase.from("media").select("id, filename, filepath, public_url, filetype, metadata")
 
+    // Build OR conditions array to avoid SQL injection
+    const orConditions: string[] = []
+
     // Check by exact URL match
-    query = query.or(`public_url.eq.${url},filepath.eq.${url}`)
+    orConditions.push(`public_url.eq."${url.replace(/"/g, '""')}"`)
+    orConditions.push(`filepath.eq."${url.replace(/"/g, '""')}"`)
 
     // If it's a normalized URL that's different from the original, check that too
     if (normalizedUrl !== url) {
-      query = query.or(`public_url.eq.${normalizedUrl},filepath.eq.${normalizedUrl}`)
+      orConditions.push(`public_url.eq."${normalizedUrl.replace(/"/g, '""')}"`)
+      orConditions.push(`filepath.eq."${normalizedUrl.replace(/"/g, '""')}"`)
     }
 
     // If it's a video URL, also check by video ID
     if (videoInfo) {
-      const metadataField = `metadata->${videoInfo.platform}Id`
-      query = query.or(`${metadataField}.eq.${videoInfo.id}`)
+      const metadataField = `metadata->>${videoInfo.platform}Id`
+      orConditions.push(`${metadataField}.eq."${videoInfo.id.replace(/"/g, '""')}"`)
+    }
+
+    // Apply OR conditions
+    if (orConditions.length > 0) {
+      query = query.or(orConditions.join(','))
     }
 
     // Execute the query
