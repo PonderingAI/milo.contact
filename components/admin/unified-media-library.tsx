@@ -1024,7 +1024,6 @@ export default function UnifiedMediaLibrary({
   useEffect(() => {
     console.log("Selected items changed:", selectedItems)
   }, [selectedItems])
-  }, [selectedItems])
 
   const handleConfirmSelection = () => {
     if (onSelect && selectedItems.length > 0) {
