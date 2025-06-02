@@ -24,6 +24,15 @@ This is a portfolio website built with Next.js, TypeScript, Tailwind CSS, and Su
   pnpm run lint          # Lint code
   pnpm run test          # Run tests
   ```
+- **Dependency conflict resolution**:
+  ```bash
+  # If pnpm fails, use npm with legacy peer deps
+  npm install --legacy-peer-deps
+  
+  # For stubborn conflicts, clean install
+  rm -rf node_modules package-lock.json pnpm-lock.yaml
+  pnpm install
+  ```
 
 ### Database Management
 - **Centralized schema**: All table definitions in `lib/database/schema.ts`
