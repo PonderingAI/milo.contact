@@ -68,7 +68,6 @@ Reusable UI components from the design system.
 | `components/ui/three-state-toggle.tsx` | Toggle with three states | Used for tristate selections |
 | `components/ui/four-state-toggle.tsx` | Toggle with four states | Used for quarternary selections |
 | `components/database-setup-alert.tsx` | Database setup notification | Alerts users to setup requirements |
-| `components/dynamic-favicons.tsx` | Dynamic favicon component | Changes favicon based on settings |
 
 ## Pages
 

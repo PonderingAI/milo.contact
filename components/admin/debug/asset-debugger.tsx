@@ -259,8 +259,8 @@ export default function AssetDebugger() {
               Analytics is enabled in your Vercel project settings.
             </p>
             <p>
-              <span className="text-green-500 font-bold">→</span> For custom favicons, ensure{" "}
-              <code className="bg-green-900/20 px-1 rounded">DynamicFavicons</code> component is working correctly.
+              <span className="text-green-500 font-bold">→</span> For custom favicons, ensure the{" "}
+              <code className="bg-green-900/20 px-1 rounded">favicon metadata</code> system is working correctly.
             </p>
             <p>
               <span className="text-green-500 font-bold">→</span> Check that static assets are properly included in your
