@@ -12,7 +12,6 @@ import {
   Database, 
   AlertCircle, 
   CheckCircle, 
-  Play, 
   Copy, 
   Download,
   Trash2,
@@ -28,12 +27,9 @@ export default function CompactDatabaseManager() {
   const [loading, setLoading] = useState(false)
   const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null)
   const [lastCheck, setLastCheck] = useState<Date | null>(null)
-  const [executing, setExecuting] = useState(false)
   const [selectedMissingTables, setSelectedMissingTables] = useState<string[]>([])
   const [selectedExistingTables, setSelectedExistingTables] = useState<string[]>([])
   const [showMigrationPopup, setShowMigrationPopup] = useState(false)
-  const [showManualSetupPopup, setShowManualSetupPopup] = useState(false)
-  const [manualSetupSQL, setManualSetupSQL] = useState("")
 
   // Auto-refresh every 30 seconds
   useEffect(() => {
@@ -66,45 +62,6 @@ export default function CompactDatabaseManager() {
       })
     } finally {
       setLoading(false)
-    }
-  }
-
-  const executeSQL = async (sql: string) => {
-    if (!sql.trim()) return
-
-    setExecuting(true)
-    try {
-      const result = await databaseValidator.executeSQL(sql)
-      
-      if (result.success) {
-        toast({
-          title: "Success",
-          description: "SQL executed successfully"
-        })
-        // Refresh status after execution
-        setTimeout(() => checkDatabaseStatus(), 1000)
-      } else {
-        // Handle case where manual execution is needed
-        if (result.needsManualExecution && result.setupSql) {
-          // Show the React-based popup with instructions
-          setManualSetupSQL(result.setupSql)
-          setShowManualSetupPopup(true)
-        } else {
-          toast({
-            title: "Error",
-            description: result.error || "Failed to execute SQL",
-            variant: "destructive"
-          })
-        }
-      }
-    } catch (error) {
-      toast({
-        title: "Error", 
-        description: "An unexpected error occurred",
-        variant: "destructive"
-      })
-    } finally {
-      setExecuting(false)
     }
   }
 
@@ -289,15 +246,15 @@ export default function CompactDatabaseManager() {
 
       {/* Migration Alert */}
       {databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0 && (
-        <Alert className="border-yellow-200 bg-yellow-50 text-yellow-800">
-          <Info className="h-4 w-4 text-yellow-600" />
-          <AlertDescription className="flex items-center justify-between text-yellow-800">
+        <Alert className="border-yellow-200 bg-yellow-800 text-white">
+          <Info className="h-4 w-4 text-white" />
+          <AlertDescription className="flex items-center justify-between text-white">
             <span>Database schema updates are available for existing tables.</span>
             <Button 
               size="sm" 
               variant="outline"
               onClick={showMigrationSQLPopup}
-              className="border-yellow-300 hover:bg-yellow-100"
+              className="border-yellow-300 hover:bg-yellow-700 text-white"
             >
               <Zap className="h-4 w-4 mr-1" />
               View Migration SQL
@@ -364,14 +321,6 @@ export default function CompactDatabaseManager() {
                       >
                         <Download className="h-4 w-4 mr-1" />
                         Download
-                      </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => executeSQL(creationSQL)}
-                        disabled={executing}
-                      >
-                        <Play className="h-4 w-4 mr-1" />
-                        Create Tables
                       </Button>
                     </div>
                     <Textarea
@@ -468,15 +417,6 @@ export default function CompactDatabaseManager() {
                         <Download className="h-4 w-4 mr-1" />
                         Download
                       </Button>
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        onClick={() => executeSQL(deletionSQL)}
-                        disabled={executing}
-                      >
-                        <Trash2 className="h-4 w-4 mr-1" />
-                        Delete Tables
-                      </Button>
                     </div>
                     <Textarea
                       value={deletionSQL}
@@ -538,17 +478,6 @@ export default function CompactDatabaseManager() {
                   <Download className="h-4 w-4 mr-1" />
                   Download
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    executeSQL(databaseStatus.updateScript)
-                    setShowMigrationPopup(false)
-                  }}
-                  disabled={executing}
-                >
-                  <Zap className="h-4 w-4 mr-1" />
-                  Apply Migration
-                </Button>
               </div>
               
               <Textarea
@@ -561,60 +490,7 @@ export default function CompactDatabaseManager() {
           </Card>
         </div>
       )}
-
-      {/* Manual Setup Popup */}
-      {showManualSetupPopup && manualSetupSQL && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
-            <CardHeader>
-              <CardTitle className="flex items-center justify-between">
-                Manual Setup Required
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setShowManualSetupPopup(false)}
-                >
-                  ×
-                </Button>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Alert>
-                <Info className="h-4 w-4" />
-                <AlertDescription>
-                  Your database doesn't have the required exec_sql function. Please copy and run the following SQL in your Supabase SQL Editor:
-                </AlertDescription>
-              </Alert>
-              
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => copyToClipboard(manualSetupSQL)}
-                >
-                  <Copy className="h-4 w-4 mr-1" />
-                  Copy SQL
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => downloadSQL(manualSetupSQL, "manual-setup.sql")}
-                >
-                  <Download className="h-4 w-4 mr-1" />
-                  Download
-                </Button>
-              </div>
-              
-              <Textarea
-                value={manualSetupSQL}
-                readOnly
-                className="font-mono text-sm"
-                rows={12}
-              />
-            </CardContent>
-          </Card>
-        </div>
-      )}
     </div>
   )
+}
 }
