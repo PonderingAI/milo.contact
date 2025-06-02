@@ -22,8 +22,8 @@ export async function POST(request: Request) {
     const filesize = file.size
     const fileBuffer = Buffer.from(await file.arrayBuffer())
 
-    // Calculate file hash for duplicate detection
-    const fileHash = crypto.createHash("md5").update(fileBuffer).digest("hex")
+    // Calculate file hash for duplicate detection using SHA-256 (same as client-side)
+    const fileHash = crypto.createHash("sha256").update(fileBuffer).digest("hex")
     console.log(`Calculated hash for ${filename}: ${fileHash}`)
 
     // Check for duplicates using our universal duplicate checker
@@ -127,8 +127,8 @@ export async function POST(request: Request) {
       publicUrl = url
     }
 
-    // Add record to the media table
-    const { error: insertError } = await createServerClient()
+    // Add record to the media table with race condition protection
+    const { error: insertError, data: insertedData } = await createServerClient()
       .from("media")
       .insert({
         filename,
@@ -145,8 +145,32 @@ export async function POST(request: Request) {
           originalFilename: filename,
         },
       })
+      .select()
 
     if (insertError) {
+      // Check if this is a race condition duplicate by doing another duplicate check
+      console.log("Insert failed, checking for race condition:", insertError.message)
+      
+      const raceConditionCheck = await checkMediaDuplicate({
+        fileHash,
+        filename,
+      })
+      
+      if (raceConditionCheck.isDuplicate) {
+        // Another thread inserted the same file while we were processing
+        console.log("Race condition detected - file was inserted by another process")
+        return NextResponse.json(
+          {
+            duplicate: true,
+            existingFile: raceConditionCheck.existingItem,
+            message: `File already exists (race condition detected)`,
+            matchType: raceConditionCheck.matchType,
+          },
+          { status: 200 },
+        )
+      }
+      
+      // Not a race condition, it's a real error
       throw new Error(`Database insert failed: ${insertError.message}`)
     }
 
@@ -155,6 +179,7 @@ export async function POST(request: Request) {
       filename,
       publicUrl,
       convertedToWebP,
+      mediaItem: insertedData && insertedData.length > 0 ? insertedData[0] : null,
     })
   } catch (error) {
     console.error("Upload error:", error)
