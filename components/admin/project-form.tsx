@@ -176,7 +176,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           const response = await fetch(`/api/projects/bts-images/${project.id}`)
 
           if (response.ok) {
-            const data = await response.json()
+            let data: any = null
+            try {
+              data = await response.json()
+            } catch (jsonError) {
+              console.error("Error parsing BTS images response JSON:", jsonError, "Response status:", response.status)
+              data = { images: [], success: false }
+            }
+            
             if (data.images && Array.isArray(data.images)) {
               // Separate images and videos
               const images: string[] = []
@@ -868,7 +875,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
               }),
             })
 
-            const btsResult = await btsResponse.json()
+            let btsResult: any = null
+            try {
+              btsResult = await btsResponse.json()
+            } catch (jsonError) {
+              console.error("Error parsing BTS response JSON during project creation:", jsonError, "Response status:", btsResponse.status)
+              // If JSON parsing fails, treat as success if status is ok, otherwise as error
+              btsResult = { 
+                error: btsResponse.ok ? null : "Invalid response format",
+                success: btsResponse.ok 
+              }
+            }
 
             if (!btsResponse.ok) {
               console.error("Error saving BTS media:", btsResult)
@@ -940,7 +957,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
               }),
             })
 
-            const btsResult = await btsResponse.json()
+            let btsResult: any = null
+            try {
+              btsResult = await btsResponse.json()
+            } catch (jsonError) {
+              console.error("Error parsing BTS response JSON during project update:", jsonError, "Response status:", btsResponse.status)
+              // If JSON parsing fails, treat as success if status is ok, otherwise as error
+              btsResult = { 
+                error: btsResponse.ok ? null : "Invalid response format",
+                success: btsResponse.ok 
+              }
+            }
 
             if (!btsResponse.ok) {
               console.error("Error updating BTS media:", btsResult)
