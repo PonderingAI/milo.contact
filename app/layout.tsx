@@ -1,7 +1,8 @@
 import type React from "react"
 import "./globals.css"
 import { ClerkProvider } from "@clerk/nextjs"
-import { Inter } from "next/font/google"
+// Removed Google Fonts import due to firewall restrictions
+// import { Inter } from "next/font/google"
 import { ThemeProvider } from "@/components/theme-provider"
 // Removed: import CustomCursor from "@/components/custom-cursor"
 import CustomCursorLoader from '@/components/custom-cursor-loader' // Added import for the new loader
@@ -16,7 +17,8 @@ import { getFaviconMetadata } from "@/lib/favicon-metadata"
 // Removed: import dynamic from 'next/dynamic'
 // Removed: const DynamicCustomCursor = dynamic(() => import('@/components/custom-cursor'), { ssr: false })
 
-const inter = Inter({ subsets: ["latin"] })
+// Replaced Google Fonts with system font fallback due to firewall restrictions
+// const inter = Inter({ subsets: ["latin"] })
 
 // Add this ErrorBoundary component
 function ErrorBoundary({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }) {
@@ -84,7 +86,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
           <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
         </head>
-        <body className={inter.className} style={{ backgroundColor }}>
+        <body className="font-sans" style={{ backgroundColor, fontFamily: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif' }}>
           <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
             <CustomCursorLoader />
             <Suspense>{children}</Suspense>
