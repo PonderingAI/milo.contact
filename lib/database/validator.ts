@@ -345,7 +345,7 @@ export class DatabaseValidator {
   /**
    * Execute SQL script
    */
-  async executeSQL(sql: string): Promise<{ success: boolean; error?: string }> {
+  async executeSQL(sql: string): Promise<{ success: boolean; error?: string; needsManualExecution?: boolean; setupSql?: string }> {
     try {
       const response = await fetch("/api/execute-sql", {
         method: "POST",
@@ -358,6 +358,16 @@ export class DatabaseValidator {
       const result = await response.json()
 
       if (!response.ok) {
+        // Handle the case where exec_sql function doesn't exist
+        if (response.status === 422 && result.sql) {
+          return { 
+            success: false, 
+            error: result.error || "SQL execution not available - manual setup required",
+            needsManualExecution: true,
+            setupSql: result.sql
+          }
+        }
+        
         return { success: false, error: result.error || "Failed to execute SQL" }
       }
 

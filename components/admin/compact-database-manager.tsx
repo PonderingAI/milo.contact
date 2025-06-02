@@ -1,0 +1,586 @@
+"use client"
+
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
+import { Checkbox } from "@/components/ui/checkbox"
+import { 
+  Database, 
+  AlertCircle, 
+  CheckCircle, 
+  Play, 
+  Copy, 
+  Download,
+  Trash2,
+  Plus,
+  Info,
+  Zap
+} from "lucide-react"
+import { toast } from "@/components/ui/use-toast"
+import { databaseValidator, type DatabaseStatus } from "@/lib/database/validator"
+import { getSchemaSummary, getAllTables, type TableConfig } from "@/lib/database/schema"
+
+export default function CompactDatabaseManager() {
+  const [loading, setLoading] = useState(false)
+  const [databaseStatus, setDatabaseStatus] = useState<DatabaseStatus | null>(null)
+  const [lastCheck, setLastCheck] = useState<Date | null>(null)
+  const [executing, setExecuting] = useState(false)
+  const [selectedMissingTables, setSelectedMissingTables] = useState<string[]>([])
+  const [selectedExistingTables, setSelectedExistingTables] = useState<string[]>([])
+  const [showMigrationPopup, setShowMigrationPopup] = useState(false)
+
+  // Auto-refresh every 30 seconds
+  useEffect(() => {
+    checkDatabaseStatus()
+    
+    const interval = setInterval(() => {
+      checkDatabaseStatus()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [])
+
+  const checkDatabaseStatus = async () => {
+    setLoading(true)
+    try {
+      const status = await databaseValidator.validateDatabase()
+      setDatabaseStatus(status)
+      setLastCheck(new Date())
+
+      // Auto-select missing tables for creation
+      if (status.missingTables.length > 0 && selectedMissingTables.length === 0) {
+        setSelectedMissingTables(status.missingTables)
+      }
+    } catch (error) {
+      console.error("Error checking database status:", error)
+      toast({
+        title: "Error",
+        description: "Failed to check database status",
+        variant: "destructive"
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const executeSQL = async (sql: string) => {
+    if (!sql.trim()) return
+
+    setExecuting(true)
+    try {
+      const result = await databaseValidator.executeSQL(sql)
+      
+      if (result.success) {
+        toast({
+          title: "Success",
+          description: "SQL executed successfully"
+        })
+        // Refresh status after execution
+        setTimeout(() => checkDatabaseStatus(), 1000)
+      } else {
+        // Handle case where manual execution is needed
+        if (result.needsManualExecution && result.setupSql) {
+          // Show a popup with instructions
+          showManualExecutionPopup(result.setupSql)
+        } else {
+          toast({
+            title: "Error",
+            description: result.error || "Failed to execute SQL",
+            variant: "destructive"
+          })
+        }
+      }
+    } catch (error) {
+      toast({
+        title: "Error", 
+        description: "An unexpected error occurred",
+        variant: "destructive"
+      })
+    } finally {
+      setExecuting(false)
+    }
+  }
+
+  const showManualExecutionPopup = (setupSql: string) => {
+    // Create a temporary popup div
+    const popupHtml = `
+      <div style="position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; display: flex; align-items: center; justify-content: center; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <div style="background: white; border-radius: 8px; padding: 24px; max-width: 600px; max-height: 80vh; overflow-y: auto; margin: 20px;">
+          <h3 style="margin: 0 0 16px 0; color: #1f2937; font-size: 18px; font-weight: 600;">Manual Setup Required</h3>
+          <p style="margin: 0 0 16px 0; color: #6b7280; line-height: 1.5;">Your database doesn't have the required exec_sql function. Please copy and run the following SQL in your Supabase SQL Editor:</p>
+          <textarea readonly style="width: 100%; height: 200px; margin: 0 0 16px 0; padding: 12px; border: 1px solid #d1d5db; border-radius: 4px; font-family: 'Monaco', 'Consolas', monospace; font-size: 12px; background: #f9fafb;">${setupSql}</textarea>
+          <div style="display: flex; gap: 8px;">
+            <button onclick="navigator.clipboard.writeText(\`${setupSql.replace(/`/g, '\\`')}\`); this.textContent='Copied!'; setTimeout(() => this.textContent='Copy SQL', 2000)" style="padding: 8px 16px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Copy SQL</button>
+            <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="padding: 8px 16px; background: #6b7280; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">Close</button>
+          </div>
+        </div>
+      </div>
+    `
+    
+    // Remove any existing popup
+    const existingPopup = document.querySelector('[data-manual-execution-popup]')
+    if (existingPopup) {
+      existingPopup.remove()
+    }
+    
+    // Add new popup
+    const popup = document.createElement('div')
+    popup.setAttribute('data-manual-execution-popup', 'true')
+    popup.innerHTML = popupHtml
+    document.body.appendChild(popup)
+  }
+
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast({
+        title: "Copied",
+        description: "SQL copied to clipboard"
+      })
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to copy to clipboard",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const downloadSQL = (sql: string, filename: string) => {
+    const blob = new Blob([sql], { type: "text/sql" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  const generateCreationSQL = () => {
+    if (selectedMissingTables.length === 0) return ""
+    
+    const allTables = getAllTables()
+    let sql = `-- Database Creation Script\n-- Generated on ${new Date().toISOString()}\n\n`
+    sql += `-- Enable UUID extension if not already enabled\nCREATE EXTENSION IF NOT EXISTS "uuid-ossp";\n\n`
+
+    // Sort by dependencies and generate SQL
+    const sortedTables = sortTablesByDependencies(selectedMissingTables, allTables)
+    
+    for (const tableName of sortedTables) {
+      const table = allTables.find(t => t.name === tableName)
+      if (table) {
+        sql += `-- Setup for ${table.displayName}\n`
+        sql += table.sql
+        sql += "\n\n"
+      }
+    }
+
+    return sql.trim()
+  }
+
+  const generateDeletionSQL = () => {
+    if (selectedExistingTables.length === 0) return ""
+    
+    let sql = `-- Table Deletion Script\n-- Generated on ${new Date().toISOString()}\n\n`
+    
+    // Reverse dependency order for deletion
+    const allTables = getAllTables()
+    const sortedTables = sortTablesByDependencies(selectedExistingTables, allTables).reverse()
+    
+    for (const tableName of sortedTables) {
+      sql += `DROP TABLE IF EXISTS ${tableName} CASCADE;\n`
+    }
+
+    return sql.trim()
+  }
+
+  const sortTablesByDependencies = (tableNames: string[], allTables: TableConfig[]): string[] => {
+    const sorted: string[] = []
+    const visited = new Set<string>()
+    const visiting = new Set<string>()
+
+    const visit = (tableName: string) => {
+      if (visiting.has(tableName)) return // Avoid circular deps
+      if (visited.has(tableName)) return
+
+      visiting.add(tableName)
+      
+      const table = allTables.find(t => t.name === tableName)
+      if (table) {
+        for (const dep of table.dependencies) {
+          if (tableNames.includes(dep)) {
+            visit(dep)
+          }
+        }
+      }
+
+      visiting.delete(tableName)
+      visited.add(tableName)
+      sorted.push(tableName)
+    }
+
+    for (const tableName of tableNames) {
+      if (!visited.has(tableName)) {
+        visit(tableName)
+      }
+    }
+
+    return sorted
+  }
+
+  const showMigrationSQLPopup = () => {
+    if (databaseStatus?.updateScript) {
+      setShowMigrationPopup(true)
+    }
+  }
+
+  const schema = getSchemaSummary()
+  const allTables = getAllTables()
+
+  const missingTables = databaseStatus?.missingTables || []
+  const existingTables = Object.keys(databaseStatus?.tableStatuses || {}).filter(
+    name => databaseStatus?.tableStatuses[name]?.exists
+  )
+
+  const creationSQL = generateCreationSQL()
+  const deletionSQL = generateDeletionSQL()
+
+  return (
+    <div className="p-6 space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Database className="h-8 w-8" />
+            Database Manager
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Auto-refreshing every 30 seconds • Last check: {lastCheck?.toLocaleTimeString() || 'Never'}
+          </p>
+        </div>
+        
+        <div className="flex items-center gap-2">
+          {databaseStatus?.allTablesExist ? (
+            <Badge variant="default" className="flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" />
+              Database Healthy
+            </Badge>
+          ) : (
+            <Badge variant="destructive" className="flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" />
+              {missingTables.length} Missing Tables
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold">{schema.totalTables}</div>
+            <p className="text-xs text-muted-foreground">Total Tables</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-green-600">{existingTables.length}</div>
+            <p className="text-xs text-muted-foreground">Existing</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-red-600">{missingTables.length}</div>
+            <p className="text-xs text-muted-foreground">Missing</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-2xl font-bold text-yellow-600">{databaseStatus?.tablesNeedingUpdate.length || 0}</div>
+            <p className="text-xs text-muted-foreground">Need Updates</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Migration Alert */}
+      {databaseStatus?.updateScript && (
+        <Alert className="border-yellow-200 bg-yellow-50">
+          <Info className="h-4 w-4" />
+          <AlertDescription className="flex items-center justify-between">
+            <span>Database schema updates are available for existing tables.</span>
+            <Button 
+              size="sm" 
+              variant="outline"
+              onClick={showMigrationSQLPopup}
+            >
+              <Zap className="h-4 w-4 mr-1" />
+              View Migration SQL
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Create Missing Tables */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5" />
+              Create Missing Tables ({missingTables.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {missingTables.length > 0 ? (
+              <>
+                <div className="space-y-2">
+                  {missingTables.map(tableName => {
+                    const table = allTables.find(t => t.name === tableName)
+                    return (
+                      <div key={tableName} className="flex items-center space-x-2 p-2 border rounded">
+                        <Checkbox
+                          id={`create-${tableName}`}
+                          checked={selectedMissingTables.includes(tableName)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedMissingTables([...selectedMissingTables, tableName])
+                            } else {
+                              setSelectedMissingTables(selectedMissingTables.filter(t => t !== tableName))
+                            }
+                          }}
+                        />
+                        <Label htmlFor={`create-${tableName}`} className="flex-1">
+                          <div className="font-medium">{table?.displayName || tableName}</div>
+                          <div className="text-xs text-muted-foreground">{table?.description}</div>
+                        </Label>
+                        {table?.required && (
+                          <Badge variant="destructive" className="text-xs">Required</Badge>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {selectedMissingTables.length > 0 && (
+                  <div className="space-y-2 border-t pt-4">
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(creationSQL)}
+                      >
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy SQL
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadSQL(creationSQL, "create-tables.sql")}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Download
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => executeSQL(creationSQL)}
+                        disabled={executing}
+                      >
+                        <Play className="h-4 w-4 mr-1" />
+                        Create Tables
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={creationSQL}
+                      readOnly
+                      className="font-mono text-sm"
+                      rows={6}
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <CheckCircle className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                All tables exist
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Manage Existing Tables */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Trash2 className="h-5 w-5" />
+              Manage Existing Tables ({existingTables.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {existingTables.length > 0 ? (
+              <>
+                <div className="space-y-2">
+                  {existingTables.map(tableName => {
+                    const table = allTables.find(t => t.name === tableName)
+                    const status = databaseStatus?.tableStatuses[tableName]
+                    return (
+                      <div key={tableName} className="flex items-center space-x-2 p-2 border rounded">
+                        <Checkbox
+                          id={`delete-${tableName}`}
+                          checked={selectedExistingTables.includes(tableName)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setSelectedExistingTables([...selectedExistingTables, tableName])
+                            } else {
+                              setSelectedExistingTables(selectedExistingTables.filter(t => t !== tableName))
+                            }
+                          }}
+                        />
+                        <Label htmlFor={`delete-${tableName}`} className="flex-1">
+                          <div className="font-medium">{table?.displayName || tableName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {table?.description}
+                            {status?.needsUpdate && " • Needs update"}
+                          </div>
+                        </Label>
+                        <div className="flex gap-1">
+                          <Badge variant="default" className="text-xs">
+                            <CheckCircle className="h-3 w-3 mr-1" />
+                            Exists
+                          </Badge>
+                          {status?.needsUpdate && (
+                            <Badge variant="outline" className="text-xs">
+                              Update Available
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {selectedExistingTables.length > 0 && (
+                  <div className="space-y-2 border-t pt-4">
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Warning: Deleting tables will permanently remove all data!
+                      </AlertDescription>
+                    </Alert>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(deletionSQL)}
+                      >
+                        <Copy className="h-4 w-4 mr-1" />
+                        Copy SQL
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => downloadSQL(deletionSQL, "delete-tables.sql")}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Download
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => executeSQL(deletionSQL)}
+                        disabled={executing}
+                      >
+                        <Trash2 className="h-4 w-4 mr-1" />
+                        Delete Tables
+                      </Button>
+                    </div>
+                    <Textarea
+                      value={deletionSQL}
+                      readOnly
+                      className="font-mono text-sm"
+                      rows={6}
+                    />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="text-center py-6 text-muted-foreground">
+                <Database className="h-8 w-8 mx-auto mb-2" />
+                No tables found
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Migration Popup */}
+      {showMigrationPopup && databaseStatus?.updateScript && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <Card className="w-full max-w-2xl max-h-[80vh] overflow-y-auto">
+            <CardHeader>
+              <CardTitle className="flex items-center justify-between">
+                Database Migration
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowMigrationPopup(false)}
+                >
+                  ×
+                </Button>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Alert>
+                <Info className="h-4 w-4" />
+                <AlertDescription>
+                  This script will update existing tables to match the current schema without losing data.
+                </AlertDescription>
+              </Alert>
+              
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => copyToClipboard(databaseStatus.updateScript)}
+                >
+                  <Copy className="h-4 w-4 mr-1" />
+                  Copy SQL
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => downloadSQL(databaseStatus.updateScript, "migration.sql")}
+                >
+                  <Download className="h-4 w-4 mr-1" />
+                  Download
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    executeSQL(databaseStatus.updateScript)
+                    setShowMigrationPopup(false)
+                  }}
+                  disabled={executing}
+                >
+                  <Zap className="h-4 w-4 mr-1" />
+                  Apply Migration
+                </Button>
+              </div>
+              
+              <Textarea
+                value={databaseStatus.updateScript}
+                readOnly
+                className="font-mono text-sm"
+                rows={12}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
