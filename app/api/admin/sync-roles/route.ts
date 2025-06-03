@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { auth, clerkClient } from "@clerk/nextjs"
-import { syncUserRoles, ensureUserHasRole, getUserRoles } from "@/lib/auth-sync"
+import { auth, clerkClient } from "@clerk/nextjs/server"
+import { syncUserRoles, ensureUserHasRole, getUserRoles } from "@/lib/auth-server"
 
 /**
  * API route to synchronize user roles between Clerk and Supabase

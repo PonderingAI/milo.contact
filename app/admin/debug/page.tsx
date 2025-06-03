@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Database, Server, FileText, AlertTriangle, Bug, FileImage } from "lucide-react"
+import { Database, Server, FileText, AlertTriangle, Bug, FileImage, Camera } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -143,6 +143,29 @@ export default function AdminDebugPage() {
             <Link href="/api/setup-rpc-functions" className="w-full">
               <Button variant="default" className="w-full bg-purple-600 hover:bg-purple-700">
                 Fix RPC Functions
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
+        {/* BTS Images Debug Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              BTS Images Debugger
+            </CardTitle>
+            <CardDescription>Debug behind-the-scenes image functionality</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Comprehensive testing tool for BTS images creation, API calls, and database operations. Includes step-by-step debugging and error analysis.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug/bts" className="w-full">
+              <Button variant="default" className="w-full">
+                Open BTS Debugger
               </Button>
             </Link>
           </CardFooter>

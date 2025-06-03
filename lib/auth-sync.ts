@@ -6,8 +6,6 @@
  */
 
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
-import { SupabaseClient } from "@supabase/supabase-js"
-import { auth } from "@clerk/nextjs"
 
 // Types
 export type UserRole = 'admin' | 'editor' | 'viewer'
@@ -58,25 +56,6 @@ export async function hasRoleClient(userId: string, role: UserRole): Promise<boo
  */
 export async function isAdminClient(userId: string): Promise<boolean> {
   return hasRoleClient(userId, 'admin')
-}
-
-/**
- * Gets the current user ID from the auth context
- * For use in client components
- */
-export function getCurrentUserId(): string | null {
-  const { userId } = auth()
-  return userId
-}
-
-/**
- * Checks if the current user is an admin
- * For use in client components
- */
-export async function isCurrentUserAdmin(): Promise<boolean> {
-  const userId = getCurrentUserId()
-  if (!userId) return false
-  return isAdminClient(userId)
 }
 
 /**
@@ -145,15 +124,11 @@ export async function removeRoleClient(userId: string, role: UserRole): Promise<
  */
 export async function syncCurrentUserRoles(): Promise<boolean> {
   try {
-    const userId = getCurrentUserId()
-    if (!userId) return false
-    
     const response = await fetch('/api/admin/sync-roles', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ userId })
+      }
     })
     
     if (!response.ok) {
