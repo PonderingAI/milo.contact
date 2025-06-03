@@ -3,10 +3,15 @@ import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
+  console.log("=== PROJECT CREATE API CALLED ===")
+  
   try {
     // Check if user is authenticated
     const { userId } = auth()
+    console.log("Auth userId:", userId)
+    
     if (!userId) {
+      console.log("No userId - returning 401")
       return NextResponse.json({ 
         error: "Unauthorized", 
         debug_userIdFromAuth: null 
@@ -87,8 +92,16 @@ export async function POST(request: Request) {
       message: "Project created successfully",
     })
   } catch (error) {
-    console.error("Unexpected error creating project:", error)
-    const { userId } = auth()
+    console.error("=== PROJECT CREATE API ERROR ===", error)
+    
+    // Always return JSON, never let the error propagate as HTML
+    let userId = null
+    try {
+      const authResult = auth()
+      userId = authResult.userId
+    } catch (authError) {
+      console.error("Error getting userId in catch block:", authError)
+    }
     
     return NextResponse.json(
       {

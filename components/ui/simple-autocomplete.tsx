@@ -211,7 +211,7 @@ export const SimpleAutocomplete = React.forwardRef<HTMLInputElement, SimpleAutoc
           onBlur={(e) => {
             // Delay closing to allow for selection
             setTimeout(() => {
-              if (!e.currentTarget.contains(document.activeElement)) {
+              if (e.currentTarget && !e.currentTarget.contains(document.activeElement)) {
                 setIsOpenState(false)
               }
             }, 100)

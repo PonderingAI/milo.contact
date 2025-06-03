@@ -608,7 +608,9 @@ export function MediaSelector({
                                     alt={item.filename}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
-                                      e.currentTarget.src = "/placeholder.svg"
+                                      if (e.currentTarget) {
+                                        e.currentTarget.src = "/placeholder.svg"
+                                      }
                                     }}
                                   />
                                   <div className="absolute inset-0 flex items-center justify-center">
@@ -628,7 +630,9 @@ export function MediaSelector({
                                 alt={item.filename}
                                 className="w-full h-full object-cover"
                                 onError={(e) => {
-                                  e.currentTarget.src = "/placeholder.svg"
+                                  if (e.currentTarget) {
+                                    e.currentTarget.src = "/placeholder.svg"
+                                  }
                                 }}
                               />
                             )}
