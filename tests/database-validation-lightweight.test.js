@@ -180,18 +180,16 @@ describe('Database Validation Banner Issue - Lightweight Tests', () => {
   })
 
   describe('User Experience Improvements', () => {
-    test('should provide clear feedback when validation is uncertain', async () => {
-      // When exec_sql is not available, user should understand why
-      // validation might not be 100% accurate
+    test('should gracefully handle validation uncertainty', async () => {
+      // When exec_sql is not available, system should fall back gracefully
+      // without confusing the user with excessive warnings
       
       jest.spyOn(validator, 'executeRawSQL').mockResolvedValue({
         success: false,
         error: 'exec_sql function not available'
       })
 
-      const consoleWarnSpy = jest.spyOn(console, 'warn').mockImplementation()
-      
-      await validator.checkTableColumns({
+      const result = await validator.checkTableColumns({
         name: 'test_table',
         displayName: 'Test Table',
         description: 'Test',
@@ -205,12 +203,10 @@ describe('Database Validation Banner Issue - Lightweight Tests', () => {
         ]
       })
 
-      // Should warn user about validation limitations
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        expect.stringContaining('Cannot check columns for test_table')
-      )
-
-      consoleWarnSpy.mockRestore()
+      // Should fall back to assuming table is correct to avoid false positives
+      expect(result.hasAllColumns).toBe(true)
+      expect(result.missingColumns).toEqual([])
+      expect(result.extraColumns).toEqual([])
     })
 
     test('should provide manual refresh capability in UI context', () => {
