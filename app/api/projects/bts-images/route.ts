@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { getRouteHandlerSupabaseClient, requireAdmin } from "@/lib/auth-sync"
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs"
 
 export async function POST(request: Request) {
@@ -83,7 +83,7 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       data: data || [],
-      message: `Successfully ${data?.length || 0} BTS images processed`,
+      message: `Successfully processed ${data?.length || 0} BTS images`,
       count: data?.length || 0
     })
   } catch (error) {

@@ -292,6 +292,12 @@ export class DatabaseValidator {
    * Check table indexes (simplified)
    */
   async checkTableIndexes(table: TableConfig): Promise<boolean> {
+    // If validation is bypassed, assume everything is correct
+    if (this._bypassValidation || this.isMarkedAsUpToDate()) {
+      console.log(`[DatabaseValidator] Index validation bypassed for ${table.name}`)
+      return true
+    }
+    
     // For now, we'll assume indexes are correct if the table exists
     // A more sophisticated implementation would query pg_indexes
     return true
@@ -301,6 +307,12 @@ export class DatabaseValidator {
    * Check table policies (simplified)
    */
   async checkTablePolicies(table: TableConfig): Promise<boolean> {
+    // If validation is bypassed, assume everything is correct
+    if (this._bypassValidation || this.isMarkedAsUpToDate()) {
+      console.log(`[DatabaseValidator] Policy validation bypassed for ${table.name}`)
+      return true
+    }
+    
     // For now, we'll assume policies are correct if the table exists
     // A more sophisticated implementation would query pg_policies
     return true
