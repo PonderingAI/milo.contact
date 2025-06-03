@@ -306,7 +306,7 @@ ${tablesToInclude.includes('bts_images') ? `
 -- BTS Images table
 CREATE TABLE IF NOT EXISTS bts_images (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  project_id UUID,
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
   image_url TEXT NOT NULL,
   caption TEXT,
   size TEXT,

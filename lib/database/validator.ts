@@ -189,7 +189,7 @@ export class DatabaseValidator {
       console.warn(`Error validating table ${name}:`, error)
     }
 
-    const needsUpdate = exists && (!hasAllColumns || !hasCorrectIndexes || !hasCorrectPolicies)
+    const needsUpdate = exists && !this.isMarkedAsUpToDate() && !this._bypassValidation && (!hasAllColumns || !hasCorrectIndexes || !hasCorrectPolicies)
 
     return {
       name,
