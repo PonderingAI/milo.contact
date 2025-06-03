@@ -45,7 +45,16 @@ export default function CompactDatabaseManager() {
   const checkDatabaseStatus = async () => {
     setLoading(true)
     try {
+      console.log('[DatabaseManager] Checking database status...')
       const status = await databaseValidator.validateDatabase()
+      console.log('[DatabaseManager] Database status received:', {
+        allTablesExist: status.allTablesExist,
+        missingTables: status.missingTables,
+        tablesNeedingUpdate: status.tablesNeedingUpdate,
+        hasUpdateScript: status.updateScript && status.updateScript.trim().length > 0,
+        updateScriptLength: status.updateScript?.length || 0
+      })
+      
       setDatabaseStatus(status)
       setLastCheck(new Date())
 
@@ -166,9 +175,16 @@ export default function CompactDatabaseManager() {
   }
 
   const showMigrationSQLPopup = () => {
+    console.log('Attempting to show migration SQL popup...', {
+      hasUpdateScript: databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0,
+      updateScriptLength: databaseStatus?.updateScript?.length || 0
+    })
+    
     if (databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0) {
+      console.log('Showing migration popup with script:', databaseStatus.updateScript.substring(0, 100) + '...')
       setShowMigrationPopup(true)
     } else {
+      console.log('No migration script available')
       toast({
         title: "No Migration Needed",
         description: "Database is already up to date",
@@ -202,6 +218,17 @@ export default function CompactDatabaseManager() {
         </div>
         
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              console.log('Manual refresh requested')
+              checkDatabaseStatus()
+            }}
+          >
+            <Database className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
           {databaseStatus?.allTablesExist ? (
             <Badge variant="default" className="flex items-center gap-1">
               <CheckCircle className="h-3 w-3" />
@@ -250,8 +277,15 @@ export default function CompactDatabaseManager() {
           <Info className="h-4 w-4 text-white" />
           <AlertDescription className="text-white">
             <div className="flex items-center justify-between">
-              <span>Database schema updates are available for existing tables.</span>
-              <div className="flex gap-2">
+              <div className="flex-1">
+                <div>Database schema updates are available for existing tables.</div>
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="text-xs mt-1 opacity-75">
+                    Debug: {databaseStatus.tablesNeedingUpdate.join(', ')} need updates
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 ml-4">
                 <Button 
                   size="sm" 
                   variant="outline"
@@ -265,19 +299,20 @@ export default function CompactDatabaseManager() {
                   size="sm" 
                   variant="outline"
                   onClick={() => {
+                    console.log('Marking database as up to date...')
                     // Mark database as up to date and refresh
                     databaseValidator.markAsUpToDate()
                     setDatabaseStatus(null)
                     checkDatabaseStatus()
                     toast({
                       title: "Marked as Up to Date",
-                      description: "Database validation will be bypassed for 1 hour"
+                      description: "Database validation will be bypassed for 1 hour. The banner will disappear on next check."
                     })
                   }}
                   className="border-yellow-300 hover:bg-yellow-700 text-white"
                 >
                   <CheckCircle className="h-4 w-4 mr-1" />
-                  Mark as Up to Date
+                  Already Applied
                 </Button>
               </div>
             </div>
