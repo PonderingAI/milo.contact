@@ -31,11 +31,28 @@ export default function CompactDatabaseManager() {
   const [selectedExistingTables, setSelectedExistingTables] = useState<string[]>([])
   const [showMigrationPopup, setShowMigrationPopup] = useState(false)
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 30 seconds, but respect "marked as up to date" status
   useEffect(() => {
     checkDatabaseStatus()
     
     const interval = setInterval(() => {
+      // Only auto-refresh if not marked as up to date recently
+      try {
+        const markedUpToDate = localStorage.getItem("database_marked_up_to_date")
+        if (markedUpToDate) {
+          const timestamp = parseInt(markedUpToDate)
+          const timeSinceMarked = Date.now() - timestamp
+          const fiveMinutes = 5 * 60 * 1000 // 5 minutes
+          
+          if (timeSinceMarked < fiveMinutes) {
+            console.log('[DatabaseManager] Skipping auto-refresh - recently marked as up to date')
+            return
+          }
+        }
+      } catch (error) {
+        console.log('[DatabaseManager] Error checking mark for auto-refresh:', error)
+      }
+      
       checkDatabaseStatus()
     }, 30000)
 
@@ -303,7 +320,7 @@ export default function CompactDatabaseManager() {
                 <Button 
                   size="sm" 
                   variant="outline"
-                  onClick={() => {
+                  onClick={async () => {
                     console.log('Marking database as up to date...', {
                       tablesNeedingUpdate: databaseStatus.tablesNeedingUpdate,
                       updateScriptLength: databaseStatus.updateScript.length
@@ -312,18 +329,27 @@ export default function CompactDatabaseManager() {
                     // Mark database as up to date and refresh
                     databaseValidator.markAsUpToDate()
                     
+                    // Verify the mark was set
+                    try {
+                      const mark = localStorage.getItem("database_marked_up_to_date")
+                      console.log('Verification: mark set to', mark)
+                    } catch (error) {
+                      console.error('Error verifying mark:', error)
+                    }
+                    
                     // Clear current status to hide banner immediately
                     setDatabaseStatus(null)
                     
-                    // Force a fresh check after a brief delay
-                    setTimeout(() => {
-                      checkDatabaseStatus()
-                    }, 500)
-                    
                     toast({
                       title: "Marked as Up to Date",
-                      description: "Database validation bypassed for 1 hour. Rechecking database status..."
+                      description: "Database validation bypassed for 1 hour. Banner will be hidden until next validation issue."
                     })
+                    
+                    // Force a fresh check after a longer delay to ensure mark is respected
+                    setTimeout(async () => {
+                      console.log('Re-checking database status after marking as up to date...')
+                      await checkDatabaseStatus()
+                    }, 1000) // Increased delay to 1 second
                   }}
                   className="border-yellow-300 hover:bg-yellow-700 text-white"
                 >

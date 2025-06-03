@@ -54,15 +54,23 @@ export class DatabaseValidator {
   private isMarkedAsUpToDate(): boolean {
     try {
       const markedUpToDate = localStorage.getItem("database_marked_up_to_date")
-      if (!markedUpToDate) return false
+      if (!markedUpToDate) {
+        console.log('[DatabaseValidator] No mark found in localStorage')
+        return false
+      }
       
       const timestamp = parseInt(markedUpToDate)
       const oneHour = 60 * 60 * 1000 // 1 hour in milliseconds
       const now = Date.now()
+      const timeDiff = now - timestamp
+      const isValid = timeDiff < oneHour
+      
+      console.log(`[DatabaseValidator] Mark check: timestamp=${timestamp}, now=${now}, diff=${timeDiff}ms, valid=${isValid}`)
       
       // Check if marked as up to date within the last hour
-      return (now - timestamp) < oneHour
-    } catch {
+      return isValid
+    } catch (error) {
+      console.log(`[DatabaseValidator] Error checking mark: ${error}`)
       return false
     }
   }
@@ -72,10 +80,19 @@ export class DatabaseValidator {
    */
   markAsUpToDate() {
     try {
-      console.log('[DatabaseValidator] Marking database as up to date for 1 hour')
-      localStorage.setItem("database_marked_up_to_date", Date.now().toString())
-    } catch {
-      // Silently handle localStorage errors
+      const timestamp = Date.now().toString()
+      console.log(`[DatabaseValidator] Marking database as up to date for 1 hour at timestamp: ${timestamp}`)
+      localStorage.setItem("database_marked_up_to_date", timestamp)
+      
+      // Verify it was set correctly
+      const verify = localStorage.getItem("database_marked_up_to_date")
+      console.log(`[DatabaseValidator] Verification: stored value = ${verify}`)
+      
+      if (verify !== timestamp) {
+        console.error(`[DatabaseValidator] ERROR: Failed to set localStorage correctly. Expected: ${timestamp}, Got: ${verify}`)
+      }
+    } catch (error) {
+      console.error(`[DatabaseValidator] ERROR: Failed to set localStorage:`, error)
     }
   }
 
@@ -191,6 +208,16 @@ export class DatabaseValidator {
 
     const needsUpdate = exists && !this.isMarkedAsUpToDate() && !this._bypassValidation && (!hasAllColumns || !hasCorrectIndexes || !hasCorrectPolicies)
 
+    console.log(`[DatabaseValidator] ${name} needsUpdate calculation:`, {
+      exists,
+      isMarkedAsUpToDate: this.isMarkedAsUpToDate(),
+      bypassValidation: this._bypassValidation,
+      hasAllColumns,
+      hasCorrectIndexes,
+      hasCorrectPolicies,
+      needsUpdate
+    })
+
     return {
       name,
       exists,
@@ -249,7 +276,18 @@ export class DatabaseValidator {
       const result = await this.executeRawSQL(sql)
       
       if (!result.success || !result.data) {
-        console.log(`[DatabaseValidator] Failed to query columns for ${table.name}, assuming correct to avoid false positives:`, result.error)
+        console.log(`[DatabaseValidator] Failed to query columns for ${table.name}, error: ${result.error}`)
+        console.log(`[DatabaseValidator] This might be because exec_sql is not available or table doesn't exist`)
+        
+        // Special handling: if table exists but we can't query columns, 
+        // and user has marked as up to date, assume columns are correct
+        const isMarked = this.isMarkedAsUpToDate()
+        if (isMarked) {
+          console.log(`[DatabaseValidator] Table ${table.name} marked as up to date, assuming columns are correct despite query failure`)
+          return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
+        }
+        
+        console.log(`[DatabaseValidator] Table ${table.name} not marked as up to date, assuming correct to avoid false positives`)
         // Fallback: assume columns are correct if table exists to avoid false positives
         // This is especially important when exec_sql is not available in production
         return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
