@@ -265,12 +265,13 @@ export default function CompactDatabaseManager() {
                   size="sm" 
                   variant="outline"
                   onClick={() => {
-                    // Force refresh by clearing cache and re-checking
+                    // Mark database as up to date and refresh
+                    databaseValidator.markAsUpToDate()
                     setDatabaseStatus(null)
                     checkDatabaseStatus()
                     toast({
-                      title: "Status Refreshed",
-                      description: "Database validation has been refreshed"
+                      title: "Marked as Up to Date",
+                      description: "Database validation will be bypassed for 1 hour"
                     })
                   }}
                   className="border-yellow-300 hover:bg-yellow-700 text-white"

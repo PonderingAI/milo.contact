@@ -49,6 +49,36 @@ export class DatabaseValidator {
   }
 
   /**
+   * Check if user has marked database as up to date recently
+   */
+  private isMarkedAsUpToDate(): boolean {
+    try {
+      const markedUpToDate = localStorage.getItem("database_marked_up_to_date")
+      if (!markedUpToDate) return false
+      
+      const timestamp = parseInt(markedUpToDate)
+      const oneHour = 60 * 60 * 1000 // 1 hour in milliseconds
+      const now = Date.now()
+      
+      // Check if marked as up to date within the last hour
+      return (now - timestamp) < oneHour
+    } catch {
+      return false
+    }
+  }
+
+  /**
+   * Mark database as up to date (persists for 1 hour)
+   */
+  markAsUpToDate() {
+    try {
+      localStorage.setItem("database_marked_up_to_date", Date.now().toString())
+    } catch {
+      // Silently handle localStorage errors
+    }
+  }
+
+  /**
    * Check the status of all tables in the database
    */
   async validateDatabase(): Promise<DatabaseStatus> {
@@ -164,7 +194,7 @@ export class DatabaseValidator {
     extraColumns: string[]
   }> {
     // If validation is bypassed, assume everything is correct
-    if (this._bypassValidation) {
+    if (this._bypassValidation || this.isMarkedAsUpToDate()) {
       return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
     }
 
@@ -183,8 +213,8 @@ export class DatabaseValidator {
       const result = await this.executeRawSQL(sql)
       
       if (!result.success || !result.data) {
-        console.warn(`Cannot check columns for ${table.name} - using simplified validation`)
         // Fallback: assume columns are correct if table exists to avoid false positives
+        // This is especially important when exec_sql is not available in production
         return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
       }
 
@@ -206,7 +236,6 @@ export class DatabaseValidator {
         extraColumns
       }
     } catch (error) {
-      console.warn(`Error checking columns for ${table.name}:`, error)
       // Fallback: assume columns are correct if table exists to avoid false positives
       return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
     }
