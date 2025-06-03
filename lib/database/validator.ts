@@ -337,6 +337,7 @@ export class DatabaseValidator {
    */
   generateUpdateScript(tableNames: string[], tableStatuses: Record<string, TableStatus>): string {
     if (tableNames.length === 0) {
+      console.log(`[DatabaseValidator] No tables need updates, returning empty script`)
       return ""
     }
 
@@ -356,11 +357,21 @@ export class DatabaseValidator {
       }
 
       console.log(`[DatabaseValidator] Checking ${tableName}:`, {
+        exists: status.exists,
+        hasAllColumns: status.hasAllColumns,
         missingColumns: status.missingColumns.length,
+        hasCorrectIndexes: status.hasCorrectIndexes,
         missingIndexes: status.missingIndexes.length,
+        hasCorrectPolicies: status.hasCorrectPolicies,
         missingPolicies: status.missingPolicies.length,
         needsUpdate: status.needsUpdate
       })
+
+      // Skip tables that don't exist (they should be in missing tables, not update tables)
+      if (!status.exists) {
+        console.log(`[DatabaseValidator] Skipping ${tableName}: table doesn't exist (should be in missing tables list)`)
+        continue
+      }
 
       let tableUpdates = ""
 

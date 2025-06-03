@@ -281,7 +281,12 @@ export default function CompactDatabaseManager() {
                 <div>Database schema updates are available for existing tables.</div>
                 {process.env.NODE_ENV === 'development' && (
                   <div className="text-xs mt-1 opacity-75">
-                    Debug: {databaseStatus.tablesNeedingUpdate.join(', ')} need updates
+                    Debug: {databaseStatus.tablesNeedingUpdate.join(', ')} need updates | Script length: {databaseStatus.updateScript.length}
+                  </div>
+                )}
+                {databaseStatus.tablesNeedingUpdate.length > 0 && (
+                  <div className="text-xs mt-1 opacity-90">
+                    Tables: {databaseStatus.tablesNeedingUpdate.join(', ')}
                   </div>
                 )}
               </div>
@@ -299,14 +304,25 @@ export default function CompactDatabaseManager() {
                   size="sm" 
                   variant="outline"
                   onClick={() => {
-                    console.log('Marking database as up to date...')
+                    console.log('Marking database as up to date...', {
+                      tablesNeedingUpdate: databaseStatus.tablesNeedingUpdate,
+                      updateScriptLength: databaseStatus.updateScript.length
+                    })
+                    
                     // Mark database as up to date and refresh
                     databaseValidator.markAsUpToDate()
+                    
+                    // Clear current status to hide banner immediately
                     setDatabaseStatus(null)
-                    checkDatabaseStatus()
+                    
+                    // Force a fresh check after a brief delay
+                    setTimeout(() => {
+                      checkDatabaseStatus()
+                    }, 500)
+                    
                     toast({
                       title: "Marked as Up to Date",
-                      description: "Database validation will be bypassed for 1 hour. The banner will disappear on next check."
+                      description: "Database validation bypassed for 1 hour. Rechecking database status..."
                     })
                   }}
                   className="border-yellow-300 hover:bg-yellow-700 text-white"
