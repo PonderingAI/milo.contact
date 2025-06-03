@@ -341,13 +341,13 @@ CREATE TABLE IF NOT EXISTS media (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   filename TEXT NOT NULL,
   original_filename TEXT,
-  file_path TEXT NOT NULL,
-  file_size INTEGER,
-  mime_type TEXT,
-  width INTEGER,
-  height INTEGER,
-  alt_text TEXT,
-  caption TEXT,
+  filepath TEXT,
+  public_url TEXT,
+  filesize INTEGER,
+  filetype TEXT,
+  thumbnail_url TEXT,
+  tags TEXT[],
+  metadata JSONB,
   uploaded_by TEXT,
   project_id UUID REFERENCES projects(id) ON DELETE SET NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -356,8 +356,10 @@ CREATE TABLE IF NOT EXISTS media (
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_media_project_id ON media(project_id);
-CREATE INDEX IF NOT EXISTS idx_media_mime_type ON media(mime_type);
+CREATE INDEX IF NOT EXISTS idx_media_filetype ON media(filetype);
 CREATE INDEX IF NOT EXISTS idx_media_uploaded_by ON media(uploaded_by);
+CREATE INDEX IF NOT EXISTS idx_media_public_url ON media(public_url);
+CREATE INDEX IF NOT EXISTS idx_media_tags ON media USING GIN(tags);
 
 -- Add RLS policies
 ALTER TABLE media ENABLE ROW LEVEL SECURITY;
@@ -414,20 +416,105 @@ END $$;`,
       { name: "id", type: "UUID", constraints: ["PRIMARY KEY"], default: "uuid_generate_v4()" },
       { name: "filename", type: "TEXT", constraints: ["NOT NULL"] },
       { name: "original_filename", type: "TEXT" },
-      { name: "file_path", type: "TEXT", constraints: ["NOT NULL"] },
-      { name: "file_size", type: "INTEGER" },
-      { name: "mime_type", type: "TEXT" },
-      { name: "width", type: "INTEGER" },
-      { name: "height", type: "INTEGER" },
-      { name: "alt_text", type: "TEXT" },
-      { name: "caption", type: "TEXT" },
+      { name: "filepath", type: "TEXT" },
+      { name: "public_url", type: "TEXT" },
+      { name: "filesize", type: "INTEGER" },
+      { name: "filetype", type: "TEXT" },
+      { name: "thumbnail_url", type: "TEXT" },
+      { name: "tags", type: "TEXT[]" },
+      { name: "metadata", type: "JSONB" },
       { name: "uploaded_by", type: "TEXT" },
       { name: "project_id", type: "UUID" },
       { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
       { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
     ],
-    indexes: ["idx_media_project_id", "idx_media_mime_type", "idx_media_uploaded_by"],
+    indexes: ["idx_media_project_id", "idx_media_filetype", "idx_media_uploaded_by", "idx_media_public_url", "idx_media_tags"],
     policies: ["public_read_media", "admins_manage_media"]
+  },
+
+  bts_images: {
+    name: "bts_images",
+    displayName: "Behind the Scenes Images",
+    description: "Stores behind-the-scenes images and videos for projects",
+    sql: `
+CREATE TABLE IF NOT EXISTS bts_images (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  image_url TEXT NOT NULL,
+  caption TEXT,
+  category TEXT DEFAULT 'general',
+  sort_order INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes
+CREATE INDEX IF NOT EXISTS idx_bts_images_project_id ON bts_images(project_id);
+CREATE INDEX IF NOT EXISTS idx_bts_images_sort_order ON bts_images(sort_order);
+
+-- Add RLS policies
+ALTER TABLE bts_images ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'bts_images' AND policyname = 'public_read_bts_images'
+  ) THEN
+    CREATE POLICY "public_read_bts_images"
+    ON bts_images
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage BTS images
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'bts_images' AND policyname = 'admins_manage_bts_images'
+  ) THEN
+    CREATE POLICY "admins_manage_bts_images"
+    ON bts_images
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;`,
+    dependencies: ["user_roles", "projects"],
+    required: false,
+    category: "content",
+    version: 1,
+    columns: [
+      { name: "id", type: "UUID", constraints: ["PRIMARY KEY"], default: "uuid_generate_v4()" },
+      { name: "project_id", type: "UUID" },
+      { name: "image_url", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "caption", type: "TEXT" },
+      { name: "category", type: "TEXT", default: "'general'" },
+      { name: "sort_order", type: "INTEGER" },
+      { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
+      { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
+    ],
+    indexes: ["idx_bts_images_project_id", "idx_bts_images_sort_order"],
+    policies: ["public_read_bts_images", "admins_manage_bts_images"]
   },
 
   dependencies: {
