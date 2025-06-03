@@ -202,15 +202,65 @@ export default function RoleDebugPage() {
 
           case 6: // Test Admin Role Assignment
             if (currentUser.publicMetadata?.superAdmin === true) {
-              // Test removing admin role and adding it back
-              const currentRoles = (currentUser.publicMetadata?.roles as string[]) || []
-              const hasAdmin = currentRoles.includes('admin')
+              // Get current state
+              const currentRolesResponse = await fetch('/api/admin/get-user-roles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id })
+              })
               
-              result = {
-                isSuperAdmin: true,
-                currentHasAdmin: hasAdmin,
-                testDescription: hasAdmin ? "Will test removing and re-adding admin role" : "Will test adding admin role",
-                skipReason: null
+              const currentRolesData = currentRolesResponse.ok ? await currentRolesResponse.json() : { roles: [] }
+              const currentClerkRoles = (currentUser.publicMetadata?.roles as string[]) || []
+              const hasAdminInClerk = currentClerkRoles.includes('admin')
+              const hasAdminInSupabase = currentRolesData.roles.includes('admin')
+              
+              console.log("[role-debug] Testing admin role assignment", {
+                hasAdminInClerk,
+                hasAdminInSupabase,
+                currentClerkRoles,
+                currentSupabaseRoles: currentRolesData.roles
+              })
+              
+              // Test adding admin role if not present
+              if (!hasAdminInClerk) {
+                console.log("[role-debug] Adding admin role via toggle API")
+                const toggleResponse = await fetch("/api/admin/toggle-role", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    userId: currentUser.id,
+                    role: "admin",
+                    action: "add",
+                  }),
+                })
+                
+                const toggleResult = toggleResponse.ok ? await toggleResponse.json() : { error: "Failed to toggle role" }
+                console.log("[role-debug] Toggle role result:", toggleResult)
+                
+                // Trigger role sync after adding
+                const syncAfterAddResponse = await fetch('/api/admin/sync-roles', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: currentUser.id })
+                })
+                
+                const syncAfterAddData = syncAfterAddResponse.ok ? await syncAfterAddResponse.json() : { error: "Sync failed" }
+                console.log("[role-debug] Sync after add result:", syncAfterAddData)
+                
+                result = {
+                  isSuperAdmin: true,
+                  initialState: { hasAdminInClerk, hasAdminInSupabase },
+                  toggleResult,
+                  syncAfterAdd: syncAfterAddData,
+                  testDescription: "Added admin role and synced to Supabase"
+                }
+              } else {
+                result = {
+                  isSuperAdmin: true,
+                  hasAdminRole: true,
+                  skipReason: "User already has admin role in Clerk",
+                  testDescription: "Skipped - user already has admin role"
+                }
               }
             } else {
               result = {

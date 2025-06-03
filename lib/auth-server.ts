@@ -125,9 +125,11 @@ export async function syncClerkUserToSupabase(userId: string) {
  */
 export async function ensureUserHasRole(userId: string, role: UserRole): Promise<boolean> {
   try {
+    console.log(`[ensureUserHasRole] Starting for userId: ${userId}, role: ${role}`)
     const supabase = createRouteHandlerClient({ cookies })
     
     // Check if the role already exists
+    console.log(`[ensureUserHasRole] Checking existing roles for user ${userId}`)
     const { data: existingRoles, error: checkError } = await supabase
       .from('user_roles')
       .select('*')
@@ -135,28 +137,36 @@ export async function ensureUserHasRole(userId: string, role: UserRole): Promise
       .eq('role', role)
     
     if (checkError) {
-      console.error("Error checking user role:", checkError)
+      console.error("[ensureUserHasRole] Error checking user role:", checkError)
       return false
     }
     
+    console.log(`[ensureUserHasRole] Existing roles found:`, existingRoles)
+    
     // If role doesn't exist, add it
     if (!existingRoles || existingRoles.length === 0) {
-      const { error: insertError } = await supabase
+      console.log(`[ensureUserHasRole] Role ${role} not found, inserting for user ${userId}`)
+      const { data: insertData, error: insertError } = await supabase
         .from('user_roles')
         .insert({
           user_id: userId,
           role
         })
+        .select()
       
       if (insertError) {
-        console.error("Error assigning role:", insertError)
+        console.error("[ensureUserHasRole] Error assigning role:", insertError)
         return false
       }
+      
+      console.log(`[ensureUserHasRole] Successfully inserted role:`, insertData)
+    } else {
+      console.log(`[ensureUserHasRole] Role ${role} already exists for user ${userId}`)
     }
     
     return true
   } catch (error) {
-    console.error("Error ensuring user role:", error)
+    console.error("[ensureUserHasRole] Error ensuring user role:", error)
     return false
   }
 }
@@ -192,35 +202,56 @@ export async function removeUserRole(userId: string, role: UserRole): Promise<bo
  */
 export async function syncUserRoles(userId: string): Promise<boolean> {
   try {
+    console.log(`[syncUserRoles] Starting sync for userId: ${userId}`)
+    
     // Ensure user exists in Supabase
-    await syncClerkUserToSupabase(userId)
+    console.log(`[syncUserRoles] Ensuring user exists in Supabase`)
+    const userSyncResult = await syncClerkUserToSupabase(userId)
+    console.log(`[syncUserRoles] User sync result:`, userSyncResult)
     
     // Get user from Clerk
+    console.log(`[syncUserRoles] Fetching user from Clerk`)
     const user = await clerkClient.users.getUser(userId)
     if (!user) {
       throw new Error(`User ${userId} not found in Clerk`)
     }
+    
+    console.log(`[syncUserRoles] Clerk user metadata:`, {
+      id: user.id,
+      publicMetadata: user.publicMetadata,
+      isSuperAdmin: user.publicMetadata?.superAdmin === true
+    })
     
     // Check if user is superAdmin in Clerk
     const isSuperAdmin = user.publicMetadata?.superAdmin === true
     
     // If user is superAdmin, ensure they have admin role in Supabase
     if (isSuperAdmin) {
-      await ensureUserHasRole(userId, 'admin')
+      console.log(`[syncUserRoles] User is superAdmin, ensuring admin role`)
+      const adminRoleResult = await ensureUserHasRole(userId, 'admin')
+      console.log(`[syncUserRoles] Admin role ensure result:`, adminRoleResult)
     }
     
     // Check if user has admin role in Clerk metadata
     const hasAdminRole = Array.isArray(user.publicMetadata?.roles) && 
       (user.publicMetadata?.roles as string[]).includes('admin')
     
+    console.log(`[syncUserRoles] User has admin role in Clerk metadata:`, hasAdminRole)
+    
     // If user has admin role in Clerk metadata, ensure they have it in Supabase
     if (hasAdminRole) {
-      await ensureUserHasRole(userId, 'admin')
+      console.log(`[syncUserRoles] Ensuring admin role from Clerk metadata`)
+      const adminRoleFromClerkResult = await ensureUserHasRole(userId, 'admin')
+      console.log(`[syncUserRoles] Admin role from Clerk result:`, adminRoleFromClerkResult)
     }
+    
+    // Verify final state
+    const finalRoles = await getUserRoles(userId)
+    console.log(`[syncUserRoles] Final roles for user ${userId}:`, finalRoles)
     
     return true
   } catch (error) {
-    console.error("Error syncing user roles:", error)
+    console.error("[syncUserRoles] Error syncing user roles:", error)
     return false
   }
 }
