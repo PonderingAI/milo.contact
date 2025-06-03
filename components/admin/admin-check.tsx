@@ -61,6 +61,7 @@ export default function AdminCheck({ children }: AdminCheckProps) {
         // If user is superAdmin but doesn't have admin role in Supabase,
         // we need to sync roles by calling the API
         if (isSuperAdmin && !hasAdminRoleInSupabase) {
+          console.log("SuperAdmin detected without admin role in Supabase - syncing roles...")
           try {
             // Call API to sync roles
             const response = await fetch('/api/admin/sync-roles', {
@@ -71,11 +72,42 @@ export default function AdminCheck({ children }: AdminCheckProps) {
               body: JSON.stringify({ userId: user.id })
             })
             
-            if (!response.ok) {
-              console.warn('Failed to sync admin role, but continuing since user is superAdmin')
+            const syncData = await response.json()
+            
+            if (response.ok) {
+              console.log("Role sync successful:", syncData)
+              // Re-check admin role in Supabase after sync
+              const newAdminRoleInSupabase = await hasRoleClient(user.id, 'admin')
+              if (newAdminRoleInSupabase) {
+                console.log("Admin role successfully synced to Supabase")
+              } else {
+                console.warn("Role sync reported success but admin role still not found in Supabase")
+              }
+            } else {
+              console.warn('Failed to sync admin role:', syncData.error)
             }
           } catch (syncError) {
             console.error('Error syncing roles:', syncError)
+          }
+        }
+        
+        // Also sync if user has admin role in Clerk but not in Supabase
+        if (hasAdminRoleInClerk && !hasAdminRoleInSupabase) {
+          console.log("Admin role in Clerk but not Supabase - syncing roles...")
+          try {
+            const response = await fetch('/api/admin/sync-roles', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ userId: user.id })
+            })
+            
+            if (response.ok) {
+              console.log("Role sync successful for Clerk admin role")
+            }
+          } catch (syncError) {
+            console.error('Error syncing Clerk admin role:', syncError)
           }
         }
         

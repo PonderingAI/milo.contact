@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { Database, Server, FileText, AlertTriangle, Bug, FileImage, Camera } from "lucide-react"
+import { Database, Server, FileText, AlertTriangle, Bug, FileImage, Camera, Shield } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 
@@ -166,6 +166,29 @@ export default function AdminDebugPage() {
             <Link href="/admin/debug/bts" className="w-full">
               <Button variant="default" className="w-full">
                 Open BTS Debugger
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
+        {/* Role System Debug Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="h-5 w-5" />
+              Role System Debugger
+            </CardTitle>
+            <CardDescription>Debug user authentication and role management</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Test role synchronization between Clerk and Supabase, debug BTS permission issues, and verify admin role assignments.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug/roles" className="w-full">
+              <Button variant="default" className="w-full">
+                Open Role Debugger
               </Button>
             </Link>
           </CardFooter>
