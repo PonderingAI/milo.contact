@@ -1,0 +1,108 @@
+# Cursor AI Editor Rules for milo.contact
+
+## Project Context
+Portfolio website with Next.js 15, TypeScript, Tailwind CSS, and Supabase. Features comprehensive database management system with centralized schema, validation, and testing.
+
+## Core Development Rules
+
+### Package Management Priority
+1. **Primary**: `pnpm` for local development
+2. **Production/Vercel**: `npm install --legacy-peer-deps` 
+3. **Never use**: `yarn` or plain `npm install`
+
+### Critical Dependencies
+```json
+{
+  "react": "18.3.1",
+  "react-dom": "18.3.1", 
+  "@types/react": "18.3.12",
+  "@types/react-dom": "18.3.1",
+  "next": "15.2.4"
+}
+```
+
+### Forbidden Dependencies
+- ❌ `@remix-run/react`, `@sveltejs/kit`, `svelte`, `vue`, `vue-router`
+- ❌ Node core modules: `fs`, `path`, `crypto`, `util`, `child_process`
+- ❌ Any dependency with version `"latest"`
+- ❌ React 19 or any package requiring React >18.3.1
+
+### Build Commands
+```bash
+# Development
+pnpm install                    # Install dependencies
+pnpm run dev                    # Development server
+pnpm run build                  # Production build
+
+# Production/Vercel build setting
+npm install --legacy-peer-deps && npm run build
+
+# Testing
+pnpm run lint                   # ESLint check
+pnpm run test                   # Jest tests
+```
+
+### Database Schema Rules
+- **Single source**: `lib/database/schema.ts`
+- **Migration safety**: Handle NOT NULL columns properly
+- **Testing**: Use predefined configurations (minimal/basic/full/development)
+
+### Code Quality Standards
+- TypeScript strict mode
+- Proper error handling with try-catch
+- Client-side: `createClientComponentClient()`
+- Component composition over inheritance
+
+### Common Fixes
+1. **React version conflicts**: Always use exact React 18.3.1, never React 19
+2. **Vercel build failures**: Use `npm install --legacy-peer-deps && npm run build`
+3. **Missing .bin directory**: Clean install with `rm -rf node_modules *.lock && pnpm install`
+4. **NOT NULL migration errors**: Add column as nullable first, then set NOT NULL
+5. **Font loading blocks**: Use Tailwind fallback fonts
+6. **Dependency conflicts**: Remove conflicting packages (@remix-run/react, svelte, vue, etc.)
+
+### File Organization
+```
+lib/database/               # Database management
+components/admin/           # Admin UI components  
+app/api/database/          # Database API routes
+tests/                     # Test files
+docs/                      # Documentation
+```
+
+### AI Assistant Commands
+```bash
+# Quick setup
+pnpm install && pnpm run dev
+
+# Database management
+npm run db:validate
+npm run db:generate basic
+npm run db:test minimal
+
+# Health check
+pnpm run build
+pnpm run lint
+git status --porcelain
+```
+
+## Code Style Preferences
+- Functional components with hooks
+- TypeScript interfaces over types
+- Tailwind CSS classes
+- Clear error messages
+- Minimal prop drilling
+
+## Performance Guidelines
+- Auto-refresh every 30 seconds max
+- Lazy load heavy components
+- Use React.memo for expensive renders
+- Minimize API calls
+
+## Testing Strategy
+- Unit tests for utilities
+- Integration tests for APIs
+- Mock Supabase for testing
+- Test database configs for safe testing
+
+Remember: Prioritize stability and developer experience. Always test builds before committing.
