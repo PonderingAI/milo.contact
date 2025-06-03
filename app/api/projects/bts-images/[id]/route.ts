@@ -23,7 +23,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       .from("bts_images")
       .select("*")
       .eq("project_id", projectId)
-      .order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true })
 
     if (error) {
       console.error("Error fetching BTS images:", error)

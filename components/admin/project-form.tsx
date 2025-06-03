@@ -952,8 +952,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
               body: JSON.stringify({
                 projectId: project.id,
                 images: allBtsMedia,
-                replaceExisting: true, // Add this flag to indicate we want to replace existing media
-                skipSortOrder: true, // Add this flag to skip sort_order if the column doesn't exist
+                replaceExisting: true, // Replace existing media
               }),
             })
 

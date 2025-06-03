@@ -439,18 +439,17 @@ END $$;`,
     sql: `
 CREATE TABLE IF NOT EXISTS bts_images (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  project_id UUID,
   image_url TEXT NOT NULL,
   caption TEXT,
-  category TEXT DEFAULT 'general',
-  sort_order INTEGER,
+  size TEXT,
+  aspect_ratio TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  category TEXT DEFAULT 'general'
 );
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_bts_images_project_id ON bts_images(project_id);
-CREATE INDEX IF NOT EXISTS idx_bts_images_sort_order ON bts_images(sort_order);
 
 -- Add RLS policies
 ALTER TABLE bts_images ENABLE ROW LEVEL SECURITY;
@@ -508,12 +507,12 @@ END $$;`,
       { name: "project_id", type: "UUID" },
       { name: "image_url", type: "TEXT", constraints: ["NOT NULL"] },
       { name: "caption", type: "TEXT" },
-      { name: "category", type: "TEXT", default: "'general'" },
-      { name: "sort_order", type: "INTEGER" },
+      { name: "size", type: "TEXT" },
+      { name: "aspect_ratio", type: "TEXT" },
       { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
-      { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
+      { name: "category", type: "TEXT", default: "'general'" }
     ],
-    indexes: ["idx_bts_images_project_id", "idx_bts_images_sort_order"],
+    indexes: ["idx_bts_images_project_id"],
     policies: ["public_read_bts_images", "admins_manage_bts_images"]
   },
 

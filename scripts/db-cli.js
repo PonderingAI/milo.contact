@@ -306,18 +306,17 @@ ${tablesToInclude.includes('bts_images') ? `
 -- BTS Images table
 CREATE TABLE IF NOT EXISTS bts_images (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  project_id UUID REFERENCES projects(id) ON DELETE CASCADE,
+  project_id UUID,
   image_url TEXT NOT NULL,
   caption TEXT,
-  category TEXT DEFAULT 'general',
-  sort_order INTEGER,
+  size TEXT,
+  aspect_ratio TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+  category TEXT DEFAULT 'general'
 );
 
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_bts_images_project_id ON bts_images(project_id);
-CREATE INDEX IF NOT EXISTS idx_bts_images_sort_order ON bts_images(sort_order);
 
 -- Add RLS policies
 ALTER TABLE bts_images ENABLE ROW LEVEL SECURITY;

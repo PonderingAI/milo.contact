@@ -3,22 +3,6 @@ import { cookies } from "next/headers"
 import { getRouteHandlerSupabaseClient, requireAdmin } from "@/lib/auth-sync"
 import { auth } from "@clerk/nextjs"
 
-// Add this function to check if a column exists in a table
-async function columnExists(supabase: any, table: string, column: string) {
-  try {
-    const { data, error } = await supabase.rpc("exec_sql", {
-      query: `SELECT column_name FROM information_schema.columns 
-              WHERE table_name = '${table}' AND column_name = '${column}'`,
-    })
-
-    if (error) throw error
-    return data && data.length > 0
-  } catch (error) {
-    console.error(`Error checking if column ${column} exists in ${table}:`, error)
-    return false
-  }
-}
-
 export async function POST(request: Request) {
   try {
     // Check if user is authenticated and has admin role
@@ -35,7 +19,7 @@ export async function POST(request: Request) {
     
     // Parse request body
     const req = await request.json()
-    const { projectId, images, replaceExisting, skipSortOrder } = req
+    const { projectId, images, replaceExisting } = req
 
     if (!projectId || !images || !Array.isArray(images)) {
       return NextResponse.json({ 
@@ -60,9 +44,6 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-    // Check if sort_order column exists
-    const hasSortOrder = skipSortOrder ? false : await columnExists(supabase, "bts_images", "sort_order")
-
     // Delete existing images if requested
     if (replaceExisting) {
       const { error: deleteError } = await supabase.from("bts_images").delete().eq("project_id", projectId)
@@ -78,16 +59,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Prepare BTS image data
-    const btsImageData = images.map((image, index) => {
-      const baseData = {
-        project_id: projectId,
-        image_url: image,
-      }
-
-      // Only add sort_order if the column exists
-      return hasSortOrder ? { ...baseData, sort_order: index } : baseData
-    })
+    // Prepare BTS image data - use the actual table schema
+    const btsImageData = images.map((image) => ({
+      project_id: projectId,
+      image_url: image,
+    }))
 
     // Insert BTS images
     const { data, error } = await supabase.from("bts_images").insert(btsImageData).select()

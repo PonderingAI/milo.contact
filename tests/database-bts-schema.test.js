@@ -31,9 +31,9 @@ describe('Database Schema BTS Images Integration', () => {
     expect(columnNames).toContain('image_url')
     expect(columnNames).toContain('caption')
     expect(columnNames).toContain('category')
-    expect(columnNames).toContain('sort_order')
+    expect(columnNames).toContain('size')
+    expect(columnNames).toContain('aspect_ratio')
     expect(columnNames).toContain('created_at')
-    expect(columnNames).toContain('updated_at')
   })
 
   test('bts_images table should have proper SQL definition', () => {
@@ -41,8 +41,9 @@ describe('Database Schema BTS Images Integration', () => {
     
     expect(btsImagesTable.sql).toBeDefined()
     expect(btsImagesTable.sql).toContain('CREATE TABLE IF NOT EXISTS bts_images')
-    expect(btsImagesTable.sql).toContain('project_id UUID REFERENCES projects(id) ON DELETE CASCADE')
     expect(btsImagesTable.sql).toContain('image_url TEXT NOT NULL')
+    expect(btsImagesTable.sql).toContain('size TEXT')
+    expect(btsImagesTable.sql).toContain('aspect_ratio TEXT')
     expect(btsImagesTable.sql).toContain('ALTER TABLE bts_images ENABLE ROW LEVEL SECURITY')
   })
 
@@ -109,7 +110,6 @@ describe('Database Schema BTS Images Integration', () => {
     const mediaTable = getTableConfig('media')
     
     expect(btsImagesTable.indexes).toContain('idx_bts_images_project_id')
-    expect(btsImagesTable.indexes).toContain('idx_bts_images_sort_order')
     
     expect(mediaTable.indexes).toContain('idx_media_project_id')
     expect(mediaTable.indexes).toContain('idx_media_public_url')

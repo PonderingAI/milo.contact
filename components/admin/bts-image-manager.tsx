@@ -24,8 +24,10 @@ interface BTSImage {
   project_id: string
   image_url: string
   caption?: string
-  sort_order?: number
+  size?: string
+  aspect_ratio?: string
   category?: string
+  created_at?: string
 }
 
 interface BTSImageManagerProps {
@@ -56,7 +58,7 @@ export default function BTSImageManager({ projectId }: BTSImageManagerProps) {
         .from("bts_images")
         .select("*")
         .eq("project_id", projectId)
-        .order("sort_order", { ascending: true })
+        .order("created_at", { ascending: true })
 
       if (error) throw error
 
