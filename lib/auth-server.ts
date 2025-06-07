@@ -8,7 +8,7 @@
  */
 
 import { createServerComponentClient, createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { SupabaseClient } from "@supabase/supabase-js"
+import { SupabaseClient, createClient } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
 import { clerkClient, currentUser, auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
@@ -122,11 +122,30 @@ export async function syncClerkUserToSupabase(userId: string) {
 
 /**
  * Ensures a user has the specified role in the user_roles table
+ * Uses service role client to bypass RLS for role management
  */
 export async function ensureUserHasRole(userId: string, role: UserRole): Promise<boolean> {
   try {
     console.log(`[ensureUserHasRole] Starting for userId: ${userId}, role: ${role}`)
-    const supabase = createRouteHandlerClient({ cookies })
+    
+    // Use service role client to bypass RLS for role management
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("[ensureUserHasRole] Missing Supabase environment variables")
+      return false
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      }
+    )
+    
+    console.log(`[ensureUserHasRole] Created service role client`)
     
     // Check if the role already exists
     console.log(`[ensureUserHasRole] Checking existing roles for user ${userId}`)
@@ -156,6 +175,12 @@ export async function ensureUserHasRole(userId: string, role: UserRole): Promise
       
       if (insertError) {
         console.error("[ensureUserHasRole] Error assigning role:", insertError)
+        console.error("[ensureUserHasRole] Insert error details:", {
+          message: insertError.message,
+          code: insertError.code,
+          details: insertError.details,
+          hint: insertError.hint
+        })
         return false
       }
       
@@ -173,10 +198,26 @@ export async function ensureUserHasRole(userId: string, role: UserRole): Promise
 
 /**
  * Removes a role from a user
+ * Uses service role client to bypass RLS for role management
  */
 export async function removeUserRole(userId: string, role: UserRole): Promise<boolean> {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    // Use service role client to bypass RLS for role management
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("[removeUserRole] Missing Supabase environment variables")
+      return false
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      }
+    )
     
     const { error } = await supabase
       .from('user_roles')
@@ -310,8 +351,22 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
   // Sync roles to ensure they're up to date
   await syncUserRoles(userId)
   
-  // Check if user has admin role
-  const supabase = createRouteHandlerClient({ cookies })
+  // Check if user has admin role using service role client
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    console.error("[requireAdmin] Missing Supabase environment variables")
+    return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
+  }
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL,
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    }
+  )
   
   const { data, error } = await supabase
     .from('user_roles')
@@ -329,10 +384,26 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
 
 /**
  * Gets all roles for a user
+ * Uses service role client to ensure we can read all roles
  */
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    // Use service role client to bypass RLS for role queries
+    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error("[getUserRoles] Missing Supabase environment variables")
+      return []
+    }
+
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
+      {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+        },
+      }
+    )
     
     const { data, error } = await supabase
       .from('user_roles')

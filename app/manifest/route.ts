@@ -14,8 +14,6 @@ const DEFAULT_ANDROID_ICON_512 = "/android-chrome-512x512.png"; // Fallback path
 
 
 export async function GET(_req: NextRequest) {
-  const supabase = createAdminClient();
-
   let faviconSrc = DEFAULT_FAVICON_ICO;
   let androidIcon192Src = DEFAULT_ANDROID_ICON_192;
   let androidIcon512Src = DEFAULT_ANDROID_ICON_512;
@@ -25,41 +23,48 @@ export async function GET(_req: NextRequest) {
   let backgroundColor = DEFAULT_BACKGROUND_COLOR;
   let themeColor = DEFAULT_THEME_COLOR;
 
-  try {
-    const { data: settings, error } = await supabase
-      .from('site_settings')
-      .select('key, value')
-      .in('key', [
-        'icon_favicon_ico', 
-        'icon_android_icon_192x192_png', 
-        'icon_android_icon_512x512_png', // Assuming a 512x512 icon might be uploaded
-        'site_name',
-        'site_short_name',
-        'site_description',
-        'site_theme_color',
-        'site_background_color'
-      ]);
+  // Only try to fetch from database if environment variables are available
+  if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    try {
+      const supabase = createAdminClient();
 
-    if (error) {
-      console.error("Error fetching site settings for manifest:", error.message);
-      // Proceed with defaults if there's an error
-    }
+      const { data: settings, error } = await supabase
+        .from('site_settings')
+        .select('key, value')
+        .in('key', [
+          'icon_favicon_ico', 
+          'icon_android_icon_192x192_png', 
+          'icon_android_icon_512x512_png', // Assuming a 512x512 icon might be uploaded
+          'site_name',
+          'site_short_name',
+          'site_description',
+          'site_theme_color',
+          'site_background_color'
+        ]);
 
-    if (settings) {
-      const settingsMap = new Map(settings.map(s => [s.key, s.value]));
-      faviconSrc = settingsMap.get('icon_favicon_ico') || DEFAULT_FAVICON_ICO;
-      androidIcon192Src = settingsMap.get('icon_android_icon_192x192_png') || DEFAULT_ANDROID_ICON_192;
-      androidIcon512Src = settingsMap.get('icon_android_icon_512x512_png') || DEFAULT_ANDROID_ICON_512; // Use if available
-      
-      appName = settingsMap.get('site_name') || DEFAULT_APP_NAME;
-      shortName = settingsMap.get('site_short_name') || DEFAULT_SHORT_NAME;
-      description = settingsMap.get('site_description') || DEFAULT_DESCRIPTION;
-      themeColor = settingsMap.get('site_theme_color') || DEFAULT_THEME_COLOR;
-      backgroundColor = settingsMap.get('site_background_color') || DEFAULT_BACKGROUND_COLOR;
+      if (error) {
+        console.error("Error fetching site settings for manifest:", error.message);
+        // Proceed with defaults if there's an error
+      }
+
+      if (settings) {
+        const settingsMap = new Map(settings.map(s => [s.key, s.value]));
+        faviconSrc = settingsMap.get('icon_favicon_ico') || DEFAULT_FAVICON_ICO;
+        androidIcon192Src = settingsMap.get('icon_android_icon_192x192_png') || DEFAULT_ANDROID_ICON_192;
+        androidIcon512Src = settingsMap.get('icon_android_icon_512x512_png') || DEFAULT_ANDROID_ICON_512; // Use if available
+        
+        appName = settingsMap.get('site_name') || DEFAULT_APP_NAME;
+        shortName = settingsMap.get('site_short_name') || DEFAULT_SHORT_NAME;
+        description = settingsMap.get('site_description') || DEFAULT_DESCRIPTION;
+        themeColor = settingsMap.get('site_theme_color') || DEFAULT_THEME_COLOR;
+        backgroundColor = settingsMap.get('site_background_color') || DEFAULT_BACKGROUND_COLOR;
+      }
+    } catch (e: any) {
+      console.error("Unexpected error fetching site settings for manifest:", e.message);
+      // Proceed with defaults
     }
-  } catch (e: any) {
-    console.error("Unexpected error fetching site settings for manifest:", e.message);
-    // Proceed with defaults
+  } else {
+    console.warn("Supabase environment variables not available, using default manifest values");
   }
 
   const manifestContent: MetadataRoute.Manifest = {

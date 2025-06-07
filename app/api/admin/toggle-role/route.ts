@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { auth } from "@clerk/nextjs/server"
-import { assignRole, removeRole } from "@/lib/server-auth-utils"
+import { auth, clerkClient } from "@clerk/nextjs/server"
+import { ensureUserHasRole, removeUserRole } from "@/lib/auth-server"
 
 export async function POST(request: Request) {
   try {
@@ -27,8 +27,7 @@ export async function POST(request: Request) {
     }
 
     // Check if user is a super admin
-    const { getUser } = await import("@clerk/nextjs/server")
-    const user = await getUser(userId)
+    const user = await clerkClient.users.getUser(userId)
 
     console.log(`[toggle-role] User metadata:`, {
       id: user?.id,
@@ -41,13 +40,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Only super admins can modify roles" }, { status: 403 })
     }
 
-    // Update the role
+    // Update the role in Supabase
     console.log(`[toggle-role] Attempting to ${action} role ${role} for user ${targetUserId}`)
     let success = false
     if (action === "add") {
-      success = await assignRole(targetUserId, role)
+      success = await ensureUserHasRole(targetUserId, role as any)
     } else if (action === "remove") {
-      success = await removeRole(targetUserId, role)
+      success = await removeUserRole(targetUserId, role as any)
     } else {
       console.log("[toggle-role] Invalid action")
       return NextResponse.json({ error: "Invalid action" }, { status: 400 })
