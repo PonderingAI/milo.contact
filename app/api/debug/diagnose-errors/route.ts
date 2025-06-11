@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase"
 
 export async function GET() {
   const diagnostics: Record<string, any> = {
@@ -21,12 +21,7 @@ export async function GET() {
   // Test Supabase connection
   try {
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      })
+      const supabase = createAdminClient()
 
       // Test connection with a simple query
       const { data, error } = await supabase.from("pg_tables").select("tablename").limit(1)
