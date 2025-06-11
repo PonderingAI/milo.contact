@@ -17,6 +17,99 @@ Milo is an open-source website builder framework that enables developers to crea
 - **TypeScript Support**: Full type safety throughout the framework
 - **Authentication**: Built-in user management and role-based access control
 
+## Quick Start
+
+### Using the CLI
+
+```bash
+# Install the CLI
+npm install -g @milo/cli
+
+# Create a new project
+milo create my-website
+
+# Navigate to project
+cd my-website
+
+# Install dependencies
+npm install
+
+# Start development server
+milo dev
+
+# Build for production
+milo build
+```
+
+### Using the Core Library
+
+```javascript
+import { 
+  MiloBuilder, 
+  HeroComponent, 
+  AboutComponent, 
+  createComponent, 
+  createPage 
+} from '@milo/core';
+
+// Create builder
+const builder = new MiloBuilder();
+
+// Register components
+builder.registerComponent(HeroComponent);
+builder.registerComponent(AboutComponent);
+
+// Create page sections
+const hero = createComponent('hero', {
+  title: 'Welcome to My Site',
+  subtitle: 'Built with Milo'
+});
+
+const about = createComponent('about', {
+  title: 'About Us',
+  content: 'We create amazing websites.'
+});
+
+// Create page
+const page = createPage('home', '/', [hero, about]);
+builder.addPage(page);
+
+// Build site
+const result = await builder.build();
+```
+
+## Built-in Components
+
+### Layout Components
+- **Hero Section**: Full-screen banner with customizable backgrounds
+- **About Section**: Flexible about section with image support
+
+### Content Components  
+- **Features Grid**: Showcasing services or features
+- **Contact Form**: Contact section with form and information
+
+### Coming Soon
+- Navigation components
+- Blog components
+- E-commerce components
+- Media galleries
+
+## Architecture
+
+Milo follows a modular architecture:
+
+```
+packages/
+├── core/           # Core builder engine
+├── cli/            # Command line interface
+├── ui/             # Visual builder (planned)
+└── create-milo-app/# Project scaffolding
+
+templates/          # Starter templates
+examples/           # Example websites
+docs/              # Documentation
+```
+
 ## Media Library
 
 The media library supports the following features:

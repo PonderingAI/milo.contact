@@ -17,7 +17,7 @@ export type {
 } from './types';
 
 // Built-in components
-export { HeroComponent, AboutComponent } from './components/BuiltInComponents';
+export { HeroComponent, AboutComponent, FeaturesComponent, ContactComponent } from './components/BuiltInComponents';
 
 // Utility functions
 export const createComponent = (type: string, props: any, children?: any[]): any => {

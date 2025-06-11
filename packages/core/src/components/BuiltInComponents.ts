@@ -153,7 +153,7 @@ export const AboutComponent: ComponentDefinition = {
               <h2 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 2rem; color: #1f2937;">${props.title}</h2>
               ${centeredImage}
               <div class="about-text" style="font-size: 1.125rem; line-height: 1.7; color: #4b5563; max-width: 800px; margin: 0 auto;">
-                ${props.content.split('\n').map(p => `<p style="margin-bottom: 1rem;">${p}</p>`).join('')}
+                ${props.content.split('\n').map((p: string) => `<p style="margin-bottom: 1rem;">${p}</p>`).join('')}
               </div>
             </div>
           ` : `
@@ -162,7 +162,7 @@ export const AboutComponent: ComponentDefinition = {
               ${imageElement}
               <div class="about-text" style="flex: 1; padding: 1rem;">
                 <div style="font-size: 1.125rem; line-height: 1.7; color: #4b5563;">
-                  ${props.content.split('\n').map(p => `<p style="margin-bottom: 1rem;">${p}</p>`).join('')}
+                  ${props.content.split('\n').map((p: string) => `<p style="margin-bottom: 1rem;">${p}</p>`).join('')}
                 </div>
               </div>
             </div>
@@ -179,6 +179,203 @@ export const AboutComponent: ComponentDefinition = {
           }
         }
       </style>
+    `;
+  }
+};
+
+export const FeaturesComponent: ComponentDefinition = {
+  name: 'features',
+  displayName: 'Features Grid',
+  category: 'content',
+  props: {
+    title: {
+      type: 'string',
+      default: 'Our Features',
+      required: true
+    },
+    subtitle: {
+      type: 'string',
+      default: 'Discover what makes us unique'
+    },
+    columns: {
+      type: 'number',
+      default: 3,
+      min: 1,
+      max: 4
+    },
+    features: {
+      type: 'array',
+      default: [
+        { title: 'Fast Performance', description: 'Optimized for speed and efficiency', icon: '⚡' },
+        { title: 'Modern Design', description: 'Clean and contemporary aesthetics', icon: '🎨' },
+        { title: 'Responsive Layout', description: 'Works perfectly on all devices', icon: '📱' }
+      ]
+    }
+  },
+  render: (props) => {
+    const features = Array.isArray(props.features) ? props.features : [
+      { title: 'Feature 1', description: 'Description', icon: '🔥' },
+      { title: 'Feature 2', description: 'Description', icon: '✨' },
+      { title: 'Feature 3', description: 'Description', icon: '🚀' }
+    ];
+
+    const featuresHtml = features.map(feature => `
+      <div class="feature-card" style="background: white; border-radius: 0.75rem; padding: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; transition: transform 0.3s ease;">
+        <div class="feature-icon" style="font-size: 3rem; margin-bottom: 1rem;">${feature.icon || '⭐'}</div>
+        <h3 style="font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; color: #1f2937;">${feature.title}</h3>
+        <p style="color: #6b7280; line-height: 1.6;">${feature.description}</p>
+      </div>
+    `).join('');
+
+    return `
+      <section class="features-section" style="padding: 4rem 2rem; background: #f9fafb;">
+        <div class="container" style="max-width: 1200px; margin: 0 auto;">
+          <div class="features-header" style="text-align: center; margin-bottom: 3rem;">
+            <h2 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 1rem; color: #1f2937;">${props.title}</h2>
+            ${props.subtitle ? `<p style="font-size: 1.125rem; color: #6b7280; max-width: 600px; margin: 0 auto;">${props.subtitle}</p>` : ''}
+          </div>
+          <div class="features-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 2rem; max-width: ${props.columns * 300}px; margin: 0 auto;">
+            ${featuresHtml}
+          </div>
+        </div>
+      </section>
+      <style>
+        .feature-card:hover {
+          transform: translateY(-4px);
+        }
+        @media (max-width: 768px) {
+          .features-grid {
+            grid-template-columns: 1fr !important;
+          }
+          .features-section h2 {
+            font-size: 2rem !important;
+          }
+        }
+      </style>
+    `;
+  }
+};
+
+export const ContactComponent: ComponentDefinition = {
+  name: 'contact',
+  displayName: 'Contact Section',
+  category: 'forms',
+  props: {
+    title: {
+      type: 'string',
+      default: 'Get in Touch',
+      required: true
+    },
+    subtitle: {
+      type: 'string',
+      default: 'We\'d love to hear from you. Send us a message and we\'ll respond as soon as possible.'
+    },
+    email: {
+      type: 'string',
+      default: 'contact@example.com'
+    },
+    phone: {
+      type: 'string',
+      default: '+1 (555) 123-4567'
+    },
+    showForm: {
+      type: 'boolean',
+      default: true
+    },
+    showContactInfo: {
+      type: 'boolean',
+      default: true
+    }
+  },
+  render: (props) => {
+    const contactForm = props.showForm ? `
+      <div class="contact-form" style="background: white; border-radius: 0.75rem; padding: 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+        <form id="contact-form">
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Name</label>
+            <input type="text" name="name" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem;">
+          </div>
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Email</label>
+            <input type="email" name="email" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem;">
+          </div>
+          <div style="margin-bottom: 1.5rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 500; color: #374151;">Message</label>
+            <textarea name="message" rows="4" required style="width: 100%; padding: 0.75rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 1rem; resize: vertical;"></textarea>
+          </div>
+          <button type="submit" style="width: 100%; background: #3b82f6; color: white; padding: 0.75rem 1.5rem; border: none; border-radius: 0.375rem; font-weight: 600; cursor: pointer; transition: background 0.3s ease;">
+            Send Message
+          </button>
+        </form>
+      </div>
+    ` : '';
+
+    const contactInfo = props.showContactInfo ? `
+      <div class="contact-info" style="background: #1f2937; color: white; border-radius: 0.75rem; padding: 2rem;">
+        <h3 style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1.5rem;">Contact Information</h3>
+        <div class="contact-details">
+          ${props.email ? `
+            <div style="margin-bottom: 1rem; display: flex; align-items: center;">
+              <span style="margin-right: 0.75rem;">📧</span>
+              <a href="mailto:${props.email}" style="color: #93c5fd; text-decoration: none;">${props.email}</a>
+            </div>
+          ` : ''}
+          ${props.phone ? `
+            <div style="margin-bottom: 1rem; display: flex; align-items: center;">
+              <span style="margin-right: 0.75rem;">📞</span>
+              <a href="tel:${props.phone}" style="color: #93c5fd; text-decoration: none;">${props.phone}</a>
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    ` : '';
+
+    return `
+      <section class="contact-section" style="padding: 4rem 2rem; background: #f3f4f6;">
+        <div class="container" style="max-width: 1200px; margin: 0 auto;">
+          <div class="contact-header" style="text-align: center; margin-bottom: 3rem;">
+            <h2 style="font-size: 2.5rem; font-weight: bold; margin-bottom: 1rem; color: #1f2937;">${props.title}</h2>
+            ${props.subtitle ? `<p style="font-size: 1.125rem; color: #6b7280; max-width: 600px; margin: 0 auto;">${props.subtitle}</p>` : ''}
+          </div>
+          <div class="contact-content" style="display: grid; grid-template-columns: 1fr; gap: 2rem; max-width: 800px; margin: 0 auto;">
+            ${props.showForm && props.showContactInfo ? `
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+                ${contactForm}
+                ${contactInfo}
+              </div>
+            ` : `
+              ${contactForm}
+              ${contactInfo}
+            `}
+          </div>
+        </div>
+      </section>
+      <style>
+        #contact-form button:hover {
+          background: #2563eb;
+        }
+        #contact-form input:focus,
+        #contact-form textarea:focus {
+          outline: none;
+          border-color: #3b82f6;
+          box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        @media (max-width: 768px) {
+          .contact-content > div {
+            grid-template-columns: 1fr !important;
+          }
+          .contact-section h2 {
+            font-size: 2rem !important;
+          }
+        }
+      </style>
+      <script>
+        document.getElementById('contact-form')?.addEventListener('submit', function(e) {
+          e.preventDefault();
+          alert('Thank you for your message! We will get back to you soon.');
+          this.reset();
+        });
+      </script>
     `;
   }
 };

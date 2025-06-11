@@ -57,13 +57,15 @@ export default {
 
   // Create basic index.js
   const indexContent = `
-import { MiloBuilder, HeroComponent, AboutComponent, createComponent, createPage } from '@milo/core';
+import { MiloBuilder, HeroComponent, AboutComponent, FeaturesComponent, ContactComponent, createComponent, createPage } from '@milo/core';
 
 const builder = new MiloBuilder();
 
 // Register components
 builder.registerComponent(HeroComponent);
 builder.registerComponent(AboutComponent);
+builder.registerComponent(FeaturesComponent);
+builder.registerComponent(ContactComponent);
 
 // Create a home page
 const heroSection = createComponent('hero', {
@@ -72,19 +74,37 @@ const heroSection = createComponent('hero', {
   backgroundType: 'gradient'
 });
 
+const featuresSection = createComponent('features', {
+  title: 'Why Choose Us',
+  subtitle: 'Discover what makes us special',
+  features: [
+    { title: 'Easy to Use', description: 'Simple and intuitive interface', icon: '🚀' },
+    { title: 'Fast Performance', description: 'Optimized for speed and efficiency', icon: '⚡' },
+    { title: 'Responsive Design', description: 'Looks great on all devices', icon: '📱' }
+  ]
+});
+
 const aboutSection = createComponent('about', {
   title: 'About Us',
-  content: 'This is a sample website built with Milo.',
+  content: 'We are passionate about creating amazing web experiences using modern technology and thoughtful design.',
   layout: 'centered'
 });
 
-const homePage = createPage('home', '/', [heroSection, aboutSection]);
+const contactSection = createComponent('contact', {
+  title: 'Get in Touch',
+  subtitle: 'Have a question or want to work together? We\\'d love to hear from you.',
+  email: 'hello@${projectName.toLowerCase().replace(/[^a-z0-9]/g, '')}.com',
+  phone: '+1 (555) 123-4567'
+});
+
+const homePage = createPage('home', '/', [heroSection, featuresSection, aboutSection, contactSection]);
 builder.addPage(homePage);
 
 // Build the site
 builder.build().then(result => {
   if (result.success) {
     console.log('Site built successfully!');
+    console.log('Pages:', result.pages.map(p => p.path));
   } else {
     console.error('Build failed:', result.errors);
   }
