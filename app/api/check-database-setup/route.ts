@@ -51,9 +51,11 @@ export async function GET() {
       tablesNeeded.push("dependencies")
     }
 
+    const isSetup = tablesNeeded.length === 0
     return NextResponse.json({
       tablesNeeded,
-      allTablesExist: tablesNeeded.length === 0,
+      allTablesExist: isSetup,
+      isSetup: isSetup,
     })
   } catch (error) {
     // Silently handle the error but return a valid response

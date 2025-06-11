@@ -5,7 +5,6 @@ import Link from "next/link"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 interface DatabaseSetupAlertProps {
   isSetup: boolean
@@ -37,44 +36,27 @@ export default function DatabaseSetupAlert({ isSetup }: DatabaseSetupAlertProps)
       setError(null)
 
       try {
-        // First try the API endpoint
+        // Use the API endpoint which is more reliable
         const response = await fetch("/api/check-database-setup")
         if (!response.ok) {
-          throw new Error(`API error: ${response.status}`)
+          throw new Error(`API error: ${response.status} ${response.statusText}`)
         }
 
         const data = await response.json()
-        if (!data.isSetup) {
-          setIsDatabaseSetup(false)
-          return
-        }
-
-        setIsDatabaseSetup(true)
-        localStorage.setItem("dbSetupAlertDismissed", "true")
-        setDismissed(true)
-      } catch (apiError) {
-        console.warn("API check failed, falling back to direct check:", apiError)
-
-        // Fallback to direct Supabase check
-        try {
-          const supabase = createClientComponentClient()
-          const { data, error } = await supabase.from("projects").select("id").limit(1)
-
-          if (error) {
-            console.warn("Projects table check failed:", error)
-            setIsDatabaseSetup(false)
-            setError("Database tables are missing. Please set up the database.")
-            return
-          }
-
+        console.log("[database-setup-alert] API response:", data)
+        
+        if (data.isSetup) {
           setIsDatabaseSetup(true)
           localStorage.setItem("dbSetupAlertDismissed", "true")
           setDismissed(true)
-        } catch (err) {
-          console.error("Error in direct database check:", err)
-          setError("Could not connect to database. Please check your connection.")
+        } else {
           setIsDatabaseSetup(false)
+          setError(`Database tables are missing: ${data.tablesNeeded?.join(', ') || 'Unknown tables'}. Please set up the database.`)
         }
+      } catch (apiError) {
+        console.error("Error checking database setup:", apiError)
+        setError("Network error checking tables: " + (apiError instanceof Error ? apiError.message : String(apiError)))
+        setIsDatabaseSetup(false)
       } finally {
         setIsChecking(false)
       }

@@ -4,7 +4,6 @@ import type React from "react"
 
 import { useState, useEffect } from "react"
 import DatabaseSetupPopup from "@/components/admin/database-setup-popup"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 
 interface AdminDatabaseCheckProps {
   children: React.ReactNode
@@ -37,37 +36,27 @@ export default function AdminDatabaseCheck({ children }: AdminDatabaseCheckProps
     setIsChecking(true)
 
     try {
-      const supabase = createClientComponentClient()
-
-      // Check if core tables exist - specifically include projects table
-      const coreTables = ["user_roles", "projects"]
-      let allTablesExist = true
-
-      for (const table of coreTables) {
-        try {
-          const { error } = await supabase.from(table).select("id").limit(1)
-          if (error && (error.code === "PGRST116" || error.message.includes("does not exist"))) {
-            allTablesExist = false
-            break
+      // Use the API instead of creating a Supabase client to avoid multiple client instances
+      const response = await fetch('/api/check-database-setup')
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.isSetup) {
+          setSetupComplete(true)
+          try {
+            localStorage.setItem("database_setup_completed", "true")
+          } catch (e) {
+            // Silently handle localStorage errors
           }
-        } catch (err) {
-          // Silently handle the error without logging to console
-          allTablesExist = false
-          break
         }
-      }
-
-      if (allTablesExist) {
-        setSetupComplete(true)
-        try {
-          localStorage.setItem("database_setup_completed", "true")
-        } catch (e) {
-          // Silently handle localStorage errors
-        }
+      } else {
+        // If API fails, assume setup is not complete
+        setSetupComplete(false)
       }
     } catch (err) {
       // Silently handle errors without logging to console
       // If there's an error, we'll assume setup is not complete
+      setSetupComplete(false)
     } finally {
       setIsChecking(false)
       setInitialCheckDone(true)

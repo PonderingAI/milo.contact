@@ -33,6 +33,29 @@ export default function AdminDebugPage() {
           </CardFooter>
         </Card>
 
+        {/* Network Debug Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bug className="h-5 w-5" />
+              Network & API Debug
+            </CardTitle>
+            <CardDescription>Diagnose network connectivity, API endpoints, and multiple client issues</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-gray-500 mb-4">
+              Test all API endpoints, database connectivity, and detect multiple Supabase client instances that cause network errors.
+            </p>
+          </CardContent>
+          <CardFooter>
+            <Link href="/admin/debug/network" className="w-full">
+              <Button variant="default" className="w-full">
+                Open Network Debug
+              </Button>
+            </Link>
+          </CardFooter>
+        </Card>
+
         {/* Client Debug Card */}
         <Card>
           <CardHeader>

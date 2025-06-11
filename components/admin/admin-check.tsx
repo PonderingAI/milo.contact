@@ -5,7 +5,6 @@ import { useUser } from "@clerk/nextjs"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { hasRoleClient } from "@/lib/auth-sync"
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, ShieldAlert, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -21,7 +20,6 @@ export default function AdminCheck({ children }: AdminCheckProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [debugInfo, setDebugInfo] = useState<any>(null)
-  const supabase = createClientComponentClient()
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -131,7 +129,7 @@ export default function AdminCheck({ children }: AdminCheckProps) {
     }
     
     checkAdminStatus()
-  }, [isLoaded, isSignedIn, router, user, supabase])
+  }, [isLoaded, isSignedIn, router, user])
   
   // Show loading state
   if (loading) {
