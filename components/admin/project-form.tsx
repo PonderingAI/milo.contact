@@ -877,7 +877,22 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
             let btsResult: any = null
             try {
-              btsResult = await btsResponse.json()
+              // Get response as text first so we can log it if JSON parsing fails
+              const responseText = await btsResponse.text()
+              console.log("BTS Response status:", btsResponse.status, "Headers:", Object.fromEntries(btsResponse.headers.entries()))
+              console.log("BTS Response text:", responseText.substring(0, 200))
+              
+              // Check if this looks like HTML (sign-in redirect)
+              if (responseText.trim().startsWith('<!DOCTYPE html') || responseText.trim().startsWith('<html')) {
+                throw new Error("Received HTML response - likely authentication redirect")
+              }
+              
+              // Try to parse as JSON
+              if (responseText.trim()) {
+                btsResult = JSON.parse(responseText)
+              } else {
+                throw new Error("Empty response")
+              }
             } catch (jsonError) {
               console.error("Error parsing BTS response JSON during project creation:", jsonError, "Response status:", btsResponse.status)
               // If JSON parsing fails, treat as success if status is ok, otherwise as error
@@ -952,14 +967,28 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
               body: JSON.stringify({
                 projectId: project.id,
                 images: allBtsMedia,
-                replaceExisting: true, // Add this flag to indicate we want to replace existing media
-                skipSortOrder: true, // Add this flag to skip sort_order if the column doesn't exist
+                replaceExisting: true, // Replace existing media
               }),
             })
 
             let btsResult: any = null
             try {
-              btsResult = await btsResponse.json()
+              // Get response as text first so we can log it if JSON parsing fails
+              const responseText = await btsResponse.text()
+              console.log("BTS Update Response status:", btsResponse.status, "Headers:", Object.fromEntries(btsResponse.headers.entries()))
+              console.log("BTS Update Response text:", responseText.substring(0, 200))
+              
+              // Check if this looks like HTML (sign-in redirect)
+              if (responseText.trim().startsWith('<!DOCTYPE html') || responseText.trim().startsWith('<html')) {
+                throw new Error("Received HTML response - likely authentication redirect")
+              }
+              
+              // Try to parse as JSON
+              if (responseText.trim()) {
+                btsResult = JSON.parse(responseText)
+              } else {
+                throw new Error("Empty response")
+              }
             } catch (jsonError) {
               console.error("Error parsing BTS response JSON during project update:", jsonError, "Response status:", btsResponse.status)
               // If JSON parsing fails, treat as success if status is ok, otherwise as error

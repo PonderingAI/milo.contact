@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { headers } from "next/headers"
 import { WebhookEvent } from "@clerk/nextjs/server"
-import { syncUserRoles, syncClerkUserToSupabase, ensureUserHasRole } from "@/lib/auth-sync"
+import { syncUserRoles, syncClerkUserToSupabase, ensureUserHasRole } from "@/lib/auth-server"
 
 /**
  * Clerk webhook handler

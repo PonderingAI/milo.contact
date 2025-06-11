@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase"
 
 export async function GET() {
   try {
@@ -8,94 +8,55 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Missing Supabase environment variables" }, { status: 500 })
     }
 
-    // Create a Supabase client
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    })
+    // Use the singleton admin client
+    const supabase = createAdminClient()
 
-    // First, make sure exec_sql exists
-    const { data: execSqlResult, error: execSqlError } = await supabase.rpc("exec_sql", {
-      sql_query: `
-        CREATE OR REPLACE FUNCTION exec_sql(sql_query text)
-        RETURNS SETOF json AS $$
-        BEGIN
-          RETURN QUERY EXECUTE sql_query;
-        END;
-        $$ LANGUAGE plpgsql SECURITY DEFINER;
-      `,
-    })
+    // Use a simpler approach to list tables without RPC functions
+    const { data: tables, error: tablesError } = await supabase
+      .from('information_schema.tables')
+      .select('table_name')
+      .eq('table_schema', 'public')
+      .order('table_name')
 
-    if (execSqlError) {
-      return NextResponse.json(
-        {
+    if (tablesError) {
+      // Fallback: try a direct query approach
+      console.log("information_schema approach failed, trying direct query:", tablesError)
+      
+      const { data: fallbackTables, error: fallbackError } = await supabase
+        .rpc('exec_sql', {
+          sql_query: `
+            SELECT tablename as table_name 
+            FROM pg_catalog.pg_tables 
+            WHERE schemaname = 'public' 
+            ORDER BY tablename;
+          `
+        })
+
+      if (fallbackError) {
+        return NextResponse.json({
           success: false,
-          error: "Failed to ensure exec_sql function exists",
-          details: execSqlError,
-        },
-        { status: 500 },
-      )
-    }
-
-    // Now create the list_tables function
-    const { data: createResult, error: createError } = await supabase.rpc("exec_sql", {
-      sql_query: `
-        CREATE OR REPLACE FUNCTION list_tables()
-        RETURNS TABLE(table_name text) AS $$
-        BEGIN
-          RETURN QUERY
-          SELECT t.tablename::text
-          FROM pg_catalog.pg_tables t
-          WHERE t.schemaname = 'public'
-          ORDER BY t.tablename;
-        END;
-        $$ LANGUAGE plpgsql SECURITY DEFINER;
-      `,
-    })
-
-    if (createError) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Failed to create list_tables function",
-          details: createError,
-        },
-        { status: 500 },
-      )
-    }
-
-    // Test the function
-    try {
-      const { data: testResult, error: testError } = await supabase.rpc("list_tables")
-
-      if (testError) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: "list_tables function exists but failed test",
-            details: testError,
+          error: "Failed to list tables using both information_schema and pg_catalog",
+          details: { 
+            primaryError: tablesError,
+            fallbackError: fallbackError
           },
-          { status: 500 },
-        )
+        }, { status: 500 })
       }
 
       return NextResponse.json({
         success: true,
-        message: "list_tables function is set up and working",
-        tables: testResult,
+        message: "Tables listed successfully (using fallback method)",
+        tables: fallbackTables,
+        method: "pg_catalog_fallback"
       })
-    } catch (error) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Exception testing list_tables function",
-          details: error instanceof Error ? error.message : String(error),
-        },
-        { status: 500 },
-      )
     }
+
+    return NextResponse.json({
+      success: true,
+      message: "Tables listed successfully",
+      tables: tables,
+      method: "information_schema"
+    })
   } catch (error) {
     return NextResponse.json(
       {

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase"
 
 export async function GET() {
   try {
@@ -8,13 +8,8 @@ export async function GET() {
       return NextResponse.json({ success: false, error: "Missing Supabase environment variables" }, { status: 500 })
     }
 
-    // Create a Supabase client
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
-    })
+    // Use the singleton admin client
+    const supabase = createAdminClient()
 
     // Try to create the exec_sql function
     const { data: createResult, error: createError } = await supabase.rpc("exec_sql", {

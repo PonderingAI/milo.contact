@@ -31,11 +31,28 @@ export default function CompactDatabaseManager() {
   const [selectedExistingTables, setSelectedExistingTables] = useState<string[]>([])
   const [showMigrationPopup, setShowMigrationPopup] = useState(false)
 
-  // Auto-refresh every 30 seconds
+  // Auto-refresh every 30 seconds, but respect "marked as up to date" status
   useEffect(() => {
     checkDatabaseStatus()
     
     const interval = setInterval(() => {
+      // Only auto-refresh if not marked as up to date recently
+      try {
+        const markedUpToDate = localStorage.getItem("database_marked_up_to_date")
+        if (markedUpToDate) {
+          const timestamp = parseInt(markedUpToDate)
+          const timeSinceMarked = Date.now() - timestamp
+          const fiveMinutes = 5 * 60 * 1000 // 5 minutes
+          
+          if (timeSinceMarked < fiveMinutes) {
+            console.log('[DatabaseManager] Skipping auto-refresh - recently marked as up to date')
+            return
+          }
+        }
+      } catch (error) {
+        console.log('[DatabaseManager] Error checking mark for auto-refresh:', error)
+      }
+      
       checkDatabaseStatus()
     }, 30000)
 
@@ -45,7 +62,16 @@ export default function CompactDatabaseManager() {
   const checkDatabaseStatus = async () => {
     setLoading(true)
     try {
+      console.log('[DatabaseManager] Checking database status...')
       const status = await databaseValidator.validateDatabase()
+      console.log('[DatabaseManager] Database status received:', {
+        allTablesExist: status.allTablesExist,
+        missingTables: status.missingTables,
+        tablesNeedingUpdate: status.tablesNeedingUpdate,
+        hasUpdateScript: status.updateScript && status.updateScript.trim().length > 0,
+        updateScriptLength: status.updateScript?.length || 0
+      })
+      
       setDatabaseStatus(status)
       setLastCheck(new Date())
 
@@ -166,9 +192,16 @@ export default function CompactDatabaseManager() {
   }
 
   const showMigrationSQLPopup = () => {
+    console.log('Attempting to show migration SQL popup...', {
+      hasUpdateScript: databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0,
+      updateScriptLength: databaseStatus?.updateScript?.length || 0
+    })
+    
     if (databaseStatus?.updateScript && databaseStatus.updateScript.trim().length > 0) {
+      console.log('Showing migration popup with script:', databaseStatus.updateScript.substring(0, 100) + '...')
       setShowMigrationPopup(true)
     } else {
+      console.log('No migration script available')
       toast({
         title: "No Migration Needed",
         description: "Database is already up to date",
@@ -202,6 +235,17 @@ export default function CompactDatabaseManager() {
         </div>
         
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              console.log('Manual refresh requested')
+              checkDatabaseStatus()
+            }}
+          >
+            <Database className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
           {databaseStatus?.allTablesExist ? (
             <Badge variant="default" className="flex items-center gap-1">
               <CheckCircle className="h-3 w-3" />
@@ -250,8 +294,20 @@ export default function CompactDatabaseManager() {
           <Info className="h-4 w-4 text-white" />
           <AlertDescription className="text-white">
             <div className="flex items-center justify-between">
-              <span>Database schema updates are available for existing tables.</span>
-              <div className="flex gap-2">
+              <div className="flex-1">
+                <div>Database schema updates are available for existing tables.</div>
+                {process.env.NODE_ENV === 'development' && (
+                  <div className="text-xs mt-1 opacity-75">
+                    Debug: {databaseStatus.tablesNeedingUpdate.join(', ')} need updates | Script length: {databaseStatus.updateScript.length}
+                  </div>
+                )}
+                {databaseStatus.tablesNeedingUpdate.length > 0 && (
+                  <div className="text-xs mt-1 opacity-90">
+                    Tables: {databaseStatus.tablesNeedingUpdate.join(', ')}
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-2 ml-4">
                 <Button 
                   size="sm" 
                   variant="outline"
@@ -264,20 +320,41 @@ export default function CompactDatabaseManager() {
                 <Button 
                   size="sm" 
                   variant="outline"
-                  onClick={() => {
+                  onClick={async () => {
+                    console.log('Marking database as up to date...', {
+                      tablesNeedingUpdate: databaseStatus.tablesNeedingUpdate,
+                      updateScriptLength: databaseStatus.updateScript.length
+                    })
+                    
                     // Mark database as up to date and refresh
                     databaseValidator.markAsUpToDate()
+                    
+                    // Verify the mark was set
+                    try {
+                      const mark = localStorage.getItem("database_marked_up_to_date")
+                      console.log('Verification: mark set to', mark)
+                    } catch (error) {
+                      console.error('Error verifying mark:', error)
+                    }
+                    
+                    // Clear current status to hide banner immediately
                     setDatabaseStatus(null)
-                    checkDatabaseStatus()
+                    
                     toast({
                       title: "Marked as Up to Date",
-                      description: "Database validation will be bypassed for 1 hour"
+                      description: "Database validation bypassed for 1 hour. Banner will be hidden until next validation issue."
                     })
+                    
+                    // Force a fresh check after a longer delay to ensure mark is respected
+                    setTimeout(async () => {
+                      console.log('Re-checking database status after marking as up to date...')
+                      await checkDatabaseStatus()
+                    }, 1000) // Increased delay to 1 second
                   }}
                   className="border-yellow-300 hover:bg-yellow-700 text-white"
                 >
                   <CheckCircle className="h-4 w-4 mr-1" />
-                  Mark as Up to Date
+                  Already Applied
                 </Button>
               </div>
             </div>

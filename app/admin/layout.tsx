@@ -24,6 +24,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               <Link href="/admin/media" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
                 Media
               </Link>
+              <Link href="/admin/users" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
+                Users
+              </Link>
+              <Link href="/admin/roles" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
+                Roles
+              </Link>
               <Link href="/admin/settings" className="block px-4 py-2 rounded hover:bg-gray-800 transition-colors">
                 Settings
               </Link>

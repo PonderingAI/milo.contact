@@ -27,28 +27,39 @@ export async function isAdmin(userId: string): Promise<boolean> {
  */
 export async function assignRole(userId: string, roleName: string): Promise<boolean> {
   try {
+    console.log(`[assignRole] Assigning role ${roleName} to user ${userId}`)
+    
     const user = await clerkClient.users.getUser(userId)
     const currentRoles = (user.publicMetadata.roles as string[]) || []
 
+    console.log(`[assignRole] Current roles:`, currentRoles)
+
     // Don't add the role if the user already has it
     if (currentRoles.includes(roleName)) {
+      console.log(`[assignRole] User already has role ${roleName}`)
       return true
     }
 
     // Add the new role
     const updatedRoles = [...currentRoles, roleName]
+    console.log(`[assignRole] Updated roles:`, updatedRoles)
 
     // Update the user's metadata
-    await clerkClient.users.updateUser(userId, {
+    const updateResult = await clerkClient.users.updateUser(userId, {
       publicMetadata: {
         ...user.publicMetadata,
         roles: updatedRoles,
       },
     })
 
+    console.log(`[assignRole] Update result:`, {
+      userId: updateResult.id,
+      updatedRoles: updateResult.publicMetadata.roles
+    })
+
     return true
   } catch (error) {
-    console.error("Error assigning role:", error)
+    console.error("[assignRole] Error assigning role:", error)
     return false
   }
 }

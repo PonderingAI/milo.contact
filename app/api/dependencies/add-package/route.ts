@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { getRouteHandlerSupabaseClient } from "@/lib/auth-sync"
-import { auth } from "@clerk/nextjs"
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
+import { auth } from "@clerk/nextjs/server"
 import { exec } from "child_process"
 import { promisify } from "util"
 import fs from "fs"

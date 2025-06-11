@@ -30,7 +30,7 @@ const createMockSupabaseClient = (mockResponse) => ({
       eq: () => Promise.resolve({ error: null })
     })
   }),
-  rpc: () => Promise.resolve({ data: [{ column_name: 'sort_order' }], error: null })
+  rpc: () => Promise.resolve({ data: [{ column_name: 'size' }], error: null })
 });
 
 describe('BTS API Error Handling Tests', () => {

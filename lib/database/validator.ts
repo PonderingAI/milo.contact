@@ -54,15 +54,23 @@ export class DatabaseValidator {
   private isMarkedAsUpToDate(): boolean {
     try {
       const markedUpToDate = localStorage.getItem("database_marked_up_to_date")
-      if (!markedUpToDate) return false
+      if (!markedUpToDate) {
+        console.log('[DatabaseValidator] No mark found in localStorage')
+        return false
+      }
       
       const timestamp = parseInt(markedUpToDate)
       const oneHour = 60 * 60 * 1000 // 1 hour in milliseconds
       const now = Date.now()
+      const timeDiff = now - timestamp
+      const isValid = timeDiff < oneHour
+      
+      console.log(`[DatabaseValidator] Mark check: timestamp=${timestamp}, now=${now}, diff=${timeDiff}ms, valid=${isValid}`)
       
       // Check if marked as up to date within the last hour
-      return (now - timestamp) < oneHour
-    } catch {
+      return isValid
+    } catch (error) {
+      console.log(`[DatabaseValidator] Error checking mark: ${error}`)
       return false
     }
   }
@@ -72,7 +80,29 @@ export class DatabaseValidator {
    */
   markAsUpToDate() {
     try {
-      localStorage.setItem("database_marked_up_to_date", Date.now().toString())
+      const timestamp = Date.now().toString()
+      console.log(`[DatabaseValidator] Marking database as up to date for 1 hour at timestamp: ${timestamp}`)
+      localStorage.setItem("database_marked_up_to_date", timestamp)
+      
+      // Verify it was set correctly
+      const verify = localStorage.getItem("database_marked_up_to_date")
+      console.log(`[DatabaseValidator] Verification: stored value = ${verify}`)
+      
+      if (verify !== timestamp) {
+        console.error(`[DatabaseValidator] ERROR: Failed to set localStorage correctly. Expected: ${timestamp}, Got: ${verify}`)
+      }
+    } catch (error) {
+      console.error(`[DatabaseValidator] ERROR: Failed to set localStorage:`, error)
+    }
+  }
+
+  /**
+   * Clear the "marked as up to date" flag
+   */
+  clearUpToDateMark() {
+    try {
+      console.log('[DatabaseValidator] Clearing up to date mark')
+      localStorage.removeItem("database_marked_up_to_date")
     } catch {
       // Silently handle localStorage errors
     }
@@ -82,27 +112,46 @@ export class DatabaseValidator {
    * Check the status of all tables in the database
    */
   async validateDatabase(): Promise<DatabaseStatus> {
+    console.log('[DatabaseValidator] Starting database validation...')
     const tables = getAllTables()
     const tableStatuses: Record<string, TableStatus> = {}
     const missingTables: string[] = []
     const tablesNeedingUpdate: string[] = []
 
     for (const table of tables) {
+      console.log(`[DatabaseValidator] Validating table: ${table.name}`)
       const status = await this.validateTable(table)
       tableStatuses[table.name] = status
       
       if (!status.exists) {
+        console.log(`[DatabaseValidator] Table ${table.name} is missing`)
         missingTables.push(table.name)
       } else if (status.needsUpdate) {
+        console.log(`[DatabaseValidator] Table ${table.name} needs update`)
         tablesNeedingUpdate.push(table.name)
+      } else {
+        console.log(`[DatabaseValidator] Table ${table.name} is up to date`)
       }
     }
 
     const allTablesExist = missingTables.length === 0
     const canAutoFix = true // We can always generate SQL scripts
     
+    console.log(`[DatabaseValidator] Validation complete:`, {
+      totalTables: tables.length,
+      missingTables: missingTables.length,
+      tablesNeedingUpdate: tablesNeedingUpdate.length,
+      allTablesExist
+    })
+    
     const sqlFixScript = this.generateCreationScript(missingTables)
     const updateScript = this.generateUpdateScript(tablesNeedingUpdate, tableStatuses)
+
+    console.log(`[DatabaseValidator] Generated scripts:`, {
+      creationScriptLength: sqlFixScript.length,
+      updateScriptLength: updateScript.length,
+      hasUpdateScript: updateScript.trim().length > 0
+    })
 
     return {
       version: 1,
@@ -157,7 +206,17 @@ export class DatabaseValidator {
       console.warn(`Error validating table ${name}:`, error)
     }
 
-    const needsUpdate = exists && (!hasAllColumns || !hasCorrectIndexes || !hasCorrectPolicies)
+    const needsUpdate = exists && !this.isMarkedAsUpToDate() && !this._bypassValidation && (!hasAllColumns || !hasCorrectIndexes || !hasCorrectPolicies)
+
+    console.log(`[DatabaseValidator] ${name} needsUpdate calculation:`, {
+      exists,
+      isMarkedAsUpToDate: this.isMarkedAsUpToDate(),
+      bypassValidation: this._bypassValidation,
+      hasAllColumns,
+      hasCorrectIndexes,
+      hasCorrectPolicies,
+      needsUpdate
+    })
 
     return {
       name,
@@ -195,12 +254,16 @@ export class DatabaseValidator {
   }> {
     // If validation is bypassed, assume everything is correct
     if (this._bypassValidation || this.isMarkedAsUpToDate()) {
+      console.log(`[DatabaseValidator] Column validation bypassed for ${table.name}`)
       return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
     }
 
     if (!table.columns) {
+      console.log(`[DatabaseValidator] No column schema defined for ${table.name}`)
       return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
     }
+
+    console.log(`[DatabaseValidator] Checking columns for ${table.name}`)
 
     try {
       // Use exec_sql to query information_schema since it's not exposed via REST API
@@ -213,12 +276,26 @@ export class DatabaseValidator {
       const result = await this.executeRawSQL(sql)
       
       if (!result.success || !result.data) {
+        console.log(`[DatabaseValidator] Failed to query columns for ${table.name}, error: ${result.error}`)
+        console.log(`[DatabaseValidator] This might be because exec_sql is not available or table doesn't exist`)
+        
+        // Special handling: if table exists but we can't query columns, 
+        // and user has marked as up to date, assume columns are correct
+        const isMarked = this.isMarkedAsUpToDate()
+        if (isMarked) {
+          console.log(`[DatabaseValidator] Table ${table.name} marked as up to date, assuming columns are correct despite query failure`)
+          return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
+        }
+        
+        console.log(`[DatabaseValidator] Table ${table.name} not marked as up to date, assuming correct to avoid false positives`)
         // Fallback: assume columns are correct if table exists to avoid false positives
         // This is especially important when exec_sql is not available in production
         return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
       }
 
       const columns = result.data
+      console.log(`[DatabaseValidator] Found ${columns.length} columns in ${table.name}:`, columns.map((c: any) => c.column_name))
+      
       const existingColumns = new Set(columns.map((col: any) => col.column_name))
       const expectedColumns = new Set(table.columns.map(col => col.name))
 
@@ -230,12 +307,20 @@ export class DatabaseValidator {
         .filter((col: any) => !expectedColumns.has(col.column_name))
         .map((col: any) => col.column_name)
 
+      console.log(`[DatabaseValidator] ${table.name} column analysis:`, {
+        expected: Array.from(expectedColumns),
+        existing: Array.from(existingColumns),
+        missing: missingColumns,
+        extra: extraColumns
+      })
+
       return {
         hasAllColumns: missingColumns.length === 0,
         missingColumns,
         extraColumns
       }
     } catch (error) {
+      console.log(`[DatabaseValidator] Error checking columns for ${table.name}, assuming correct:`, error)
       // Fallback: assume columns are correct if table exists to avoid false positives
       return { hasAllColumns: true, missingColumns: [], extraColumns: [] }
     }
@@ -245,6 +330,12 @@ export class DatabaseValidator {
    * Check table indexes (simplified)
    */
   async checkTableIndexes(table: TableConfig): Promise<boolean> {
+    // If validation is bypassed, assume everything is correct
+    if (this._bypassValidation || this.isMarkedAsUpToDate()) {
+      console.log(`[DatabaseValidator] Index validation bypassed for ${table.name}`)
+      return true
+    }
+    
     // For now, we'll assume indexes are correct if the table exists
     // A more sophisticated implementation would query pg_indexes
     return true
@@ -254,6 +345,12 @@ export class DatabaseValidator {
    * Check table policies (simplified)
    */
   async checkTablePolicies(table: TableConfig): Promise<boolean> {
+    // If validation is bypassed, assume everything is correct
+    if (this._bypassValidation || this.isMarkedAsUpToDate()) {
+      console.log(`[DatabaseValidator] Policy validation bypassed for ${table.name}`)
+      return true
+    }
+    
     // For now, we'll assume policies are correct if the table exists
     // A more sophisticated implementation would query pg_policies
     return true
@@ -290,6 +387,7 @@ export class DatabaseValidator {
    */
   generateUpdateScript(tableNames: string[], tableStatuses: Record<string, TableStatus>): string {
     if (tableNames.length === 0) {
+      console.log(`[DatabaseValidator] No tables need updates, returning empty script`)
       return ""
     }
 
@@ -297,11 +395,33 @@ export class DatabaseValidator {
     let hasActualUpdates = false
     let updateSQL = ""
 
+    console.log(`[DatabaseValidator] Generating update script for tables: ${tableNames.join(', ')}`)
+
     for (const tableName of tableNames) {
       const table = tableConfigs[tableName]
       const status = tableStatuses[tableName]
       
-      if (!table || !status) continue
+      if (!table || !status) {
+        console.log(`[DatabaseValidator] Skipping ${tableName}: missing table config or status`)
+        continue
+      }
+
+      console.log(`[DatabaseValidator] Checking ${tableName}:`, {
+        exists: status.exists,
+        hasAllColumns: status.hasAllColumns,
+        missingColumns: status.missingColumns.length,
+        hasCorrectIndexes: status.hasCorrectIndexes,
+        missingIndexes: status.missingIndexes.length,
+        hasCorrectPolicies: status.hasCorrectPolicies,
+        missingPolicies: status.missingPolicies.length,
+        needsUpdate: status.needsUpdate
+      })
+
+      // Skip tables that don't exist (they should be in missing tables, not update tables)
+      if (!status.exists) {
+        console.log(`[DatabaseValidator] Skipping ${tableName}: table doesn't exist (should be in missing tables list)`)
+        continue
+      }
 
       let tableUpdates = ""
 
@@ -309,6 +429,7 @@ export class DatabaseValidator {
       if (status.missingColumns.length > 0 && table.columns) {
         hasActualUpdates = true
         tableUpdates += `-- Updates for ${table.displayName}\n`
+        console.log(`[DatabaseValidator] ${tableName} has missing columns: ${status.missingColumns.join(', ')}`)
 
         for (const columnName of status.missingColumns) {
           const column = table.columns.find(c => c.name === columnName)
@@ -399,9 +520,11 @@ export class DatabaseValidator {
 
     // Only return a script if there are actual updates
     if (!hasActualUpdates) {
+      console.log(`[DatabaseValidator] No actual updates needed, returning empty script`)
       return ""
     }
 
+    console.log(`[DatabaseValidator] Actual updates detected, generating migration script`)
     let sql = `-- Database Update Script\n-- Generated on ${new Date().toISOString()}\n\n`
     sql += updateSQL
 

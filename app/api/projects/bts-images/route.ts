@@ -1,29 +1,18 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { getRouteHandlerSupabaseClient, requireAdmin } from "@/lib/auth-sync"
-import { auth } from "@clerk/nextjs"
-
-// Add this function to check if a column exists in a table
-async function columnExists(supabase: any, table: string, column: string) {
-  try {
-    const { data, error } = await supabase.rpc("exec_sql", {
-      query: `SELECT column_name FROM information_schema.columns 
-              WHERE table_name = '${table}' AND column_name = '${column}'`,
-    })
-
-    if (error) throw error
-    return data && data.length > 0
-  } catch (error) {
-    console.error(`Error checking if column ${column} exists in ${table}:`, error)
-    return false
-  }
-}
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
+import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
+  console.log("=== BTS IMAGES API CALLED ===")
+  
   try {
     // Check if user is authenticated and has admin role
     const { userId } = auth()
+    console.log("Auth userId:", userId)
+    
     if (!userId) {
+      console.log("No userId - returning 401")
       return NextResponse.json({ 
         error: "Unauthorized", 
         debug_userIdFromAuth: null 
@@ -35,7 +24,7 @@ export async function POST(request: Request) {
     
     // Parse request body
     const req = await request.json()
-    const { projectId, images, replaceExisting, skipSortOrder } = req
+    const { projectId, images, replaceExisting } = req
 
     if (!projectId || !images || !Array.isArray(images)) {
       return NextResponse.json({ 
@@ -60,9 +49,6 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-    // Check if sort_order column exists
-    const hasSortOrder = skipSortOrder ? false : await columnExists(supabase, "bts_images", "sort_order")
-
     // Delete existing images if requested
     if (replaceExisting) {
       const { error: deleteError } = await supabase.from("bts_images").delete().eq("project_id", projectId)
@@ -78,16 +64,11 @@ export async function POST(request: Request) {
       }
     }
 
-    // Prepare BTS image data
-    const btsImageData = images.map((image, index) => {
-      const baseData = {
-        project_id: projectId,
-        image_url: image,
-      }
-
-      // Only add sort_order if the column exists
-      return hasSortOrder ? { ...baseData, sort_order: index } : baseData
-    })
+    // Prepare BTS image data - use the actual table schema
+    const btsImageData = images.map((image) => ({
+      project_id: projectId,
+      image_url: image,
+    }))
 
     // Insert BTS images
     const { data, error } = await supabase.from("bts_images").insert(btsImageData).select()
@@ -107,12 +88,20 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       data: data || [],
-      message: `Successfully ${data?.length || 0} BTS images processed`,
+      message: `Successfully processed ${data?.length || 0} BTS images`,
       count: data?.length || 0
     })
   } catch (error) {
-    console.error("Error processing request:", error)
-    const { userId } = auth()
+    console.error("=== BTS IMAGES API ERROR ===", error)
+    
+    // Always return JSON, never let the error propagate as HTML
+    let userId = null
+    try {
+      const authResult = auth()
+      userId = authResult.userId
+    } catch (authError) {
+      console.error("Error getting userId in catch block:", authError)
+    }
     
     return NextResponse.json({ 
       error: "Internal Server Error", 
