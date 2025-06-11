@@ -1,13 +1,13 @@
-# Contributing to Milo Presedo Portfolio
+# Contributing to Milo Website Builder
 
-Thank you for considering contributing to this project! This document outlines the guidelines and workflows for contributing.
+Thank you for considering contributing to this project! This document outlines the guidelines and workflows for contributing to the Milo website builder framework.
 
 ## Development Workflow
 
 ### Setting Up Development Environment
 
 1. Fork the repository
-2. Clone your fork: `git clone https://github.com/yourusername/milo-portfolio.git`
+2. Clone your fork: `git clone https://github.com/yourusername/milo-website-builder.git`
 3. Install dependencies: `npm install`
 4. Create a `.env.local` file with the required environment variables (see `.env.example`)
 5. Run the development server: `npm run dev`

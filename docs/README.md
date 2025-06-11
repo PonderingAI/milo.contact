@@ -1,17 +1,21 @@
-# Milo Presedo Portfolio
+# Milo Website Builder
 
-This is the portfolio website for Milo Presedo, showcasing film production and photography work.
+A modern, TypeScript-based website builder framework for creating professional websites with ease.
 
-## Features
+## Overview
 
-- Responsive design optimized for all devices
-- Project showcase with filtering by category
-- Admin dashboard for content management
-- Dynamic site settings management
-- Custom favicon and app icon support
-- Media library for image and video management
-- Automatic WebP conversion for optimal image quality
-- Authentication and role-based access control
+Milo is an open-source website builder framework that enables developers to create, customize, and deploy professional websites quickly. Built with Next.js, React, and TypeScript, it provides a powerful component system, theme engine, and extensible plugin architecture.
+
+## Core Features
+
+- **Component System**: Modular, reusable React components for building websites
+- **Responsive Design**: Optimized layouts that work across all devices  
+- **Admin Dashboard**: Content management system for easy website updates
+- **Theme Engine**: Customizable themes and styling system
+- **Media Library**: Comprehensive media management with automatic optimization
+- **Plugin Architecture**: Extensible system for adding custom functionality
+- **TypeScript Support**: Full type safety throughout the framework
+- **Authentication**: Built-in user management and role-based access control
 
 ## Media Library
 
