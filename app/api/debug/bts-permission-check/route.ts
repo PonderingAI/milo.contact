@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase"
 
 /**
  * API endpoint to check BTS permissions for debugging
@@ -40,16 +40,7 @@ export async function POST(request: NextRequest) {
       }, { status: 500 })
     }
 
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    )
+    const supabase = createAdminClient()
 
     console.log("[bts-permission-check] Created Supabase service role client")
 

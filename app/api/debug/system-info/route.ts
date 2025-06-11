@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient, getSupabaseBrowserClient } from "@/lib/supabase"
 import { NextResponse } from "next/server"
 
 export async function GET() {
@@ -8,10 +8,6 @@ export async function GET() {
     const hasServiceRoleKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY
     const hasClerkConfig = !!(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY)
     
-    // Create Supabase client
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ""
-    const supabaseKey = process.env.SUPABASE_ANON_KEY || ""
-    
     let supabaseInfo = {
       connected: false,
       error: undefined as string | undefined,
@@ -19,29 +15,49 @@ export async function GET() {
       version: undefined as string | undefined,
     }
 
-    if (supabaseUrl && supabaseKey) {
+    if (hasSupabaseUrl && hasServiceRoleKey) {
       try {
-        const supabase = createClient(supabaseUrl, supabaseKey)
+        // Use admin client for better access
+        const supabase = createAdminClient()
         
-        // Check connection by listing tables
+        // Check connection by listing tables using information_schema
         const { data, error } = await supabase
-          .from("pg_catalog.pg_tables")
-          .select("tablename")
-          .eq("schemaname", "public")
+          .from("information_schema.tables")
+          .select("table_name")
+          .eq("table_schema", "public")
           .limit(20)
 
         if (error) {
-          throw error
-        }
+          // Fallback to pg_catalog if information_schema fails
+          console.log("information_schema failed, trying pg_catalog:", error)
+          
+          const { data: fallbackData, error: fallbackError } = await supabase
+            .rpc('exec_sql', {
+              sql_query: `
+                SELECT tablename as table_name 
+                FROM pg_catalog.pg_tables 
+                WHERE schemaname = 'public' 
+                LIMIT 20;
+              `
+            })
 
-        // Get version info
-        const { data: versionData, error: versionError } = await supabase.rpc("version")
+          if (fallbackError) {
+            throw new Error(`Both table listing methods failed: ${error.message} / ${fallbackError.message}`)
+          }
 
-        supabaseInfo = {
-          connected: true,
-          tables: data?.map((row) => row.tablename) || [],
-          version: versionError ? undefined : versionData,
-          error: undefined,
+          supabaseInfo = {
+            connected: true,
+            tables: fallbackData?.map((row: any) => row.table_name) || [],
+            version: "Available (fallback method used)",
+            error: undefined,
+          }
+        } else {
+          supabaseInfo = {
+            connected: true,
+            tables: data?.map((row) => row.table_name) || [],
+            version: "Available",
+            error: undefined,
+          }
         }
       } catch (error) {
         supabaseInfo = {
@@ -54,7 +70,7 @@ export async function GET() {
     } else {
       supabaseInfo = {
         connected: false,
-        error: "Missing Supabase URL or anon key",
+        error: "Missing Supabase URL or service role key",
         tables: undefined,
         version: undefined,
       }

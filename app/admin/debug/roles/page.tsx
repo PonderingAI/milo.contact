@@ -5,7 +5,7 @@ import { useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Loader2, Shield, RefreshCw, CheckCircle, AlertTriangle, User, Database, Key } from "lucide-react"
+import { Loader2, Shield, RefreshCw, CheckCircle, AlertTriangle, User, Database, Key, Wifi, WifiOff } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 
 interface DebugStep {
@@ -22,6 +22,7 @@ export default function RoleDebugPage() {
   const [steps, setSteps] = useState<DebugStep[]>([])
   const [isRunning, setIsRunning] = useState(false)
   const [currentStepIndex, setCurrentStepIndex] = useState(-1)
+  const [networkStatus, setNetworkStatus] = useState<'unknown' | 'online' | 'offline'>('unknown')
 
   const debugSteps: Omit<DebugStep, 'status'>[] = [
     {
@@ -65,6 +66,20 @@ export default function RoleDebugPage() {
   useEffect(() => {
     // Initialize steps
     setSteps(debugSteps.map(step => ({ ...step, status: 'pending' })))
+    
+    // Check network status
+    const updateNetworkStatus = () => {
+      setNetworkStatus(navigator.onLine ? 'online' : 'offline')
+    }
+    
+    updateNetworkStatus()
+    window.addEventListener('online', updateNetworkStatus)
+    window.addEventListener('offline', updateNetworkStatus)
+    
+    return () => {
+      window.removeEventListener('online', updateNetworkStatus)
+      window.removeEventListener('offline', updateNetworkStatus)
+    }
   }, [])
 
   const updateStep = (index: number, updates: Partial<DebugStep>) => {
@@ -106,14 +121,22 @@ export default function RoleDebugPage() {
 
           case 1: // Check Environment Configuration
             // Test if environment variables are accessible to the API
-            const envCheckResponse = await fetch('/api/debug/system-info')
-            
+            let envCheckResponse: Response
             let envData: any = {}
             let hasSupabaseConfig = false
             
-            if (envCheckResponse.ok) {
-              envData = await envCheckResponse.json()
-              hasSupabaseConfig = !!(envData.supabaseUrl && envData.hasServiceRoleKey)
+            try {
+              envCheckResponse = await fetch('/api/debug/system-info')
+              
+              if (envCheckResponse.ok) {
+                envData = await envCheckResponse.json()
+                hasSupabaseConfig = !!(envData.supabaseUrl && envData.hasServiceRoleKey)
+              } else {
+                throw new Error(`Environment check API returned ${envCheckResponse.status}: ${envCheckResponse.statusText}`)
+              }
+            } catch (fetchError) {
+              console.error("Network error checking environment:", fetchError)
+              throw new Error(`Network error checking environment: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`)
             }
             
             result = {
@@ -131,9 +154,23 @@ export default function RoleDebugPage() {
             break
 
           case 2: // Check Database Tables
-            // Check if user_roles table exists
-            const tableCheckResponse = await fetch('/api/debug/setup-list-tables')
-            const tableData = await tableCheckResponse.json()
+            // Check if user_roles table exists with better error handling
+            let tableCheckResponse: Response
+            let tableData: any = {}
+            
+            try {
+              tableCheckResponse = await fetch('/api/debug/setup-list-tables')
+              
+              if (tableCheckResponse.ok) {
+                tableData = await tableCheckResponse.json()
+              } else {
+                console.error(`Table check API returned ${tableCheckResponse.status}:`, await tableCheckResponse.text())
+                throw new Error(`Table listing API failed: ${tableCheckResponse.status} ${tableCheckResponse.statusText}`)
+              }
+            } catch (fetchError) {
+              console.error("Network error checking tables:", fetchError)
+              throw new Error(`Network error checking tables: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`)
+            }
             
             const hasUserRolesTable = tableData.tables && tableData.tables.some((table: any) => 
               table.table_name === 'user_roles' || table.name === 'user_roles'
@@ -165,7 +202,8 @@ export default function RoleDebugPage() {
               hasUserRolesTable,
               allTables: tableData.tables || [],
               tableAccessTest,
-              tableCount: tableData.tables?.length || 0
+              tableCount: tableData.tables?.length || 0,
+              apiMethod: tableData.method || "unknown"
             }
             
             if (!hasUserRolesTable) {
@@ -187,36 +225,61 @@ export default function RoleDebugPage() {
 
           case 4: // Check Supabase Roles
             // Now check the actual roles (table existence was verified in step 2)
-            const rolesResponse = await fetch('/api/admin/get-user-roles', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.id })
-            })
+            let rolesResponse: Response
+            let rolesData: any = {}
             
-            if (!rolesResponse.ok) {
-              const errorData = await rolesResponse.json()
-              throw new Error(errorData.error || `API returned ${rolesResponse.status}: ${rolesResponse.statusText}`)
+            try {
+              rolesResponse = await fetch('/api/admin/get-user-roles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id })
+              })
+              
+              if (!rolesResponse.ok) {
+                const errorText = await rolesResponse.text()
+                let errorData: any = {}
+                try {
+                  errorData = JSON.parse(errorText)
+                } catch {
+                  errorData = { error: errorText }
+                }
+                throw new Error(errorData.error || `API returned ${rolesResponse.status}: ${rolesResponse.statusText}`)
+              }
+              
+              rolesData = await rolesResponse.json()
+            } catch (fetchError) {
+              console.error("Error fetching user roles:", fetchError)
+              throw new Error(`Failed to check Supabase roles: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`)
             }
-            
-            const rolesData = await rolesResponse.json()
             
             result = rolesData
             break
 
           case 5: // Test Role Sync API
-            const syncResponse = await fetch('/api/admin/sync-roles', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.id })
-            })
-            
+            let syncResponse: Response
             let syncData: any = {}
             
             try {
-              syncData = await syncResponse.json()
-            } catch (jsonError) {
-              console.error("[role-debug] Failed to parse sync response as JSON:", jsonError)
-              syncData = { parseError: "Response was not valid JSON" }
+              syncResponse = await fetch('/api/admin/sync-roles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: currentUser.id })
+              })
+              
+              try {
+                const responseText = await syncResponse.text()
+                if (responseText) {
+                  syncData = JSON.parse(responseText)
+                } else {
+                  syncData = { parseError: "Empty response body" }
+                }
+              } catch (jsonError) {
+                console.error("[role-debug] Failed to parse sync response as JSON:", jsonError)
+                syncData = { parseError: "Response was not valid JSON" }
+              }
+            } catch (fetchError) {
+              console.error("Network error during role sync:", fetchError)
+              throw new Error(`Network error during role sync: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}`)
             }
             
             result = {
@@ -261,33 +324,58 @@ export default function RoleDebugPage() {
 
           case 7: // Test BTS Permission Check
             // Simulate the exact check used in BTS API
-            const btsCheckResponse = await fetch('/api/debug/bts-permission-check', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ userId: currentUser.id })
-            })
+            let btsCheckResponse: Response
+            let btsCheckWorking = false
             
-            result = {
-              apiExists: btsCheckResponse.status !== 404,
-              status: btsCheckResponse.status
-            }
-            
-            if (btsCheckResponse.status === 404) {
-              // Create a manual simulation
-              const manualRolesResponse = await fetch('/api/admin/get-user-roles', {
+            try {
+              btsCheckResponse = await fetch('/api/debug/bts-permission-check', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: currentUser.id })
               })
               
-              if (manualRolesResponse.ok) {
-                const rolesData = await manualRolesResponse.json()
-                const hasAdminRole = rolesData.roles.includes('admin')
+              btsCheckWorking = btsCheckResponse.status !== 404
+            } catch (fetchError) {
+              console.error("Network error during BTS permission check:", fetchError)
+              btsCheckWorking = false
+              btsCheckResponse = { status: 0 } as Response
+            }
+            
+            result = {
+              apiExists: btsCheckWorking,
+              status: btsCheckResponse.status
+            }
+            
+            if (!btsCheckWorking) {
+              // Create a manual simulation
+              try {
+                const manualRolesResponse = await fetch('/api/admin/get-user-roles', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: currentUser.id })
+                })
+                
+                if (manualRolesResponse.ok) {
+                  const rolesData = await manualRolesResponse.json()
+                  const hasAdminRole = rolesData.roles.includes('admin')
+                  result = {
+                    ...result,
+                    simulatedCheck: true,
+                    hasAdminRole,
+                    wouldAllowBTS: hasAdminRole
+                  }
+                } else {
+                  result = {
+                    ...result,
+                    simulatedCheck: false,
+                    error: "Failed to simulate BTS check"
+                  }
+                }
+              } catch (manualError) {
                 result = {
                   ...result,
-                  simulatedCheck: true,
-                  hasAdminRole,
-                  wouldAllowBTS: hasAdminRole
+                  simulatedCheck: false,
+                  error: `Manual simulation failed: ${manualError instanceof Error ? manualError.message : String(manualError)}`
                 }
               }
             }
@@ -296,13 +384,23 @@ export default function RoleDebugPage() {
           case 8: // Test Admin Role Assignment
             if (currentUser.publicMetadata?.superAdmin === true) {
               // Get current state
-              const currentRolesResponse = await fetch('/api/admin/get-user-roles', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId: currentUser.id })
-              })
+              let currentRolesResponse: Response
+              let currentRolesData: any = { roles: [] }
               
-              const currentRolesData = currentRolesResponse.ok ? await currentRolesResponse.json() : { roles: [] }
+              try {
+                currentRolesResponse = await fetch('/api/admin/get-user-roles', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ userId: currentUser.id })
+                })
+                
+                if (currentRolesResponse.ok) {
+                  currentRolesData = await currentRolesResponse.json()
+                }
+              } catch (fetchError) {
+                console.error("Error fetching current roles for test:", fetchError)
+              }
+              
               const currentClerkRoles = (currentUser.publicMetadata?.roles as string[]) || []
               const hasAdminInClerk = currentClerkRoles.includes('admin')
               const hasAdminInSupabase = currentRolesData.roles.includes('admin')
@@ -317,27 +415,42 @@ export default function RoleDebugPage() {
               // Test adding admin role if not present
               if (!hasAdminInClerk) {
                 console.log("[role-debug] Adding admin role via toggle API")
-                const toggleResponse = await fetch("/api/admin/toggle-role", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    userId: currentUser.id,
-                    role: "admin",
-                    action: "add",
-                  }),
-                })
                 
-                const toggleResult = toggleResponse.ok ? await toggleResponse.json() : { error: "Failed to toggle role" }
+                let toggleResult: any = { error: "Network error" }
+                try {
+                  const toggleResponse = await fetch("/api/admin/toggle-role", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      userId: currentUser.id,
+                      role: "admin",
+                      action: "add",
+                    }),
+                  })
+                  
+                  toggleResult = toggleResponse.ok ? await toggleResponse.json() : { error: "Failed to toggle role" }
+                } catch (fetchError) {
+                  console.error("Network error during role toggle:", fetchError)
+                  toggleResult = { error: `Network error: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}` }
+                }
+                
                 console.log("[role-debug] Toggle role result:", toggleResult)
                 
                 // Trigger role sync after adding
-                const syncAfterAddResponse = await fetch('/api/admin/sync-roles', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ userId: currentUser.id })
-                })
+                let syncAfterAddData: any = { error: "Network error" }
+                try {
+                  const syncAfterAddResponse = await fetch('/api/admin/sync-roles', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId: currentUser.id })
+                  })
+                  
+                  syncAfterAddData = syncAfterAddResponse.ok ? await syncAfterAddResponse.json() : { error: "Sync failed" }
+                } catch (fetchError) {
+                  console.error("Network error during sync after add:", fetchError)
+                  syncAfterAddData = { error: `Network error: ${fetchError instanceof Error ? fetchError.message : String(fetchError)}` }
+                }
                 
-                const syncAfterAddData = syncAfterAddResponse.ok ? await syncAfterAddResponse.json() : { error: "Sync failed" }
                 console.log("[role-debug] Sync after add result:", syncAfterAddData)
                 
                 result = {
@@ -415,18 +528,34 @@ export default function RoleDebugPage() {
     <div className="container mx-auto p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Role System Debug</h1>
-        <Button
-          onClick={runDebugSequence}
-          disabled={isRunning}
-          variant="default"
-        >
-          {isRunning ? (
-            <Loader2 className="h-4 w-4 animate-spin mr-2" />
-          ) : (
-            <RefreshCw className="h-4 w-4 mr-2" />
-          )}
-          {isRunning ? "Running Tests..." : "Run Full Debug"}
-        </Button>
+        <div className="flex items-center gap-4">
+          {/* Network Status Indicator */}
+          <div className="flex items-center gap-2">
+            {networkStatus === 'online' ? (
+              <Wifi className="h-4 w-4 text-green-500" />
+            ) : networkStatus === 'offline' ? (
+              <WifiOff className="h-4 w-4 text-red-500" />
+            ) : (
+              <div className="w-4 h-4 rounded-full bg-gray-400" />
+            )}
+            <Badge variant={networkStatus === 'online' ? 'default' : 'destructive'} className="text-xs">
+              {networkStatus === 'online' ? 'Online' : networkStatus === 'offline' ? 'Offline' : 'Unknown'}
+            </Badge>
+          </div>
+          
+          <Button
+            onClick={runDebugSequence}
+            disabled={isRunning || networkStatus === 'offline'}
+            variant="default"
+          >
+            {isRunning ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            {isRunning ? "Running Tests..." : "Run Full Debug"}
+          </Button>
+        </div>
       </div>
 
       {/* Current User Info */}
