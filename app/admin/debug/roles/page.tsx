@@ -29,6 +29,14 @@ export default function RoleDebugPage() {
       description: "Verify the user is properly authenticated via Clerk"
     },
     {
+      name: "Check Environment Configuration",
+      description: "Verify Supabase environment variables and service role access"
+    },
+    {
+      name: "Check Database Tables",
+      description: "Verify user_roles table exists and is accessible"
+    },
+    {
       name: "Fetch Clerk User Metadata",
       description: "Get user's roles and superAdmin status from Clerk"
     },
@@ -96,7 +104,76 @@ export default function RoleDebugPage() {
             }
             break
 
-          case 1: // Fetch Clerk User Metadata
+          case 1: // Check Environment Configuration
+            // Test if environment variables are accessible to the API
+            const envCheckResponse = await fetch('/api/debug/system-info')
+            
+            let envData: any = {}
+            let hasSupabaseConfig = false
+            
+            if (envCheckResponse.ok) {
+              envData = await envCheckResponse.json()
+              hasSupabaseConfig = !!(envData.supabaseUrl && envData.hasServiceRoleKey)
+            }
+            
+            result = {
+              envApiWorking: envCheckResponse.ok,
+              envApiStatus: envCheckResponse.status,
+              supabaseUrl: envData.supabaseUrl ? "configured" : "missing",
+              serviceRoleKey: envData.hasServiceRoleKey ? "configured" : "missing",
+              hasRequiredConfig: hasSupabaseConfig,
+              envData: envData
+            }
+            
+            if (!hasSupabaseConfig) {
+              throw new Error("Missing required Supabase environment variables (URL or Service Role Key)")
+            }
+            break
+
+          case 2: // Check Database Tables
+            // Check if user_roles table exists
+            const tableCheckResponse = await fetch('/api/debug/setup-list-tables')
+            const tableData = await tableCheckResponse.json()
+            
+            const hasUserRolesTable = tableData.tables && tableData.tables.some((table: any) => 
+              table.table_name === 'user_roles' || table.name === 'user_roles'
+            )
+            
+            // Try to directly test user_roles table access
+            let tableAccessTest = null
+            
+            try {
+              const testRoleResponse = await fetch('/api/admin/get-user-roles', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userId: 'test-user-id' })
+              })
+              
+              tableAccessTest = {
+                status: testRoleResponse.status,
+                accessible: testRoleResponse.status !== 404 && testRoleResponse.status !== 500
+              }
+            } catch (error) {
+              tableAccessTest = {
+                error: error instanceof Error ? error.message : String(error),
+                accessible: false
+              }
+            }
+            
+            result = {
+              tableListWorking: tableCheckResponse.ok,
+              hasUserRolesTable,
+              allTables: tableData.tables || [],
+              tableAccessTest,
+              tableCount: tableData.tables?.length || 0
+            }
+            
+            if (!hasUserRolesTable) {
+              throw new Error("user_roles table does not exist in database")
+            }
+            break
+
+          case 3: // Fetch Clerk User Metadata
             result = {
               id: currentUser.id,
               email: currentUser.primaryEmailAddress?.emailAddress,
@@ -108,7 +185,8 @@ export default function RoleDebugPage() {
             }
             break
 
-          case 2: // Check Supabase Roles
+          case 4: // Check Supabase Roles
+            // Now check the actual roles (table existence was verified in step 2)
             const rolesResponse = await fetch('/api/admin/get-user-roles', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -117,28 +195,43 @@ export default function RoleDebugPage() {
             
             if (!rolesResponse.ok) {
               const errorData = await rolesResponse.json()
-              throw new Error(errorData.error || 'Failed to fetch Supabase roles')
+              throw new Error(errorData.error || `API returned ${rolesResponse.status}: ${rolesResponse.statusText}`)
             }
             
-            result = await rolesResponse.json()
+            const rolesData = await rolesResponse.json()
+            
+            result = rolesData
             break
 
-          case 3: // Test Role Sync API
+          case 5: // Test Role Sync API
             const syncResponse = await fetch('/api/admin/sync-roles', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ userId: currentUser.id })
             })
             
-            if (!syncResponse.ok) {
-              const errorData = await syncResponse.json()
-              throw new Error(errorData.error || 'Role sync failed')
+            let syncData: any = {}
+            
+            try {
+              syncData = await syncResponse.json()
+            } catch (jsonError) {
+              console.error("[role-debug] Failed to parse sync response as JSON:", jsonError)
+              syncData = { parseError: "Response was not valid JSON" }
             }
             
-            result = await syncResponse.json()
+            result = {
+              status: syncResponse.status,
+              ok: syncResponse.ok,
+              headers: Object.fromEntries(syncResponse.headers.entries()),
+              data: syncData
+            }
+            
+            if (!syncResponse.ok) {
+              throw new Error(`Role sync failed: ${syncData.error || syncResponse.statusText}`)
+            }
             break
 
-          case 4: // Verify Role Sync Results
+          case 6: // Verify Role Sync Results
             const verifyResponse = await fetch('/api/admin/get-user-roles', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -166,7 +259,7 @@ export default function RoleDebugPage() {
             }
             break
 
-          case 5: // Test BTS Permission Check
+          case 7: // Test BTS Permission Check
             // Simulate the exact check used in BTS API
             const btsCheckResponse = await fetch('/api/debug/bts-permission-check', {
               method: 'POST',
@@ -200,7 +293,7 @@ export default function RoleDebugPage() {
             }
             break
 
-          case 6: // Test Admin Role Assignment
+          case 8: // Test Admin Role Assignment
             if (currentUser.publicMetadata?.superAdmin === true) {
               // Get current state
               const currentRolesResponse = await fetch('/api/admin/get-user-roles', {

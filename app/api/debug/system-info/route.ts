@@ -3,12 +3,15 @@ import { NextResponse } from "next/server"
 
 export async function GET() {
   try {
+    // Check environment variables needed for role system
+    const hasSupabaseUrl = !!process.env.NEXT_PUBLIC_SUPABASE_URL
+    const hasServiceRoleKey = !!process.env.SUPABASE_SERVICE_ROLE_KEY
+    const hasClerkConfig = !!(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY)
+    
     // Create Supabase client
-    const supabaseUrl = process.env.SUPABASE_URL || ""
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ""
     const supabaseKey = process.env.SUPABASE_ANON_KEY || ""
-    const supabase = createClient(supabaseUrl, supabaseKey)
-
-    // Test Supabase connection
+    
     let supabaseInfo = {
       connected: false,
       error: undefined as string | undefined,
@@ -16,31 +19,42 @@ export async function GET() {
       version: undefined as string | undefined,
     }
 
-    try {
-      // Check connection by listing tables
-      const { data, error } = await supabase
-        .from("pg_catalog.pg_tables")
-        .select("tablename")
-        .eq("schemaname", "public")
-        .limit(20)
+    if (supabaseUrl && supabaseKey) {
+      try {
+        const supabase = createClient(supabaseUrl, supabaseKey)
+        
+        // Check connection by listing tables
+        const { data, error } = await supabase
+          .from("pg_catalog.pg_tables")
+          .select("tablename")
+          .eq("schemaname", "public")
+          .limit(20)
 
-      if (error) {
-        throw error
+        if (error) {
+          throw error
+        }
+
+        // Get version info
+        const { data: versionData, error: versionError } = await supabase.rpc("version")
+
+        supabaseInfo = {
+          connected: true,
+          tables: data?.map((row) => row.tablename) || [],
+          version: versionError ? undefined : versionData,
+          error: undefined,
+        }
+      } catch (error) {
+        supabaseInfo = {
+          connected: false,
+          error: error instanceof Error ? error.message : String(error),
+          tables: undefined,
+          version: undefined,
+        }
       }
-
-      // Get version info
-      const { data: versionData, error: versionError } = await supabase.rpc("version")
-
-      supabaseInfo = {
-        connected: true,
-        tables: data?.map((row) => row.tablename) || [],
-        version: versionError ? undefined : versionData,
-        error: undefined,
-      }
-    } catch (error) {
+    } else {
       supabaseInfo = {
         connected: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: "Missing Supabase URL or anon key",
         tables: undefined,
         version: undefined,
       }
@@ -55,6 +69,15 @@ export async function GET() {
     return NextResponse.json({
       supabase: supabaseInfo,
       environment: environmentInfo,
+      supabaseUrl: hasSupabaseUrl ? "configured" : "missing",
+      hasServiceRoleKey,
+      hasClerkConfig,
+      requiredEnvVars: {
+        NEXT_PUBLIC_SUPABASE_URL: hasSupabaseUrl,
+        SUPABASE_SERVICE_ROLE_KEY: hasServiceRoleKey,
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: !!process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY,
+        CLERK_SECRET_KEY: !!process.env.CLERK_SECRET_KEY
+      }
     })
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : String(error) }, { status: 500 })
