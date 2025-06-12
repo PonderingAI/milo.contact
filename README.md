@@ -1,6 +1,6 @@
 # Milo Website Builder
 
-A modern, TypeScript-based website builder framework for creating professional websites with ease.
+A modern, TypeScript-based website builder framework for creating professional websites.
 
 ## 🚀 Quick Start
 
