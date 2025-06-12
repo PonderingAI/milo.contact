@@ -1,7 +1,6 @@
 "use client"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { FourStateToggle, type ToggleState } from "@/components/ui/four-state-toggle"
 import { Info, ExternalLink, ShieldCheck, BookOpen } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { useState } from "react"
@@ -20,7 +19,7 @@ interface Dependency {
   securityDetails?: any
   hasDependabotAlert?: boolean
   dependabotAlertDetails?: any
-  updateMode: ToggleState
+  updateMode: string
   isDev?: boolean
 }
 
@@ -28,7 +27,6 @@ interface DependencyListProps {
   dependencies: Dependency[]
   filter: string
   searchTerm: string
-  updateDependencyMode: (id: string, value: ToggleState) => void
   viewVulnerabilityDetails: (dependency: Dependency) => void
   viewDependabotAlertDetails: (dependency: Dependency) => void
   clearFilters: () => void
@@ -39,7 +37,6 @@ export function DependencyList({
   dependencies,
   filter,
   searchTerm,
-  updateDependencyMode,
   viewVulnerabilityDetails,
   viewDependabotAlertDetails,
   clearFilters,
@@ -141,34 +138,7 @@ export function DependencyList({
               <th className="text-left py-3 px-4">Current</th>
               <th className="text-left py-3 px-4">Latest</th>
               <th className="text-left py-3 px-4">Status</th>
-              <th className="text-left py-3 px-4 font-medium text-base">
-                <div className="flex items-center">
-                  Update Mode
-                  <div className="relative ml-1 group">
-                    <Info className="h-4 w-4 text-gray-400 cursor-help" />
-                    <div className="absolute left-0 bottom-full mb-2 w-80 p-3 bg-gray-800 text-xs rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity z-50 pointer-events-none">
-                      <p className="mb-2">
-                        <strong>Off:</strong> No automatic updates
-                      </p>
-                      <p className="mb-2">
-                        <strong>Security Only:</strong> Only apply security patches
-                      </p>
-                      <p className="mb-2">
-                        <strong>All Updates:</strong> Apply all package updates
-                      </p>
-                      <p className="mb-2">
-                        <strong>Global:</strong> Use the global setting
-                      </p>
-                      <div className="mt-2 pt-2 border-t border-gray-700">
-                        <p className="text-gray-300">
-                          <strong>Note:</strong> Packages with Dependabot alerts will be updated regardless of update
-                          mode to protect your application from security vulnerabilities.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </th>
+
               <th className="text-left py-3 px-4">Actions</th>
             </tr>
           </thead>
@@ -183,8 +153,6 @@ export function DependencyList({
                   transition={{ duration: 0.2, delay: index * 0.02 }}
                   className={`${index % 2 === 0 ? "bg-gray-800/30" : ""} ${
                     dep.hasDependabotAlert ? "bg-gray-700/30" : dep.hasSecurityIssue ? "bg-gray-700/20" : ""
-                  } ${dep.updateMode === "global" ? "border-l-2 border-gray-600" : ""} ${
-                    dep.hasDependabotAlert && dep.updateMode === "off" ? "border-l-2 border-gray-500" : ""
                   }`}
                 >
                   <td className="py-3 px-4">
@@ -193,16 +161,6 @@ export function DependencyList({
                       {dep.isDev && (
                         <Badge variant="outline" className="ml-2 border-gray-700 text-gray-400">
                           Dev
-                        </Badge>
-                      )}
-                      {dep.updateMode === "global" && (
-                        <Badge variant="outline" className="ml-2 border-gray-600 text-gray-300 bg-gray-700/50">
-                          Global
-                        </Badge>
-                      )}
-                      {dep.hasDependabotAlert && dep.updateMode === "off" && (
-                        <Badge variant="outline" className="ml-2 border-gray-500 text-gray-300 bg-gray-700/50">
-                          Force Update
                         </Badge>
                       )}
                     </div>
@@ -256,26 +214,7 @@ export function DependencyList({
                       </Badge>
                     )}
                   </td>
-                  <td className="py-3 px-4">
-                    <div className="relative">
-                      <FourStateToggle
-                        value={dep.updateMode}
-                        onValueChange={(value) => updateDependencyMode(dep.id, value)}
-                        showLabels={false}
-                        className="w-[300px] max-w-full"
-                      />
-                      {dep.hasDependabotAlert && dep.updateMode === "off" && (
-                        <div className="absolute -top-2 -right-2 bg-gray-600 text-white text-xs px-1 rounded-full">
-                          !
-                        </div>
-                      )}
-                    </div>
-                    {dep.hasDependabotAlert && dep.updateMode === "off" && (
-                      <div className="text-xs text-gray-400 mt-1">
-                        Will be updated despite "Off" setting due to Dependabot alert
-                      </div>
-                    )}
-                  </td>
+
                   <td className="py-3 px-4">
                     <Button
                       size="sm"

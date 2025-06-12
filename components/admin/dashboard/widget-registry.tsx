@@ -3,6 +3,7 @@ import { ProjectStatsWidget } from "./widgets/project-stats-widget"
 import { RealTimeStatsWidget } from "./widgets/real-time-stats-widget"
 import { SecurityOverviewWidget } from "./widgets/security-overview-widget"
 import { SystemActivityWidget } from "./widgets/system-activity-widget"
+import { GlobalUpdatePolicyWidget } from "./widgets/global-update-policy-widget"
 import { SecurityWidget } from "@/components/admin/security-widgets"
 import { 
   Users, 
@@ -194,6 +195,23 @@ export const availableWidgets: WidgetDefinition[] = [
     defaultSize: { w: 4, h: 3, minW: 3, minH: 2 },
     defaultProps: {
       title: "Project Overview",
+    },
+  },
+
+  // === DEPENDENCY MANAGEMENT ===
+  {
+    type: "global-update-policy",
+    title: "Global Update Policy",
+    description: "Manage global dependency update policy and settings",
+    category: "Dependencies",
+    component: (props: any) => (
+      <GlobalUpdatePolicyWidget
+        title={props.title}
+      />
+    ),
+    defaultSize: { w: 3, h: 4, minW: 3, minH: 3 },
+    defaultProps: {
+      title: "Global Update Policy",
     },
   },
 
@@ -437,27 +455,37 @@ export const defaultWidgets: Widget[] = [
   },
   {
     id: "widget-4",
+    type: "global-update-policy",
+    title: "Global Update Policy",
+    size: { w: 3, h: 4 },
+    position: { x: 9, y: 0 },
+    props: {
+      title: "Global Update Policy",
+    },
+  },
+  {
+    id: "widget-5",
     type: "security-overview",
     title: "Security",
     size: { w: 3, h: 2 },
-    position: { x: 9, y: 0 },
+    position: { x: 0, y: 4 },
     props: {
       title: "Security Overview",
       showActions: true,
     },
   },
   {
-    id: "widget-5",
+    id: "widget-6",
     type: "project-overview",
     title: "Project Insights",
     size: { w: 6, h: 3 },
-    position: { x: 0, y: 2 },
+    position: { x: 3, y: 4 },
     props: {
       title: "Project Insights",
     },
   },
   {
-    id: "widget-6",
+    id: "widget-7",
     type: "system-activity",
     title: "Recent Activity",
     size: { w: 6, h: 3 },
