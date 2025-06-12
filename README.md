@@ -109,10 +109,14 @@ Milo creates a comprehensive website building platform that:
 
 | Service | Port | Status | Purpose |
 |---------|------|--------|---------|
-| Main App | 3000 | ✅ Ready | Website builder and admin interface |
-| API Routes | 3000/api | ✅ Ready | Backend API endpoints |
-| Media Library | 3000/admin | ✅ Ready | Media management system |
-| Database Setup | 3000/setup | ✅ Ready | Database initialization |
+| Main Website | 3000 | ✅ Ready | Portfolio website with dynamic content |
+| Admin Dashboard | 3000/admin | ✅ Ready | Content management and media library |
+| Project Management | 3000/projects | ✅ Ready | Portfolio project showcase and search |
+| API Endpoints | 3000/api | ✅ Ready | RESTful API for all data operations |
+| Database Setup | 3000/setup | ✅ Ready | Automated database initialization |
+| Media Processing | 3000/api/media | ✅ Ready | Image optimization and video integration |
+| Authentication | 3000/auth | ✅ Ready | User authentication via Clerk |
+| Developer Tools | 3000/tools | 🚧 Beta | Development utilities and prompt studio |
 
 ---
 
