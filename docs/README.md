@@ -1,17 +1,114 @@
-# Milo Presedo Portfolio
+# Milo Website Builder
 
-This is the portfolio website for Milo Presedo, showcasing film production and photography work.
+A modern, TypeScript-based website builder framework for creating professional websites with ease.
 
-## Features
+## Overview
 
-- Responsive design optimized for all devices
-- Project showcase with filtering by category
-- Admin dashboard for content management
-- Dynamic site settings management
-- Custom favicon and app icon support
-- Media library for image and video management
-- Automatic WebP conversion for optimal image quality
-- Authentication and role-based access control
+Milo is an open-source website builder framework that enables developers to create, customize, and deploy professional websites quickly. Built with Next.js, React, and TypeScript, it provides a powerful component system, theme engine, and extensible plugin architecture.
+
+## Core Features
+
+- **Component System**: Modular, reusable React components for building websites
+- **Responsive Design**: Optimized layouts that work across all devices  
+- **Admin Dashboard**: Content management system for easy website updates
+- **Theme Engine**: Customizable themes and styling system
+- **Media Library**: Comprehensive media management with automatic optimization
+- **Plugin Architecture**: Extensible system for adding custom functionality
+- **TypeScript Support**: Full type safety throughout the framework
+- **Authentication**: Built-in user management and role-based access control
+
+## Quick Start
+
+### Using the CLI
+
+```bash
+# Install the CLI
+npm install -g @milo/cli
+
+# Create a new project
+milo create my-website
+
+# Navigate to project
+cd my-website
+
+# Install dependencies
+npm install
+
+# Start development server
+milo dev
+
+# Build for production
+milo build
+```
+
+### Using the Core Library
+
+```javascript
+import { 
+  MiloBuilder, 
+  HeroComponent, 
+  AboutComponent, 
+  createComponent, 
+  createPage 
+} from '@milo/core';
+
+// Create builder
+const builder = new MiloBuilder();
+
+// Register components
+builder.registerComponent(HeroComponent);
+builder.registerComponent(AboutComponent);
+
+// Create page sections
+const hero = createComponent('hero', {
+  title: 'Welcome to My Site',
+  subtitle: 'Built with Milo'
+});
+
+const about = createComponent('about', {
+  title: 'About Us',
+  content: 'We create amazing websites.'
+});
+
+// Create page
+const page = createPage('home', '/', [hero, about]);
+builder.addPage(page);
+
+// Build site
+const result = await builder.build();
+```
+
+## Built-in Components
+
+### Layout Components
+- **Hero Section**: Full-screen banner with customizable backgrounds
+- **About Section**: Flexible about section with image support
+
+### Content Components  
+- **Features Grid**: Showcasing services or features
+- **Contact Form**: Contact section with form and information
+
+### Coming Soon
+- Navigation components
+- Blog components
+- E-commerce components
+- Media galleries
+
+## Architecture
+
+Milo follows a modular architecture:
+
+```
+packages/
+├── core/           # Core builder engine
+├── cli/            # Command line interface
+├── ui/             # Visual builder (planned)
+└── create-milo-app/# Project scaffolding
+
+templates/          # Starter templates
+examples/           # Example websites
+docs/              # Documentation
+```
 
 ## Media Library
 

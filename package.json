@@ -1,13 +1,17 @@
 {
-  "name": "my-v0-project",
+  "name": "milo-website-builder",
   "version": "0.1.0",
-  "private": true,
+  "description": "A modern, TypeScript-based website builder framework",
+  "private": false,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
+    "build:core": "cd packages/core && npm run build",
+    "build:cli": "cd packages/cli && npm run build", 
+    "build:all": "npm run build:core && npm run build:cli",
     "db:help": "node scripts/db-cli.js help",
     "db:status": "node scripts/db-cli.js status",
     "db:validate": "node scripts/db-cli.js validate",
@@ -15,6 +19,9 @@
     "db:test": "node scripts/db-cli.js test",
     "db:setup": "node scripts/db-cli.js generate basic"
   },
+  "workspaces": [
+    "packages/*"
+  ],
   "dependencies": {
     "@clerk/nextjs": "^5.2.4",
     "@emotion/is-prop-valid": "^1.2.1",

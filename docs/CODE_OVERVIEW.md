@@ -1,6 +1,6 @@
-# Code Overview - Milo Presedo Portfolio
+# Code Overview - Milo Website Builder
 
-This document provides a comprehensive overview of all files in the codebase, organized by functionality. Use this as a quick reference to understand what code already exists and how different parts of the application relate to each other.
+This document provides a comprehensive overview of all files in the codebase, organized by functionality. Use this as a quick reference to understand what code already exists and how different parts of the framework relate to each other.
 
 ## Table of Contents
 

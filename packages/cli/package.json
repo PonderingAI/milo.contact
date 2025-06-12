@@ -1,0 +1,35 @@
+{
+  "name": "@milo/cli",
+  "version": "0.1.0",
+  "description": "Command line interface for Milo website builder",
+  "main": "dist/index.js",
+  "bin": {
+    "milo": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "jest"
+  },
+  "keywords": [
+    "website-builder",
+    "cli",
+    "framework"
+  ],
+  "author": "Milo Contributors",
+  "license": "MIT",
+  "dependencies": {
+    "@milo/core": "^0.1.0",
+    "commander": "^9.0.0",
+    "chalk": "^4.1.2",
+    "ora": "^5.4.1",
+    "inquirer": "^8.2.5"
+  },
+  "devDependencies": {
+    "@types/inquirer": "^8.2.5",
+    "typescript": "^5.0.0"
+  }
+}

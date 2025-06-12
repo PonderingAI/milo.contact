@@ -2,6 +2,7 @@
 
 # dependencies
 /node_modules
+/packages/*/node_modules
 
 # next.js
 /.next/
@@ -9,6 +10,7 @@
 
 # production
 /build
+/packages/*/dist
 
 # debug
 npm-debug.log*
