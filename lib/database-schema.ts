@@ -186,6 +186,24 @@ END $$;`,
     dependencies: ["user_roles"],
     sqlFile: "docs/setup/dependency-tables.sql",
   },
+  {
+    name: "dependabot_alerts",
+    displayName: "Dependabot Alerts",
+    description: "Stores GitHub Dependabot security alerts",
+    category: "dependencies",
+    required: false,
+    dependencies: ["user_roles", "dependencies"],
+    sqlFile: "docs/setup/dependency-tables.sql",
+  },
+  {
+    name: "dependency_update_history", 
+    displayName: "Dependency Update History",
+    description: "Tracks all dependency update attempts and results",
+    category: "dependencies",
+    required: false,
+    dependencies: ["user_roles", "dependencies", "dependabot_alerts"],
+    sqlFile: "docs/setup/dependency-tables.sql",
+  },
 
   // Other tables
   {

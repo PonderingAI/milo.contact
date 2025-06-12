@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server"
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
+import { auth } from "@clerk/nextjs/server"
 import fs from "fs"
 import path from "path"
 import { exec } from "child_process"
@@ -94,6 +96,31 @@ async function fetchPackageInfo(packageName) {
 
 export async function POST() {
   try {
+    // Check if user is authenticated
+    const { userId } = auth()
+    if (!userId) {
+      return NextResponse.json({ 
+        error: "Unauthorized", 
+        message: "You must be signed in to scan dependencies" 
+      }, { status: 401 })
+    }
+    
+    // Get authenticated Supabase client that syncs Clerk with Supabase
+    const supabase = await getRouteHandlerSupabaseClient()
+    
+    // Check if user has admin role
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+    
+    if (roleError || !roleData || roleData.length === 0) {
+      return NextResponse.json({ 
+        error: "Permission denied", 
+        message: "Admin role required to scan dependencies"
+      }, { status: 403 })
+    }
     // Get dependencies from package.json
     const { dependencies, devDependencies } = await getDependenciesFromPackageJson()
     const allDeps = [...dependencies, ...devDependencies]
