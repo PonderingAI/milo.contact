@@ -1,229 +1,582 @@
-# Milo Website Builder
+# Milo Website Builder - Technical Deep Dive
 
-A modern, TypeScript-based website builder framework for creating professional websites with ease.
+This document provides comprehensive technical documentation for the Milo Website Builder framework. For getting started, see the main [README](../README.md).
 
-## Overview
+## Architecture Overview
 
-Milo is an open-source website builder framework that enables developers to create, customize, and deploy professional websites quickly. Built with Next.js, React, and TypeScript, it provides a powerful component system, theme engine, and extensible plugin architecture.
+Milo follows a modular, component-based architecture built on modern web technologies:
 
-## Core Features
+```
+Milo Framework Architecture
+├── Frontend Layer (Next.js 15 + React 18)
+│   ├── App Router (app/)
+│   ├── Component System (components/)
+│   └── UI Library (Radix UI + Tailwind CSS)
+├── Backend Layer (Next.js API Routes)
+│   ├── Authentication (Clerk)
+│   ├── Database (Supabase)
+│   └── File Storage (Supabase Storage)
+├── Data Layer
+│   ├── PostgreSQL (via Supabase)
+│   ├── Real-time subscriptions
+│   └── Row Level Security (RLS)
+└── Development Tools
+    ├── TypeScript (strict mode)
+    ├── Testing (Jest + React Testing Library)
+    └── Database CLI tools
+```
 
-- **Component System**: Modular, reusable React components for building websites
-- **Responsive Design**: Optimized layouts that work across all devices  
-- **Admin Dashboard**: Content management system for easy website updates
-- **Theme Engine**: Customizable themes and styling system
-- **Media Library**: Comprehensive media management with automatic optimization
-- **Plugin Architecture**: Extensible system for adding custom functionality
-- **TypeScript Support**: Full type safety throughout the framework
-- **Authentication**: Built-in user management and role-based access control
+## Core Technologies
 
-## Quick Start
+### Frontend Stack
+- **Next.js 15**: React framework with App Router
+- **React 18**: UI library with concurrent features
+- **TypeScript**: Type safety and developer experience
+- **Tailwind CSS**: Utility-first CSS framework
+- **Radix UI**: Accessible component primitives
+- **Framer Motion**: Animation library
 
-### Using the CLI
+### Backend Stack
+- **Supabase**: PostgreSQL database with real-time features
+- **Clerk**: Authentication and user management
+- **Next.js API Routes**: Serverless API endpoints
+- **Zod**: Runtime type validation
+- **Sharp**: Image processing and optimization
+
+## Component System
+
+Milo's component system is designed for maximum reusability and type safety:
+
+### Component Structure
+
+```typescript
+// Base component interface
+interface ComponentProps {
+  id?: string;
+  className?: string;
+  children?: React.ReactNode;
+}
+
+// Component with variants
+interface ButtonProps extends ComponentProps {
+  variant: 'primary' | 'secondary' | 'outline';
+  size: 'sm' | 'md' | 'lg';
+  onClick: () => void;
+  disabled?: boolean;
+}
+```
+
+### Built-in Components
+
+#### Layout Components
+- **Hero Section**: Full-screen banners with customizable backgrounds
+- **About Section**: Flexible about sections with image support
+- **Navigation**: Responsive navigation with mobile support
+
+#### Content Components  
+- **Features Grid**: Service/feature showcases with icons
+- **Contact Form**: Contact sections with form validation
+- **Media Gallery**: Image and video galleries with lightbox
+
+#### Form Components
+- **Input Fields**: Text, email, password, textarea inputs
+- **Select Dropdowns**: Single and multi-select options
+- **File Upload**: Drag-and-drop file upload with progress
+- **Form Validation**: Real-time validation with error states
+
+### Component Development
+
+```typescript
+import { cva, type VariantProps } from "class-variance-authority";
+import { cn } from "@/lib/utils";
+
+const componentVariants = cva(
+  "base-classes",
+  {
+    variants: {
+      variant: {
+        primary: "variant-specific-classes",
+        secondary: "variant-specific-classes",
+      },
+      size: {
+        sm: "size-specific-classes",
+        lg: "size-specific-classes",
+      },
+    },
+    defaultVariants: {
+      variant: "primary",
+      size: "sm",
+    },
+  }
+);
+
+interface ComponentProps 
+  extends React.HTMLAttributes<HTMLElement>,
+    VariantProps<typeof componentVariants> {
+  // Additional props
+}
+
+export function Component({ 
+  variant, 
+  size, 
+  className, 
+  ...props 
+}: ComponentProps) {
+  return (
+    <div 
+      className={cn(componentVariants({ variant, size }), className)}
+      {...props}
+    />
+  );
+}
+```
+
+## Database Architecture
+
+Milo uses Supabase (PostgreSQL) with a well-defined schema and Row Level Security:
+
+### Core Tables
+
+```sql
+-- Site settings and configuration
+CREATE TABLE site_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Media library for images and videos
+CREATE TABLE media_library (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
+  filename TEXT NOT NULL,
+  original_filename TEXT,
+  file_path TEXT NOT NULL,
+  file_size BIGINT,
+  mime_type TEXT,
+  width INTEGER,
+  height INTEGER,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Project management
+CREATE TABLE projects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID REFERENCES auth.users(id),
+  name TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+```
+
+### Row Level Security (RLS)
+
+All tables implement RLS policies for secure data access:
+
+```sql
+-- Example: Users can only access their own media
+CREATE POLICY "Users can access own media" ON media_library
+FOR ALL USING (auth.uid() = user_id);
+
+-- Example: Site settings are publicly readable, admin writable
+CREATE POLICY "Public read access" ON site_settings
+FOR SELECT USING (true);
+
+CREATE POLICY "Admin write access" ON site_settings
+FOR ALL USING (auth.jwt() ->> 'role' = 'admin');
+```
+
+## API Architecture
+
+### RESTful API Design
+
+```typescript
+// GET /api/media - List media items
+// POST /api/media - Upload new media
+// PUT /api/media/[id] - Update media item
+// DELETE /api/media/[id] - Delete media item
+
+export async function GET(request: NextRequest) {
+  const { searchParams } = new URL(request.url);
+  const page = parseInt(searchParams.get('page') || '1');
+  const limit = parseInt(searchParams.get('limit') || '10');
+  
+  const supabase = createServerClient();
+  const { data, error, count } = await supabase
+    .from('media_library')
+    .select('*', { count: 'exact' })
+    .range((page - 1) * limit, page * limit - 1)
+    .order('created_at', { ascending: false });
+    
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  
+  return NextResponse.json({
+    data,
+    pagination: {
+      page,
+      limit,
+      total: count,
+      pages: Math.ceil(count / limit)
+    }
+  });
+}
+```
+
+### Authentication Integration
+
+```typescript
+import { auth } from '@clerk/nextjs';
+import { createServerClient } from '@/lib/supabase-server';
+
+export async function POST(request: NextRequest) {
+  const { userId } = auth();
+  
+  if (!userId) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  
+  const supabase = createServerClient();
+  // Database operations with authenticated user context
+}
+
+## Media Management System
+
+### File Upload and Processing
+
+```typescript
+// Automatic WebP conversion for images
+import sharp from 'sharp';
+
+export async function processImage(file: File): Promise<Buffer> {
+  const buffer = Buffer.from(await file.arrayBuffer());
+  
+  return await sharp(buffer)
+    .webp({ quality: 90 })
+    .resize(1920, 1080, { 
+      fit: 'inside', 
+      withoutEnlargement: true 
+    })
+    .toBuffer();
+}
+```
+
+### Storage Architecture
+
+- **Upload Flow**: Client → API Route → Supabase Storage
+- **URL Generation**: Signed URLs for secure access
+- **Optimization**: Automatic WebP conversion and resizing
+- **Metadata**: Extracted and stored in database
+
+### Supported Media Types
+
+- **Images**: JPEG, PNG, WebP, GIF, SVG
+- **Videos**: MP4, WebM, Vimeo embeds, YouTube embeds
+- **Documents**: PDF (planned)
+- **Archives**: ZIP extraction for batch uploads
+
+## Theme System
+
+### CSS Custom Properties
+
+```css
+:root {
+  /* Primary colors */
+  --primary-50: 239 246 255;
+  --primary-500: 59 130 246;
+  --primary-900: 30 58 138;
+  
+  /* Semantic colors */
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --card: 0 0% 100%;
+  --card-foreground: 222.2 84% 4.9%;
+}
+
+[data-theme="dark"] {
+  --background: 222.2 84% 4.9%;
+  --foreground: 210 40% 98%;
+  --card: 222.2 84% 4.9%;
+  --card-foreground: 210 40% 98%;
+}
+```
+
+### Theme Configuration
+
+```typescript
+interface ThemeConfig {
+  colors: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+    foreground: string;
+  };
+  typography: {
+    fontFamily: {
+      sans: string[];
+      serif: string[];
+      mono: string[];
+    };
+    fontSize: Record<string, [string, string]>;
+  };
+  spacing: Record<string, string>;
+  borderRadius: Record<string, string>;
+}
+```
+
+## Development Tools
+
+### Database CLI
 
 ```bash
-# Install the CLI
-npm install -g @milo/cli
+# Check database status
+npm run db:status
 
-# Create a new project
-milo create my-website
+# Validate schema against database
+npm run db:validate
 
-# Navigate to project
-cd my-website
+# Generate migration scripts
+npm run db:generate
 
-# Install dependencies
-npm install
-
-# Start development server
-milo dev
-
-# Build for production
-milo build
+# Test database operations
+npm run db:test
 ```
 
-### Using the Core Library
+### Testing Framework
 
-```javascript
-import { 
-  MiloBuilder, 
-  HeroComponent, 
-  AboutComponent, 
-  createComponent, 
-  createPage 
-} from '@milo/core';
+```typescript
+// Component testing
+import { render, screen, fireEvent } from '@testing-library/react';
+import { MediaUploader } from '@/components/MediaUploader';
 
-// Create builder
-const builder = new MiloBuilder();
+test('should upload file successfully', async () => {
+  const onUpload = jest.fn();
+  render(<MediaUploader onUpload={onUpload} />);
+  
+  const file = new File(['test'], 'test.jpg', { type: 'image/jpeg' });
+  const input = screen.getByLabelText(/upload/i);
+  
+  fireEvent.change(input, { target: { files: [file] } });
+  
+  await waitFor(() => {
+    expect(onUpload).toHaveBeenCalledWith(file);
+  });
+});
+```
 
-// Register components
-builder.registerComponent(HeroComponent);
-builder.registerComponent(AboutComponent);
+## Performance Optimization
 
-// Create page sections
-const hero = createComponent('hero', {
-  title: 'Welcome to My Site',
-  subtitle: 'Built with Milo'
+### Code Splitting
+
+```typescript
+// Dynamic imports for large components
+const AdminDashboard = dynamic(() => import('@/components/AdminDashboard'), {
+  loading: () => <div>Loading dashboard...</div>,
+  ssr: false
 });
 
-const about = createComponent('about', {
-  title: 'About Us',
-  content: 'We create amazing websites.'
+// Route-based code splitting (automatic with App Router)
+// app/admin/dashboard/page.tsx
+export default function DashboardPage() {
+  return <AdminDashboard />;
+}
+```
+
+### Image Optimization
+
+```typescript
+import Image from 'next/image';
+
+// Optimized images with Next.js
+export function OptimizedImage({ src, alt, ...props }) {
+  return (
+    <Image
+      src={src}
+      alt={alt}
+      width={800}
+      height={600}
+      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+      priority={props.priority}
+      placeholder="blur"
+      blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQ..."
+      {...props}
+    />
+  );
+}
+```
+
+### Database Query Optimization
+
+```typescript
+// Efficient queries with proper indexing
+const { data } = await supabase
+  .from('media_library')
+  .select(`
+    id,
+    filename,
+    file_path,
+    created_at,
+    projects:project_id (
+      id,
+      name
+    )
+  `)
+  .eq('user_id', userId)
+  .order('created_at', { ascending: false })
+  .range(0, 9); // Pagination for performance
+```
+
+## Security Features
+
+### Input Validation
+
+```typescript
+import { z } from 'zod';
+
+const createMediaSchema = z.object({
+  filename: z.string().min(1).max(255),
+  file_size: z.number().positive().max(50 * 1024 * 1024), // 50MB max
+  mime_type: z.enum(['image/jpeg', 'image/png', 'image/webp']),
+  metadata: z.record(z.unknown()).optional()
 });
 
-// Create page
-const page = createPage('home', '/', [hero, about]);
-builder.addPage(page);
-
-// Build site
-const result = await builder.build();
+// Usage in API route
+const validatedData = createMediaSchema.parse(requestBody);
 ```
 
-## Built-in Components
+### Content Security Policy
 
-### Layout Components
-- **Hero Section**: Full-screen banner with customizable backgrounds
-- **About Section**: Flexible about section with image support
-
-### Content Components  
-- **Features Grid**: Showcasing services or features
-- **Contact Form**: Contact section with form and information
-
-### Coming Soon
-- Navigation components
-- Blog components
-- E-commerce components
-- Media galleries
-
-## Architecture
-
-Milo follows a modular architecture:
-
-```
-packages/
-├── core/           # Core builder engine
-├── cli/            # Command line interface
-├── ui/             # Visual builder (planned)
-└── create-milo-app/# Project scaffolding
-
-templates/          # Starter templates
-examples/           # Example websites
-docs/              # Documentation
+```typescript
+// next.config.mjs
+const securityHeaders = [
+  {
+    key: 'Content-Security-Policy',
+    value: `
+      default-src 'self';
+      script-src 'self' 'unsafe-eval' 'unsafe-inline';
+      style-src 'self' 'unsafe-inline';
+      img-src 'self' data: blob: https://*.supabase.co;
+      font-src 'self';
+      connect-src 'self' https://*.supabase.co wss://*.supabase.co;
+    `.replace(/\s{2,}/g, ' ').trim()
+  }
+];
 ```
 
-## Media Library
+## Deployment Architecture
 
-The media library supports the following features:
+### Vercel Deployment
 
-- Upload images and other files (single or bulk upload)
-- Add videos from multiple platforms:
-  - Vimeo videos
-  - YouTube videos (including youtube.com/watch?v=ID format)
-  - LinkedIn videos
-- Automatic WebP conversion for images
-- Storage usage tracking
-- Drag and drop file uploads
-- Preview and manage media
-- Copy media URLs for embedding
+```json
+{
+  "version": 2,
+  "build": {
+    "env": {
+      "NEXT_TELEMETRY_DISABLED": "1"
+    }
+  },
+  "functions": {
+    "app/api/**/*.js": {
+      "maxDuration": 30
+    }
+  },
+  "regions": ["iad1"]
+}
+```
 
-### Important Notes
+### Environment Configuration
 
-- When making changes to the media library, always make minimal changes to fix specific issues
-- Avoid complete rewrites of components unless absolutely necessary
-- Test all functionality after making changes
-- Ensure YouTube links in all formats are properly recognized
-- Prevent duplicate video links from being added
+```bash
+# Production environment variables
+NEXT_PUBLIC_SUPABASE_URL=https://project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
+SUPABASE_SERVICE_ROLE_KEY=eyJ...
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_live_...
+CLERK_SECRET_KEY=sk_live_...
+```
 
-## Media Management
+## Advanced Features
 
-The site includes a comprehensive media management system:
+### Real-time Subscriptions
 
-- **Automatic WebP Conversion**: All uploaded images are automatically converted to WebP format with high quality (90%) to ensure they look great on large displays while maintaining good performance.
-- **Media Library**: A unified media library for managing all images and videos.
-- **URL Copying**: Easy access to media URLs for use in other applications.
-- **Vimeo Integration**: Add Vimeo videos directly to the media library.
-- **Image Preview**: Preview images before using them.
+```typescript
+// Real-time updates for collaborative editing
+useEffect(() => {
+  const channel = supabase
+    .channel('media_changes')
+    .on(
+      'postgres_changes',
+      {
+        event: '*',
+        schema: 'public',
+        table: 'media_library'
+      },
+      (payload) => {
+        console.log('Change received!', payload);
+        // Update local state
+        setMediaItems(current => 
+          updateMediaList(current, payload)
+        );
+      }
+    )
+    .subscribe();
 
-For detailed information about media storage and retrieval, see [MEDIA-STORAGE.md](./MEDIA-STORAGE.md).
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, []);
+```
 
-## App Icons and Favicons
+### Plugin System (Planned)
 
-The site supports custom app icons and favicons that persist across deployments. These are stored in the Supabase database and storage, ensuring they remain available even after updates to the site.
+```typescript
+interface Plugin {
+  name: string;
+  version: string;
+  install(): Promise<void>;
+  uninstall(): Promise<void>;
+  components: Record<string, React.ComponentType>;
+  hooks: Record<string, Function>;
+}
 
-### How App Icons Work
+// Plugin registration
+export function registerPlugin(plugin: Plugin) {
+  PluginManager.register(plugin);
+}
+```
 
-1. Icons are uploaded through the admin dashboard
-2. Files are stored in Supabase Storage in the `public/icons` directory
-3. References to these icons are saved in the `site_settings` table with keys prefixed with `icon_`
-4. The `DynamicFavicons` component loads these icons client-side
-5. Default icons are used as fallback if custom icons aren't available
+## Migration and Scaling
 
-### Uploading New Icons
+### Database Migrations
 
-1. Generate a favicon package from [favicon-generator.org](https://www.favicon-generator.org/)
-2. Upload the zip file through the Admin Dashboard > Settings > App Icons tab
-3. The system will automatically extract and store all icons
-4. Icons will be immediately available after upload
+```sql
+-- Migration script example
+-- Migration: 001_add_media_metadata.sql
 
-## Setup and Installation
+ALTER TABLE media_library 
+ADD COLUMN metadata JSONB DEFAULT '{}';
 
-### Prerequisites
+CREATE INDEX idx_media_metadata 
+ON media_library USING gin (metadata);
 
-- Node.js 18+ and npm
-- Supabase account
-- Vercel account (for deployment)
+-- Update RLS policy to include metadata access
+DROP POLICY IF EXISTS "Users can access own media" ON media_library;
+CREATE POLICY "Users can access own media" ON media_library
+FOR ALL USING (auth.uid() = user_id);
+```
 
-### Environment Variables
+### Horizontal Scaling
 
-Create a `.env.local` file with the following variables:
+- **CDN Integration**: Static assets via Vercel Edge Network
+- **Database Read Replicas**: For high-traffic applications
+- **Function Regions**: Deploy API routes closer to users
+- **Cache Layers**: Redis for session and query caching
 
-\`\`\`
-NEXT_PUBLIC_SUPABASE_URL=your-supabase-url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
-SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
-BOOTSTRAP_SECRET=your-bootstrap-secret
-\`\`\`
-
-### Installation
-
-1. Clone the repository
-2. Install dependencies: `npm install`
-3. Run the development server: `npm run dev`
-4. Open [http://localhost:3000](http://localhost:3000)
-
-### Database Setup
-
-1. Visit `/setup` to initialize the database tables and storage buckets
-2. Follow the on-screen instructions to complete setup
-
-## Development
-
-### Project Structure
-
-- `/app` - Next.js App Router pages and API routes
-- `/components` - Reusable React components
-- `/lib` - Utility functions and shared code
-- `/public` - Static assets
-- `/setup` - Database setup SQL files
-- `/docs` - Documentation files
-
-### Key Components
-
-- `DynamicFavicons` - Loads custom favicons from the database
-- `AppIconsUploader` - Handles uploading and managing app icons
-- `SiteInformationForm` - Manages site content and settings
-- `UnifiedMediaLibrary` - Media management system
-
-## Deployment
-
-The site is deployed on Vercel. The app icons, media files, and site settings are stored in Supabase and will persist across deployments.
-
-### Deployment Steps
-
-1. Connect your GitHub repository to Vercel
-2. Add the required environment variables
-3. Deploy the site
-4. Visit `/setup` on the deployed site to initialize the database
-
-## License
-
-All rights reserved. This code is not open for redistribution.
+For implementation guides and getting started, see:
+- [Setup Guide](./SETUP.md) - Development environment setup
+- [Development Guide](./DEVELOPMENT.md) - Development workflow
+- [Contributing Guide](./CONTRIBUTING.md) - How to contribute

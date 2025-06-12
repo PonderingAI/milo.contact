@@ -2,23 +2,164 @@
 
 A modern, TypeScript-based website builder framework for creating professional websites with ease.
 
-## About
+## 🚀 Quick Start
 
-Milo is an open-source website builder framework that enables developers to create, customize, and deploy professional websites quickly. Built with Next.js, React, and TypeScript, it provides a powerful component system, theme engine, and extensible plugin architecture.
+### Option 1: Traditional Setup (Recommended)
 
-## Documentation
+```bash
+# Clone and install
+git clone https://github.com/PonderingAI/milo.contact.git
+cd milo.contact
+npm install
 
-All documentation has been moved to the [docs folder](./docs):
+# Setup environment
+cp .env.example .env.local
+# Add your Supabase and other environment variables
 
-- [Full README](./docs/README.md) - Complete framework documentation
-- [Contributing Guide](./docs/CONTRIBUTING.md) - How to contribute to the project
-- [Changelog](./docs/CHANGELOG.md) - History of changes
-- [Code Overview](./docs/CODE_OVERVIEW.md) - Framework structure and organization
-- [Culture](./docs/CULTURE.md) - Development principles and practices
-- [Security](./docs/SECURITY.md) - Security policies and features
+# Start development
+npm run dev
+```
 
-## Quick Links
+*Complete development environment with all features*
 
-- [Setup Instructions](./docs/README.md#setup-and-installation)
-- [Features](./docs/README.md#features)
-- [Deployment](./docs/README.md#deployment)
+### Option 2: CLI Installation
+
+```bash
+# Install the CLI globally
+npm install -g @milo/cli
+
+# Create new project
+milo create my-website
+cd my-website
+
+# Start development
+milo dev
+```
+
+*Quick project scaffolding with CLI tools*
+
+### Option 3: Docker Setup
+
+```bash
+# Quick setup with Docker
+docker compose up -d
+```
+
+*Containerized development environment*
+
+### Option 4: Database Only
+
+```bash
+# Setup database infrastructure only
+npm run db:setup
+```
+
+*Initialize database tables and storage without full setup*
+
+**Requirements:** Node.js 18+ and either Supabase account or Docker Desktop installed and running
+
+---
+
+## 📚 Documentation
+
+### Getting Started (Essential)
+
+- **[Setup Guide](./docs/SETUP.md)** - Complete development environment setup
+- **[Development Guide](./docs/DEVELOPMENT.md)** - Development workflow and best practices
+- **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
+
+### Technical Reference
+
+- **[Code Overview](./docs/CODE_OVERVIEW.md)** - How the code is organized and where to find things
+- **[Database Setup](./docs/DATABASE-SETUP.md)** - Database management and schema setup
+- **[Media Storage](./docs/MEDIA-STORAGE.md)** - Media management and storage systems
+- **[Email Setup](./docs/EMAIL-SETUP.md)** - Email system configuration
+- **[Dependencies](./docs/DEPENDENCIES.md)** - Dependency management documentation
+- **[Security](./docs/SECURITY.md)** - Security guidelines and authentication
+
+### Team Collaboration
+
+- **[Contributing](./docs/CONTRIBUTING.md)** - How to contribute to the project
+- **[Culture](./docs/CULTURE.md)** - Development principles and practices
+- **[Project Management](./docs/TODO.md)** - Current tasks and roadmap
+
+### System Documentation
+
+- **[Deployment](./docs/DEPLOYMENT.md)** - Production deployment instructions
+- **[Database Management](./docs/DATABASE-MANAGEMENT.md)** - Advanced database operations
+- **[Implementation Summary](./docs/IMPLEMENTATION-SUMMARY.md)** - System architecture overview
+- **[Changelog](./docs/CHANGELOG.md)** - Version history and changes
+
+---
+
+## 🏗️ System Overview
+
+Milo creates a comprehensive website building platform that:
+
+- 🎨 **Component System**: Modular, reusable React components for building websites
+- 📱 **Responsive Design**: Optimized layouts that work across all devices  
+- 🛠️ **Admin Dashboard**: Content management system for easy website updates
+- 🎨 **Theme Engine**: Customizable themes and styling system
+- 📚 **Media Library**: Comprehensive media management with automatic optimization
+- 🔌 **Plugin Architecture**: Extensible system for adding custom functionality
+- 🔒 **Authentication**: Built-in user management and role-based access control
+- ⚡ **TypeScript Support**: Full type safety throughout the framework
+
+### Current Services
+
+| Service | Port | Status | Purpose |
+|---------|------|--------|---------|
+| Main App | 3000 | ✅ Ready | Website builder and admin interface |
+| API Routes | 3000/api | ✅ Ready | Backend API endpoints |
+| Media Library | 3000/admin | ✅ Ready | Media management system |
+| Database Setup | 3000/setup | ✅ Ready | Database initialization |
+
+---
+
+## 🧪 Quick Development
+
+```bash
+# Install dependencies
+npm install
+
+# Setup environment variables
+cp .env.example .env.local
+# Edit .env.local with your Supabase credentials
+
+# Initialize database
+npm run db:setup
+
+# Start development server
+npm run dev
+
+# Run tests
+npm test
+
+# Build for production
+npm run build
+
+# Database management
+npm run db:validate
+npm run db:status
+```
+
+For detailed setup instructions, see [docs/SETUP.md](./docs/SETUP.md)
+
+---
+
+## 🤝 Contributing
+
+1. Read the [Development Guide](./docs/DEVELOPMENT.md) for workflow and best practices
+2. Check [Contributing Guidelines](./docs/CONTRIBUTING.md) for code standards
+3. Review [Culture](./docs/CULTURE.md) for team practices and principles
+4. Follow the [Setup Guide](./docs/SETUP.md) to get your environment ready
+
+---
+
+## 📞 Support
+
+Having issues? Check the [Troubleshooting Guide](./docs/TROUBLESHOOTING.md) or review the [Code Overview](./docs/CODE_OVERVIEW.md) for understanding the system architecture.
+
+---
+
+**📁 Note**: All documentation has been organized in the `docs/` folder for better discoverability. The [docs folder](./docs) contains a complete navigation guide.
