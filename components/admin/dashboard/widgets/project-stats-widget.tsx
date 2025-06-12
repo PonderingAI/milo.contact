@@ -29,10 +29,16 @@ export function ProjectStatsWidget({
         setLoading(true)
         setError(null)
 
-        // Fetch all projects
-        const response = await fetch(`${endpoint}?q=`)
+        // Fetch all projects - try search with wildcard first, fallback to different approaches
+        let response = await fetch(`${endpoint}?q=*`)
+        
+        // If search API doesn't work with wildcard, try alternative approaches
         if (!response.ok) {
-          throw new Error("Failed to fetch projects")
+          // Try calling without any query parameters to get all projects
+          response = await fetch(endpoint)
+          if (!response.ok) {
+            throw new Error("Failed to fetch projects")
+          }
         }
 
         const data = await response.json()

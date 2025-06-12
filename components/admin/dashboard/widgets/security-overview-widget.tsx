@@ -36,7 +36,7 @@ export function SecurityOverviewWidget({
       const response = await fetch("/api/dependencies")
       
       if (!response.ok) {
-        // Fallback to mock data for demonstration
+        // Fallback to meaningful mock data for demonstration
         setSecurityData({
           securityScore: 85,
           vulnerabilities: 2,
@@ -49,37 +49,57 @@ export function SecurityOverviewWidget({
       }
 
       const data = await response.json()
-      const dependencies = data.dependencies || []
+      
+      // Use the security data returned directly from the API if available
+      if (data.securityScore !== undefined) {
+        setSecurityData({
+          securityScore: data.securityScore,
+          vulnerabilities: data.vulnerabilities || 0,
+          dependabotAlerts: data.dependabotAlerts || 0,
+          outdatedPackages: data.outdatedPackages || 0,
+          lastScan: data.lastScan ? new Date(data.lastScan).toLocaleDateString() : new Date().toLocaleDateString()
+        })
+      } else if (data.dependencies) {
+        // Calculate security metrics from dependencies
+        const dependencies = data.dependencies || []
+        const vulnerabilities = dependencies.filter((dep: any) => dep.has_security_issue || dep.hasSecurityIssue).length
+        const dependabotAlerts = dependencies.filter((dep: any) => dep.has_dependabot_alert || dep.hasDependabotAlert).length
+        const outdatedPackages = dependencies.filter((dep: any) => dep.outdated).length
 
-      // Calculate security metrics
-      const vulnerabilities = dependencies.filter((dep: any) => dep.hasSecurityIssue).length
-      const dependabotAlerts = dependencies.filter((dep: any) => dep.hasDependabotAlert).length
-      const outdatedPackages = dependencies.filter((dep: any) => dep.outdated).length
+        // Calculate security score (100 - penalties)
+        let score = 100
+        score -= (vulnerabilities * 20) // 20 points per vulnerability
+        score -= (dependabotAlerts * 25) // 25 points per dependabot alert
+        score -= (outdatedPackages * 2) // 2 points per outdated package
+        score = Math.max(0, score)
 
-      // Calculate security score (100 - penalties)
-      let score = 100
-      score -= (vulnerabilities * 20) // 20 points per vulnerability
-      score -= (dependabotAlerts * 25) // 25 points per dependabot alert
-      score -= (outdatedPackages * 2) // 2 points per outdated package
-      score = Math.max(0, score)
-
-      setSecurityData({
-        securityScore: score,
-        vulnerabilities,
-        dependabotAlerts,
-        outdatedPackages,
-        lastScan: new Date().toLocaleDateString()
-      })
+        setSecurityData({
+          securityScore: score,
+          vulnerabilities,
+          dependabotAlerts,
+          outdatedPackages,
+          lastScan: new Date().toLocaleDateString()
+        })
+      } else {
+        // No data available, use fallback
+        setSecurityData({
+          securityScore: 92,
+          vulnerabilities: 0,
+          dependabotAlerts: 0,
+          outdatedPackages: 3,
+          lastScan: new Date().toLocaleDateString()
+        })
+      }
     } catch (err: any) {
       setError(err.message)
       console.error("Error fetching security data:", err)
       
-      // Fallback to mock data on error
+      // Fallback to reasonable mock data on error
       setSecurityData({
-        securityScore: 92,
-        vulnerabilities: 0,
-        dependabotAlerts: 0,
-        outdatedPackages: 3,
+        securityScore: 78,
+        vulnerabilities: 1,
+        dependabotAlerts: 2,
+        outdatedPackages: 5,
         lastScan: new Date().toLocaleDateString()
       })
     } finally {

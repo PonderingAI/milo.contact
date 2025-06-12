@@ -450,7 +450,7 @@ export const defaultWidgets: Widget[] = [
     id: "widget-5",
     type: "project-overview",
     title: "Project Insights",
-    size: { w: 4, h: 3 },
+    size: { w: 6, h: 3 },
     position: { x: 0, y: 2 },
     props: {
       title: "Project Insights",
@@ -460,23 +460,11 @@ export const defaultWidgets: Widget[] = [
     id: "widget-6",
     type: "system-activity",
     title: "Recent Activity",
-    size: { w: 4, h: 3 },
-    position: { x: 4, y: 2 },
+    size: { w: 6, h: 3 },
+    position: { x: 6, y: 2 },
     props: {
       title: "Recent Activity",
       maxItems: 5,
-    },
-  },
-  {
-    id: "widget-7",
-    type: "user-growth-chart",
-    title: "User Growth",
-    size: { w: 4, h: 3 },
-    position: { x: 8, y: 2 },
-    props: {
-      title: "User Growth",
-      data: userGrowthData,
-      type: "line",
     },
   },
 ]

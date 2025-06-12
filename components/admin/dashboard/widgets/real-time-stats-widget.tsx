@@ -35,22 +35,34 @@ export function RealTimeStatsWidget({
 
       switch (metric) {
         case "projects":
-          response = await fetch("/api/projects/search?q=")
+          response = await fetch("/api/projects/search?q=*")
           if (response.ok) {
             data = await response.json()
-            const projects = data.data || []
-            const current = projects.length
-            
-            // Get projects from last period for comparison
-            const lastWeek = new Date()
-            lastWeek.setDate(lastWeek.getDate() - 7)
-            const recent = projects.filter((p: any) => 
-              p.created_at && new Date(p.created_at) > lastWeek
-            ).length
-            
+            if (data.success && data.data) {
+              const projects = data.data
+              const current = projects.length
+              
+              // Get projects from last period for comparison
+              const lastWeek = new Date()
+              lastWeek.setDate(lastWeek.getDate() - 7)
+              const recent = projects.filter((p: any) => 
+                p.created_at && new Date(p.created_at) > lastWeek
+              ).length
+              
+              setStats({
+                current,
+                previous: Math.max(0, current - recent),
+                label: "Total Projects",
+                suffix: ""
+              })
+            } else {
+              throw new Error("Invalid response format")
+            }
+          } else {
+            // Fallback data for projects
             setStats({
-              current,
-              previous: Math.max(0, current - recent),
+              current: 48,
+              previous: 45,
               label: "Total Projects",
               suffix: ""
             })
@@ -58,17 +70,8 @@ export function RealTimeStatsWidget({
           break
 
         case "media":
-          // Try to get media count from an API endpoint
           response = await fetch("/api/media/count")
-          if (!response.ok) {
-            // Fallback to mock data if endpoint doesn't exist
-            setStats({
-              current: 156,
-              previous: 142,
-              label: "Media Files",
-              suffix: ""
-            })
-          } else {
+          if (response.ok) {
             data = await response.json()
             setStats({
               current: data.count || 0,
@@ -76,25 +79,32 @@ export function RealTimeStatsWidget({
               label: "Media Files",
               suffix: ""
             })
+          } else {
+            // Fallback to mock data if endpoint doesn't exist
+            setStats({
+              current: 156,
+              previous: 142,
+              label: "Media Files",
+              suffix: ""
+            })
           }
           break
 
         case "storage":
-          // Try to get storage usage
           response = await fetch("/api/storage/usage")
-          if (!response.ok) {
-            // Fallback to mock data
-            setStats({
-              current: 2.4,
-              previous: 2.1,
-              label: "Storage Used",
-              suffix: " GB"
-            })
-          } else {
+          if (response.ok) {
             data = await response.json()
             setStats({
               current: data.used || 0,
               previous: data.previousUsed || 0,
+              label: "Storage Used",
+              suffix: " GB"
+            })
+          } else {
+            // Fallback to mock data
+            setStats({
+              current: 2.4,
+              previous: 2.1,
               label: "Storage Used",
               suffix: " GB"
             })

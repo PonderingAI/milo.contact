@@ -72,8 +72,8 @@ describe('SecurityOverviewWidget', () => {
     render(<SecurityOverviewWidget />)
 
     await waitFor(() => {
-      expect(screen.getByText('92%')).toBeInTheDocument() // Fallback score
-      expect(screen.getByText('All Clear')).toBeInTheDocument()
+      expect(screen.getByText('78%')).toBeInTheDocument() // Updated fallback score
+      expect(screen.getByText('View Security Details')).toBeInTheDocument() // Should show details since there are issues
     })
   })
 
