@@ -1,5 +1,23 @@
 import { ChartWidget } from "./widgets/chart-widget"
-import { Users, FileText, HardDrive, Shield, CreditCard } from "lucide-react"
+import { ProjectStatsWidget } from "./widgets/project-stats-widget"
+import { RealTimeStatsWidget } from "./widgets/real-time-stats-widget"
+import { SecurityOverviewWidget } from "./widgets/security-overview-widget"
+import { SystemActivityWidget } from "./widgets/system-activity-widget"
+import { SecurityWidget } from "@/components/admin/security-widgets"
+import { 
+  Users, 
+  FileText, 
+  HardDrive, 
+  Shield, 
+  CreditCard, 
+  Activity,
+  AlertTriangle,
+  Package,
+  Settings,
+  History,
+  TrendingUp,
+  BarChart3
+} from "lucide-react"
 import type { WidgetDefinition, Widget } from "./widget-container"
 
 // Sample data for widgets
@@ -32,6 +50,7 @@ const storageData = [
 
 // Define available widgets
 export const availableWidgets: WidgetDefinition[] = [
+  // === ANALYTICS & CHARTS ===
   {
     type: "user-growth-chart",
     title: "User Growth",
@@ -92,11 +111,257 @@ export const availableWidgets: WidgetDefinition[] = [
       type: "bar",
     },
   },
+
+  // === REAL-TIME STATISTICS ===
+  {
+    type: "projects-stats-live",
+    title: "Live Project Stats",
+    description: "Real-time project statistics with trend data",
+    category: "Statistics",
+    component: (props: any) => (
+      <RealTimeStatsWidget
+        title={props.title}
+        metric="projects"
+        icon={<FileText className="h-4 w-4" />}
+      />
+    ),
+    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
+    defaultProps: {
+      title: "Projects",
+    },
+  },
+  {
+    type: "media-stats-live",
+    title: "Live Media Stats",
+    description: "Real-time media file statistics",
+    category: "Statistics",
+    component: (props: any) => (
+      <RealTimeStatsWidget
+        title={props.title}
+        metric="media"
+        icon={<HardDrive className="h-4 w-4" />}
+      />
+    ),
+    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
+    defaultProps: {
+      title: "Media Files",
+    },
+  },
+  {
+    type: "storage-stats-live",
+    title: "Live Storage Stats",
+    description: "Real-time storage usage statistics",
+    category: "Statistics",
+    component: (props: any) => (
+      <RealTimeStatsWidget
+        title={props.title}
+        metric="storage"
+        icon={<HardDrive className="h-4 w-4" />}
+      />
+    ),
+    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
+    defaultProps: {
+      title: "Storage Usage",
+    },
+  },
+  {
+    type: "dependencies-stats-live",
+    title: "Live Dependencies",
+    description: "Real-time dependency statistics",
+    category: "Statistics",
+    component: (props: any) => (
+      <RealTimeStatsWidget
+        title={props.title}
+        metric="dependencies"
+        icon={<Package className="h-4 w-4" />}
+      />
+    ),
+    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
+    defaultProps: {
+      title: "Dependencies",
+    },
+  },
+
+  // === PROJECT INSIGHTS ===
+  {
+    type: "project-overview",
+    title: "Project Overview",
+    description: "Detailed project statistics and insights",
+    category: "Projects",
+    component: (props: any) => (
+      <ProjectStatsWidget title={props.title} />
+    ),
+    defaultSize: { w: 4, h: 3, minW: 3, minH: 2 },
+    defaultProps: {
+      title: "Project Overview",
+    },
+  },
+
+  // === SECURITY WIDGETS ===
+  {
+    type: "security-overview",
+    title: "Security Overview",
+    description: "Complete security status overview",
+    category: "Security",
+    component: (props: any) => (
+      <SecurityOverviewWidget
+        title={props.title}
+        showActions={props.showActions}
+      />
+    ),
+    defaultSize: { w: 4, h: 3, minW: 3, minH: 2 },
+    defaultProps: {
+      title: "Security Overview",
+      showActions: true,
+    },
+  },
+  {
+    type: "security-score",
+    title: "Security Score",
+    description: "Overall security rating of your application",
+    category: "Security",
+    component: (props: any) => {
+      // Create mock security stats for the SecurityWidget
+      const mockSecurityStats = {
+        securityScore: props.securityScore || 92,
+        vulnerabilities: props.vulnerabilities || 0,
+        dependabotAlerts: props.dependabotAlerts || 0,
+        outdatedPackages: props.outdatedPackages || 3,
+        lastScan: props.lastScan || new Date().toLocaleDateString()
+      }
+      
+      return (
+        <SecurityWidget
+          type="security-score"
+          id={props.id || "security-score"}
+          securityStats={mockSecurityStats}
+          dependencies={[]}
+          updateResults={[]}
+          globalUpdateMode="conservative"
+          globalDependenciesCount={0}
+          dependabotAlertCount={0}
+          setActiveTab={() => {}}
+          setFilter={() => {}}
+          updateGlobalMode={() => {}}
+          resetAllSettings={() => {}}
+          runSecurityAudit={() => {}}
+          auditRunning={false}
+          applyChanges={() => {}}
+          handleAddWidget={() => {}}
+        />
+      )
+    },
+    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
+    defaultProps: {
+      securityScore: 92,
+    },
+  },
+  {
+    type: "vulnerabilities",
+    title: "Vulnerabilities",
+    description: "Known security issues in your dependencies",
+    category: "Security",
+    component: (props: any) => {
+      const mockSecurityStats = {
+        securityScore: 92,
+        vulnerabilities: props.vulnerabilities || 0,
+        dependabotAlerts: 0,
+        outdatedPackages: 3,
+        lastScan: new Date().toLocaleDateString()
+      }
+      
+      return (
+        <SecurityWidget
+          type="vulnerabilities"
+          id={props.id || "vulnerabilities"}
+          securityStats={mockSecurityStats}
+          dependencies={[]}
+          updateResults={[]}
+          globalUpdateMode="conservative"
+          globalDependenciesCount={0}
+          dependabotAlertCount={0}
+          setActiveTab={() => {}}
+          setFilter={() => {}}
+          updateGlobalMode={() => {}}
+          resetAllSettings={() => {}}
+          runSecurityAudit={() => {}}
+          auditRunning={false}
+          applyChanges={() => {}}
+          handleAddWidget={() => {}}
+        />
+      )
+    },
+    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
+    defaultProps: {
+      vulnerabilities: 0,
+    },
+  },
+  {
+    type: "dependabot-alerts",
+    title: "Dependabot Alerts",
+    description: "GitHub Dependabot security alerts",
+    category: "Security",
+    component: (props: any) => {
+      const mockSecurityStats = {
+        securityScore: 92,
+        vulnerabilities: 0,
+        dependabotAlerts: props.dependabotAlerts || 0,
+        outdatedPackages: 3,
+        lastScan: new Date().toLocaleDateString()
+      }
+      
+      return (
+        <SecurityWidget
+          type="dependabot-alerts"
+          id={props.id || "dependabot-alerts"}
+          securityStats={mockSecurityStats}
+          dependencies={[]}
+          updateResults={[]}
+          globalUpdateMode="conservative"
+          globalDependenciesCount={0}
+          dependabotAlertCount={props.dependabotAlerts || 0}
+          setActiveTab={() => {}}
+          setFilter={() => {}}
+          updateGlobalMode={() => {}}
+          resetAllSettings={() => {}}
+          runSecurityAudit={() => {}}
+          auditRunning={false}
+          applyChanges={() => {}}
+          handleAddWidget={() => {}}
+        />
+      )
+    },
+    defaultSize: { w: 3, h: 3, minW: 2, minH: 2 },
+    defaultProps: {
+      dependabotAlerts: 0,
+    },
+  },
+
+  // === SYSTEM MONITORING ===
+  {
+    type: "system-activity",
+    title: "System Activity",
+    description: "Recent system activity and events",
+    category: "System",
+    component: (props: any) => (
+      <SystemActivityWidget
+        title={props.title}
+        maxItems={props.maxItems}
+      />
+    ),
+    defaultSize: { w: 4, h: 4, minW: 3, minH: 3 },
+    defaultProps: {
+      title: "Recent Activity",
+      maxItems: 5,
+    },
+  },
+
+  // === LEGACY WIDGETS (kept for compatibility but improved) ===
   {
     type: "users-stats",
     title: "Total Users",
-    description: "Display total number of users",
-    category: "Statistics",
+    description: "Display total number of users (legacy)",
+    category: "Legacy",
     component: (props: any) => (
       <div className="flex flex-col h-full justify-center items-center">
         <div className="text-muted-foreground mb-2 flex items-center gap-2">
@@ -117,8 +382,8 @@ export const availableWidgets: WidgetDefinition[] = [
   {
     type: "revenue-stats",
     title: "Revenue",
-    description: "Display total revenue",
-    category: "Statistics",
+    description: "Display total revenue (legacy)",
+    category: "Legacy",
     component: (props: any) => (
       <div className="flex flex-col h-full justify-center items-center">
         <div className="text-muted-foreground mb-2 flex items-center gap-2">
@@ -136,146 +401,70 @@ export const availableWidgets: WidgetDefinition[] = [
       description: "Monthly income",
     },
   },
-  {
-    type: "projects-stats",
-    title: "Projects",
-    description: "Display total number of projects",
-    category: "Statistics",
-    component: (props: any) => (
-      <div className="flex flex-col h-full justify-center items-center">
-        <div className="text-muted-foreground mb-2 flex items-center gap-2">
-          <FileText className="h-4 w-4" />
-          <span>{props.title || "Projects"}</span>
-        </div>
-        <div className="text-4xl font-bold text-primary">{props.value || "48"}</div>
-        <p className="text-sm text-muted-foreground mt-2">{props.description || "Active projects"}</p>
-      </div>
-    ),
-    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
-    defaultProps: {
-      title: "Projects",
-      value: "48",
-      description: "Active projects",
-    },
-  },
-  {
-    type: "storage-stats",
-    title: "Storage",
-    description: "Display total storage used",
-    category: "Statistics",
-    component: (props: any) => (
-      <div className="flex flex-col h-full justify-center items-center">
-        <div className="text-muted-foreground mb-2 flex items-center gap-2">
-          <HardDrive className="h-4 w-4" />
-          <span>{props.title || "Storage"}</span>
-        </div>
-        <div className="text-4xl font-bold text-primary">{props.value || "128 GB"}</div>
-        <p className="text-sm text-muted-foreground mt-2">{props.description || "Total usage"}</p>
-      </div>
-    ),
-    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
-    defaultProps: {
-      title: "Storage",
-      value: "128 GB",
-      description: "Total usage",
-    },
-  },
-  {
-    type: "security-stats",
-    title: "Security",
-    description: "Display security score",
-    category: "Statistics",
-    component: (props: any) => (
-      <div className="flex flex-col h-full justify-center items-center">
-        <div className="text-muted-foreground mb-2 flex items-center gap-2">
-          <Shield className="h-4 w-4" />
-          <span>{props.title || "Security"}</span>
-        </div>
-        <div className="text-4xl font-bold text-primary">{props.value || "92%"}</div>
-        <p className="text-sm text-muted-foreground mt-2">{props.description || "Security score"}</p>
-      </div>
-    ),
-    defaultSize: { w: 3, h: 2, minW: 2, minH: 2 },
-    defaultProps: {
-      title: "Security",
-      value: "92%",
-      description: "Security score",
-    },
-  },
 ]
 
 // Default widgets for the dashboard
 export const defaultWidgets: Widget[] = [
   {
     id: "widget-1",
-    type: "users-stats",
-    title: "Total Users",
+    type: "projects-stats-live",
+    title: "Projects",
     size: { w: 3, h: 2 },
     position: { x: 0, y: 0 },
     props: {
-      title: "Total Users",
-      value: "1,234",
-      description: "Active accounts",
+      title: "Projects",
     },
   },
   {
     id: "widget-2",
-    type: "revenue-stats",
-    title: "Revenue",
+    type: "media-stats-live",
+    title: "Media Files",
     size: { w: 3, h: 2 },
     position: { x: 3, y: 0 },
     props: {
-      title: "Revenue",
-      value: "$12,345",
-      description: "Monthly income",
+      title: "Media Files",
     },
   },
   {
     id: "widget-3",
-    type: "projects-stats",
-    title: "Projects",
+    type: "storage-stats-live",
+    title: "Storage",
     size: { w: 3, h: 2 },
     position: { x: 6, y: 0 },
     props: {
-      title: "Projects",
-      value: "48",
-      description: "Active projects",
+      title: "Storage Usage",
     },
   },
   {
     id: "widget-4",
-    type: "storage-stats",
-    title: "Storage",
+    type: "security-overview",
+    title: "Security",
     size: { w: 3, h: 2 },
     position: { x: 9, y: 0 },
     props: {
-      title: "Storage",
-      value: "128 GB",
-      description: "Total usage",
+      title: "Security Overview",
+      showActions: true,
     },
   },
   {
     id: "widget-5",
-    type: "user-growth-chart",
-    title: "User Growth",
-    size: { w: 6, h: 4 },
+    type: "project-overview",
+    title: "Project Insights",
+    size: { w: 6, h: 3 },
     position: { x: 0, y: 2 },
     props: {
-      title: "User Growth",
-      data: userGrowthData,
-      type: "line",
+      title: "Project Insights",
     },
   },
   {
     id: "widget-6",
-    type: "revenue-chart",
-    title: "Monthly Revenue",
-    size: { w: 6, h: 4 },
+    type: "system-activity",
+    title: "Recent Activity",
+    size: { w: 6, h: 3 },
     position: { x: 6, y: 2 },
     props: {
-      title: "Monthly Revenue",
-      data: revenueData,
-      type: "bar",
+      title: "Recent Activity",
+      maxItems: 5,
     },
   },
 ]

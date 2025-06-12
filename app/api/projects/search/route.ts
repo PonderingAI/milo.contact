@@ -8,21 +8,14 @@ export async function GET(request: Request) {
     const category = searchParams.get("category")
     const role = searchParams.get("role")
 
-    if (!query && !category && !role) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: "No search parameters provided",
-        },
-        { status: 400 },
-      )
-    }
+    // Allow empty queries to return all projects
+    const isEmpty = (!query || query.trim() === "" || query === "*") && !category && !role
 
     const supabase = createAdminClient()
     let projectsQuery = supabase.from("projects").select("*")
 
     // Apply filters
-    if (query) {
+    if (query && query.trim() !== "" && query !== "*") {
       projectsQuery = projectsQuery.or(
         `title.ilike.%${query}%,description.ilike.%${query}%,category.ilike.%${query}%,role.ilike.%${query}%`,
       )
