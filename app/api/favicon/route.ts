@@ -9,15 +9,21 @@ export async function GET() {
     const { data, error } = await supabase.from("site_settings").select("value").eq("key", "favicon").single()
 
     if (error || !data) {
-      // Return default favicon
-      return NextResponse.redirect(new URL("/favicon.ico", process.env.NEXT_PUBLIC_SITE_URL))
+      // Return default favicon with caching
+      const response = NextResponse.redirect(new URL("/favicon.ico", process.env.NEXT_PUBLIC_SITE_URL))
+      response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+      return response
     }
 
-    // Redirect to the favicon URL
-    return NextResponse.redirect(data.value)
+    // Redirect to the favicon URL with caching
+    const response = NextResponse.redirect(data.value)
+    response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+    return response
   } catch (error) {
     console.error("Error serving favicon:", error)
-    // Return default favicon
-    return NextResponse.redirect(new URL("/favicon.ico", process.env.NEXT_PUBLIC_SITE_URL))
+    // Return default favicon with caching
+    const response = NextResponse.redirect(new URL("/favicon.ico", process.env.NEXT_PUBLIC_SITE_URL))
+    response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+    return response
   }
 }
