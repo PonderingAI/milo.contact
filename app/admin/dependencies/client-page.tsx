@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { AlertCircle, Package, RefreshCw } from "lucide-react"
 import DependencyTableSetupGuide from "@/components/admin/dependency-table-setup-guide"
 import { DependencyList } from "@/components/admin/dependency-list"
+import { type ToggleState } from "@/components/ui/four-state-toggle"
 
 // Define the dependency interface
 interface Dependency {
@@ -22,7 +23,7 @@ interface Dependency {
   securityDetails?: any
   hasDependabotAlert?: boolean
   dependabotAlertDetails?: any
-  updateMode: string
+  updateMode: ToggleState
   isDev?: boolean
 }
 
@@ -167,6 +168,28 @@ export default function ClientDependenciesPage() {
     }
   }
 
+  const updateDependencyMode = async (id: string, value: ToggleState) => {
+    try {
+      // Update locally first for immediate feedback
+      setDependencies((deps) =>
+        deps.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep))
+      )
+
+      // Then update on the server
+      await fetch(`/api/dependencies/update-mode`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, updateMode: value }),
+      })
+    } catch (error) {
+      console.error("Failed to update dependency mode:", error)
+      // Revert on failure
+      fetchDependencies()
+    }
+  }
+
   if (!isLoaded) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -298,6 +321,7 @@ export default function ClientDependenciesPage() {
                 dependencies={dependencies}
                 filter={filter}
                 searchTerm={searchTerm}
+                updateDependencyMode={updateDependencyMode}
                 viewVulnerabilityDetails={viewVulnerabilityDetails}
                 viewDependabotAlertDetails={viewDependabotAlertDetails}
                 clearFilters={clearFilters}
