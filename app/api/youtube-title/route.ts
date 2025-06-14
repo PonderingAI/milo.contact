@@ -23,11 +23,16 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json()
 
-    return NextResponse.json({
+    const jsonResponse = NextResponse.json({
       title: data.title || null,
       author: data.author_name || null,
       thumbnailUrl: data.thumbnail_url || null,
     })
+    
+    // Cache YouTube metadata for 1 hour since video info doesn't change frequently
+    jsonResponse.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+    
+    return jsonResponse
   } catch (error) {
     console.error("Error fetching YouTube title:", error)
     return NextResponse.json(

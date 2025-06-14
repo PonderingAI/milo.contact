@@ -145,6 +145,10 @@ export async function GET(request: Request) {
       status: overallStatus,
       results,
       timestamp: new Date().toISOString()
+    }, {
+      headers: {
+        'Cache-Control': 'public, max-age=30, s-maxage=30'
+      }
     })
 
   } catch (error) {
