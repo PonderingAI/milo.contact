@@ -11,6 +11,8 @@ const publicRoutes = [
   "/backend-setup",
   "/setup",
   "/api/setup-all",
+  "/api/setup/unified",
+  "/api/database/diagnostics",
   "/api/setup-database",
   "/api/seed-database",
   "/api/setup-storage",
@@ -33,5 +35,10 @@ export default clerkMiddleware({
 })
 
 export const config = {
-  matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"],
+  // Exclude static files, _next, manifest files, favicons, and other assets
+  matcher: [
+    "/((?!.+\\.[\\w]+$|_next|favicon|manifest|robots|sitemap|apple-icon|icon-).*)",
+    "/",
+    "/(api|trpc)(.*)"
+  ],
 }
