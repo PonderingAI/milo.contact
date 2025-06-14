@@ -95,6 +95,9 @@ export async function GET(_req: NextRequest) {
   };
 
   return new Response(JSON.stringify(manifestContent), {
-    headers: { 'Content-Type': 'application/manifest+json' }
+    headers: { 
+      'Content-Type': 'application/manifest+json',
+      'Cache-Control': 'public, max-age=3600, s-maxage=3600'
+    }
   });
 }

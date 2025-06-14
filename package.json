@@ -9,6 +9,7 @@
     "start": "next start",
     "lint": "next lint",
     "test": "jest",
+    "test:optimizations": "node scripts/test-optimizations.js",
     "build:core": "cd packages/core && npm run build",
     "build:cli": "cd packages/cli && npm run build",
     "build:all": "npm run build:core && npm run build:cli",
