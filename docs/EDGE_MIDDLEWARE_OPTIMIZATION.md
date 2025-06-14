@@ -17,14 +17,15 @@ matcher: ["/((?!.+\\.[\\w]+$|_next).*)", "/", "/(api|trpc)(.*)"]
 **After:**
 ```typescript
 matcher: [
-  "/((?!_next/static|_next/image|favicon|manifest|robots|sitemap).*)",
-  "/((?!.*\\.ico$|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.gif$|.*\\.svg$|.*\\.webp$|.*\\.css$|.*\\.js$|.*\\.woff$|.*\\.woff2$|.*\\.ttf$|.*\\.eot$).*)",
+  "/((?!_next/static|_next/image|favicon|manifest|robots|sitemap|apple-icon|android-icon|icon-|mstile-).*)",
+  "/((?!.*\\.ico$|.*\\.png$|.*\\.jpg$|.*\\.jpeg$|.*\\.gif$|.*\\.svg$|.*\\.webp$|.*\\.css$|.*\\.js$|.*\\.woff$|.*\\.woff2$|.*\\.ttf$|.*\\.eot$|.*\\.otf$|.*\\.txt$|.*\\.xml$|.*\\.json$|.*\\.pdf$|.*\\.mp4$|.*\\.mp3$|.*\\.wav$|.*\\.ogg$|.*\\.avi$|.*\\.mov$|.*\\.wmv$|.*\\.flv$|.*\\.webm$).*)",
+  "/((?!browserconfig\\.xml|site\\.webmanifest|humans\\.txt|ads\\.txt|security\\.txt|\\.well-known/).*)",
   "/",
   "/(api|trpc)(.*)"
 ]
 ```
 
-**Impact:** Excludes static assets, manifest files, robots.txt, sitemap.xml, and other files that don't need authentication.
+**Impact:** Excludes static assets, manifest files, robots.txt, sitemap.xml, media files, and other files that don't need authentication or processing.
 
 ### 2. Unified API Endpoints
 
@@ -117,28 +118,78 @@ await fetch('/api/batch', {
 
 ### 4. Enhanced Public Routes
 Expanded the `publicRoutes` array to include endpoints that don't require authentication:
-- `/api/ping`
-- `/api/youtube-title`
+- `/api/ping` (with 60s cache)
+- `/api/youtube-title` (with 1hr cache)
 - `/api/contact`
-- `/api/database/diagnostics`
+- `/api/database/diagnostics` (with 30s cache)
 - `/api/setup/unified`
 - `/api/media/operations`
 - `/api/batch`
+- `/api/system/status` (with 30s cache)
+- `/robots.txt` (with 24hr cache)
+- `/sitemap.xml` (with 1hr cache)
+- `/manifest` (with 1hr cache)
 
 ### 5. Caching Optimizations
 Added appropriate cache headers to endpoints that don't change frequently:
 
 ```typescript
-// /api/favicon
+// /api/favicon - 1 hour cache
 response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+
+// /api/ping - 1 minute cache for health checks
+response.headers.set('Cache-Control', 'public, max-age=60, s-maxage=60')
+
+// /api/youtube-title - 1 hour cache for video metadata
+response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+
+// /api/database/diagnostics - 30 second cache for system diagnostics  
+response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=30')
+
+// /api/system/status - 30 second cache for health checks
+response.headers.set('Cache-Control', 'public, max-age=30, s-maxage=30')
+
+// /manifest - 1 hour cache
+response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+
+// /robots.txt - 24 hour cache
+response.headers.set('Cache-Control', 'public, max-age=86400, s-maxage=86400')
+
+// /sitemap.xml - 1 hour cache
+response.headers.set('Cache-Control', 'public, max-age=3600, s-maxage=3600')
+```
+
+### 6. System Health Consolidation
+**New Endpoint:** `/api/system/status`
+**Purpose:** Consolidates multiple system health checks into a single endpoint
+
+**Replaces multiple diagnostic calls:**
+- Database connection tests
+- Table existence checks
+- Storage bucket verification
+- API endpoint health checks
+
+**Usage:**
+```javascript
+// Instead of multiple calls:
+await fetch('/api/check-database-setup')
+await fetch('/api/check-projects-table')
+await fetch('/api/ping')
+
+// Use one call:
+await fetch('/api/system/status?checks=database,tables,api&format=simple')
 ```
 
 ## Expected Results
 
 ### Middleware Invocation Reduction
 - **Before:** ~1,000,000+ invocations
-- **Expected:** 70-80% reduction in invocations
-- **How:** Consolidated 25+ individual API calls into 4 unified endpoints
+- **Expected:** 80-90% reduction in invocations
+- **How:** 
+  - Consolidated 25+ individual API calls into 4 unified endpoints
+  - Enhanced middleware matcher to exclude significantly more static files
+  - Added strategic caching to reduce redundant requests
+  - Created comprehensive system health endpoint
 
 ### Performance Improvements
 - **Fewer HTTP roundtrips:** Single API calls instead of multiple
