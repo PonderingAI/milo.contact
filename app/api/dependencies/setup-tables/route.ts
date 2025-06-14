@@ -1,9 +1,34 @@
 import { NextResponse } from "next/server"
-import { createAdminClient } from "@/lib/supabase-server"
+import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
+import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
   try {
-    const supabase = createAdminClient()
+    // Check if user is authenticated
+    const { userId } = auth()
+    if (!userId) {
+      return NextResponse.json({ 
+        error: "Unauthorized", 
+        message: "You must be signed in to set up dependency tables" 
+      }, { status: 401 })
+    }
+    
+    // Get authenticated Supabase client that syncs Clerk with Supabase
+    const supabase = await getRouteHandlerSupabaseClient()
+    
+    // Check if user has admin role
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('*')
+      .eq('user_id', userId)
+      .eq('role', 'admin')
+    
+    if (roleError || !roleData || roleData.length === 0) {
+      return NextResponse.json({ 
+        error: "Permission denied", 
+        message: "Admin role required to set up dependency tables"
+      }, { status: 403 })
+    }
 
     // SQL to create the dependencies table
     const createDependenciesTableSQL = `

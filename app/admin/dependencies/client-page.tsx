@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { AlertCircle, Package, RefreshCw } from "lucide-react"
 import DependencyTableSetupGuide from "@/components/admin/dependency-table-setup-guide"
 import { DependencyList } from "@/components/admin/dependency-list"
-import type { ToggleState } from "@/components/ui/four-state-toggle"
+import { type ToggleState } from "@/components/ui/four-state-toggle"
 
 // Define the dependency interface
 interface Dependency {
@@ -131,29 +131,7 @@ export default function ClientDependenciesPage() {
     fetchDependencies()
   }
 
-  const updateDependencyMode = async (id: string, value: ToggleState) => {
-    // Find the dependency
-    const dependency = dependencies.find((dep) => dep.id === id)
-    if (!dependency) return
 
-    // Update locally first for immediate feedback
-    setDependencies((deps) => deps.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep)))
-
-    // Then update on the server
-    try {
-      await fetch(`/api/dependencies/update-mode`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ id, mode: value }),
-      })
-    } catch (error) {
-      console.error("Failed to update dependency mode:", error)
-      // Revert on failure
-      fetchDependencies()
-    }
-  }
 
   const viewVulnerabilityDetails = (dependency) => {
     setSelectedDependency(dependency)
@@ -185,6 +163,28 @@ export default function ClientDependenciesPage() {
       })
     } catch (error) {
       console.error("Failed to reset all dependencies to global mode:", error)
+      // Revert on failure
+      fetchDependencies()
+    }
+  }
+
+  const updateDependencyMode = async (id: string, value: ToggleState) => {
+    try {
+      // Update locally first for immediate feedback
+      setDependencies((deps) =>
+        deps.map((dep) => (dep.id === id ? { ...dep, updateMode: value } : dep))
+      )
+
+      // Then update on the server
+      await fetch(`/api/dependencies/update-mode`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ id, updateMode: value }),
+      })
+    } catch (error) {
+      console.error("Failed to update dependency mode:", error)
       // Revert on failure
       fetchDependencies()
     }

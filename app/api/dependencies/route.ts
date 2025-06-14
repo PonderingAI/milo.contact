@@ -187,7 +187,7 @@ export async function GET() {
         security_details: hasSecurityIssue ? securityIssues?.vulnerabilities?.[dep.name] : null,
         has_dependabot_alert: false, // We're not using simulated data anymore
         dependabot_alert_details: null,
-        update_mode: "conservative", // Default to conservative
+        update_mode: "global", // Default to global policy
         is_dev: dep.is_dev,
         description: dep.description || "",
         repository: dep.repository || "",
@@ -234,7 +234,7 @@ export async function GET() {
             has_dependabot_alert: false,
             is_dev: dep.is_dev,
             description: "Loaded from package.json",
-            update_mode: "conservative",
+            update_mode: "global",
           })),
           tableExists: true, // Pretend tables exist to avoid setup messages
           message: "Using package.json as fallback.",

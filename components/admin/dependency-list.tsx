@@ -151,13 +151,13 @@ export function DependencyList({
                         <strong>Off:</strong> No automatic updates
                       </p>
                       <p className="mb-2">
-                        <strong>Security Only:</strong> Only apply security patches
+                        <strong>Conservative:</strong> Only apply security patches and minor updates
                       </p>
                       <p className="mb-2">
-                        <strong>All Updates:</strong> Apply all package updates
+                        <strong>Aggressive:</strong> Apply all package updates including major versions
                       </p>
                       <p className="mb-2">
-                        <strong>Global:</strong> Use the global setting
+                        <strong>Global:</strong> Use the global setting configured in the dashboard
                       </p>
                       <div className="mt-2 pt-2 border-t border-gray-700">
                         <p className="text-gray-300">
@@ -276,6 +276,7 @@ export function DependencyList({
                       </div>
                     )}
                   </td>
+
                   <td className="py-3 px-4">
                     <Button
                       size="sm"
