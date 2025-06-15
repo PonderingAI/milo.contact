@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { cookies } from "next/headers"
-import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
+import { getRouteHandlerSupabaseClient, checkAdminPermission } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
@@ -33,19 +33,15 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // Check if user has admin role
-    const { data: roleData, error: roleError } = await supabase
-      .from('user_roles')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
+    // Check if user has admin role via Clerk metadata
+    const hasAdminPermission = await checkAdminPermission(userId)
     
-    if (roleError || !roleData || roleData.length === 0) {
+    if (!hasAdminPermission) {
       return NextResponse.json({ 
         error: "Permission denied. Admin role required.",
         debug_userIdFromAuth: userId,
-        supabaseError: roleError?.message || "No admin role found",
-        supabaseCode: roleError?.code || "PERMISSION_DENIED"
+        supabaseError: "No admin role found in Clerk metadata",
+        supabaseCode: "PERMISSION_DENIED"
       }, { status: 403 })
     }
 

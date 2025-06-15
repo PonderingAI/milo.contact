@@ -210,6 +210,30 @@ export async function isAdminServer(): Promise<boolean> {
 }
 
 /**
+ * Checks if a user ID has admin permissions via Clerk metadata
+ * Returns boolean for simple permission checks
+ */
+export async function checkAdminPermission(userId: string): Promise<boolean> {
+  try {
+    // Get user from Clerk
+    const user = await clerkClient.users.getUser(userId)
+    if (!user) {
+      return false
+    }
+    
+    // Check if user has admin role in metadata
+    const roles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
+    
+    return roles.includes('admin')
+  } catch (error) {
+    console.error("Error checking admin permission:", error)
+    return false
+  }
+}
+
+/**
  * Middleware helper to check if a request is from an admin
  * For use in API routes - reads from Clerk metadata
  */
@@ -221,18 +245,9 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
   }
   
   try {
-    // Get user from Clerk
-    const user = await clerkClient.users.getUser(userId)
-    if (!user) {
-      return NextResponse.json({ error: "User not found" }, { status: 401 })
-    }
+    const hasPermission = await checkAdminPermission(userId)
     
-    // Check if user has admin role in metadata
-    const roles = Array.isArray(user.publicMetadata?.roles) 
-      ? user.publicMetadata.roles as string[]
-      : []
-    
-    if (!roles.includes('admin')) {
+    if (!hasPermission) {
       return NextResponse.json({ error: "Permission denied" }, { status: 403 })
     }
     
