@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { headers } from "next/headers"
 import { WebhookEvent } from "@clerk/nextjs/server"
-import { syncUserRoles, syncClerkUserToSupabase, ensureUserHasRole } from "@/lib/auth-server"
+import { syncUserRoles, ensureUserHasRole } from "@/lib/auth-server"
 
 /**
  * Clerk webhook handler
  * 
- * Handles Clerk webhook events and synchronizes user data between Clerk and Supabase
- * - Creates users in Supabase when they're created in Clerk
- * - Syncs roles when users sign in or metadata changes
+ * Handles Clerk webhook events and ensures roles are properly set in Clerk metadata
+ * - Syncs roles when users are created or metadata changes
  * - Assigns admin role to superAdmin users automatically
+ * - No longer syncs to Supabase as role management is now Clerk-only
  * 
  * Configure your Clerk webhook to send events to this endpoint:
  * - user.created
@@ -98,8 +98,8 @@ export async function POST(req: NextRequest) {
         // A new user was created in Clerk
         const { id: userId } = data
         
-        // Create the user in Supabase with the same ID
-        await syncClerkUserToSupabase(userId)
+        // Ensure roles are properly set in Clerk metadata
+        await syncUserRoles(userId)
         
         // Check if user has superAdmin in metadata and assign admin role if needed
         if (data.public_metadata?.superAdmin === true) {

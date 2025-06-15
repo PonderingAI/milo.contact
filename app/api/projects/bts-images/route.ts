@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
+import { createClient } from "@supabase/supabase-js"
+import { checkAdminPermission } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
@@ -19,8 +19,12 @@ export async function POST(request: Request) {
       }, { status: 401 })
     }
     
-    // Get authenticated Supabase client that syncs Clerk with Supabase
-    const supabase = await getRouteHandlerSupabaseClient()
+    // Get authenticated Supabase client with service role to bypass RLS
+    // Since we're already checking admin permissions via Clerk metadata above
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
     
     // Parse request body
     const req = await request.json()
@@ -33,21 +37,18 @@ export async function POST(request: Request) {
       }, { status: 400 })
     }
 
-    // Check if user has admin role
-    const { data: roleData, error: roleError } = await supabase
-      .from('user_roles')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
+    // Check if user has admin role via Clerk metadata
+    const hasAdminPermission = await checkAdminPermission(userId)
     
-    if (roleError || !roleData || roleData.length === 0) {
+    if (!hasAdminPermission) {
       return NextResponse.json({ 
         error: "Permission denied. Admin role required.",
         debug_userIdFromAuth: userId,
-        supabaseError: roleError?.message || "No admin role found",
-        supabaseCode: roleError?.code || "PERMISSION_DENIED"
+        supabaseError: "No admin role found in Clerk metadata",
+        supabaseCode: "PERMISSION_DENIED"
       }, { status: 403 })
     }
+
 
     // Delete existing images if requested
     if (replaceExisting) {

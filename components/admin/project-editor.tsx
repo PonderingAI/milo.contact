@@ -807,8 +807,14 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           }
         }
 
-        // Redirect to the project edit page
-        router.push(`/admin/projects/${responseData.data[0].id}/edit`)
+        // Show success message and redirect back to projects list
+        toast({
+          title: "Project created",
+          description: "Project created successfully!",
+        })
+        
+        // Redirect back to projects list instead of edit page
+        router.push("/admin/projects")
       } else {
         // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
@@ -854,8 +860,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Refresh the page
-        router.refresh()
+        // Redirect back to projects list
+        router.push("/admin/projects")
       }
     } catch (error: any) {
       console.error("Error saving project:", error)

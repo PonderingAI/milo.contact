@@ -35,23 +35,17 @@ EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error
 END $$;
 
--- Allow authenticated users with admin role to manage compatibility data
+-- Allow authenticated users to read compatibility data
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_compatibility' AND policyname = 'admins_manage_compatibility'
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_compatibility' AND policyname = 'authenticated_read_compatibility'
   ) THEN
-    CREATE POLICY "admins_manage_compatibility"
+    CREATE POLICY "authenticated_read_compatibility"
     ON dependency_compatibility
-    FOR ALL
+    FOR SELECT
     TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM user_roles
-        WHERE user_id = auth.uid() 
-        AND role = 'admin'
-      )
-    );
+    USING (true);
   END IF;
 EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error

@@ -5,58 +5,72 @@
    ▲ Next.js 15.2.4
 
    Creating an optimized production build ...
+   Disabled SWC as replacement for Babel because of custom Babel configuration "babel.config.js" https://nextjs.org/docs/messages/swc-disabled
+   Disabled SWC as replacement for Babel because of custom Babel configuration "babel.config.js" https://nextjs.org/docs/messages/swc-disabled
+   Disabled SWC as replacement for Babel because of custom Babel configuration "babel.config.js" https://nextjs.org/docs/messages/swc-disabled
  ✓ Compiled successfully
    Skipping validation of types
    Skipping linting
    Collecting page data ...
-   Generating static pages (0/161) ...
+   Generating static pages (0/165) ...
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+   Generating static pages (41/165) 
+   Generating static pages (82/165) 
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-   Generating static pages (40/161) 
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at s (.next/server/chunks/5816.js:1:621)
-    at f (.next/server/app/page.js:1:6567)
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at c (.next/server/chunks/8338.js:1:1629)
+    at b (.next/server/app/page.js:1:18275)
     at stringify (<anonymous>)
 Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at f (.next/server/app/page.js:1:6662)
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at b (.next/server/app/page.js:1:18370)
 Error in getHeroSettings: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at i (.next/server/app/page.js:1:4188)
-    at c (.next/server/app/page.js:1:5142)
+    at s (.next/server/chunks/2463.js:194:12344)
+    at l (.next/server/app/page.js:1:15895)
+    at c (.next/server/app/page.js:1:16849)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
-   Generating static pages (80/161) 
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Supabase environment variables not available, using default manifest values
 Database not set up, returning mock data
 Latest project for hero: Short Film Title
 Hero settings: {
@@ -77,500 +91,493 @@ Latest project: {
   tags: [ 'Short Film', 'Director' ]
 }
 Using configured media: /images/hero-bg.jpg
+   Generating static pages (123/165) 
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Supabase environment variables not available, using default manifest values
-   Generating static pages (120/161) 
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at l (.next/server/chunks/5816.js:1:1791)
-    at o (.next/server/app/projects/[id]/page.js:1:19832)
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
     at stringify (<anonymous>)
 Using mock data for project ID: directed-1 (non-UUID format)
 Using mock data for project ID: directed-2 (non-UUID format)
 Using mock data for project ID: camera-1 (non-UUID format)
-Using mock data for project ID: camera-2 (non-UUID format)
 Using mock data for project ID: production-1 (non-UUID format)
 Using mock data for project ID: production-2 (non-UUID format)
-Using mock data for project ID: photo-1 (non-UUID format)
 Using mock data for project ID: photo-2 (non-UUID format)
-Using mock data for project ID: ai-1 (non-UUID format)
+Using mock data for project ID: photo-1 (non-UUID format)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at i (.next/server/app/api/dependencies/system-status/route.js:1:3981)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
-    at r (.next/server/chunks/9545.js:194:14499)
-    at o (.next/server/chunks/5816.js:1:227)
-    at s (.next/server/chunks/5816.js:1:621)
-    at d (.next/server/app/admin/seed-projects/page.js:1:1851)
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
+Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at d (.next/server/chunks/8338.js:1:2809)
+    at d (.next/server/app/projects/[id]/page.js:1:13562)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Using mock data for project ID: ai-1 (non-UUID format)
+Using mock data for project ID: camera-2 (non-UUID format)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in isDatabaseSetup: Error: Missing Supabase environment variables. Please check your .env file.
+    at s (.next/server/chunks/2463.js:194:12344)
+    at n (.next/server/chunks/8338.js:1:1235)
+    at c (.next/server/chunks/8338.js:1:1629)
+    at c (.next/server/app/admin/seed-projects/page.js:1:10976)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
+    at stringify (<anonymous>)
+ ✓ Generating static pages (165/165)
 Database not set up, returning mock data
- ✓ Generating static pages (161/161)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
 Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
-    at stringify (<anonymous>)
-Error in getBackgroundColor: Error: Missing Supabase environment variables. Please check your .env file.
-    at a (.next/server/chunks/9545.js:194:14756)
-    at h (.next/server/chunks/9545.js:1:6392)
-    at g (.next/server/chunks/9545.js:1:6775)
+    at i (.next/server/chunks/2463.js:194:12611)
+    at g (.next/server/chunks/2463.js:264:6984)
+    at y (.next/server/chunks/2463.js:264:7367)
     at stringify (<anonymous>)
    Finalizing page optimization ...
    Collecting build traces ...
 
 Route (app)                                              Size  First Load JS
-┌ ƒ /                                                 9.86 kB         191 kB
-├ ƒ /_not-found                                         990 B         102 kB
-├ ƒ /admin                                             148 kB         312 kB
-├ ƒ /admin/bootstrap                                  1.46 kB         127 kB
-├ ƒ /admin/database                                   9.93 kB         166 kB
-├ ƒ /admin/database-debug                             2.78 kB         159 kB
-├ ƒ /admin/debug                                        194 B         104 kB
-├ ƒ /admin/debug-client                               1.42 kB         110 kB
-├ ƒ /admin/debug-database                             5.57 kB         114 kB
-├ ƒ /admin/debug/advanced                             18.5 kB         158 kB
-├ ƒ /admin/debug/bts                                  5.93 kB         114 kB
-├ ƒ /admin/debug/comprehensive                         7.3 kB         137 kB
-├ ƒ /admin/debug/database                             8.11 kB         119 kB
-├ ƒ /admin/debug/database-check                       3.74 kB         112 kB
-├ ƒ /admin/debug/logs                                 3.37 kB         115 kB
-├ ƒ /admin/debug/media-preview                        4.73 kB         118 kB
-├ ƒ /admin/debug/network                              6.54 kB         136 kB
-├ ƒ /admin/debug/project-media                        4.54 kB         113 kB
-├ ƒ /admin/debug/roles                                7.92 kB         137 kB
-├ ƒ /admin/debug/system                                 434 B         102 kB
-├ ƒ /admin/debug/video-system                         9.02 kB         120 kB
-├ ƒ /admin/dependencies                               7.12 kB         249 kB
-├ ƒ /admin/dependencies/compatibility                 11.2 kB         127 kB
-├ ƒ /admin/edit-project/[id]                            172 B         208 kB
-├ ƒ /admin/media                                      16.7 kB         184 kB
-├ ƒ /admin/permission-denied                            194 B         104 kB
-├ ƒ /admin/projects                                   6.44 kB         179 kB
-├ ƒ /admin/projects/[id]/edit                         6.32 kB         208 kB
-├ ƒ /admin/projects/[id]/edit-client                  3.09 kB         157 kB
-├ ƒ /admin/projects/new                                 172 B         208 kB
-├ ƒ /admin/roles                                      4.16 kB         137 kB
-├ ƒ /admin/security                                     17 kB         222 kB
-├ ƒ /admin/seed-projects                                194 B         104 kB
-├ ƒ /admin/settings                                   44.1 kB         235 kB
-├ ƒ /admin/test-supabase                              3.16 kB         111 kB
-├ ƒ /admin/users                                      2.19 kB         135 kB
-├ ƒ /api/add-thumbnail-url-column                       434 B         102 kB
-├ ƒ /api/admin/confirm-user                             434 B         102 kB
-├ ƒ /api/admin/create-user                              434 B         102 kB
-├ ƒ /api/admin/get-user-roles                           434 B         102 kB
-├ ƒ /api/admin/sync-roles                               434 B         102 kB
-├ ƒ /api/admin/toggle-role                              434 B         102 kB
-├ ƒ /api/admin/update-password                          434 B         102 kB
-├ ƒ /api/assign-admin                                   434 B         102 kB
-├ ƒ /api/batch                                          434 B         102 kB
-├ ƒ /api/bulk-upload                                    434 B         102 kB
-├ ƒ /api/check-database-setup                           434 B         102 kB
-├ ƒ /api/check-media-duplicate                          434 B         102 kB
-├ ƒ /api/check-media-table                              434 B         102 kB
-├ ƒ /api/check-projects-schema                          434 B         102 kB
-├ ƒ /api/check-table                                    434 B         102 kB
-├ ƒ /api/check-table-exists                             434 B         102 kB
-├ ƒ /api/cleanup-media-duplicates                       434 B         102 kB
-├ ƒ /api/contact                                        434 B         102 kB
-├ ƒ /api/convert-to-webp                                434 B         102 kB
-├ ƒ /api/database/diagnostics                           434 B         102 kB
-├ ƒ /api/database/testing                               434 B         102 kB
-├ ƒ /api/database/validate                              434 B         102 kB
-├ ƒ /api/debug/bts-permission-check                     434 B         102 kB
-├ ƒ /api/debug/bts-test                                 434 B         102 kB
-├ ƒ /api/debug/check-analytics                          434 B         102 kB
-├ ƒ /api/debug/check-favicons                           434 B         102 kB
-├ ƒ /api/debug/check-projects-table                     434 B         102 kB
-├ ƒ /api/debug/diagnose-errors                          434 B         102 kB
-├ ƒ /api/debug/media-preview                            434 B         102 kB
-├ ƒ /api/debug/project-detail/[id]                      434 B         102 kB
-├ ƒ /api/debug/setup-exec-sql                           434 B         102 kB
-├ ƒ /api/debug/setup-list-tables                        434 B         102 kB
-├ ƒ /api/debug/system-info                              434 B         102 kB
-├ ƒ /api/debug/video-info                               434 B         102 kB
-├ ƒ /api/dependencies                                   434 B         102 kB
-├ ƒ /api/dependencies/add-package                       434 B         102 kB
-├ ƒ /api/dependencies/apply                             434 B         102 kB
-├ ƒ /api/dependencies/audit                             434 B         102 kB
-├ ƒ /api/dependencies/auto-update                       434 B         102 kB
-├ ƒ /api/dependencies/auto-update-service               434 B         102 kB
-├ ƒ /api/dependencies/check-compatibility               434 B         102 kB
-├ ƒ /api/dependencies/check-tables                      434 B         102 kB
-├ ƒ /api/dependencies/check-updates                     434 B         102 kB
-├ ƒ /api/dependencies/compatibility                     434 B         102 kB
-├ ƒ /api/dependencies/fallback-scan                     434 B         102 kB
-├ ƒ /api/dependencies/fetch-compatibility-data          434 B         102 kB
-├ ƒ /api/dependencies/generate-complete-package-json    434 B         102 kB
-├ ƒ /api/dependencies/generate-package-json             434 B         102 kB
-├ ƒ /api/dependencies/initialize                        434 B         102 kB
-├ ƒ /api/dependencies/list                              434 B         102 kB
-├ ƒ /api/dependencies/lock                              434 B         102 kB
-├ ƒ /api/dependencies/reset-all                         434 B         102 kB
-├ ƒ /api/dependencies/safe-update                       434 B         102 kB
-├ ƒ /api/dependencies/scan                              434 B         102 kB
-├ ƒ /api/dependencies/scheduled-update                  434 B         102 kB
-├ ƒ /api/dependencies/settings                          434 B         102 kB
-├ ƒ /api/dependencies/setup                             434 B         102 kB
-├ ƒ /api/dependencies/setup-compatibility-table         434 B         102 kB
-├ ƒ /api/dependencies/setup-system                      434 B         102 kB
-├ ƒ /api/dependencies/setup-tables                      434 B         102 kB
-├ ƒ /api/dependencies/system-status                     434 B         102 kB
-├ ƒ /api/dependencies/update                            434 B         102 kB
-├ ƒ /api/dependencies/update-mode                       434 B         102 kB
-├ ƒ /api/direct-table-check                             434 B         102 kB
-├ ƒ /api/exec-sql                                       434 B         102 kB
-├ ƒ /api/execute-sql                                    434 B         102 kB
-├ ƒ /api/favicon                                        434 B         102 kB
-├ ƒ /api/list-all-tables                                434 B         102 kB
-├ ƒ /api/list-tables-simple                             434 B         102 kB
-├ ƒ /api/media/count                                    434 B         102 kB
-├ ƒ /api/media/delete                                   434 B         102 kB
-├ ƒ /api/media/operations                               434 B         102 kB
-├ ƒ /api/media/update                                   434 B         102 kB
-├ ƒ /api/ping                                           434 B         102 kB
-├ ƒ /api/process-video-url                              434 B         102 kB
-├ ƒ /api/projects/[id]                                  434 B         102 kB
-├ ƒ /api/projects/bts-images                            434 B         102 kB
-├ ƒ /api/projects/bts-images/[id]                       434 B         102 kB
-├ ƒ /api/projects/create                                434 B         102 kB
-├ ƒ /api/projects/search                                434 B         102 kB
-├ ƒ /api/projects/update/[id]                           434 B         102 kB
-├ ƒ /api/revalidate                                     434 B         102 kB
-├ ƒ /api/rpc                                            434 B         102 kB
-├ ƒ /api/seed-database                                  434 B         102 kB
-├ ƒ /api/settings                                       434 B         102 kB
-├ ƒ /api/setup-all                                      434 B         102 kB
-├ ƒ /api/setup-check-tables-function                    434 B         102 kB
-├ ƒ /api/setup-database                                 434 B         102 kB
-├ ƒ /api/setup-dependencies                             434 B         102 kB
-├ ƒ /api/setup-dependencies-tables                      434 B         102 kB
-├ ƒ /api/setup-dependency-settings-table                434 B         102 kB
-├ ƒ /api/setup-exec-sql                                 434 B         102 kB
-├ ƒ /api/setup-exec-sql-function                        434 B         102 kB
-├ ƒ /api/setup-icons-bucket                             434 B         102 kB
-├ ƒ /api/setup-media-storage-policy                     434 B         102 kB
-├ ƒ /api/setup-media-table                              434 B         102 kB
-├ ƒ /api/setup-projects-table                           434 B         102 kB
-├ ƒ /api/setup-rpc-functions                            434 B         102 kB
-├ ƒ /api/setup-security-audits-table                    434 B         102 kB
-├ ƒ /api/setup-settings-table                           434 B         102 kB
-├ ƒ /api/setup-site-settings                            434 B         102 kB
-├ ƒ /api/setup-storage                                  434 B         102 kB
-├ ƒ /api/setup-tag-order-table                          434 B         102 kB
-├ ƒ /api/setup/unified                                  434 B         102 kB
-├ ƒ /api/storage/usage                                  434 B         102 kB
-├ ƒ /api/supabase-diagnostic                            434 B         102 kB
-├ ƒ /api/tag-order                                      434 B         102 kB
-├ ƒ /api/test-auth                                      434 B         102 kB
-├ ƒ /api/test-clerk                                     434 B         102 kB
-├ ƒ /api/test-supabase                                  434 B         102 kB
-├ ƒ /api/test-supabase-connection                       434 B         102 kB
-├ ƒ /api/upload-app-icons                               434 B         102 kB
-├ ƒ /api/webhook                                        434 B         102 kB
-├ ƒ /api/youtube-title                                  434 B         102 kB
-├ ƒ /auth-test                                        3.58 kB         133 kB
-├ ƒ /auth/callback                                     1.7 kB         138 kB
-├ ƒ /backend-setup                                      194 B         104 kB
-├ ƒ /debug                                             1.2 kB         123 kB
-├ ƒ /debug-clerk                                      1.14 kB         123 kB
-├ ○ /manifest                                           434 B         102 kB
-├ ƒ /media-hosting                                    3.59 kB         118 kB
-├ ƒ /projects                                           434 B         102 kB
-├ ● /projects/[id]                                    6.79 kB         127 kB
+┌ ƒ /                                                 14.2 kB         295 kB
+├ ƒ /_not-found                                         990 B         183 kB
+├ ƒ /admin                                             153 kB         409 kB
+├ ƒ /admin/bootstrap                                  2.65 kB         215 kB
+├ ƒ /admin/database                                   10.5 kB         266 kB
+├ ƒ /admin/database-debug                             4.02 kB         256 kB
+├ ƒ /admin/debug                                        194 B         186 kB
+├ ƒ /admin/debug-client                               1.98 kB         192 kB
+├ ƒ /admin/debug-database                             6.59 kB         197 kB
+├ ƒ /admin/debug/advanced                             20.3 kB         251 kB
+├ ƒ /admin/debug/bts                                  7.79 kB         198 kB
+├ ƒ /admin/debug/comprehensive                        9.26 kB         226 kB
+├ ƒ /admin/debug/database                             7.18 kB         205 kB
+├ ƒ /admin/debug/database-check                       4.74 kB         195 kB
+├ ƒ /admin/debug/logs                                 1.58 kB         199 kB
+├ ƒ /admin/debug/media-preview                         6.3 kB         203 kB
+├ ƒ /admin/debug/network                              8.33 kB         225 kB
+├ ƒ /admin/debug/project-media                        5.55 kB         196 kB
+├ ƒ /admin/debug/roles                                10.3 kB         227 kB
+├ ƒ /admin/debug/system                                 442 B         182 kB
+├ ƒ /admin/debug/video-system                         5.56 kB         206 kB
+├ ƒ /admin/dependencies                               8.11 kB         364 kB
+├ ƒ /admin/dependencies/compatibility                 10.6 kB         213 kB
+├ ƒ /admin/edit-project/[id]                            180 B         317 kB
+├ ƒ /admin/media                                      21.9 kB         286 kB
+├ ƒ /admin/permission-denied                            194 B         186 kB
+├ ƒ /admin/projects                                   7.92 kB         281 kB
+├ ƒ /admin/projects/[id]/edit                         8.73 kB         318 kB
+├ ƒ /admin/projects/[id]/edit-client                  5.92 kB         255 kB
+├ ƒ /admin/projects/new                                 179 B         317 kB
+├ ƒ /admin/roles                                      8.44 kB         226 kB
+├ ƒ /admin/security                                   15.3 kB         328 kB
+├ ƒ /admin/seed-projects                                194 B         186 kB
+├ ƒ /admin/settings                                   44.4 kB         343 kB
+├ ƒ /admin/test-supabase                              4.02 kB         194 kB
+├ ƒ /admin/users                                      5.95 kB         223 kB
+├ ƒ /api/add-thumbnail-url-column                       442 B         182 kB
+├ ƒ /api/admin/apply-rls-fix                            442 B         182 kB
+├ ƒ /api/admin/confirm-user                             442 B         182 kB
+├ ƒ /api/admin/create-user                              442 B         182 kB
+├ ƒ /api/admin/get-user-roles                           442 B         182 kB
+├ ƒ /api/admin/sync-roles                               442 B         182 kB
+├ ƒ /api/admin/toggle-role                              442 B         182 kB
+├ ƒ /api/admin/update-password                          442 B         182 kB
+├ ƒ /api/assign-admin                                   442 B         182 kB
+├ ƒ /api/batch                                          442 B         182 kB
+├ ƒ /api/bulk-upload                                    442 B         182 kB
+├ ƒ /api/check-database-setup                           442 B         182 kB
+├ ƒ /api/check-media-duplicate                          442 B         182 kB
+├ ƒ /api/check-media-table                              442 B         182 kB
+├ ƒ /api/check-projects-schema                          442 B         182 kB
+├ ƒ /api/check-table                                    442 B         182 kB
+├ ƒ /api/check-table-exists                             442 B         182 kB
+├ ƒ /api/cleanup-media-duplicates                       442 B         182 kB
+├ ƒ /api/contact                                        442 B         182 kB
+├ ƒ /api/convert-to-webp                                442 B         182 kB
+├ ƒ /api/database/diagnostics                           442 B         182 kB
+├ ƒ /api/database/testing                               442 B         182 kB
+├ ƒ /api/database/validate                              442 B         182 kB
+├ ƒ /api/debug/bts-permission-check                     442 B         182 kB
+├ ƒ /api/debug/bts-test                                 442 B         182 kB
+├ ƒ /api/debug/check-analytics                          442 B         182 kB
+├ ƒ /api/debug/check-favicons                           442 B         182 kB
+├ ƒ /api/debug/check-projects-table                     442 B         182 kB
+├ ƒ /api/debug/diagnose-errors                          442 B         182 kB
+├ ƒ /api/debug/media-preview                            442 B         182 kB
+├ ƒ /api/debug/project-detail/[id]                      442 B         182 kB
+├ ƒ /api/debug/setup-exec-sql                           442 B         182 kB
+├ ƒ /api/debug/setup-list-tables                        442 B         182 kB
+├ ƒ /api/debug/system-info                              442 B         182 kB
+├ ƒ /api/debug/video-info                               442 B         182 kB
+├ ƒ /api/dependencies                                   442 B         182 kB
+├ ƒ /api/dependencies/add-package                       442 B         182 kB
+├ ƒ /api/dependencies/apply                             442 B         182 kB
+├ ƒ /api/dependencies/audit                             442 B         182 kB
+├ ƒ /api/dependencies/auto-update                       442 B         182 kB
+├ ƒ /api/dependencies/auto-update-service               442 B         182 kB
+├ ƒ /api/dependencies/check-compatibility               442 B         182 kB
+├ ƒ /api/dependencies/check-tables                      442 B         182 kB
+├ ƒ /api/dependencies/check-updates                     442 B         182 kB
+├ ƒ /api/dependencies/compatibility                     442 B         182 kB
+├ ƒ /api/dependencies/fallback-scan                     442 B         182 kB
+├ ƒ /api/dependencies/fetch-compatibility-data          442 B         182 kB
+├ ƒ /api/dependencies/generate-complete-package-json    442 B         182 kB
+├ ƒ /api/dependencies/generate-package-json             442 B         182 kB
+├ ƒ /api/dependencies/initialize                        442 B         182 kB
+├ ƒ /api/dependencies/list                              442 B         182 kB
+├ ƒ /api/dependencies/lock                              442 B         182 kB
+├ ƒ /api/dependencies/reset-all                         442 B         182 kB
+├ ƒ /api/dependencies/safe-update                       442 B         182 kB
+├ ƒ /api/dependencies/scan                              442 B         182 kB
+├ ƒ /api/dependencies/scheduled-update                  442 B         182 kB
+├ ƒ /api/dependencies/settings                          442 B         182 kB
+├ ƒ /api/dependencies/setup                             442 B         182 kB
+├ ƒ /api/dependencies/setup-compatibility-table         442 B         182 kB
+├ ƒ /api/dependencies/setup-system                      442 B         182 kB
+├ ƒ /api/dependencies/setup-tables                      442 B         182 kB
+├ ƒ /api/dependencies/system-status                     442 B         182 kB
+├ ƒ /api/dependencies/update                            442 B         182 kB
+├ ƒ /api/dependencies/update-mode                       442 B         182 kB
+├ ƒ /api/direct-table-check                             442 B         182 kB
+├ ƒ /api/exec-sql                                       442 B         182 kB
+├ ƒ /api/execute-sql                                    442 B         182 kB
+├ ƒ /api/favicon                                        442 B         182 kB
+├ ƒ /api/list-all-tables                                442 B         182 kB
+├ ƒ /api/list-tables-simple                             442 B         182 kB
+├ ƒ /api/media/count                                    442 B         182 kB
+├ ƒ /api/media/delete                                   442 B         182 kB
+├ ƒ /api/media/operations                               442 B         182 kB
+├ ƒ /api/media/update                                   442 B         182 kB
+├ ƒ /api/ping                                           442 B         182 kB
+├ ƒ /api/process-video-url                              442 B         182 kB
+├ ƒ /api/projects/[id]                                  442 B         182 kB
+├ ƒ /api/projects/bts-images                            442 B         182 kB
+├ ƒ /api/projects/bts-images/[id]                       442 B         182 kB
+├ ƒ /api/projects/create                                442 B         182 kB
+├ ƒ /api/projects/search                                442 B         182 kB
+├ ƒ /api/projects/update/[id]                           442 B         182 kB
+├ ƒ /api/revalidate                                     442 B         182 kB
+├ ƒ /api/rpc                                            442 B         182 kB
+├ ƒ /api/seed-database                                  442 B         182 kB
+├ ƒ /api/settings                                       442 B         182 kB
+├ ƒ /api/setup-all                                      442 B         182 kB
+├ ƒ /api/setup-check-tables-function                    442 B         182 kB
+├ ƒ /api/setup-database                                 442 B         182 kB
+├ ƒ /api/setup-dependencies                             442 B         182 kB
+├ ƒ /api/setup-dependencies-tables                      442 B         182 kB
+├ ƒ /api/setup-dependency-settings-table                442 B         182 kB
+├ ƒ /api/setup-exec-sql                                 442 B         182 kB
+├ ƒ /api/setup-exec-sql-function                        442 B         182 kB
+├ ƒ /api/setup-icons-bucket                             442 B         182 kB
+├ ƒ /api/setup-media-storage-policy                     442 B         182 kB
+├ ƒ /api/setup-media-table                              442 B         182 kB
+├ ƒ /api/setup-projects-table                           442 B         182 kB
+├ ƒ /api/setup-rpc-functions                            442 B         182 kB
+├ ƒ /api/setup-security-audits-table                    442 B         182 kB
+├ ƒ /api/setup-settings-table                           442 B         182 kB
+├ ƒ /api/setup-site-settings                            442 B         182 kB
+├ ƒ /api/setup-storage                                  442 B         182 kB
+├ ƒ /api/setup-tag-order-table                          442 B         182 kB
+├ ƒ /api/setup/unified                                  442 B         182 kB
+├ ƒ /api/storage/usage                                  442 B         182 kB
+├ ƒ /api/supabase-diagnostic                            442 B         182 kB
+├ ƒ /api/system/status                                  442 B         182 kB
+├ ƒ /api/tag-order                                      442 B         182 kB
+├ ƒ /api/test-auth                                      442 B         182 kB
+├ ƒ /api/test-clerk                                     442 B         182 kB
+├ ƒ /api/test-supabase                                  442 B         182 kB
+├ ƒ /api/test-supabase-connection                       442 B         182 kB
+├ ƒ /api/upload-app-icons                               442 B         182 kB
+├ ƒ /api/webhook                                        442 B         182 kB
+├ ƒ /api/youtube-title                                  442 B         182 kB
+├ ƒ /auth-test                                        4.37 kB         222 kB
+├ ƒ /auth/callback                                    3.41 kB         231 kB
+├ ƒ /backend-setup                                      194 B         186 kB
+├ ƒ /debug                                            2.24 kB         211 kB
+├ ƒ /debug-clerk                                      2.34 kB         211 kB
+├ ○ /manifest                                           442 B         182 kB
+├ ƒ /media-hosting                                    5.15 kB         203 kB
+├ ƒ /projects                                           442 B         182 kB
+├ ● /projects/[id]                                    6.86 kB         214 kB
 ├   ├ /projects/directed-1
 ├   ├ /projects/directed-2
 ├   ├ /projects/camera-1
 ├   └ [+6 more paths]
-├ ƒ /projects/search                                  5.56 kB         157 kB
-├ ƒ /setup                                            4.09 kB         115 kB
-├ ƒ /setup-database                                   3.91 kB         112 kB
-├ ƒ /sign-in/[[...sign-in]]                             348 B         128 kB
-├ ƒ /sign-up/[[...sign-up]]                             348 B         128 kB
-├ ƒ /tools                                            4.82 kB         116 kB
-└ ƒ /tools/prompt-studio                              8.25 kB         139 kB
-+ First Load JS shared by all                          101 kB
-  ├ chunks/1684-83d2367d9c3d4117.js                   45.8 kB
-  ├ chunks/4bd1b696-142cb746d7f07d03.js               53.3 kB
-  └ other shared chunks (total)                       2.01 kB
+├ ƒ /projects/search                                  7.55 kB         254 kB
+├ ƒ /robots.txt                                         442 B         182 kB
+├ ƒ /setup                                            5.01 kB         200 kB
+├ ƒ /setup-database                                   4.95 kB         195 kB
+├ ƒ /sign-in/[[...sign-in]]                           1.39 kB         216 kB
+├ ƒ /sign-up/[[...sign-up]]                           1.39 kB         216 kB
+├ ƒ /sitemap.xml                                        442 B         182 kB
+├ ƒ /tools                                            5.42 kB         200 kB
+└ ƒ /tools/prompt-studio                              9.72 kB         226 kB
++ First Load JS shared by all                          182 kB
+  ├ chunks/4bd1b696-d589310bc32d13ca.js               53.3 kB
+  ├ chunks/6891-38289b338ac7d96b.js                    126 kB
+  └ other shared chunks (total)                       2.09 kB
 
 
-ƒ Middleware                                            69 kB
+ƒ Middleware                                            71 kB
 
 ○  (Static)   prerendered as static content
 ●  (SSG)      prerendered as static HTML (uses generateStaticParams)

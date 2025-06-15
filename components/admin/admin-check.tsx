@@ -42,45 +42,36 @@ export default function AdminCheck({ children }: AdminCheckProps) {
         const hasAdminRoleInClerk = Array.isArray(user.publicMetadata?.roles) && 
           (user.publicMetadata?.roles as string[]).includes('admin')
         
-        // Check for admin role in Supabase user_roles table
-        const hasAdminRoleInSupabase = await hasRoleClient(user.id, 'admin')
-        
         // Debug information (only in development)
         if (process.env.NODE_ENV === 'development') {
           setDebugInfo({
             userId: user.id,
             isSuperAdmin,
             hasAdminRoleInClerk,
-            hasAdminRoleInSupabase,
             clerkMetadata: user.publicMetadata
           })
         }
         
-        // If user is superAdmin but doesn't have admin role in Supabase,
-        // we need to sync roles by calling the API
-        if (isSuperAdmin && !hasAdminRoleInSupabase) {
-          console.log("SuperAdmin detected without admin role in Supabase - syncing roles...")
+        // If user is superAdmin but doesn't have admin role in Clerk metadata,
+        // we need to sync roles within Clerk
+        if (isSuperAdmin && !hasAdminRoleInClerk) {
+          console.log("SuperAdmin detected without admin role in Clerk metadata - syncing roles...")
           try {
-            // Call API to sync roles
+            // Call API to sync roles within Clerk
             const response = await fetch('/api/admin/sync-roles', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ userId: user.id })
+              }
             })
             
             const syncData = await response.json()
             
             if (response.ok) {
               console.log("Role sync successful:", syncData)
-              // Re-check admin role in Supabase after sync
-              const newAdminRoleInSupabase = await hasRoleClient(user.id, 'admin')
-              if (newAdminRoleInSupabase) {
-                console.log("Admin role successfully synced to Supabase")
-              } else {
-                console.warn("Role sync reported success but admin role still not found in Supabase")
-              }
+              // Refresh the page to get updated metadata
+              window.location.reload()
+              return
             } else {
               console.warn('Failed to sync admin role:', syncData.error)
             }
@@ -89,28 +80,8 @@ export default function AdminCheck({ children }: AdminCheckProps) {
           }
         }
         
-        // Also sync if user has admin role in Clerk but not in Supabase
-        if (hasAdminRoleInClerk && !hasAdminRoleInSupabase) {
-          console.log("Admin role in Clerk but not Supabase - syncing roles...")
-          try {
-            const response = await fetch('/api/admin/sync-roles', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ userId: user.id })
-            })
-            
-            if (response.ok) {
-              console.log("Role sync successful for Clerk admin role")
-            }
-          } catch (syncError) {
-            console.error('Error syncing Clerk admin role:', syncError)
-          }
-        }
-        
-        // User is admin if they are superAdmin OR have admin role in Clerk OR have admin role in Supabase
-        const userIsAdmin = isSuperAdmin || hasAdminRoleInClerk || hasAdminRoleInSupabase
+        // User is admin if they are superAdmin OR have admin role in Clerk metadata
+        const userIsAdmin = isSuperAdmin || hasAdminRoleInClerk
         
         setIsAdmin(userIsAdmin)
         

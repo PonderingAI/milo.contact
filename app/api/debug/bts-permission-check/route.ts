@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@clerk/nextjs/server"
-import { createAdminClient } from "@/lib/supabase"
+import { checkAdminPermission } from "@/lib/auth-server"
 
 /**
  * API endpoint to check BTS permissions for debugging
@@ -31,40 +31,9 @@ export async function POST(request: NextRequest) {
 
     console.log(`[bts-permission-check] Checking permissions for user: ${userIdToCheck}`)
 
-    // Create Supabase client using service role to bypass RLS
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("[bts-permission-check] Missing Supabase environment variables")
-      return NextResponse.json({
-        error: "Server configuration error",
-        debug_info: "Missing Supabase environment variables"
-      }, { status: 500 })
-    }
-
-    const supabase = createAdminClient()
-
-    console.log("[bts-permission-check] Created Supabase service role client")
-
-    // Check if user has admin role in user_roles table
-    const { data: userRoles, error: rolesError } = await supabase
-      .from('user_roles')
-      .select('*')
-      .eq('user_id', userIdToCheck)
-
-    console.log(`[bts-permission-check] Query result:`, { userRoles, rolesError })
-
-    if (rolesError) {
-      console.error("[bts-permission-check] Error querying user roles:", rolesError)
-      return NextResponse.json({
-        error: "Database query failed",
-        debug_info: rolesError,
-        supabaseError: rolesError.message,
-        supabaseCode: rolesError.code
-      }, { status: 500 })
-    }
-
-    // Check if user has admin role
-    const hasAdminRole = userRoles?.some(role => role.role === 'admin') || false
-    console.log(`[bts-permission-check] User has admin role: ${hasAdminRole}`)
+    // Check if user has admin role via Clerk metadata (new system)
+    const hasAdminRole = await checkAdminPermission(userIdToCheck)
+    console.log(`[bts-permission-check] User has admin role (Clerk): ${hasAdminRole}`)
 
     // Get Clerk user metadata for comparison
     const { clerkClient } = await import("@clerk/nextjs/server")
@@ -78,19 +47,22 @@ export async function POST(request: NextRequest) {
       console.log(`[bts-permission-check] Clerk metadata:`, { isSuperAdmin, roles: clerkMetadata?.roles })
     } catch (clerkError) {
       console.error("[bts-permission-check] Error fetching Clerk user:", clerkError)
+      return NextResponse.json({
+        error: "Error fetching user data",
+        debug_info: clerkError instanceof Error ? clerkError.message : String(clerkError)
+      }, { status: 500 })
     }
 
-    // Simulate the exact permission check used in BTS API
+    // Simulate the exact permission check used in BTS API (now using Clerk)
     if (!hasAdminRole) {
       return NextResponse.json({
         error: "Permission denied. Admin role required.",
         debug_userIdFromAuth: userId,
         debug_targetUserId: userIdToCheck,
         debug_hasAdminRole: hasAdminRole,
-        debug_userRoles: userRoles,
         debug_clerkMetadata: clerkMetadata,
         debug_isSuperAdmin: isSuperAdmin,
-        supabaseError: "No admin role found",
+        supabaseError: "No admin role found in Clerk metadata",
         supabaseCode: "PERMISSION_DENIED"
       }, { status: 403 })
     }
@@ -98,11 +70,10 @@ export async function POST(request: NextRequest) {
     // Permission check passed
     return NextResponse.json({
       success: true,
-      message: "BTS permission check passed",
+      message: "BTS permission check passed (Clerk-only system)",
       debug_info: {
         userId: userIdToCheck,
         hasAdminRole,
-        userRoles,
         isSuperAdmin,
         clerkMetadata
       }

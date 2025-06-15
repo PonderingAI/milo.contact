@@ -2,10 +2,11 @@
  * Authentication Utilities for Client Components
  * 
  * This module provides client-compatible authentication utilities.
+ * Role management is now handled exclusively through Clerk's publicMetadata.
  * For server-only functions, see lib/auth-server.ts
  */
 
-import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
+import { useUser } from "@clerk/nextjs"
 
 // Types
 export type UserRole = 'admin' | 'editor' | 'viewer'
@@ -18,32 +19,20 @@ export interface RoleData {
 }
 
 /**
- * Gets an authenticated Supabase client for client components
- */
-export function getClientSupabaseClient() {
-  return createClientComponentClient()
-}
-
-/**
  * Checks if a user has a specific role
- * For use in client components
+ * For use in client components - reads from Clerk metadata
  */
-export async function hasRoleClient(userId: string, role: UserRole): Promise<boolean> {
+export function hasRoleClient(role: UserRole): boolean {
   try {
-    const supabase = createClientComponentClient()
+    const { user } = useUser()
+    if (!user) return false
     
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('role', role)
+    // Get roles from Clerk metadata
+    const roles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
     
-    if (error) {
-      console.error("Error checking role:", error)
-      return false
-    }
-    
-    return data && data.length > 0
+    return roles.includes(role)
   } catch (error) {
     console.error("Error checking role:", error)
     return false
@@ -52,10 +41,10 @@ export async function hasRoleClient(userId: string, role: UserRole): Promise<boo
 
 /**
  * Checks if a user is an admin
- * For use in client components
+ * For use in client components - reads from Clerk metadata
  */
-export async function isAdminClient(userId: string): Promise<boolean> {
-  return hasRoleClient(userId, 'admin')
+export function isAdminClient(): boolean {
+  return hasRoleClient('admin')
 }
 
 /**
