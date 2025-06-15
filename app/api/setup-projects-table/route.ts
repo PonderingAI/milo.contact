@@ -66,17 +66,12 @@ export async function POST() {
         USING (true);
 
         -- Allow authenticated users with admin role to manage projects
+        -- NOTE: Admin permission checking now handled at API level (Clerk-only)
         CREATE POLICY "admins_manage_projects"
         ON projects
         FOR ALL
         TO authenticated
-        USING (
-          EXISTS (
-            SELECT 1 FROM user_roles
-            WHERE user_id = auth.uid() 
-            AND role = 'admin'
-          )
-        );
+        USING (true);
 
         -- Create BTS images table
         CREATE TABLE IF NOT EXISTS bts_images (
@@ -101,17 +96,12 @@ export async function POST() {
         USING (true);
 
         -- Allow authenticated users with admin role to manage BTS images
+        -- NOTE: Admin permission checking now handled at API level (Clerk-only)
         CREATE POLICY "admins_manage_bts_images"
         ON bts_images
         FOR ALL
         TO authenticated
-        USING (
-          EXISTS (
-            SELECT 1 FROM user_roles
-            WHERE user_id = auth.uid() 
-            AND role = 'admin'
-          )
-        );
+        USING (true);
       `,
     })
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getRouteHandlerSupabaseClient } from "@/lib/auth-server"
+import { getRouteHandlerSupabaseClient, checkAdminPermission } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function GET() {
@@ -14,23 +14,19 @@ export async function GET() {
       }, { status: 401 })
     }
     
-    // Get authenticated Supabase client that syncs Clerk with Supabase
+    // Get authenticated Supabase client
     const supabase = await getRouteHandlerSupabaseClient()
     
-    // Check if user has admin role
-    const { data: roleData, error: roleError } = await supabase
-      .from('user_roles')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
+    // Check if user has admin role via Clerk metadata
+    const hasAdminPermission = await checkAdminPermission(userId)
     
-    if (roleError || !roleData || roleData.length === 0) {
+    if (!hasAdminPermission) {
       return NextResponse.json({ 
         error: "Permission denied", 
-        message: "Admin role required to view dependencies",
+        message: "Admin role required",
         debug_userIdFromAuth: userId,
-        supabaseError: roleError?.message || "No admin role found",
-        supabaseCode: roleError?.code || "PERMISSION_DENIED"
+        supabaseError: "No admin role found in Clerk metadata",
+        supabaseCode: "PERMISSION_DENIED"
       }, { status: 403 })
     }
     

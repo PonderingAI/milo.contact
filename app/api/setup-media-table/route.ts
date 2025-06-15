@@ -55,13 +55,7 @@ export async function POST() {
             ON media
             FOR ALL
             TO authenticated
-            USING (
-              EXISTS (
-                SELECT 1 FROM user_roles
-                WHERE user_id = auth.uid() 
-                AND role = 'admin'
-              )
-            );
+            USING (true); -- Admin permission checking now handled at API level (Clerk-only)
           END IF;
         EXCEPTION WHEN OTHERS THEN
           -- Policy already exists or other error
