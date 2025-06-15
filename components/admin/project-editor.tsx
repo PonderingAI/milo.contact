@@ -860,8 +860,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Refresh the page
-        router.refresh()
+        // Redirect back to projects list
+        router.push("/admin/projects")
       }
     } catch (error: any) {
       console.error("Error saving project:", error)
