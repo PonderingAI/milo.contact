@@ -37,79 +37,7 @@ export const CURRENT_SCHEMA_VERSION = 1
 
 // All table configurations
 export const tableConfigs: Record<string, TableConfig> = {
-  user_roles: {
-    name: "user_roles",
-    displayName: "User Roles",
-    description: "Stores user roles and permissions",
-    sql: `
-CREATE TABLE IF NOT EXISTS user_roles (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id TEXT NOT NULL,
-  role TEXT NOT NULL,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  UNIQUE(user_id, role)
-);
 
--- Add RLS policies
-ALTER TABLE user_roles ENABLE ROW LEVEL SECURITY;
-
--- Allow authenticated users to read their own roles
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'user_roles' AND policyname = 'users_read_own_roles'
-  ) THEN
-    CREATE POLICY "users_read_own_roles"
-    ON user_roles
-    FOR SELECT
-    TO authenticated
-    USING (user_id = auth.uid());
-  END IF;
-EXCEPTION WHEN OTHERS THEN
-  -- Policy already exists or other error
-END $$;
-
--- Allow admins to manage all roles
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'user_roles' AND policyname = 'admins_manage_roles'
-  ) THEN
-    CREATE POLICY "admins_manage_roles"
-    ON user_roles
-    FOR ALL
-    TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM user_roles
-        WHERE user_id = auth.uid() 
-        AND role = 'admin'
-      )
-    )
-    WITH CHECK (
-      EXISTS (
-        SELECT 1 FROM user_roles
-        WHERE user_id = auth.uid() 
-        AND role = 'admin'
-      )
-    );
-  END IF;
-EXCEPTION WHEN OTHERS THEN
-  -- Policy already exists or other error
-END $$;`,
-    dependencies: [],
-    required: true,
-    category: "core",
-    version: 1,
-    columns: [
-      { name: "id", type: "UUID", constraints: ["PRIMARY KEY"], default: "uuid_generate_v4()" },
-      { name: "user_id", type: "TEXT", constraints: ["NOT NULL"] },
-      { name: "role", type: "TEXT", constraints: ["NOT NULL"] },
-      { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
-    ],
-    indexes: ["UNIQUE(user_id, role)"],
-    policies: ["users_read_own_roles", "admins_manage_roles"]
-  },
 
   site_settings: {
     name: "site_settings",

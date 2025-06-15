@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
-import { checkAdminPermission, syncClerkUserToSupabase } from "@/lib/auth-server"
+import { checkAdminPermission } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
@@ -49,12 +49,6 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-    // Sync user roles from Clerk to Supabase to ensure RLS policies work
-    console.log("Syncing user roles from Clerk to Supabase...")
-    const syncResult = await syncClerkUserToSupabase(userId)
-    if (!syncResult) {
-      console.warn("Failed to sync user roles to Supabase, but continuing with service role...")
-    }
 
     // Delete existing images if requested
     if (replaceExisting) {
