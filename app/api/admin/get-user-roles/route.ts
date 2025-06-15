@@ -3,10 +3,10 @@ import { auth } from "@clerk/nextjs/server"
 import { getUserRoles } from "@/lib/auth-server"
 
 /**
- * API route to get user roles from Supabase user_roles table
+ * API route to get user roles from Clerk metadata
  * 
- * This endpoint allows admins to fetch the current roles assigned to a user
- * in the Supabase database. Used for role management and debugging.
+ * This endpoint allows users to fetch the current roles assigned to a user
+ * in Clerk's publicMetadata. Used for role management and debugging.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     // In production, you might want to add additional permission checks
     // for querying other users' roles
     
-    // Get the roles from Supabase
+    // Get the roles from Clerk
     const roles = await getUserRoles(userIdToQuery)
     
     // Return the roles

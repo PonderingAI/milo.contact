@@ -1,5 +1,5 @@
 /**
- * Test suite for the role management system
+ * Test suite for the role management system (Clerk-only)
  */
 
 import { describe, test, expect, beforeAll, afterAll } from '@jest/globals'
@@ -12,21 +12,6 @@ const mockClerkUser = {
   lastName: 'User',
   publicMetadata: { superAdmin: true, roles: ['admin'] },
   createdAt: new Date().toISOString()
-}
-
-// Mock Supabase
-const mockSupabaseClient = {
-  from: jest.fn().mockReturnThis(),
-  select: jest.fn().mockReturnThis(),
-  eq: jest.fn().mockReturnThis(),
-  insert: jest.fn().mockReturnThis(),
-  delete: jest.fn().mockReturnThis(),
-  auth: {
-    admin: {
-      getUserById: jest.fn(),
-      createUser: jest.fn()
-    }
-  }
 }
 
 describe('Role Management System', () => {
@@ -42,7 +27,7 @@ describe('Role Management System', () => {
   describe('User Role Sync', () => {
     test('should sync superAdmin to admin role', async () => {
       // This test verifies the core functionality:
-      // SuperAdmin users should automatically get admin role in Supabase
+      // SuperAdmin users should automatically get admin role in Clerk metadata
       
       const isSuperAdmin = mockClerkUser.publicMetadata.superAdmin
       const hasAdminInClerk = mockClerkUser.publicMetadata.roles.includes('admin')
@@ -51,7 +36,7 @@ describe('Role Management System', () => {
       expect(hasAdminInClerk).toBe(true)
       
       // In a real implementation, this would call syncUserRoles
-      // and verify that the user gets admin role in Supabase
+      // and verify that the user gets admin role in their Clerk metadata
     })
 
     test('should handle users without superAdmin status', async () => {
@@ -107,55 +92,50 @@ describe('Role Management System', () => {
     test('should display correct role status', async () => {
       const userWithRoles = {
         clerkRoles: ['admin'],
-        supabaseRoles: ['admin'],
         isSuperAdmin: true
       }
       
-      const rolesInSync = JSON.stringify(userWithRoles.clerkRoles.sort()) === 
-                         JSON.stringify(userWithRoles.supabaseRoles.sort())
+      const hasAdminRole = userWithRoles.clerkRoles.includes('admin')
       
-      expect(rolesInSync).toBe(true)
+      expect(hasAdminRole).toBe(true)
     })
 
-    test('should detect out-of-sync roles', async () => {
-      const userWithMismatchedRoles = {
-        clerkRoles: ['admin'],
-        supabaseRoles: [], // Missing admin role in Supabase
+    test('should detect missing roles', async () => {
+      const userWithoutRoles = {
+        clerkRoles: [], // Missing admin role in Clerk
         isSuperAdmin: true
       }
       
-      const adminInClerk = userWithMismatchedRoles.clerkRoles.includes('admin')
-      const adminInSupabase = userWithMismatchedRoles.supabaseRoles.includes('admin')
-      const rolesInSync = adminInClerk === adminInSupabase
+      const hasAdminRole = userWithoutRoles.clerkRoles.includes('admin')
+      const needsSync = userWithoutRoles.isSuperAdmin && !hasAdminRole
       
-      expect(rolesInSync).toBe(false)
+      expect(hasAdminRole).toBe(false)
+      expect(needsSync).toBe(true)
     })
   })
 
   describe('Automatic Role Sync on Admin Access', () => {
-    test('should trigger role sync for superAdmin without Supabase admin role', async () => {
-      const superAdminWithoutSupabaseRole = {
+    test('should trigger role sync for superAdmin without admin role', async () => {
+      const superAdminWithoutAdminRole = {
         isSuperAdmin: true,
-        hasAdminRoleInClerk: true,
-        hasAdminRoleInSupabase: false
+        hasAdminRoleInClerk: false
       }
       
-      // This simulates the AdminCheck component logic
-      const shouldTriggerSync = superAdminWithoutSupabaseRole.isSuperAdmin && 
-                               !superAdminWithoutSupabaseRole.hasAdminRoleInSupabase
+      // This simulates the role sync logic
+      const shouldTriggerSync = superAdminWithoutAdminRole.isSuperAdmin && 
+                               !superAdminWithoutAdminRole.hasAdminRoleInClerk
       
       expect(shouldTriggerSync).toBe(true)
     })
 
-    test('should not trigger unnecessary sync for properly synced users', async () => {
-      const properlySyncedUser = {
+    test('should not trigger unnecessary sync for properly configured users', async () => {
+      const properlyConfiguredUser = {
         isSuperAdmin: true,
-        hasAdminRoleInClerk: true,
-        hasAdminRoleInSupabase: true
+        hasAdminRoleInClerk: true
       }
       
-      const shouldTriggerSync = properlySyncedUser.isSuperAdmin && 
-                               !properlySyncedUser.hasAdminRoleInSupabase
+      const shouldTriggerSync = properlyConfiguredUser.isSuperAdmin && 
+                               !properlyConfiguredUser.hasAdminRoleInClerk
       
       expect(shouldTriggerSync).toBe(false)
     })

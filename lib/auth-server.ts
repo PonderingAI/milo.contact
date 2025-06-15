@@ -3,15 +3,15 @@
  * 
  * This module provides server-side authentication utilities for Next.js server components
  * and API routes. These functions can only be used in server contexts.
+ * Role management is now handled exclusively through Clerk's publicMetadata.
  * 
- * @see lib/auth-client.ts for client-compatible authentication utilities
+ * @see lib/auth-sync.ts for client-compatible authentication utilities
  */
 
-import { createServerComponentClient, createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { SupabaseClient, createClient } from "@supabase/supabase-js"
-import { cookies } from "next/headers"
 import { clerkClient, currentUser, auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
+import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
+import { cookies } from "next/headers"
 
 // Types
 export type UserRole = 'admin' | 'editor' | 'viewer'
@@ -24,171 +24,55 @@ export interface RoleData {
 }
 
 /**
- * Gets an authenticated Supabase client for server components
- * Ensures proper JWT token handling
- */
-export async function getServerSupabaseClient() {
-  const supabase = createServerComponentClient({ cookies })
-  
-  // Get current Clerk user
-  const user = await currentUser()
-  
-  if (!user) {
-    return supabase
-  }
-  
-  // Ensure roles are synced
-  await syncUserRoles(user.id)
-  
-  return supabase
-}
-
-/**
  * Gets an authenticated Supabase client for API routes
- * This is critical for fixing the auth.uid() issue in route handlers
+ * This is for non-role related database operations only
  */
-export async function getRouteHandlerSupabaseClient(req?: NextRequest) {
-  const supabase = createRouteHandlerClient({ cookies })
-  
-  // Get current Clerk user ID from auth()
-  const { userId } = auth()
-  
-  if (!userId) {
-    console.warn("No authenticated user found in route handler")
-    return supabase
-  }
-  
-  // Ensure roles are synced
-  await syncUserRoles(userId)
-  
-  return supabase
+export async function getRouteHandlerSupabaseClient() {
+  return createRouteHandlerClient({ cookies })
 }
 
-/**
- * Syncs a Clerk user to Supabase
- * Creates or updates the Supabase user record to match Clerk
- */
-export async function syncClerkUserToSupabase(userId: string) {
-  try {
-    // Get user from Clerk
-    const clerkUser = await clerkClient.users.getUser(userId)
-    if (!clerkUser) {
-      throw new Error(`User ${userId} not found in Clerk`)
-    }
-    
-    // Get Supabase admin client (bypasses RLS)
-    const supabaseAdmin = createRouteHandlerClient({ cookies })
-    
-    // Check if user exists in Supabase auth.users
-    const { data: existingUser, error: getUserError } = await supabaseAdmin.auth.admin.getUserById(userId)
-    
-    if (getUserError) {
-      console.error("Error checking if user exists in Supabase:", getUserError)
-      // Continue anyway - the user might exist but we don't have admin access
-    }
-    
-    // If user doesn't exist in Supabase, create them
-    if (!existingUser?.user) {
-      // Get primary email
-      const primaryEmail = clerkUser.emailAddresses.find(email => email.id === clerkUser.primaryEmailAddressId)?.emailAddress
-      
-      if (!primaryEmail) {
-        throw new Error(`User ${userId} has no primary email address`)
-      }
-      
-      // Create user in Supabase
-      const { error: createUserError } = await supabaseAdmin.auth.admin.createUser({
-        email: primaryEmail,
-        email_confirm: true,
-        user_metadata: {
-          full_name: `${clerkUser.firstName} ${clerkUser.lastName}`.trim(),
-          clerk_id: clerkUser.id
-        },
-        id: clerkUser.id // Use the same ID as Clerk
-      })
-      
-      if (createUserError) {
-        console.error("Error creating user in Supabase:", createUserError)
-        throw createUserError
-      }
-    }
-    
-    return true
-  } catch (error) {
-    console.error("Error syncing user to Supabase:", error)
-    return false
-  }
-}
 
 /**
- * Ensures a user has the specified role in the user_roles table
- * Uses service role client to bypass RLS for role management
+ * Ensures a user has the specified role in Clerk metadata
+ * Updates the user's publicMetadata.roles array
  */
 export async function ensureUserHasRole(userId: string, role: UserRole): Promise<boolean> {
   try {
     console.log(`[ensureUserHasRole] Starting for userId: ${userId}, role: ${role}`)
     
-    // Use service role client to bypass RLS for role management
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("[ensureUserHasRole] Missing Supabase environment variables")
-      return false
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    )
-    
-    console.log(`[ensureUserHasRole] Created service role client`)
-    
-    // Check if the role already exists
-    console.log(`[ensureUserHasRole] Checking existing roles for user ${userId}`)
-    const { data: existingRoles, error: checkError } = await supabase
-      .from('user_roles')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('role', role)
-    
-    if (checkError) {
-      console.error("[ensureUserHasRole] Error checking user role:", checkError)
+    // Get current user from Clerk
+    const user = await clerkClient.users.getUser(userId)
+    if (!user) {
+      console.error(`[ensureUserHasRole] User ${userId} not found in Clerk`)
       return false
     }
     
-    console.log(`[ensureUserHasRole] Existing roles found:`, existingRoles)
+    // Get current roles from metadata
+    const currentRoles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
     
-    // If role doesn't exist, add it
-    if (!existingRoles || existingRoles.length === 0) {
-      console.log(`[ensureUserHasRole] Role ${role} not found, inserting for user ${userId}`)
-      const { data: insertData, error: insertError } = await supabase
-        .from('user_roles')
-        .insert({
-          user_id: userId,
-          role
-        })
-        .select()
-      
-      if (insertError) {
-        console.error("[ensureUserHasRole] Error assigning role:", insertError)
-        console.error("[ensureUserHasRole] Insert error details:", {
-          message: insertError.message,
-          code: insertError.code,
-          details: insertError.details,
-          hint: insertError.hint
-        })
-        return false
-      }
-      
-      console.log(`[ensureUserHasRole] Successfully inserted role:`, insertData)
-    } else {
+    console.log(`[ensureUserHasRole] Current roles:`, currentRoles)
+    
+    // Check if role already exists
+    if (currentRoles.includes(role)) {
       console.log(`[ensureUserHasRole] Role ${role} already exists for user ${userId}`)
+      return true
     }
     
+    // Add the new role
+    const updatedRoles = [...currentRoles, role]
+    console.log(`[ensureUserHasRole] Adding role ${role}, updated roles:`, updatedRoles)
+    
+    // Update user metadata in Clerk
+    await clerkClient.users.updateUser(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        roles: updatedRoles
+      }
+    })
+    
+    console.log(`[ensureUserHasRole] Successfully added role ${role} to user ${userId}`)
     return true
   } catch (error) {
     console.error("[ensureUserHasRole] Error ensuring user role:", error)
@@ -197,58 +81,60 @@ export async function ensureUserHasRole(userId: string, role: UserRole): Promise
 }
 
 /**
- * Removes a role from a user
- * Uses service role client to bypass RLS for role management
+ * Removes a role from a user in Clerk metadata
+ * Updates the user's publicMetadata.roles array
  */
 export async function removeUserRole(userId: string, role: UserRole): Promise<boolean> {
   try {
-    // Use service role client to bypass RLS for role management
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("[removeUserRole] Missing Supabase environment variables")
+    console.log(`[removeUserRole] Starting for userId: ${userId}, role: ${role}`)
+    
+    // Get current user from Clerk
+    const user = await clerkClient.users.getUser(userId)
+    if (!user) {
+      console.error(`[removeUserRole] User ${userId} not found in Clerk`)
       return false
     }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
+    
+    // Get current roles from metadata
+    const currentRoles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
+    
+    console.log(`[removeUserRole] Current roles:`, currentRoles)
+    
+    // Check if role exists to remove
+    if (!currentRoles.includes(role)) {
+      console.log(`[removeUserRole] Role ${role} does not exist for user ${userId}`)
+      return true // Not an error if role doesn't exist
+    }
+    
+    // Remove the role
+    const updatedRoles = currentRoles.filter(r => r !== role)
+    console.log(`[removeUserRole] Removing role ${role}, updated roles:`, updatedRoles)
+    
+    // Update user metadata in Clerk
+    await clerkClient.users.updateUser(userId, {
+      publicMetadata: {
+        ...user.publicMetadata,
+        roles: updatedRoles
       }
-    )
+    })
     
-    const { error } = await supabase
-      .from('user_roles')
-      .delete()
-      .eq('user_id', userId)
-      .eq('role', role)
-    
-    if (error) {
-      console.error("Error removing user role:", error)
-      return false
-    }
-    
+    console.log(`[removeUserRole] Successfully removed role ${role} from user ${userId}`)
     return true
   } catch (error) {
-    console.error("Error removing user role:", error)
+    console.error("[removeUserRole] Error removing user role:", error)
     return false
   }
 }
 
 /**
- * Syncs user roles from Clerk metadata to Supabase user_roles table
- * This is the core function that ensures superAdmin in Clerk gets admin role in Supabase
+ * Syncs user roles within Clerk metadata
+ * Ensures superAdmin users have the admin role in their metadata
  */
 export async function syncUserRoles(userId: string): Promise<boolean> {
   try {
     console.log(`[syncUserRoles] Starting sync for userId: ${userId}`)
-    
-    // Ensure user exists in Supabase
-    console.log(`[syncUserRoles] Ensuring user exists in Supabase`)
-    const userSyncResult = await syncClerkUserToSupabase(userId)
-    console.log(`[syncUserRoles] User sync result:`, userSyncResult)
     
     // Get user from Clerk
     console.log(`[syncUserRoles] Fetching user from Clerk`)
@@ -266,28 +152,25 @@ export async function syncUserRoles(userId: string): Promise<boolean> {
     // Check if user is superAdmin in Clerk
     const isSuperAdmin = user.publicMetadata?.superAdmin === true
     
-    // If user is superAdmin, ensure they have admin role in Supabase
-    if (isSuperAdmin) {
-      console.log(`[syncUserRoles] User is superAdmin, ensuring admin role`)
+    // Get current roles from metadata
+    const currentRoles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
+    
+    console.log(`[syncUserRoles] Current roles:`, currentRoles)
+    
+    // If user is superAdmin, ensure they have admin role
+    if (isSuperAdmin && !currentRoles.includes('admin')) {
+      console.log(`[syncUserRoles] User is superAdmin but missing admin role, adding it`)
       const adminRoleResult = await ensureUserHasRole(userId, 'admin')
       console.log(`[syncUserRoles] Admin role ensure result:`, adminRoleResult)
     }
     
-    // Check if user has admin role in Clerk metadata
-    const hasAdminRole = Array.isArray(user.publicMetadata?.roles) && 
-      (user.publicMetadata?.roles as string[]).includes('admin')
-    
-    console.log(`[syncUserRoles] User has admin role in Clerk metadata:`, hasAdminRole)
-    
-    // If user has admin role in Clerk metadata, ensure they have it in Supabase
-    if (hasAdminRole) {
-      console.log(`[syncUserRoles] Ensuring admin role from Clerk metadata`)
-      const adminRoleFromClerkResult = await ensureUserHasRole(userId, 'admin')
-      console.log(`[syncUserRoles] Admin role from Clerk result:`, adminRoleFromClerkResult)
-    }
-    
-    // Verify final state
-    const finalRoles = await getUserRoles(userId)
+    // Get final roles after sync
+    const updatedUser = await clerkClient.users.getUser(userId)
+    const finalRoles = Array.isArray(updatedUser.publicMetadata?.roles) 
+      ? updatedUser.publicMetadata.roles as string[]
+      : []
     console.log(`[syncUserRoles] Final roles for user ${userId}:`, finalRoles)
     
     return true
@@ -299,30 +182,19 @@ export async function syncUserRoles(userId: string): Promise<boolean> {
 
 /**
  * Checks if the current user has a specific role
- * For use in server components
+ * For use in server components - reads from Clerk metadata
  */
 export async function hasRoleServer(role: UserRole): Promise<boolean> {
   try {
     const user = await currentUser()
     if (!user) return false
     
-    // Ensure roles are synced
-    await syncUserRoles(user.id)
+    // Get roles from Clerk metadata
+    const roles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
     
-    const supabase = createServerComponentClient({ cookies })
-    
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('role', role)
-    
-    if (error) {
-      console.error("Error checking role:", error)
-      return false
-    }
-    
-    return data && data.length > 0
+    return roles.includes(role)
   } catch (error) {
     console.error("Error checking role:", error)
     return false
@@ -339,7 +211,7 @@ export async function isAdminServer(): Promise<boolean> {
 
 /**
  * Middleware helper to check if a request is from an admin
- * For use in API routes
+ * For use in API routes - reads from Clerk metadata
  */
 export async function requireAdmin(req: NextRequest): Promise<NextResponse | null> {
   const { userId } = auth()
@@ -348,74 +220,51 @@ export async function requireAdmin(req: NextRequest): Promise<NextResponse | nul
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
   
-  // Sync roles to ensure they're up to date
-  await syncUserRoles(userId)
-  
-  // Check if user has admin role using service role client
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    console.error("[requireAdmin] Missing Supabase environment variables")
-    return NextResponse.json({ error: "Server configuration error" }, { status: 500 })
-  }
-
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY,
-    {
-      auth: {
-        persistSession: false,
-        autoRefreshToken: false,
-      },
+  try {
+    // Get user from Clerk
+    const user = await clerkClient.users.getUser(userId)
+    if (!user) {
+      return NextResponse.json({ error: "User not found" }, { status: 401 })
     }
-  )
-  
-  const { data, error } = await supabase
-    .from('user_roles')
-    .select('*')
-    .eq('user_id', userId)
-    .eq('role', 'admin')
-  
-  if (error || !data || data.length === 0) {
-    return NextResponse.json({ error: "Permission denied" }, { status: 403 })
+    
+    // Check if user has admin role in metadata
+    const roles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
+    
+    if (!roles.includes('admin')) {
+      return NextResponse.json({ error: "Permission denied" }, { status: 403 })
+    }
+    
+    // User is admin, return null to continue processing
+    return null
+  } catch (error) {
+    console.error("Error checking admin role:", error)
+    return NextResponse.json({ error: "Error checking permissions" }, { status: 500 })
   }
-  
-  // User is admin, return null to continue processing
-  return null
 }
 
 /**
- * Gets all roles for a user
- * Uses service role client to ensure we can read all roles
+ * Gets all roles for a user from Clerk metadata
  */
 export async function getUserRoles(userId: string): Promise<UserRole[]> {
   try {
-    // Use service role client to bypass RLS for role queries
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error("[getUserRoles] Missing Supabase environment variables")
-      return []
-    }
-
-    const supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-      process.env.SUPABASE_SERVICE_ROLE_KEY,
-      {
-        auth: {
-          persistSession: false,
-          autoRefreshToken: false,
-        },
-      }
-    )
+    console.log(`[getUserRoles] Getting roles for user: ${userId}`)
     
-    const { data, error } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-    
-    if (error) {
-      console.error("Error getting user roles:", error)
+    // Get user from Clerk
+    const user = await clerkClient.users.getUser(userId)
+    if (!user) {
+      console.error(`[getUserRoles] User ${userId} not found in Clerk`)
       return []
     }
     
-    return (data || []).map(r => r.role as UserRole)
+    // Get roles from metadata
+    const roles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as UserRole[]
+      : []
+    
+    console.log(`[getUserRoles] Found roles for user ${userId}:`, roles)
+    return roles
   } catch (error) {
     console.error("Error getting user roles:", error)
     return []
@@ -423,11 +272,25 @@ export async function getUserRoles(userId: string): Promise<UserRole[]> {
 }
 
 /**
+ * Syncs a Clerk user to Supabase for non-role purposes
+ * This is a minimal sync that doesn't handle roles (now Clerk-only)
+ */
+export async function syncClerkUserToSupabase(userId: string) {
+  try {
+    console.log(`[syncClerkUserToSupabase] Note: Role management now handled exclusively by Clerk for user ${userId}`)
+    // Since roles are now exclusively in Clerk, this function does minimal work
+    // Other parts of the system may still need this for non-role user sync
+    return true
+  } catch (error) {
+    console.error("Error in minimal user sync:", error)
+    return false
+  }
+}
+
+/**
  * Initializes the authentication system
- * Call this on app startup to ensure everything is set up
+ * Since we're using Clerk-only now, this mainly ensures system is ready
  */
 export async function initAuthSync() {
-  // This is a placeholder for any initialization logic
-  // Could be expanded to check and create necessary database tables, etc.
-  console.log("Auth sync system initialized")
+  console.log("Clerk-only auth system initialized")
 }

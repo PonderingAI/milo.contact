@@ -3,12 +3,11 @@ import { auth, clerkClient } from "@clerk/nextjs/server"
 import { syncUserRoles, ensureUserHasRole, getUserRoles } from "@/lib/auth-server"
 
 /**
- * API route to synchronize user roles between Clerk and Supabase
+ * API route to synchronize user roles within Clerk
  * 
  * This endpoint:
- * 1. Syncs roles from Clerk metadata to Supabase user_roles table
- * 2. Automatically assigns admin role to superAdmin users
- * 3. Can be used to sync roles for the current user or another user (if requester is superAdmin)
+ * 1. Ensures superAdmin users have the admin role in their Clerk metadata
+ * 2. Can be used to sync roles for the current user or another user (if requester is superAdmin)
  */
 export async function POST(request: NextRequest) {
   try {
@@ -57,7 +56,7 @@ export async function POST(request: NextRequest) {
       ? targetUser.publicMetadata.roles as string[]
       : []
     
-    // Sync all roles from Clerk to Supabase
+    // Sync roles within Clerk (ensure superAdmin has admin role)
     await syncUserRoles(userIdToSync)
     
     // If user is superAdmin, ensure they have the admin role
@@ -65,8 +64,8 @@ export async function POST(request: NextRequest) {
       await ensureUserHasRole(userIdToSync, 'admin')
     }
     
-    // Get the updated roles from Supabase after syncing
-    const supabaseRoles = await getUserRoles(userIdToSync)
+    // Get the updated roles from Clerk after syncing
+    const finalRoles = await getUserRoles(userIdToSync)
     
     // Return success with debug information
     return NextResponse.json({
@@ -76,8 +75,8 @@ export async function POST(request: NextRequest) {
         userId: userIdToSync,
         isSuperAdmin,
         clerkRoles,
-        supabaseRoles,
-        adminRoleAssigned: isSuperAdmin || clerkRoles.includes('admin') || supabaseRoles.includes('admin')
+        finalRoles,
+        adminRoleAssigned: isSuperAdmin || clerkRoles.includes('admin') || finalRoles.includes('admin')
       }
     })
     
