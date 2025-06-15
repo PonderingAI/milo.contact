@@ -31,6 +31,34 @@ export async function getRouteHandlerSupabaseClient() {
   return createRouteHandlerClient({ cookies })
 }
 
+/**
+ * Syncs Clerk user data to Supabase for RLS compatibility
+ * This ensures Supabase auth.uid() returns the correct user ID
+ */
+export async function syncClerkUserToSupabase(userId: string) {
+  try {
+    console.log(`[syncClerkUserToSupabase] Syncing user ${userId} to Supabase`)
+    
+    // Get Supabase client
+    const supabase = await getRouteHandlerSupabaseClient()
+    
+    // Get user from Clerk
+    const user = await clerkClient.users.getUser(userId)
+    if (!user) {
+      throw new Error(`User ${userId} not found in Clerk`)
+    }
+    
+    // Ensure user roles are synced in Clerk first
+    await syncUserRoles(userId)
+    
+    console.log(`[syncClerkUserToSupabase] User ${userId} synced successfully`)
+    return true
+  } catch (error) {
+    console.error("[syncClerkUserToSupabase] Error syncing user to Supabase:", error)
+    return false
+  }
+}
+
 
 /**
  * Ensures a user has the specified role in Clerk metadata

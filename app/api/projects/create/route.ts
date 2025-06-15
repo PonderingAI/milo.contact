@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getRouteHandlerSupabaseClient, checkAdminPermission } from "@/lib/auth-server"
+import { getRouteHandlerSupabaseClient, checkAdminPermission, syncClerkUserToSupabase } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
@@ -32,6 +32,10 @@ export async function POST(request: Request) {
         supabaseCode: "PERMISSION_DENIED"
       }, { status: 403 })
     }
+
+    // Sync user to Supabase for RLS compatibility
+    console.log("Syncing Clerk user to Supabase for RLS...")
+    await syncClerkUserToSupabase(userId)
 
     // Parse and validate project data
     const projectData = await request.json()
