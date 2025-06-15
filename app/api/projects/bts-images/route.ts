@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { getRouteHandlerSupabaseClient, checkAdminPermission } from "@/lib/auth-server"
+import { createClient } from "@supabase/supabase-js"
+import { checkAdminPermission, syncClerkUserToSupabase } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
@@ -19,8 +19,12 @@ export async function POST(request: Request) {
       }, { status: 401 })
     }
     
-    // Get authenticated Supabase client that syncs Clerk with Supabase
-    const supabase = await getRouteHandlerSupabaseClient()
+    // Get authenticated Supabase client with service role to bypass RLS
+    // Since we're already checking admin permissions via Clerk metadata above
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
     
     // Parse request body
     const req = await request.json()
@@ -43,6 +47,13 @@ export async function POST(request: Request) {
         supabaseError: "No admin role found in Clerk metadata",
         supabaseCode: "PERMISSION_DENIED"
       }, { status: 403 })
+    }
+
+    // Sync user roles from Clerk to Supabase to ensure RLS policies work
+    console.log("Syncing user roles from Clerk to Supabase...")
+    const syncResult = await syncClerkUserToSupabase(userId)
+    if (!syncResult) {
+      console.warn("Failed to sync user roles to Supabase, but continuing with service role...")
     }
 
     // Delete existing images if requested

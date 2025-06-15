@@ -287,17 +287,69 @@ export async function getUserRoles(userId: string): Promise<UserRole[]> {
 }
 
 /**
- * Syncs a Clerk user to Supabase for non-role purposes
- * This is a minimal sync that doesn't handle roles (now Clerk-only)
+ * Syncs a Clerk user's roles to the Supabase user_roles table
+ * This ensures RLS policies that check user_roles will work correctly
  */
 export async function syncClerkUserToSupabase(userId: string) {
   try {
-    console.log(`[syncClerkUserToSupabase] Note: Role management now handled exclusively by Clerk for user ${userId}`)
-    // Since roles are now exclusively in Clerk, this function does minimal work
-    // Other parts of the system may still need this for non-role user sync
+    console.log(`[syncClerkUserToSupabase] Syncing user ${userId} from Clerk to Supabase`)
+    
+    // Get user from Clerk
+    const user = await clerkClient.users.getUser(userId)
+    if (!user) {
+      console.error(`[syncClerkUserToSupabase] User ${userId} not found in Clerk`)
+      return false
+    }
+    
+    // Get roles from Clerk metadata
+    const roles = Array.isArray(user.publicMetadata?.roles) 
+      ? user.publicMetadata.roles as string[]
+      : []
+    
+    console.log(`[syncClerkUserToSupabase] User ${userId} has roles in Clerk:`, roles)
+    
+    // Get a service role client to bypass RLS for sync operations
+    const { createClient } = require('@supabase/supabase-js')
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
+    
+    // First, remove all existing roles for this user in Supabase
+    const { error: deleteError } = await supabase
+      .from('user_roles')
+      .delete()
+      .eq('user_id', userId)
+    
+    if (deleteError) {
+      console.error(`[syncClerkUserToSupabase] Error removing existing roles:`, deleteError)
+      // Continue anyway, might be first time sync
+    }
+    
+    // Insert the new roles
+    if (roles.length > 0) {
+      const roleRecords = roles.map(role => ({
+        user_id: userId,
+        role: role
+      }))
+      
+      const { error: insertError } = await supabase
+        .from('user_roles')
+        .insert(roleRecords)
+      
+      if (insertError) {
+        console.error(`[syncClerkUserToSupabase] Error inserting roles:`, insertError)
+        return false
+      }
+      
+      console.log(`[syncClerkUserToSupabase] Successfully synced ${roles.length} roles to Supabase`)
+    } else {
+      console.log(`[syncClerkUserToSupabase] No roles to sync for user ${userId}`)
+    }
+    
     return true
   } catch (error) {
-    console.error("Error in minimal user sync:", error)
+    console.error("[syncClerkUserToSupabase] Error syncing user to Supabase:", error)
     return false
   }
 }
