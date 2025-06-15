@@ -813,8 +813,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project created successfully!",
         })
         
-        // Redirect back to projects list instead of edit page
-        router.push("/admin/projects")
+        // Redirect back to project overview (main projects page)
+        router.push("/#projects")
       } else {
         // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
@@ -860,8 +860,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Redirect back to projects list
-        router.push("/admin/projects")
+        // Redirect back to project overview (main projects page)
+        router.push("/#projects")
       }
     } catch (error: any) {
       console.error("Error saving project:", error)
@@ -1056,18 +1056,52 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
                 {!formData.is_public && schemaColumns.includes("publish_date") && (
                   <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Publish Date</label>
-                    <div className="relative">
-                      <Input
-                        type="datetime-local"
-                        name="publish_date"
-                        onChange={(e) => {
-                          const value = e.target.value ? new Date(e.target.value).toISOString() : null
-                          setFormData((prev) => ({ ...prev, publish_date: value }))
-                        }}
-                        className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
-                      />
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Release</label>
+                    <div className="space-y-2">
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="checkbox"
+                          id="enable-scheduled-release"
+                          checked={!!formData.publish_date}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              // Set to 24 hours from now as default
+                              const tomorrow = new Date()
+                              tomorrow.setDate(tomorrow.getDate() + 1)
+                              setFormData((prev) => ({ ...prev, publish_date: tomorrow.toISOString() }))
+                            } else {
+                              setFormData((prev) => ({ ...prev, publish_date: null }))
+                            }
+                          }}
+                          className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                        />
+                        <label htmlFor="enable-scheduled-release" className="text-sm text-gray-300">
+                          Schedule automatic release
+                        </label>
+                      </div>
+                      
+                      {formData.publish_date && (
+                        <div className="relative">
+                          <Input
+                            type="datetime-local"
+                            name="publish_date"
+                            value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ''}
+                            onChange={(e) => {
+                              const value = e.target.value ? new Date(e.target.value).toISOString() : null
+                              setFormData((prev) => ({ ...prev, publish_date: value }))
+                            }}
+                            className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
+                          />
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        </div>
+                      )}
+                      
+                      {formData.publish_date && (
+                        <p className="text-xs text-gray-400">
+                          Project will automatically become public on{' '}
+                          {new Date(formData.publish_date).toLocaleString()}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
@@ -1311,7 +1345,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         <div className="flex justify-end gap-4 mt-6">
           <Button
             variant="outline"
-            onClick={() => router.push("/admin/projects")}
+            onClick={() => router.push("/#projects")}
             className="border-gray-700 text-gray-300 hover:bg-[#131a2a]"
           >
             Cancel
