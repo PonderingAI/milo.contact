@@ -10,7 +10,6 @@
 
 import { clerkClient, currentUser, auth } from "@clerk/nextjs/server"
 import { NextRequest, NextResponse } from "next/server"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 
 // Types
@@ -24,39 +23,25 @@ export interface RoleData {
 }
 
 /**
- * Gets an authenticated Supabase client for API routes
- * This is for non-role related database operations only
+ * Gets a Supabase client for API routes with service role privileges
+ * Since we're using Clerk for authentication, we bypass RLS using service role
+ * All permission checks are handled at the application layer
  */
 export async function getRouteHandlerSupabaseClient() {
-  return createRouteHandlerClient({ cookies })
-}
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-/**
- * Syncs Clerk user data to Supabase for RLS compatibility
- * This ensures Supabase auth.uid() returns the correct user ID
- */
-export async function syncClerkUserToSupabase(userId: string) {
-  try {
-    console.log(`[syncClerkUserToSupabase] Syncing user ${userId} to Supabase`)
-    
-    // Get Supabase client
-    const supabase = await getRouteHandlerSupabaseClient()
-    
-    // Get user from Clerk
-    const user = await clerkClient.users.getUser(userId)
-    if (!user) {
-      throw new Error(`User ${userId} not found in Clerk`)
-    }
-    
-    // Ensure user roles are synced in Clerk first
-    await syncUserRoles(userId)
-    
-    console.log(`[syncClerkUserToSupabase] User ${userId} synced successfully`)
-    return true
-  } catch (error) {
-    console.error("[syncClerkUserToSupabase] Error syncing user to Supabase:", error)
-    return false
+  if (!supabaseUrl || !supabaseServiceKey) {
+    throw new Error("Missing Supabase environment variables. Please check your .env file.")
   }
+
+  const { createClient } = await import('@supabase/supabase-js')
+  return createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+  })
 }
 
 

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { getRouteHandlerSupabaseClient, checkAdminPermission, syncClerkUserToSupabase } from "@/lib/auth-server"
+import { getRouteHandlerSupabaseClient, checkAdminPermission } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
@@ -18,9 +18,6 @@ export async function POST(request: Request) {
       }, { status: 401 })
     }
     
-    // Get authenticated Supabase client that syncs Clerk with Supabase
-    const supabase = await getRouteHandlerSupabaseClient()
-    
     // Check if user has admin role via Clerk metadata
     const hasAdminPermission = await checkAdminPermission(userId)
     
@@ -33,9 +30,8 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-    // Sync user to Supabase for RLS compatibility
-    console.log("Syncing Clerk user to Supabase for RLS...")
-    await syncClerkUserToSupabase(userId)
+    // Get Supabase client with service role (bypasses RLS)
+    const supabase = await getRouteHandlerSupabaseClient()
 
     // Parse and validate project data
     const projectData = await request.json()
@@ -66,7 +62,7 @@ export async function POST(request: Request) {
       )
     }
 
-    // Insert the project using the authenticated client
+    // Insert the project using the service role client (bypasses RLS)
     const { data, error } = await supabase.from("projects").insert([projectData]).select()
 
     if (error) {
