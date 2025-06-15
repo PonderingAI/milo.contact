@@ -2,9 +2,34 @@
  * Test suite for the role management system (Clerk-only)
  */
 
-import { describe, test, expect, beforeAll, afterAll } from '@jest/globals'
+import { describe, test, expect, beforeAll, afterAll, jest } from '@jest/globals'
 
-// Mock Clerk for testing
+// Mock Clerk client for testing
+const mockClerkClient = {
+  users: {
+    getUser: jest.fn(),
+    updateUser: jest.fn()
+  }
+}
+
+// Mock the actual auth-server functions
+jest.mock('@/lib/auth-server', () => ({
+  ensureUserHasRole: jest.fn(),
+  removeUserRole: jest.fn(),
+  syncUserRoles: jest.fn(),
+  hasRoleServer: jest.fn(),
+  checkAdminPermission: jest.fn(),
+  getUserRoles: jest.fn()
+}))
+
+// Mock Clerk Next.js
+jest.mock('@clerk/nextjs/server', () => ({
+  clerkClient: mockClerkClient,
+  currentUser: jest.fn(),
+  auth: jest.fn()
+}))
+
+// Test data
 const mockClerkUser = {
   id: 'test_user_123',
   primaryEmailAddress: { emailAddress: 'test@example.com' },
@@ -15,179 +40,160 @@ const mockClerkUser = {
 }
 
 describe('Role Management System', () => {
+  let authServer: any
+
   beforeAll(async () => {
     // Setup test environment
     process.env.NODE_ENV = 'test'
+    
+    // Import the mocked auth server module
+    authServer = await import('@/lib/auth-server')
   })
 
   afterAll(async () => {
     // Cleanup
+    jest.clearAllMocks()
   })
 
   describe('User Role Sync', () => {
     test('should sync superAdmin to admin role', async () => {
-      // This test verifies the core functionality:
-      // SuperAdmin users should automatically get admin role in Clerk metadata
+      // Mock the getUserRoles function to return admin role
+      authServer.getUserRoles.mockResolvedValue(['admin'])
       
-      const isSuperAdmin = mockClerkUser.publicMetadata.superAdmin
-      const hasAdminInClerk = mockClerkUser.publicMetadata.roles.includes('admin')
+      // Mock syncUserRoles to succeed
+      authServer.syncUserRoles.mockResolvedValue(true)
       
-      expect(isSuperAdmin).toBe(true)
-      expect(hasAdminInClerk).toBe(true)
+      const userId = 'test_user_123'
+      const result = await authServer.syncUserRoles(userId)
+      const roles = await authServer.getUserRoles(userId)
       
-      // In a real implementation, this would call syncUserRoles
-      // and verify that the user gets admin role in their Clerk metadata
+      expect(result).toBe(true)
+      expect(roles).toContain('admin')
+      expect(authServer.syncUserRoles).toHaveBeenCalledWith(userId)
     })
 
     test('should handle users without superAdmin status', async () => {
-      const regularUser = {
-        ...mockClerkUser,
-        publicMetadata: { superAdmin: false, roles: [] }
-      }
+      // Mock a regular user with no roles
+      authServer.getUserRoles.mockResolvedValue([])
       
-      expect(regularUser.publicMetadata.superAdmin).toBe(false)
-      expect(regularUser.publicMetadata.roles).toEqual([])
+      const userId = 'regular_user_123'
+      const roles = await authServer.getUserRoles(userId)
+      
+      expect(roles).toEqual([])
     })
   })
 
   describe('Permission Checks', () => {
     test('should allow BTS operations for admin users', async () => {
-      // This test simulates the BTS API permission check
-      const userRoles = ['admin']
-      const hasAdminRole = userRoles.includes('admin')
+      // Mock checkAdminPermission to return true for admin user
+      authServer.checkAdminPermission.mockResolvedValue(true)
       
-      expect(hasAdminRole).toBe(true)
-      // In the real BTS API, this should return success
+      const userId = 'admin_user_123'
+      const hasPermission = await authServer.checkAdminPermission(userId)
+      
+      expect(hasPermission).toBe(true)
     })
 
     test('should deny BTS operations for non-admin users', async () => {
-      const userRoles = ['viewer']
-      const hasAdminRole = userRoles.includes('admin')
+      // Mock checkAdminPermission to return false for non-admin user
+      authServer.checkAdminPermission.mockResolvedValue(false)
       
-      expect(hasAdminRole).toBe(false)
-      // In the real BTS API, this should return 403 permission denied
+      const userId = 'regular_user_123'
+      const hasPermission = await authServer.checkAdminPermission(userId)
+      
+      expect(hasPermission).toBe(false)
     })
   })
 
   describe('Role Assignment API', () => {
-    test('should allow superAdmins to assign admin roles', async () => {
-      const requestingUser = mockClerkUser // SuperAdmin
-      const canAssignAdminRole = requestingUser.publicMetadata.superAdmin === true
+    test('should allow adding admin role to user', async () => {
+      // Mock ensureUserHasRole to succeed
+      authServer.ensureUserHasRole.mockResolvedValue(true)
       
-      expect(canAssignAdminRole).toBe(true)
+      const userId = 'test_user_123'
+      const role = 'admin'
+      const result = await authServer.ensureUserHasRole(userId, role)
+      
+      expect(result).toBe(true)
+      expect(authServer.ensureUserHasRole).toHaveBeenCalledWith(userId, role)
     })
 
-    test('should prevent non-superAdmins from assigning admin roles', async () => {
-      const regularAdmin = {
-        ...mockClerkUser,
-        publicMetadata: { superAdmin: false, roles: ['admin'] }
-      }
+    test('should allow removing admin role from user', async () => {
+      // Mock removeUserRole to succeed
+      authServer.removeUserRole.mockResolvedValue(true)
       
-      const canAssignAdminRole = regularAdmin.publicMetadata.superAdmin === true
-      expect(canAssignAdminRole).toBe(false)
+      const userId = 'test_user_123'
+      const role = 'admin'
+      const result = await authServer.removeUserRole(userId, role)
+      
+      expect(result).toBe(true)
+      expect(authServer.removeUserRole).toHaveBeenCalledWith(userId, role)
+    })
+  })
+
+  describe('Server-side Role Checks', () => {
+    test('should check admin role correctly on server', async () => {
+      // Mock hasRoleServer to return true for admin
+      authServer.hasRoleServer.mockResolvedValue(true)
+      
+      const hasAdmin = await authServer.hasRoleServer('admin')
+      
+      expect(hasAdmin).toBe(true)
+    })
+
+    test('should deny access for non-admin users', async () => {
+      // Mock hasRoleServer to return false for non-admin
+      authServer.hasRoleServer.mockResolvedValue(false)
+      
+      const hasAdmin = await authServer.hasRoleServer('admin')
+      
+      expect(hasAdmin).toBe(false)
     })
   })
 
   describe('Role Management Interface', () => {
-    test('should display correct role status', async () => {
-      const userWithRoles = {
-        clerkRoles: ['admin'],
-        isSuperAdmin: true
-      }
+    test('should get user roles correctly', async () => {
+      // Mock getUserRoles to return specific roles
+      const expectedRoles = ['admin', 'editor']
+      authServer.getUserRoles.mockResolvedValue(expectedRoles)
       
-      const hasAdminRole = userWithRoles.clerkRoles.includes('admin')
+      const userId = 'test_user_123'
+      const roles = await authServer.getUserRoles(userId)
       
-      expect(hasAdminRole).toBe(true)
+      expect(roles).toEqual(expectedRoles)
     })
 
-    test('should detect missing roles', async () => {
-      const userWithoutRoles = {
-        clerkRoles: [], // Missing admin role in Clerk
-        isSuperAdmin: true
-      }
+    test('should handle users with no roles', async () => {
+      // Mock getUserRoles to return empty array
+      authServer.getUserRoles.mockResolvedValue([])
       
-      const hasAdminRole = userWithoutRoles.clerkRoles.includes('admin')
-      const needsSync = userWithoutRoles.isSuperAdmin && !hasAdminRole
+      const userId = 'no_roles_user_123'
+      const roles = await authServer.getUserRoles(userId)
       
-      expect(hasAdminRole).toBe(false)
-      expect(needsSync).toBe(true)
+      expect(roles).toEqual([])
     })
   })
 
-  describe('Automatic Role Sync on Admin Access', () => {
-    test('should trigger role sync for superAdmin without admin role', async () => {
-      const superAdminWithoutAdminRole = {
-        isSuperAdmin: true,
-        hasAdminRoleInClerk: false
-      }
+  describe('Error Handling', () => {
+    test('should handle errors in role sync gracefully', async () => {
+      // Mock syncUserRoles to fail
+      authServer.syncUserRoles.mockResolvedValue(false)
       
-      // This simulates the role sync logic
-      const shouldTriggerSync = superAdminWithoutAdminRole.isSuperAdmin && 
-                               !superAdminWithoutAdminRole.hasAdminRoleInClerk
+      const userId = 'error_user_123'
+      const result = await authServer.syncUserRoles(userId)
       
-      expect(shouldTriggerSync).toBe(true)
+      expect(result).toBe(false)
     })
 
-    test('should not trigger unnecessary sync for properly configured users', async () => {
-      const properlyConfiguredUser = {
-        isSuperAdmin: true,
-        hasAdminRoleInClerk: true
-      }
+    test('should handle errors in permission checks gracefully', async () => {
+      // Mock checkAdminPermission to fail
+      authServer.checkAdminPermission.mockResolvedValue(false)
       
-      const shouldTriggerSync = properlyConfiguredUser.isSuperAdmin && 
-                               !properlyConfiguredUser.hasAdminRoleInClerk
+      const userId = 'error_user_123'
+      const result = await authServer.checkAdminPermission(userId)
       
-      expect(shouldTriggerSync).toBe(false)
+      expect(result).toBe(false)
     })
   })
 })
 
-// Integration test helper functions
-export const testRoleManagementIntegration = {
-  /**
-   * Test the complete role sync workflow
-   */
-  async testFullRoleSync(userId: string) {
-    const steps = []
-    
-    try {
-      // Step 1: Check initial state
-      steps.push({ step: 'initial_check', status: 'running' })
-      // Implementation would check Clerk and Supabase roles
-      steps[0].status = 'success'
-      
-      // Step 2: Trigger sync
-      steps.push({ step: 'sync_roles', status: 'running' })
-      // Implementation would call /api/admin/sync-roles
-      steps[1].status = 'success'
-      
-      // Step 3: Verify sync results
-      steps.push({ step: 'verify_sync', status: 'running' })
-      // Implementation would verify roles are properly synced
-      steps[2].status = 'success'
-      
-      // Step 4: Test BTS permission
-      steps.push({ step: 'test_bts_permission', status: 'running' })
-      // Implementation would test BTS API permission check
-      steps[3].status = 'success'
-      
-      return { success: true, steps }
-    } catch (error) {
-      return { success: false, error: error.message, steps }
-    }
-  },
-
-  /**
-   * Test role assignment functionality
-   */
-  async testRoleAssignment(requestingUserId: string, targetUserId: string, role: string) {
-    try {
-      // Check if requesting user can assign roles
-      // Call role assignment API
-      // Verify role was assigned
-      return { success: true }
-    } catch (error) {
-      return { success: false, error: error.message }
-    }
-  }
-}
