@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import type React from "react"
 import { Button } from "@/components/ui/button"
 import { Trash2 } from "lucide-react"
 import {
@@ -73,7 +74,16 @@ export default function DeleteProjectButton({ id, onDelete }: DeleteProjectButto
 
   return (
     <>
-      <Button variant="ghost" size="icon" onClick={() => setOpen(true)}>
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        className="h-8 w-8 p-0" 
+        onClick={(e: React.MouseEvent) => { 
+          e.stopPropagation(); 
+          e.preventDefault(); 
+          setOpen(true); 
+        }}
+      >
         <Trash2 className="h-4 w-4 text-red-500" />
         <span className="sr-only">Delete</span>
       </Button>
