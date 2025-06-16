@@ -17,6 +17,7 @@ import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import UnifiedMediaInput from "@/components/admin/unified-media-input"
+import { CustomDatePicker } from "@/components/ui/custom-date-picker"
 
 interface ProjectEditorProps {
   project?: {
@@ -28,7 +29,6 @@ interface ProjectEditorProps {
     image: string
     thumbnail_url?: string
     description?: string
-    is_public: boolean
     publish_date: string | null
     tags?: string[]
     project_date?: string
@@ -44,7 +44,6 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     image: project?.image || "",
     thumbnail_url: project?.thumbnail_url || "",
     description: project?.description || "",
-    is_public: project?.is_public ?? true,
     publish_date: project?.publish_date || null,
     project_date: project?.project_date || new Date().toISOString().split("T")[0],
   })
@@ -759,7 +758,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         category: formData.category.trim(),
         role: roleInput.trim() || formData.role.trim(),
         project_date: formData.project_date,
-        is_public: formData.is_public,
+        publish_date: formData.publish_date,
         thumbnail_url: formData.thumbnail_url || thumbnailUrl || null,
       }
 
@@ -801,19 +800,24 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
             if (!btsResponse.ok) {
               console.error("Error saving BTS images:", await btsResponse.json())
+              // Continue with success flow even if BTS save fails
             }
           } catch (btsError) {
             console.error("Error saving BTS images:", btsError)
+            // Continue with success flow even if BTS save fails
           }
         }
 
-        // Show success message and redirect back to projects list
+        console.log("Project created successfully, redirecting to admin projects...")
+
+        // Show success message and redirect back to admin projects page
         toast({
           title: "Project created",
           description: "Project created successfully!",
         })
         
-        // Redirect back to projects list instead of edit page
+        // Force redirect immediately
+        console.log("About to redirect to /admin/projects")
         router.push("/admin/projects")
       } else {
         // Update existing project
@@ -832,6 +836,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           throw new Error(responseData.error || "Failed to update project")
         }
 
+        console.log("Project updated successfully, updating BTS media...")
+
         // Update BTS images if any
         if (project?.id) {
           try {
@@ -848,11 +854,15 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
             if (!btsResponse.ok) {
               console.error("Error updating BTS images:", await btsResponse.json())
+              // Continue with success flow even if BTS update fails
             }
           } catch (btsError) {
             console.error("Error updating BTS images:", btsError)
+            // Continue with success flow even if BTS update fails
           }
         }
+
+        console.log("Project update completed, redirecting to admin projects...")
 
         // Show success message
         toast({
@@ -860,7 +870,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Redirect back to projects list
+        // Force redirect immediately after showing success message
+        console.log("About to redirect to /admin/projects")
         router.push("/admin/projects")
       }
     } catch (error: any) {
@@ -1039,38 +1050,26 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Visibility</label>
-                  <Select
-                    value={formData.is_public ? "true" : "false"}
-                    onValueChange={(value) => handleSelectChange("is_public", value === "true")}
-                  >
-                    <SelectTrigger className="border-gray-800 bg-[#0f1520] text-gray-200">
-                      <SelectValue placeholder="Select visibility" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#070a10] border-gray-800 text-gray-200">
-                      <SelectItem value="true">Public</SelectItem>
-                      <SelectItem value="false">Private</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Release Date</label>
+                  <CustomDatePicker
+                    value={formData.publish_date ? formData.publish_date.split('T')[0] : null}
+                    onChange={(date) => {
+                      setFormData((prev) => ({ 
+                        ...prev, 
+                        publish_date: date ? date + 'T00:00:00.000Z' : null 
+                      }))
+                    }}
+                    minDate={new Date().toISOString().split('T')[0]}
+                    placeholder="Leave empty for immediate public release"
+                    className="border-gray-800 bg-[#0f1520] text-gray-200"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.publish_date 
+                      ? `Project will be private until ${new Date(formData.publish_date).toLocaleDateString()}` 
+                      : "Project will be public immediately"
+                    }
+                  </p>
                 </div>
-
-                {!formData.is_public && schemaColumns.includes("publish_date") && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Publish Date</label>
-                    <div className="relative">
-                      <Input
-                        type="datetime-local"
-                        name="publish_date"
-                        onChange={(e) => {
-                          const value = e.target.value ? new Date(e.target.value).toISOString() : null
-                          setFormData((prev) => ({ ...prev, publish_date: value }))
-                        }}
-                        className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
-                      />
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 

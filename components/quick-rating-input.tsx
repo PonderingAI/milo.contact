@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useRef, useEffect, type KeyboardEvent } from "react"
-import { Dialog, DialogContent } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
@@ -47,6 +48,11 @@ export function QuickRatingInput({ isOpen, onClose, onSubmit, initialRating = 0 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="sm:max-w-[300px] bg-neutral-900 border-neutral-800 text-neutral-100">
+        <DialogHeader>
+          <VisuallyHidden>
+            <DialogTitle>Quick Rating Input</DialogTitle>
+          </VisuallyHidden>
+        </DialogHeader>
         <div className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="quick-rating" className="text-neutral-300">

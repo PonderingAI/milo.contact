@@ -5,7 +5,7 @@ import Link from "next/link"
 import { ArrowLeft, Loader2 } from "lucide-react"
 import { createClientComponentClient } from "@supabase/auth-helpers-nextjs"
 import { useParams, useRouter } from "next/navigation"
-import { mockProjects, mockBtsImages } from "@/lib/project-data"
+import { mockProjects, mockBtsImages } from "@/lib/mock-data"
 import { Button } from "@/components/ui/button"
 
 export default function ClientEditProjectPage() {

@@ -43,13 +43,13 @@ requireAdmin(req) // for API middleware
 
 * `app/api/projects/bts-images/route.ts` and key admin routes now:
   * call `getRouteHandlerSupabaseClient()`  
-  * validate admin role via `public.user_roles`  
+  * validate admin role via Clerk metadata (`superAdmin` flag or `admin` role)
   * return consistent JSON errors.
 
 ### 2.4 Front-end guards
 
-* `components/admin/admin-check.tsx` verifies admin via three signals:  
-  `superAdmin` • Clerk roles • Supabase `user_roles`.  
+* `components/admin/admin-check.tsx` verifies admin via Clerk metadata:  
+  `superAdmin` flag • Clerk `roles` array containing 'admin'.  
 * Non-admins are redirected to `/admin/permission-denied`.
 
 ### 2.5 Webhooks
