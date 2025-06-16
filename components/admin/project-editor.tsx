@@ -5,9 +5,6 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import DatePicker from "react-datepicker"
-import "react-datepicker/dist/react-datepicker.css"
-import "@/styles/datepicker.css"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -20,6 +17,7 @@ import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import UnifiedMediaInput from "@/components/admin/unified-media-input"
+import { DateTimePicker } from "@/components/ui/date-time-picker"
 
 interface ProjectEditorProps {
   project?: {
@@ -763,6 +761,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         role: roleInput.trim() || formData.role.trim(),
         project_date: formData.project_date,
         is_public: formData.is_public,
+        publish_date: formData.publish_date,
         thumbnail_url: formData.thumbnail_url || thumbnailUrl || null,
       }
 
@@ -804,20 +803,26 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
             if (!btsResponse.ok) {
               console.error("Error saving BTS images:", await btsResponse.json())
+              // Continue with success flow even if BTS save fails
             }
           } catch (btsError) {
             console.error("Error saving BTS images:", btsError)
+            // Continue with success flow even if BTS save fails
           }
         }
 
-        // Show success message and redirect back to projects list
+        console.log("Project created successfully, redirecting to admin projects...")
+
+        // Show success message and redirect back to admin projects page
         toast({
           title: "Project created",
           description: "Project created successfully!",
         })
         
-        // Redirect back to admin projects page
-        router.push("/admin/projects")
+        // Redirect back to admin projects page with a slight delay to ensure toast is shown
+        setTimeout(() => {
+          router.push("/admin/projects")
+        }, 500)
       } else {
         // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
@@ -835,6 +840,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           throw new Error(responseData.error || "Failed to update project")
         }
 
+        console.log("Project updated successfully, updating BTS media...")
+
         // Update BTS images if any
         if (project?.id) {
           try {
@@ -851,11 +858,15 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
             if (!btsResponse.ok) {
               console.error("Error updating BTS images:", await btsResponse.json())
+              // Continue with success flow even if BTS update fails
             }
           } catch (btsError) {
             console.error("Error updating BTS images:", btsError)
+            // Continue with success flow even if BTS update fails
           }
         }
+
+        console.log("Project update completed, redirecting to admin projects...")
 
         // Show success message
         toast({
@@ -863,8 +874,10 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Redirect back to admin projects page
-        router.push("/admin/projects")
+        // Redirect back to admin projects page with a slight delay to ensure toast is shown
+        setTimeout(() => {
+          router.push("/admin/projects")
+        }, 500)
       }
     } catch (error: any) {
       console.error("Error saving project:", error)
@@ -1084,26 +1097,16 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                       </div>
                       
                       {formData.publish_date && (
-                        <div className="relative">
-                          <DatePicker
-                            selected={formData.publish_date ? new Date(formData.publish_date) : null}
-                            onChange={(date) => {
-                              const value = date ? date.toISOString() : null
-                              setFormData((prev) => ({ ...prev, publish_date: value }))
-                            }}
-                            showTimeSelect
-                            timeFormat="HH:mm"
-                            timeIntervals={15}
-                            timeCaption="Time"
-                            dateFormat="MMMM d, yyyy h:mm aa"
-                            className="w-full border-gray-800 bg-[#0f1520] text-gray-200 pl-10 rounded-md px-3 py-2 focus:border-gray-700 focus:outline-none"
-                            wrapperClassName="w-full"
-                            calendarClassName="bg-[#0f1520] border-gray-800 text-gray-200"
-                            popperClassName="z-50"
-                            minDate={new Date()}
-                          />
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
-                        </div>
+                        <DateTimePicker
+                          value={formData.publish_date ? new Date(formData.publish_date) : null}
+                          onChange={(date) => {
+                            const value = date ? date.toISOString() : null
+                            setFormData((prev) => ({ ...prev, publish_date: value }))
+                          }}
+                          minDate={new Date()}
+                          placeholder="Select release date and time"
+                          className="border-gray-800 bg-[#0f1520] text-gray-200"
+                        />
                       )}
                       
                       {formData.publish_date && (
