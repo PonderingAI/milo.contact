@@ -1,4 +1,4 @@
-import { getProjects } from "@/lib/project-data"
+import { getProjects } from "@/lib/project-data-server"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"

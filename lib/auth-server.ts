@@ -225,6 +225,7 @@ export async function isAdminServer(): Promise<boolean> {
 /**
  * Checks if a user ID has admin permissions via Clerk metadata
  * Returns boolean for simple permission checks
+ * Checks both superAdmin flag and admin role for comprehensive permission checking
  */
 export async function checkAdminPermission(userId: string): Promise<boolean> {
   try {
@@ -234,12 +235,17 @@ export async function checkAdminPermission(userId: string): Promise<boolean> {
       return false
     }
     
+    // Check if user is superAdmin
+    const isSuperAdmin = user.publicMetadata?.superAdmin === true
+    
     // Check if user has admin role in metadata
     const roles = Array.isArray(user.publicMetadata?.roles) 
       ? user.publicMetadata.roles as string[]
       : []
+    const hasAdminRole = roles.includes('admin')
     
-    return roles.includes('admin')
+    // User is admin if they are superAdmin OR have admin role
+    return isSuperAdmin || hasAdminRole
   } catch (error) {
     console.error("Error checking admin permission:", error)
     return false

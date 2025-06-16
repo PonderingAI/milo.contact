@@ -1,6 +1,6 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
-import { getProjects } from "@/lib/project-data"
+import { getProjects } from "@/lib/project-data-server"
 import ProjectSearchBar from "@/components/project-search-bar"
 import { OffsetProjectGrid } from "@/components/offset-project-grid"
 import { Loader2 } from "lucide-react"

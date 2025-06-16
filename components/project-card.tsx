@@ -13,11 +13,15 @@ interface ProjectCardProps {
   link: string
   isAdmin?: boolean
   onEdit?: () => void
+  project_date?: string | null
   is_public?: boolean
-  publish_date?: string | null
 }
 
-export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, is_public, publish_date }: ProjectCardProps) {
+export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, project_date, is_public }: ProjectCardProps) {
+  // Determine if project is private based on is_public flag and project_date
+  const now = new Date()
+  const isPrivate = is_public === false || (project_date && new Date(project_date) > now)
+
   return (
     <Link href={link} aria-label={title} className="relative group block aspect-video overflow-hidden rounded-lg">
       <Image 
@@ -31,17 +35,15 @@ export function ProjectCard({ id, title, category, role, image, link, isAdmin, o
 
       {/* Admin Indicators (top-left) */}
       {isAdmin && (
-        <div className="absolute top-2 left-2 z-10 space-y-1 text-xs">
-          {typeof is_public !== 'undefined' && (
-            <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
-              {is_public ? <Eye className="mr-1 h-3 w-3" /> : <EyeOff className="mr-1 h-3 w-3" />}
-              <span>{is_public ? "Public" : "Private"}</span>
-            </div>
-          )}
-          {publish_date && (
+        <div className="absolute top-2 left-2 z-10 flex flex-wrap gap-1 text-xs">
+          <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
+            {isPrivate ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+            <span>{isPrivate ? "Private" : "Public"}</span>
+          </div>
+          {isPrivate && project_date && (
             <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
               <CalendarDays className="mr-1 h-3 w-3" />
-              <span>Scheduled: {new Date(publish_date).toLocaleDateString()}</span>
+              <span>{new Date(project_date).toLocaleDateString()}</span>
             </div>
           )}
         </div>

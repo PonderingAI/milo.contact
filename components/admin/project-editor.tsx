@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X, ArrowLeft, Save } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -28,8 +29,7 @@ interface ProjectEditorProps {
     image: string
     thumbnail_url?: string
     description?: string
-    is_public: boolean
-    publish_date: string | null
+    is_public?: boolean
     tags?: string[]
     project_date?: string
   }
@@ -44,10 +44,12 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     image: project?.image || "",
     thumbnail_url: project?.thumbnail_url || "",
     description: project?.description || "",
-    is_public: project?.is_public ?? true,
-    publish_date: project?.publish_date || null,
     project_date: project?.project_date || new Date().toISOString().split("T")[0],
+    is_public: project?.is_public !== undefined ? project.is_public : true,
   })
+
+  // Derived state for private toggle based on project_date
+  const isPrivate = formData.project_date ? new Date(formData.project_date) > new Date() : !formData.is_public
 
   // State to track the role input for tag extraction
   const [roleInput, setRoleInput] = useState(project?.role || "")
@@ -228,7 +230,18 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
-    setFormData((prev) => ({ ...prev, [name]: value }))
+    
+    if (name === 'project_date') {
+      // Automatically update is_public based on whether the date is in the future
+      const isInFuture = value && new Date(value) > new Date()
+      setFormData((prev) => ({ 
+        ...prev, 
+        [name]: value, 
+        is_public: !isInFuture 
+      }))
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }))
+    }
   }
 
   const handleSelectChange = (name: string, value: string | boolean) => {
@@ -248,6 +261,29 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   const handleCategoryChange = (value: string) => {
     setFormData((prev) => ({ ...prev, category: value }))
   }
+
+  const handlePrivateToggle = (isPrivate: boolean) => {
+    if (isPrivate) {
+      // If toggling to private, set project_date to tomorrow if not already set to a future date
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const currentProjectDate = formData.project_date ? new Date(formData.project_date) : null
+      
+      setFormData((prev) => ({ 
+        ...prev, 
+        is_public: false,
+        project_date: (currentProjectDate && currentProjectDate > new Date()) ? prev.project_date : tomorrow.toISOString().split("T")[0]
+      }))
+    } else {
+      // If toggling to public, set project_date to today and set is_public to true
+      setFormData((prev) => ({ 
+        ...prev, 
+        is_public: true,
+        project_date: new Date().toISOString().split("T")[0]
+      }))
+    }
+  }
+
 
   const handleImageUpload = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
@@ -801,20 +837,30 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
             if (!btsResponse.ok) {
               console.error("Error saving BTS images:", await btsResponse.json())
+              // Continue with success flow even if BTS save fails
             }
           } catch (btsError) {
             console.error("Error saving BTS images:", btsError)
+            // Continue with success flow even if BTS save fails
           }
         }
 
-        // Show success message and redirect back to projects list
+        console.log("Project created successfully, redirecting to admin projects...")
+
+        // Show success message and redirect back to admin projects page
         toast({
           title: "Project created",
           description: "Project created successfully!",
         })
         
-        // Redirect back to projects list instead of edit page
-        router.push("/admin/projects")
+        // Force redirect with fallback
+        console.log("About to redirect to /admin/projects")
+        try {
+          await router.push("/admin/projects")
+        } catch (routerError) {
+          console.error("Router push failed, using window.location:", routerError)
+          window.location.href = "/admin/projects"
+        }
       } else {
         // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
@@ -832,6 +878,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           throw new Error(responseData.error || "Failed to update project")
         }
 
+        console.log("Project updated successfully, updating BTS media...")
+
         // Update BTS images if any
         if (project?.id) {
           try {
@@ -848,11 +896,15 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
             if (!btsResponse.ok) {
               console.error("Error updating BTS images:", await btsResponse.json())
+              // Continue with success flow even if BTS update fails
             }
           } catch (btsError) {
             console.error("Error updating BTS images:", btsError)
+            // Continue with success flow even if BTS update fails
           }
         }
+
+        console.log("Project update completed, redirecting to admin projects...")
 
         // Show success message
         toast({
@@ -860,8 +912,14 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Redirect back to projects list
-        router.push("/admin/projects")
+        // Force redirect with fallback
+        console.log("About to redirect to /admin/projects")
+        try {
+          await router.push("/admin/projects")
+        } catch (routerError) {
+          console.error("Router push failed, using window.location:", routerError)
+          window.location.href = "/admin/projects"
+        }
       }
     } catch (error: any) {
       console.error("Error saving project:", error)
@@ -1036,41 +1094,33 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                     />
                     <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   </div>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.project_date && new Date(formData.project_date) > new Date()
+                      ? `Project will be private until ${new Date(formData.project_date).toLocaleDateString()}`
+                      : "Project date and release date"
+                    }
+                  </p>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Visibility</label>
-                  <Select
-                    value={formData.is_public ? "true" : "false"}
-                    onValueChange={(value) => handleSelectChange("is_public", value === "true")}
-                  >
-                    <SelectTrigger className="border-gray-800 bg-[#0f1520] text-gray-200">
-                      <SelectValue placeholder="Select visibility" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#070a10] border-gray-800 text-gray-200">
-                      <SelectItem value="true">Public</SelectItem>
-                      <SelectItem value="false">Private</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {!formData.is_public && schemaColumns.includes("publish_date") && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Publish Date</label>
-                    <div className="relative">
-                      <Input
-                        type="datetime-local"
-                        name="publish_date"
-                        onChange={(e) => {
-                          const value = e.target.value ? new Date(e.target.value).toISOString() : null
-                          setFormData((prev) => ({ ...prev, publish_date: value }))
-                        }}
-                        className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-medium text-gray-400">Visibility</label>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-xs ${isPrivate ? 'text-gray-400' : 'text-green-400'}`}>Public</span>
+                      <Switch
+                        checked={isPrivate}
+                        onCheckedChange={handlePrivateToggle}
                       />
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <span className={`text-xs ${isPrivate ? 'text-orange-400' : 'text-gray-400'}`}>Private</span>
                     </div>
                   </div>
-                )}
+                  <p className="text-xs text-gray-500">
+                    {isPrivate 
+                      ? "Project is private and won't appear on the public site" 
+                      : "Project is public and visible to everyone"
+                    }
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

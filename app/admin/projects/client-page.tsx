@@ -5,11 +5,18 @@ import { useRouter } from "next/navigation"
 import { useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Plus, Search, Filter, X } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+  DropdownMenuCheckboxItem,
+  DropdownMenuSeparator,
+  DropdownMenuLabel,
+} from "@/components/ui/dropdown-menu"
+import { Plus, Search, Filter, X, ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ProjectCard } from "@/components/project-card"
-import SimpleTagFilter from "@/components/simple-tag-filter"
-import { getSupabaseBrowserClient } from "@/lib/supabase"
 import type { Project } from "@/lib/project-data"
 
 export default function ClientProjectsPage() {
@@ -24,7 +31,7 @@ export default function ClientProjectsPage() {
   const [selectedRole, setSelectedRole] = useState("")
   const [searchQuery, setSearchQuery] = useState("")
   const [filteredProjects, setFilteredProjects] = useState<Project[]>([])
-  const [showFilters, setShowFilters] = useState(false)
+  const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "private">("all")
 
   useEffect(() => {
     if (isLoaded && !isSignedIn) {
@@ -41,21 +48,14 @@ export default function ClientProjectsPage() {
   const fetchProjects = async () => {
     try {
       setLoading(true)
-      const supabase = getSupabaseBrowserClient()
       
-      // Check if Supabase client is properly initialized
-      if (!supabase) {
-        throw new Error('Supabase client initialization failed')
+      const response = await fetch("/api/admin/projects")
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch projects: ${response.statusText}`)
       }
 
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        throw error
-      }
+      const { projects: data } = await response.json()
 
       if (data) {
         setProjects(data)
@@ -92,6 +92,24 @@ export default function ClientProjectsPage() {
       result = result.filter((project) => project.role?.toLowerCase().includes(selectedRole.toLowerCase()))
     }
 
+    // Apply privacy filter using both is_public and project_date
+    const now = new Date()
+    if (privacyFilter === "public") {
+      result = result.filter((project) => {
+        // Project is public if is_public is not false AND (no project_date OR project_date is today or in past)
+        const isPublicFlag = project.is_public !== false
+        const isProjectDatePublic = !project.project_date || new Date(project.project_date) <= now
+        return isPublicFlag && isProjectDatePublic
+      })
+    } else if (privacyFilter === "private") {
+      result = result.filter((project) => {
+        // Project is private if is_public is false OR project_date is in future
+        const isPrivateFlag = project.is_public === false
+        const hasPrivateDate = project.project_date && new Date(project.project_date) > now
+        return isPrivateFlag || hasPrivateDate
+      })
+    }
+
     // Apply search filter
     if (searchQuery) {
       result = result.filter((project) => {
@@ -105,7 +123,7 @@ export default function ClientProjectsPage() {
     }
 
     setFilteredProjects(result)
-  }, [projects, selectedCategory, selectedRole, searchQuery])
+  }, [projects, selectedCategory, selectedRole, searchQuery, privacyFilter])
 
   const handleCategoryChange = (category: string) => {
     setSelectedCategory(category === selectedCategory ? "" : category)
@@ -119,6 +137,7 @@ export default function ClientProjectsPage() {
     setSelectedCategory("")
     setSelectedRole("")
     setSearchQuery("")
+    setPrivacyFilter("all")
   }
 
   if (!isLoaded) {
@@ -135,10 +154,6 @@ export default function ClientProjectsPage() {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
           <h1 className="text-3xl font-bold">Projects</h1>
           <div className="flex gap-2">
-            <Button onClick={() => setShowFilters(!showFilters)} variant="outline" className="border-gray-700">
-              <Filter className="h-4 w-4 mr-2" />
-              {showFilters ? "Hide Filters" : "Show Filters"}
-            </Button>
             <Button onClick={() => router.push("/admin/projects/new")}>
               <Plus className="h-4 w-4 mr-2" />
               New Project
@@ -146,59 +161,123 @@ export default function ClientProjectsPage() {
           </div>
         </div>
 
-        <Card className="bg-gray-900 border-gray-800 mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-xl">Search & Filter</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                <Input
-                  type="text"
-                  placeholder="Search projects..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 pr-10 bg-gray-800 border-gray-700"
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => setSearchQuery("")}
-                    className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-300"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
+        {/* Search Input - simplified without box */}
+        <div className="space-y-4 mb-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 bg-transparent border-gray-800 focus:border-gray-700"
+            />
+          </div>
+
+          {/* Filter Controls */}
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Privacy Filter Toggles */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant={privacyFilter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPrivacyFilter("all")}
+              >
+                All
+              </Button>
+              <Button
+                variant={privacyFilter === "public" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPrivacyFilter("public")}
+              >
+                Public
+              </Button>
+              <Button
+                variant={privacyFilter === "private" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setPrivacyFilter("private")}
+              >
+                Private
+              </Button>
+            </div>
+
+            {/* More Filters Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm">
+                  <Filter className="h-4 w-4 mr-2" />
+                  More Filters
+                  <ChevronDown className="h-4 w-4 ml-2" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-64 max-h-80 overflow-y-auto">
+                {/* Categories */}
+                {categories.length > 0 && (
+                  <>
+                    <DropdownMenuLabel>Categories</DropdownMenuLabel>
+                    {categories.map((category) => (
+                      <DropdownMenuCheckboxItem
+                        key={category}
+                        checked={selectedCategory === category}
+                        onCheckedChange={() => handleCategoryChange(category)}
+                      >
+                        {category}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                  </>
                 )}
-              </div>
 
-              {showFilters && (
-                <div className="space-y-4 pt-2">
-                  <SimpleTagFilter
-                    title="Categories"
-                    tags={categories}
-                    selectedTag={selectedCategory}
-                    onChange={handleCategoryChange}
-                  />
+                {/* Roles */}
+                {roles.length > 0 && (
+                  <>
+                    <DropdownMenuLabel>Roles</DropdownMenuLabel>
+                    {roles.map((role) => (
+                      <DropdownMenuCheckboxItem
+                        key={role}
+                        checked={selectedRole === role}
+                        onCheckedChange={() => handleRoleChange(role)}
+                      >
+                        {role}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-                  <SimpleTagFilter
-                    title="Roles"
-                    tags={roles}
-                    selectedTag={selectedRole}
-                    onChange={handleRoleChange}
-                  />
+            {/* Clear Filters Button */}
+            {(selectedCategory || selectedRole || searchQuery || privacyFilter !== "all") && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear Filters
+              </Button>
+            )}
+          </div>
 
-                  {(selectedCategory || selectedRole || searchQuery) && (
-                    <div className="flex justify-end">
-                      <button onClick={clearFilters} className="text-sm text-gray-400 hover:text-white underline">
-                        Clear all filters
-                      </button>
-                    </div>
-                  )}
-                </div>
+          {/* Selected Filters Display */}
+          {(selectedCategory || selectedRole) && (
+            <div className="flex flex-wrap gap-2">
+              {selectedCategory && (
+                <Badge
+                  variant="secondary"
+                  className="cursor-pointer hover:bg-red-900/50"
+                  onClick={() => setSelectedCategory("")}
+                >
+                  {selectedCategory} ×
+                </Badge>
+              )}
+              {selectedRole && (
+                <Badge
+                  variant="secondary"
+                  className="cursor-pointer hover:bg-red-900/50"
+                  onClick={() => setSelectedRole("")}
+                >
+                  {selectedRole} ×
+                </Badge>
               )}
             </div>
-          </CardContent>
-        </Card>
+          )}
+        </div>
 
         {loading ? (
           <div className="text-center py-12">
@@ -241,8 +320,8 @@ export default function ClientProjectsPage() {
                 category={project.category}
                 role={project.role}
                 image={project.image}
+                project_date={project.project_date}
                 is_public={project.is_public}
-                publish_date={project.publish_date}
                 isAdmin={true}
                 onEdit={() => router.push(`/admin/projects/${project.id}/edit`)}
                 link={`/projects/${project.id}`}

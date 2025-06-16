@@ -1,6 +1,7 @@
 import { Suspense } from "react"
 import ProjectDetailContent from "./project-detail-content"
-import { getProjectById, mockProjects, mockBtsImages } from "@/lib/project-data"
+import { getProjectById } from "@/lib/project-data-server"
+import { mockProjects, mockBtsImages } from "@/lib/project-data"
 import { notFound } from "next/navigation"
 
 export default async function ProjectDetailPage({ params }: { params: { id: string } }) {
