@@ -187,9 +187,12 @@ export default function VideoBackground({ videoUrl, fallbackImage = "/images/her
             top: "50%",
             left: "50%",
             transform: "translate(-50%, -50%)",
-            width: "100%",
-            height: "100%",
-            objectFit: "contain",
+            width: "177.77vh", // 16:9 aspect ratio ensures coverage
+            height: "56.25vw", // 16:9 aspect ratio ensures coverage  
+            minWidth: "100%",
+            minHeight: "100%",
+            objectFit: "cover",
+            backgroundColor: "transparent",
           }}
           frameBorder="0"
           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
