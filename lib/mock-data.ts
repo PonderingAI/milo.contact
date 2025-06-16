@@ -52,6 +52,8 @@ export const mockProjects: Project[] = [
     special_notes:
       "This project was particularly special because we shot it entirely during golden hour over three consecutive days, creating a consistent and dreamlike visual atmosphere.",
     tags: ["Short Film", "Director"],
+    project_date: "2024-03-15",
+    created_at: "2024-01-01T00:00:00Z",
   },
   {
     id: "directed-2",
@@ -64,6 +66,8 @@ export const mockProjects: Project[] = [
     special_notes:
       "Working with the artist to develop a visual language that complemented the music was a rewarding creative challenge.",
     tags: ["Music Video", "Director"],
+    project_date: "2024-05-20",
+    created_at: "2024-01-02T00:00:00Z",
   },
 
   // Camera Work Projects
@@ -78,6 +82,8 @@ export const mockProjects: Project[] = [
     special_notes:
       "The challenging lighting conditions and complex camera movements made this project particularly rewarding.",
     tags: ["Feature Film", "1st AC"],
+    project_date: "2024-07-10",
+    created_at: "2024-01-03T00:00:00Z",
   },
   {
     id: "camera-2",
@@ -89,6 +95,8 @@ export const mockProjects: Project[] = [
     description: "Served as 2nd AC for this popular TV series, handling equipment and supporting the camera team.",
     special_notes: "Working with a seasoned DP taught me invaluable lessons about lighting and composition.",
     tags: ["Television", "2nd AC"],
+    project_date: "2024-01-22",
+    created_at: "2024-01-04T00:00:00Z",
   },
 
   // Production Projects
@@ -102,6 +110,8 @@ export const mockProjects: Project[] = [
     description: "Provided essential support as a PA on this award-winning short film production.",
     special_notes: "Being part of such a collaborative and creative team was an incredible learning experience.",
     tags: ["Short Film", "Production Assistant"],
+    project_date: "2024-04-08",
+    created_at: "2024-01-05T00:00:00Z",
   },
   {
     id: "production-2",
@@ -113,6 +123,8 @@ export const mockProjects: Project[] = [
     description: "Assisted with various aspects of production for this innovative music video.",
     special_notes: "The fast-paced production schedule taught me how to work efficiently under pressure.",
     tags: ["Music Video", "Production Assistant"],
+    project_date: "2024-02-14",
+    created_at: "2024-01-06T00:00:00Z",
   },
 
   // Photography Projects
@@ -126,6 +138,8 @@ export const mockProjects: Project[] = [
     special_notes:
       "Spending weeks in remote locations to capture these images gave me a deeper appreciation for nature's beauty.",
     tags: ["Landscape", "Photographer"],
+    project_date: "2024-06-30",
+    created_at: "2024-01-07T00:00:00Z",
   },
   {
     id: "photo-2",
@@ -137,6 +151,8 @@ export const mockProjects: Project[] = [
     special_notes:
       "Creating an environment where subjects felt comfortable enough to express their authentic selves was the key to these portraits.",
     tags: ["Portrait", "Photographer"],
+    project_date: "2024-08-15",
+    created_at: "2024-01-08T00:00:00Z",
   },
   {
     id: "ai-1",
@@ -149,6 +165,8 @@ export const mockProjects: Project[] = [
     special_notes:
       "This project uses cutting-edge AI models to create unique visual experiences that challenge our perception of art and creativity.",
     tags: ["AI", "AI Artist"],
+    // No project_date to test null handling
+    created_at: "2024-01-09T00:00:00Z",
   },
 ]
 

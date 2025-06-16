@@ -75,6 +75,7 @@ export async function getProjects(): Promise<Project[]> {
       .from("projects")
       .select("*")
       .neq("is_public", false) // Only exclude projects explicitly marked as private
+      .order("project_date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
 
     // Also filter by project_date if it exists - show projects with no date or date <= today
@@ -145,6 +146,7 @@ export async function getAllProjectsForAdmin(): Promise<Project[]> {
     const { data, error } = await supabase
       .from("projects")
       .select("*")
+      .order("project_date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -327,6 +329,7 @@ export async function getProjectsByCategory(category: string): Promise<Project[]
       .from("projects")
       .select("*")
       .eq("category", category)
+      .order("project_date", { ascending: false, nullsFirst: false })
       .order("created_at", { ascending: false })
 
     if (error) {
@@ -396,7 +399,9 @@ export async function getProjectsByRole(role: string | string[]): Promise<Projec
       query = query.ilike("role", `%${role}%`)
     }
 
-    const { data, error } = await query.order("created_at", { ascending: false })
+    const { data, error } = await query
+      .order("project_date", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching projects by role:", error)
