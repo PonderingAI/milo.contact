@@ -17,7 +17,7 @@ import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import UnifiedMediaInput from "@/components/admin/unified-media-input"
-import { DateTimePicker } from "@/components/ui/date-time-picker"
+import { CustomDatePicker } from "@/components/ui/custom-date-picker"
 
 interface ProjectEditorProps {
   project?: {
@@ -29,7 +29,6 @@ interface ProjectEditorProps {
     image: string
     thumbnail_url?: string
     description?: string
-    is_public: boolean
     publish_date: string | null
     tags?: string[]
     project_date?: string
@@ -45,7 +44,6 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     image: project?.image || "",
     thumbnail_url: project?.thumbnail_url || "",
     description: project?.description || "",
-    is_public: project?.is_public ?? true,
     publish_date: project?.publish_date || null,
     project_date: project?.project_date || new Date().toISOString().split("T")[0],
   })
@@ -760,7 +758,6 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         category: formData.category.trim(),
         role: roleInput.trim() || formData.role.trim(),
         project_date: formData.project_date,
-        is_public: formData.is_public,
         publish_date: formData.publish_date,
         thumbnail_url: formData.thumbnail_url || thumbnailUrl || null,
       }
@@ -819,10 +816,9 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project created successfully!",
         })
         
-        // Redirect back to admin projects page with a slight delay to ensure toast is shown
-        setTimeout(() => {
-          router.push("/admin/projects")
-        }, 500)
+        // Force redirect immediately
+        console.log("About to redirect to /admin/projects")
+        router.push("/admin/projects")
       } else {
         // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
@@ -874,10 +870,9 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Redirect back to admin projects page with a slight delay to ensure toast is shown
-        setTimeout(() => {
-          router.push("/admin/projects")
-        }, 500)
+        // Force redirect immediately after showing success message
+        console.log("About to redirect to /admin/projects")
+        router.push("/admin/projects")
       }
     } catch (error: any) {
       console.error("Error saving project:", error)
@@ -1055,69 +1050,26 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Visibility</label>
-                  <Select
-                    value={formData.is_public ? "true" : "false"}
-                    onValueChange={(value) => handleSelectChange("is_public", value === "true")}
-                  >
-                    <SelectTrigger className="border-gray-800 bg-[#0f1520] text-gray-200">
-                      <SelectValue placeholder="Select visibility" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-[#070a10] border-gray-800 text-gray-200">
-                      <SelectItem value="true">Public</SelectItem>
-                      <SelectItem value="false">Private</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Release Date</label>
+                  <CustomDatePicker
+                    value={formData.publish_date ? formData.publish_date.split('T')[0] : null}
+                    onChange={(date) => {
+                      setFormData((prev) => ({ 
+                        ...prev, 
+                        publish_date: date ? date + 'T00:00:00.000Z' : null 
+                      }))
+                    }}
+                    minDate={new Date().toISOString().split('T')[0]}
+                    placeholder="Leave empty for immediate public release"
+                    className="border-gray-800 bg-[#0f1520] text-gray-200"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    {formData.publish_date 
+                      ? `Project will be private until ${new Date(formData.publish_date).toLocaleDateString()}` 
+                      : "Project will be public immediately"
+                    }
+                  </p>
                 </div>
-
-                {!formData.is_public && schemaColumns.includes("publish_date") && (
-                  <div>
-                    <label className="block text-xs font-medium text-gray-400 mb-1">Scheduled Release</label>
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          id="enable-scheduled-release"
-                          checked={!!formData.publish_date}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              // Set to 24 hours from now as default
-                              const tomorrow = new Date()
-                              tomorrow.setDate(tomorrow.getDate() + 1)
-                              setFormData((prev) => ({ ...prev, publish_date: tomorrow.toISOString() }))
-                            } else {
-                              setFormData((prev) => ({ ...prev, publish_date: null }))
-                            }
-                          }}
-                          className="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-                        />
-                        <label htmlFor="enable-scheduled-release" className="text-sm text-gray-300">
-                          Schedule automatic release
-                        </label>
-                      </div>
-                      
-                      {formData.publish_date && (
-                        <DateTimePicker
-                          value={formData.publish_date ? new Date(formData.publish_date) : null}
-                          onChange={(date) => {
-                            const value = date ? date.toISOString() : null
-                            setFormData((prev) => ({ ...prev, publish_date: value }))
-                          }}
-                          minDate={new Date()}
-                          placeholder="Select release date and time"
-                          className="border-gray-800 bg-[#0f1520] text-gray-200"
-                        />
-                      )}
-                      
-                      {formData.publish_date && (
-                        <p className="text-xs text-gray-400">
-                          Project will automatically become public on{' '}
-                          {new Date(formData.publish_date).toLocaleString()}
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                )}
               </CardContent>
             </Card>
 

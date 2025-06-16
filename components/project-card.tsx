@@ -13,11 +13,14 @@ interface ProjectCardProps {
   link: string
   isAdmin?: boolean
   onEdit?: () => void
-  is_public?: boolean
   publish_date?: string | null
 }
 
-export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, is_public, publish_date }: ProjectCardProps) {
+export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, publish_date }: ProjectCardProps) {
+  // Determine if project is private based on publish_date
+  const now = new Date()
+  const isPrivate = publish_date && new Date(publish_date) > now
+
   return (
     <Link href={link} aria-label={title} className="relative group block aspect-video overflow-hidden rounded-lg">
       <Image 
@@ -32,13 +35,11 @@ export function ProjectCard({ id, title, category, role, image, link, isAdmin, o
       {/* Admin Indicators (top-left) */}
       {isAdmin && (
         <div className="absolute top-2 left-2 z-10 flex flex-wrap gap-1 text-xs">
-          {typeof is_public !== 'undefined' && (
-            <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
-              {is_public ? <Eye className="mr-1 h-3 w-3" /> : <EyeOff className="mr-1 h-3 w-3" />}
-              <span>{is_public ? "Public" : "Private"}</span>
-            </div>
-          )}
-          {!is_public && publish_date && (
+          <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
+            {isPrivate ? <EyeOff className="mr-1 h-3 w-3" /> : <Eye className="mr-1 h-3 w-3" />}
+            <span>{isPrivate ? "Private" : "Public"}</span>
+          </div>
+          {isPrivate && publish_date && (
             <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
               <CalendarDays className="mr-1 h-3 w-3" />
               <span>{new Date(publish_date).toLocaleDateString()}</span>

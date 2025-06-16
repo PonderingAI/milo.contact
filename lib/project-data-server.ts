@@ -66,12 +66,12 @@ export async function getProjects(): Promise<Project[]> {
 
     const supabase = createServerClient()
 
-    // For public pages, always filter to only show public projects or those with publish_date in the past
+    // For public pages, only show projects that are public (publish_date is null or in the past)
     const now = new Date().toISOString()
     const { data, error } = await supabase
       .from("projects")
       .select("*")
-      .or(`is_public.eq.true,publish_date.lt.${now}`)
+      .or(`publish_date.is.null,publish_date.lte.${now}`)
       .order("created_at", { ascending: false })
 
     if (error) {
