@@ -361,6 +361,17 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       }
     }
 
+    const getVideoInfo = () => {
+      if (video.includes("youtube.com") || video.includes("youtu.be")) {
+        return { platform: "YouTube", thumbnail: getVideoThumbnail() }
+      } else if (video.includes("vimeo.com")) {
+        return { platform: "Vimeo", thumbnail: null }
+      }
+      return { platform: "Video", thumbnail: null }
+    }
+
+    const videoInfo = getVideoInfo()
+
     const getVideoThumbnail = () => {
       if (video.includes("youtube.com")) {
         return `https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`
@@ -370,7 +381,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       return null
     }
 
-    const thumbnailUrl = getVideoThumbnail()
+    const thumbnailUrl = videoInfo.thumbnail
 
     return (
       <TooltipProvider>
@@ -388,10 +399,10 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                 {thumbnailUrl ? (
                   <img
                     src={thumbnailUrl}
-                    alt={`${video.includes("youtube") ? "YouTube" : "Video"} video ${index + 1}`}
+                    alt={`${videoInfo.platform} video ${index + 1}`}
                     className="w-full h-full object-cover"
                   />
-                ) : video.includes("vimeo.com") ? (
+                ) : videoInfo.platform === "Vimeo" ? (
                   <div className="text-gray-400 flex flex-col items-center">
                     <Film size={24} />
                     <span className="text-xs mt-1">Vimeo Video</span>
@@ -399,7 +410,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                 ) : (
                   <div className="text-gray-400 flex flex-col items-center">
                     <Film size={24} />
-                    <span className="text-xs mt-1">Video</span>
+                    <span className="text-xs mt-1">{videoInfo.platform}</span>
                   </div>
                 )}
               </div>
@@ -436,11 +447,19 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                 "Loading release date..."
               ) : releaseDate ? (
                 <>
-                  <div className="font-medium">Release Date</div>
+                  <div className="font-medium">{videoInfo.platform} Release Date</div>
                   <div>{releaseDate}</div>
                 </>
+              ) : videoInfo.platform === "YouTube" ? (
+                <>
+                  <div className="font-medium">{videoInfo.platform} Video</div>
+                  <div className="text-xs text-gray-400">Release date requires YouTube Data API</div>
+                </>
               ) : (
-                "Release date not available"
+                <>
+                  <div className="font-medium">{videoInfo.platform} Video</div>
+                  <div className="text-xs text-gray-400">Release date not available</div>
+                </>
               )}
             </div>
           </TooltipContent>

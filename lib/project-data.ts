@@ -122,11 +122,9 @@ export async function extractVideoDate(url: string): Promise<Date | null> {
     if (!videoInfo) return null
 
     if (videoInfo.platform === "youtube") {
-      // For YouTube, we'll use the oEmbed API to get basic info
-      // Note: oEmbed doesn't provide upload dates directly
-      // We'll need to implement this differently or use YouTube Data API
-      // For now, return null and log that YouTube date extraction is not implemented
-      console.log("YouTube date extraction not yet implemented - requires YouTube Data API")
+      // For YouTube, we would need to use the YouTube Data API which requires an API key
+      // For now, we return a specific message indicating this limitation
+      console.log("YouTube date extraction requires YouTube Data API v3 with API key")
       return null
     } else if (videoInfo.platform === "vimeo") {
       // Use Vimeo API v2 to get upload date
