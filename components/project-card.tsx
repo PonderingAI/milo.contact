@@ -2,6 +2,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Edit, Eye, EyeOff, CalendarDays } from "lucide-react"
+import DeleteProjectButton from "@/components/admin/delete-project-button"
 import type React from "react" // Added import for React.MouseEvent
 
 interface ProjectCardProps {
@@ -13,11 +14,12 @@ interface ProjectCardProps {
   link: string
   isAdmin?: boolean
   onEdit?: () => void
+  onDelete?: () => void
   project_date?: string | null
   is_public?: boolean
 }
 
-export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, project_date, is_public }: ProjectCardProps) {
+export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, onDelete, project_date, is_public }: ProjectCardProps) {
   // Determine if project is private based on is_public flag and project_date
   const now = new Date()
   const isPrivate = is_public === false || (project_date && new Date(project_date) > now)
@@ -58,23 +60,26 @@ export function ProjectCard({ id, title, category, role, image, link, isAdmin, o
         </div>
       </div>
 
-      {/* Edit Button (bottom-right) */}
+      {/* Edit and Delete Buttons (bottom-right) */}
       {isAdmin && onEdit && (
-        <Button
-          onClick={(e: React.MouseEvent) => { 
-            e.stopPropagation(); 
-            e.preventDefault();  
-            if (onEdit) { 
-                onEdit();
-            }
-          }}
-          variant="secondary" 
-          size="icon" 
-          className="absolute bottom-3 right-3 z-20 h-8 w-8 p-0"
-          aria-label="Edit project"
-        >
-          <Edit className="h-4 w-4" />
-        </Button>
+        <div className="absolute bottom-3 right-3 z-20 flex gap-1">
+          <Button
+            onClick={(e: React.MouseEvent) => { 
+              e.stopPropagation(); 
+              e.preventDefault();  
+              if (onEdit) { 
+                  onEdit();
+              }
+            }}
+            variant="secondary" 
+            size="icon" 
+            className="h-8 w-8 p-0"
+            aria-label="Edit project"
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <DeleteProjectButton id={id} onDelete={onDelete} />
+        </div>
       )}
     </Link>
   )

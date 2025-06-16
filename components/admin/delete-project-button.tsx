@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
+import type React from "react"
 import { Button } from "@/components/ui/button"
 import { Trash2 } from "lucide-react"
 import {
@@ -18,9 +19,10 @@ import { toast } from "@/components/ui/use-toast"
 
 interface DeleteProjectButtonProps {
   id: string
+  onDelete?: () => void
 }
 
-export default function DeleteProjectButton({ id }: DeleteProjectButtonProps) {
+export default function DeleteProjectButton({ id, onDelete }: DeleteProjectButtonProps) {
   const [open, setOpen] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const router = useRouter()
@@ -49,9 +51,14 @@ export default function DeleteProjectButton({ id }: DeleteProjectButtonProps) {
         description: "The project has been successfully deleted",
       })
 
-      // Refresh the page or redirect
-      router.refresh()
-      router.push("/admin/projects")
+      // Call onDelete callback if provided, otherwise refresh/redirect
+      if (onDelete) {
+        onDelete()
+      } else {
+        // Refresh the page or redirect
+        router.refresh()
+        router.push("/admin/projects")
+      }
     } catch (error) {
       console.error("Error deleting project:", error)
       toast({
@@ -67,7 +74,16 @@ export default function DeleteProjectButton({ id }: DeleteProjectButtonProps) {
 
   return (
     <>
-      <Button variant="ghost" size="icon" onClick={() => setOpen(true)}>
+      <Button 
+        variant="ghost" 
+        size="icon" 
+        className="h-8 w-8 p-0" 
+        onClick={(e: React.MouseEvent) => { 
+          e.stopPropagation(); 
+          e.preventDefault(); 
+          setOpen(true); 
+        }}
+      >
         <Trash2 className="h-4 w-4 text-red-500" />
         <span className="sr-only">Delete</span>
       </Button>
