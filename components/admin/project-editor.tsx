@@ -5,6 +5,9 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
+import DatePicker from "react-datepicker"
+import "react-datepicker/dist/react-datepicker.css"
+import "@/styles/datepicker.css"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -813,8 +816,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project created successfully!",
         })
         
-        // Redirect back to project overview (main projects page)
-        router.push("/#projects")
+        // Redirect back to admin projects page
+        router.push("/admin/projects")
       } else {
         // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
@@ -860,8 +863,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Redirect back to project overview (main projects page)
-        router.push("/#projects")
+        // Redirect back to admin projects page
+        router.push("/admin/projects")
       }
     } catch (error: any) {
       console.error("Error saving project:", error)
@@ -1082,17 +1085,24 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                       
                       {formData.publish_date && (
                         <div className="relative">
-                          <Input
-                            type="datetime-local"
-                            name="publish_date"
-                            value={formData.publish_date ? new Date(formData.publish_date).toISOString().slice(0, 16) : ''}
-                            onChange={(e) => {
-                              const value = e.target.value ? new Date(e.target.value).toISOString() : null
+                          <DatePicker
+                            selected={formData.publish_date ? new Date(formData.publish_date) : null}
+                            onChange={(date) => {
+                              const value = date ? date.toISOString() : null
                               setFormData((prev) => ({ ...prev, publish_date: value }))
                             }}
-                            className="border-gray-800 bg-[#0f1520] text-gray-200 pl-10"
+                            showTimeSelect
+                            timeFormat="HH:mm"
+                            timeIntervals={15}
+                            timeCaption="Time"
+                            dateFormat="MMMM d, yyyy h:mm aa"
+                            className="w-full border-gray-800 bg-[#0f1520] text-gray-200 pl-10 rounded-md px-3 py-2 focus:border-gray-700 focus:outline-none"
+                            wrapperClassName="w-full"
+                            calendarClassName="bg-[#0f1520] border-gray-800 text-gray-200"
+                            popperClassName="z-50"
+                            minDate={new Date()}
                           />
-                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                          <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                         </div>
                       )}
                       
@@ -1345,7 +1355,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         <div className="flex justify-end gap-4 mt-6">
           <Button
             variant="outline"
-            onClick={() => router.push("/#projects")}
+            onClick={() => router.push("/admin/projects")}
             className="border-gray-700 text-gray-300 hover:bg-[#131a2a]"
           >
             Cancel

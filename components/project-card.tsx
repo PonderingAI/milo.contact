@@ -31,17 +31,17 @@ export function ProjectCard({ id, title, category, role, image, link, isAdmin, o
 
       {/* Admin Indicators (top-left) */}
       {isAdmin && (
-        <div className="absolute top-2 left-2 z-10 space-y-1 text-xs">
+        <div className="absolute top-2 left-2 z-10 flex flex-wrap gap-1 text-xs">
           {typeof is_public !== 'undefined' && (
             <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
               {is_public ? <Eye className="mr-1 h-3 w-3" /> : <EyeOff className="mr-1 h-3 w-3" />}
               <span>{is_public ? "Public" : "Private"}</span>
             </div>
           )}
-          {publish_date && (
+          {!is_public && publish_date && (
             <div className="flex items-center rounded-full bg-black/50 px-2 py-0.5 text-white">
               <CalendarDays className="mr-1 h-3 w-3" />
-              <span>Scheduled: {new Date(publish_date).toLocaleDateString()}</span>
+              <span>{new Date(publish_date).toLocaleDateString()}</span>
             </div>
           )}
         </div>
