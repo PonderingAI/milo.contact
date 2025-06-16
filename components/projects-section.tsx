@@ -1,8 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import ProjectSearch from "@/components/project-search"
-import TagFilter from "@/components/tag-filter"
+import ProjectFilters from "@/components/project-filters"
 import OffsetProjectGrid from "@/components/offset-project-grid"
 import type { Project } from "@/lib/project-data"
 
@@ -13,6 +12,7 @@ interface ProjectsSectionProps {
 export default function ProjectsSection({ projects }: ProjectsSectionProps) {
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [privacyFilter, setPrivacyFilter] = useState<"all" | "public" | "private">("all")
 
   const handleSearch = (query: string) => {
     setSearchQuery(query)
@@ -22,7 +22,11 @@ export default function ProjectsSection({ projects }: ProjectsSectionProps) {
     setSelectedTags(tags)
   }
 
-  // Filter projects based on search term and selected tags
+  const handlePrivacyFilter = (filter: "all" | "public" | "private") => {
+    setPrivacyFilter(filter)
+  }
+
+  // Filter projects based on search term, selected tags, and privacy
   const filteredProjects = projects.filter((project) => {
     // Filter by search term
     const matchesSearch =
@@ -39,15 +43,26 @@ export default function ProjectsSection({ projects }: ProjectsSectionProps) {
         return (project.category && project.category.includes(tag)) || (project.role && project.role.includes(tag))
       })
 
-    return matchesSearch && matchesTags
+    // Filter by privacy setting
+    const matchesPrivacy = 
+      privacyFilter === "all" ||
+      (privacyFilter === "public" && project.is_public === true) ||
+      (privacyFilter === "private" && project.is_public === false)
+
+    return matchesSearch && matchesTags && matchesPrivacy
   })
 
   return (
     <section id="projects" className="mb-24">
       <h2 className="text-5xl md:text-7xl font-serif mb-12">My Work</h2>
 
-      <ProjectSearch onSearch={handleSearch} />
-      <TagFilter onTagSelect={handleTagSelect} selectedTags={selectedTags} />
+      <ProjectFilters 
+        onSearch={handleSearch}
+        onTagSelect={handleTagSelect}
+        onPrivacyFilter={handlePrivacyFilter}
+        selectedTags={selectedTags}
+        privacyFilter={privacyFilter}
+      />
       <OffsetProjectGrid projects={filteredProjects} searchQuery={searchQuery} selectedTags={selectedTags} />
     </section>
   )
