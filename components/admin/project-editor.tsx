@@ -10,13 +10,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { extractVideoInfo } from "@/lib/project-data"
+import { extractVideoInfo, extractVideoDate } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X, ArrowLeft, Save } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import UnifiedMediaInput from "@/components/admin/unified-media-input"
 
 interface ProjectEditorProps {
@@ -78,6 +79,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [isUsingVideoThumbnail, setIsUsingVideoThumbnail] = useState(false)
+  const [videoReleaseDates, setVideoReleaseDates] = useState<Map<string, Date>>(new Map())
   const [schemaColumns, setSchemaColumns] = useState<string[]>([])
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
@@ -304,20 +306,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   async function extractDateFromMedia(url: string, type: "image" | "video"): Promise<Date | null> {
     try {
       if (type === "video") {
-        const videoInfo = extractVideoInfo(url)
-        if (!videoInfo) return null
-
-        if (videoInfo.platform === "vimeo") {
-          // Get video metadata from Vimeo
-          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-          if (response.ok) {
-            const videoData = await response.json()
-            const video = videoData[0]
-            if (video.upload_date) {
-              return new Date(video.upload_date)
-            }
-          }
-        }
+        // Use the new extractVideoDate function that handles both YouTube and Vimeo
+        return await extractVideoDate(url)
       } else if (type === "image") {
         // For images in Supabase, check if we have metadata
         const { data } = await supabase.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
@@ -337,6 +327,182 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     } catch (error) {
       console.error("Error extracting date from media:", error)
       return null
+    }
+  }
+
+  // Video display component with tooltip for release date
+  const VideoDisplayWithTooltip = ({ 
+    video, 
+    index, 
+    onSetMain, 
+    onRemove, 
+    isMain = false, 
+    type = "main" 
+  }: {
+    video: string
+    index: number
+    onSetMain?: () => void
+    onRemove: () => void
+    isMain?: boolean
+    type?: "main" | "bts"
+  }) => {
+    const [releaseDate, setReleaseDate] = useState<string | null>(null)
+    const [isLoadingDate, setIsLoadingDate] = useState(false)
+
+    const fetchReleaseDate = async () => {
+      if (releaseDate || isLoadingDate) return
+      
+      setIsLoadingDate(true)
+      try {
+        const date = await getVideoReleaseDate(video)
+        setReleaseDate(date)
+      } finally {
+        setIsLoadingDate(false)
+      }
+    }
+
+    const getVideoThumbnail = () => {
+      if (video.includes("youtube.com")) {
+        return `https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`
+      } else if (video.includes("youtu.be")) {
+        return `https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`
+      }
+      return null
+    }
+
+    const thumbnailUrl = getVideoThumbnail()
+
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <div 
+              className="relative group cursor-pointer"
+              onMouseEnter={fetchReleaseDate}
+            >
+              <div
+                className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${
+                  isMain ? "ring-2 ring-blue-500" : ""
+                }`}
+              >
+                {thumbnailUrl ? (
+                  <img
+                    src={thumbnailUrl}
+                    alt={`${video.includes("youtube") ? "YouTube" : "Video"} video ${index + 1}`}
+                    className="w-full h-full object-cover"
+                  />
+                ) : video.includes("vimeo.com") ? (
+                  <div className="text-gray-400 flex flex-col items-center">
+                    <Film size={24} />
+                    <span className="text-xs mt-1">Vimeo Video</span>
+                  </div>
+                ) : (
+                  <div className="text-gray-400 flex flex-col items-center">
+                    <Film size={24} />
+                    <span className="text-xs mt-1">Video</span>
+                  </div>
+                )}
+              </div>
+              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                {onSetMain && (
+                  <button
+                    type="button"
+                    onClick={onSetMain}
+                    className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
+                    title="Set as main video"
+                  >
+                    <Film size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={onRemove}
+                  className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                  title="Remove video"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+              {isMain && (
+                <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
+                  Main
+                </div>
+              )}
+            </div>
+          </TooltipTrigger>
+          <TooltipContent>
+            <div className="text-sm">
+              {isLoadingDate ? (
+                "Loading release date..."
+              ) : releaseDate ? (
+                <>
+                  <div className="font-medium">Release Date</div>
+                  <div>{releaseDate}</div>
+                </>
+              ) : (
+                "Release date not available"
+              )}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    )
+  }
+
+  // Function to get video release date for tooltip display
+  const getVideoReleaseDate = async (videoUrl: string): Promise<string | null> => {
+    // Check if we already have this date cached
+    if (videoReleaseDates.has(videoUrl)) {
+      const date = videoReleaseDates.get(videoUrl)
+      return date ? date.toLocaleDateString() : null
+    }
+
+    try {
+      const date = await extractVideoDate(videoUrl)
+      if (date) {
+        setVideoReleaseDates((prev) => new Map(prev).set(videoUrl, date))
+        return date.toLocaleDateString()
+      }
+    } catch (error) {
+      console.error("Error fetching video release date:", error)
+    }
+
+    return null
+  }
+
+  // Function to process external videos and extract dates
+  const processExternalVideo = async (mediaUrl: string) => {
+    const toastId = toast({
+      title: "Processing video",
+      description: "Extracting video information and date...",
+    })
+
+    setIsProcessingVideo(true)
+
+    try {
+      // Extract date from video if project_date is empty
+      if (!formData.project_date) {
+        const date = await extractDateFromMedia(mediaUrl, "video")
+        if (date) {
+          setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+        }
+      }
+
+      toast({
+        id: toastId,
+        title: "Video processed",
+        description: "Video information has been processed",
+      })
+    } catch (error) {
+      console.error("Error processing video:", error)
+      toast({
+        id: toastId,
+        title: "Error processing video",
+        description: error instanceof Error ? error.message : "Failed to process video URL",
+        variant: "destructive",
+      })
+    } finally {
+      setIsProcessingVideo(false)
     }
   }
 
@@ -398,13 +564,13 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                 setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
               }
             } else {
-              // If not in media library, process as external video
-              await processVideoUrl(mediaUrl)
+              // If not in media library, process as external video and extract date
+              await processExternalVideo(mediaUrl)
             }
           } catch (error) {
             console.error("Error processing video from media library:", error)
             // Fall back to regular processing
-            await processVideoUrl(mediaUrl)
+            await processExternalVideo(mediaUrl)
           }
         }
       } else {
@@ -1202,58 +1368,15 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                   <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {mainVideos.map((video, index) => (
-                      <div key={`main-video-${index}`} className="relative group">
-                        <div
-                          className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${thumbnailUrl === video ? "ring-2 ring-blue-500" : ""}`}
-                        >
-                          {video.includes("youtube.com") ? (
-                            <img
-                              src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
-                              alt={`YouTube video ${index + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : video.includes("youtu.be") ? (
-                            <img
-                              src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
-                              alt={`YouTube video ${index + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : video.includes("vimeo.com") ? (
-                            <div className="text-gray-400 flex flex-col items-center">
-                              <Film size={24} />
-                              <span className="text-xs mt-1">Vimeo Video</span>
-                            </div>
-                          ) : (
-                            <div className="text-gray-400 flex flex-col items-center">
-                              <Film size={24} />
-                              <span className="text-xs mt-1">Video</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => setMainVideo(video)}
-                            className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
-                            title="Set as main video"
-                          >
-                            <Film size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeMainVideo(index)}
-                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                            title="Remove video"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                        {thumbnailUrl === video && (
-                          <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
-                            Main
-                          </div>
-                        )}
-                      </div>
+                      <VideoDisplayWithTooltip
+                        key={`main-video-${index}`}
+                        video={video}
+                        index={index}
+                        onSetMain={() => setMainVideo(video)}
+                        onRemove={() => removeMainVideo(index)}
+                        isMain={thumbnailUrl === video}
+                        type="main"
+                      />
                     ))}
                   </div>
                 </div>
@@ -1306,43 +1429,14 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                   <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                     {btsVideos.map((video, index) => (
-                      <div key={`bts-video-${index}`} className="relative group">
-                        <div className="aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center">
-                          {video.includes("youtube.com") ? (
-                            <img
-                              src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
-                              alt={`YouTube video ${index + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : video.includes("youtu.be") ? (
-                            <img
-                              src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
-                              alt={`YouTube video ${index + 1}`}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : video.includes("vimeo.com") ? (
-                            <div className="text-gray-400 flex flex-col items-center">
-                              <Film size={24} />
-                              <span className="text-xs mt-1">Vimeo Video</span>
-                            </div>
-                          ) : (
-                            <div className="text-gray-400 flex flex-col items-center">
-                              <Film size={24} />
-                              <span className="text-xs mt-1">Video</span>
-                            </div>
-                          )}
-                        </div>
-                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <button
-                            type="button"
-                            onClick={() => removeBtsVideo(index)}
-                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                            title="Remove video"
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      </div>
+                      <VideoDisplayWithTooltip
+                        key={`bts-video-${index}`}
+                        video={video}
+                        index={index}
+                        onRemove={() => removeBtsVideo(index)}
+                        isMain={false}
+                        type="bts"
+                      />
                     ))}
                   </div>
                 </div>
