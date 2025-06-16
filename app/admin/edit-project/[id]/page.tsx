@@ -1,4 +1,4 @@
-import { getProjectById } from "@/lib/project-data"
+import { getProjectById } from "@/lib/project-data-server"
 import ProjectEditor from "@/components/admin/project-editor"
 
 export default async function EditProjectPage({ params }: { params: { id: string } }) {

@@ -1,7 +1,7 @@
 import Link from "next/link"
 import { ArrowLeft } from "lucide-react"
 import ProjectForm from "@/components/admin/project-form"
-import { getProjectById } from "@/lib/project-data"
+import { getProjectById } from "@/lib/project-data-server"
 
 export default async function EditProjectPage({ params }: { params: { id: string } }) {
   try {
