@@ -92,12 +92,22 @@ export default function ClientProjectsPage() {
       result = result.filter((project) => project.role?.toLowerCase().includes(selectedRole.toLowerCase()))
     }
 
-    // Apply privacy filter using publish_date
+    // Apply privacy filter using both is_public and publish_date
     const now = new Date()
     if (privacyFilter === "public") {
-      result = result.filter((project) => !project.publish_date || new Date(project.publish_date) <= now)
+      result = result.filter((project) => {
+        // Project is public if is_public is not false AND (no publish_date OR publish_date is in past)
+        const isPublicFlag = project.is_public !== false
+        const isPublishDatePublic = !project.publish_date || new Date(project.publish_date) <= now
+        return isPublicFlag && isPublishDatePublic
+      })
     } else if (privacyFilter === "private") {
-      result = result.filter((project) => project.publish_date && new Date(project.publish_date) > now)
+      result = result.filter((project) => {
+        // Project is private if is_public is false OR publish_date is in future
+        const isPrivateFlag = project.is_public === false
+        const hasPrivateDate = project.publish_date && new Date(project.publish_date) > now
+        return isPrivateFlag || hasPrivateDate
+      })
     }
 
     // Apply search filter
@@ -311,6 +321,7 @@ export default function ClientProjectsPage() {
                 role={project.role}
                 image={project.image}
                 publish_date={project.publish_date}
+                is_public={project.is_public}
                 isAdmin={true}
                 onEdit={() => router.push(`/admin/projects/${project.id}/edit`)}
                 link={`/projects/${project.id}`}

@@ -14,12 +14,13 @@ interface ProjectCardProps {
   isAdmin?: boolean
   onEdit?: () => void
   publish_date?: string | null
+  is_public?: boolean
 }
 
-export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, publish_date }: ProjectCardProps) {
-  // Determine if project is private based on publish_date
+export function ProjectCard({ id, title, category, role, image, link, isAdmin, onEdit, publish_date, is_public }: ProjectCardProps) {
+  // Determine if project is private based on is_public flag and publish_date
   const now = new Date()
-  const isPrivate = publish_date && new Date(publish_date) > now
+  const isPrivate = is_public === false || (publish_date && new Date(publish_date) > now)
 
   return (
     <Link href={link} aria-label={title} className="relative group block aspect-video overflow-hidden rounded-lg">

@@ -854,9 +854,14 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project created successfully!",
         })
         
-        // Force redirect immediately
+        // Force redirect with fallback
         console.log("About to redirect to /admin/projects")
-        router.push("/admin/projects")
+        try {
+          await router.push("/admin/projects")
+        } catch (routerError) {
+          console.error("Router push failed, using window.location:", routerError)
+          window.location.href = "/admin/projects"
+        }
       } else {
         // Update existing project
         const response = await fetch(`/api/projects/update/${project?.id}`, {
@@ -908,9 +913,14 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           description: "Project updated successfully!",
         })
 
-        // Force redirect immediately after showing success message
+        // Force redirect with fallback
         console.log("About to redirect to /admin/projects")
-        router.push("/admin/projects")
+        try {
+          await router.push("/admin/projects")
+        } catch (routerError) {
+          console.error("Router push failed, using window.location:", routerError)
+          window.location.href = "/admin/projects"
+        }
       }
     } catch (error: any) {
       console.error("Error saving project:", error)
