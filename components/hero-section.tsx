@@ -1,6 +1,6 @@
 import { createServerClient } from "@/lib/supabase-server"
 import VideoBackground from "./video-background"
-import { extractVideoInfo } from "@/lib/utils"
+import { extractVideoInfo } from "@/lib/project-data"
 
 interface HeroSectionProps {
   latestProject?: any
