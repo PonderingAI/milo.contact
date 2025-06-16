@@ -19,7 +19,6 @@ export interface Project {
   updated_at?: string
   project_date?: string
   is_public?: boolean
-  publish_date?: string
   // type is deprecated - use category or tags instead
   type?: string
   // Virtual property for tags - not stored in database
