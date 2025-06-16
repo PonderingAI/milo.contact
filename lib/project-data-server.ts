@@ -53,6 +53,7 @@ async function checkUserIsAdmin(userId: string): Promise<boolean> {
 
 /**
  * Get all projects from the database or fallback to mock data
+ * For public-facing pages - always filters out private projects
  */
 export async function getProjects(): Promise<Project[]> {
   try {
@@ -65,19 +66,13 @@ export async function getProjects(): Promise<Project[]> {
 
     const supabase = createServerClient()
 
-    // Check if user is authenticated and has admin role using Clerk
-    const user = await currentUser()
-    const isAdmin = user ? await checkUserIsAdmin(user.id) : false
-
-    let query = supabase.from("projects").select("*")
-
-    // If not admin, only show public projects or those with publish_date in the past
-    if (!isAdmin) {
-      const now = new Date().toISOString()
-      query = query.or(`is_public.eq.true,publish_date.lt.${now}`)
-    }
-
-    const { data, error } = await query.order("created_at", { ascending: false })
+    // For public pages, always filter to only show public projects or those with publish_date in the past
+    const now = new Date().toISOString()
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .or(`is_public.eq.true,publish_date.lt.${now}`)
+      .order("created_at", { ascending: false })
 
     if (error) {
       console.error("Error fetching projects:", error)
@@ -113,6 +108,73 @@ export async function getProjects(): Promise<Project[]> {
     return processedProjects.length > 0 ? processedProjects : mockProjects
   } catch (error) {
     console.error("Error in getProjects:", error)
+    return mockProjects
+  }
+}
+
+/**
+ * Get all projects from the database for admin use - shows both public and private projects
+ * Requires user to be authenticated as admin
+ */
+export async function getAllProjectsForAdmin(): Promise<Project[]> {
+  try {
+    // First check if database is set up
+    const isDbSetup = await isDatabaseSetup()
+    if (!isDbSetup) {
+      console.log("Database not set up, returning mock data")
+      return mockProjects
+    }
+
+    const supabase = createServerClient()
+
+    // Check if user is authenticated and has admin role using Clerk
+    const user = await currentUser()
+    const isAdmin = user ? await checkUserIsAdmin(user.id) : false
+
+    if (!isAdmin) {
+      throw new Error("Admin access required")
+    }
+
+    // For admin pages, show all projects including private ones
+    const { data, error } = await supabase
+      .from("projects")
+      .select("*")
+      .order("created_at", { ascending: false })
+
+    if (error) {
+      console.error("Error fetching projects for admin:", error)
+      return mockProjects
+    }
+
+    // Process projects to extract tags from categories and roles
+    const processedProjects = data.map((project) => {
+      // Extract tags from role field
+      const roleTags = extractTagsFromRole(project.role)
+
+      // If project has type but no category, use type as category (for backward compatibility)
+      if (project.type && !project.category) {
+        project.category = project.type
+      }
+
+      // If project has thumbnail_url but no video_platform/video_id, extract them
+      if (project.thumbnail_url && (!project.video_platform || !project.video_id)) {
+        const videoInfo = extractVideoInfo(project.thumbnail_url)
+        if (videoInfo) {
+          project.video_platform = videoInfo.platform
+          project.video_id = videoInfo.id
+        }
+      }
+
+      return {
+        ...project,
+        tags: [project.category, ...roleTags].filter(Boolean),
+      }
+    })
+
+    // Only return mock projects if no real projects exist
+    return processedProjects.length > 0 ? processedProjects : mockProjects
+  } catch (error) {
+    console.error("Error in getAllProjectsForAdmin:", error)
     return mockProjects
   }
 }

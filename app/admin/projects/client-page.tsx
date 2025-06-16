@@ -17,7 +17,6 @@ import {
 import { Plus, Search, Filter, X, ChevronDown } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { ProjectCard } from "@/components/project-card"
-import { getSupabaseBrowserClient } from "@/lib/supabase"
 import type { Project } from "@/lib/project-data"
 
 export default function ClientProjectsPage() {
@@ -49,21 +48,14 @@ export default function ClientProjectsPage() {
   const fetchProjects = async () => {
     try {
       setLoading(true)
-      const supabase = getSupabaseBrowserClient()
       
-      // Check if Supabase client is properly initialized
-      if (!supabase) {
-        throw new Error('Supabase client initialization failed')
+      const response = await fetch("/api/admin/projects")
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch projects: ${response.statusText}`)
       }
 
-      const { data, error } = await supabase
-        .from("projects")
-        .select("*")
-        .order("created_at", { ascending: false })
-
-      if (error) {
-        throw error
-      }
+      const { projects: data } = await response.json()
 
       if (data) {
         setProjects(data)
