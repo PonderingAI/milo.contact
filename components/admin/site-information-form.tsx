@@ -14,7 +14,7 @@ import { toast } from "@/components/ui/use-toast"
 import { Loader2, Film, RefreshCw } from "lucide-react"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import MediaSelector from "./media-selector"
-import { extractVideoInfo } from "@/lib/utils"
+import { extractVideoInfo } from "@/lib/project-data"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { commonInvalidations } from "@/lib/cache-utils"
 

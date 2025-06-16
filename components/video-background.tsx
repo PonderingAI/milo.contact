@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { extractVideoInfo } from "@/lib/utils"
+import { extractVideoInfo } from "@/lib/project-data"
 
 interface VideoBackgroundProps {
   videoUrl: string

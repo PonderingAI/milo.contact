@@ -6,7 +6,7 @@ import { useState, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { MediaSelector } from "@/components/admin/media-selector"
-import { extractVideoInfo } from "@/lib/utils"
+import { extractVideoInfo } from "@/lib/project-data"
 import { X, Upload, Link, ImageIcon } from "lucide-react"
 
 interface UnifiedMediaInputProps {
