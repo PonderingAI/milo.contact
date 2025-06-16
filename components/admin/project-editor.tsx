@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X, ArrowLeft, Save } from "lucide-react"
+import { Switch } from "@/components/ui/switch"
 import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -30,6 +31,7 @@ interface ProjectEditorProps {
     thumbnail_url?: string
     description?: string
     publish_date: string | null
+    is_public?: boolean
     tags?: string[]
     project_date?: string
   }
@@ -46,7 +48,11 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     description: project?.description || "",
     publish_date: project?.publish_date || null,
     project_date: project?.project_date || new Date().toISOString().split("T")[0],
+    is_public: project?.is_public !== undefined ? project.is_public : true,
   })
+
+  // Derived state for private toggle based on publish_date
+  const isPrivate = formData.publish_date ? new Date(formData.publish_date) > new Date() : !formData.is_public
 
   // State to track the role input for tag extraction
   const [roleInput, setRoleInput] = useState(project?.role || "")
@@ -246,6 +252,37 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
   const handleCategoryChange = (value: string) => {
     setFormData((prev) => ({ ...prev, category: value }))
+  }
+
+  const handlePrivateToggle = (isPrivate: boolean) => {
+    if (isPrivate) {
+      // If toggling to private, set publish_date to tomorrow if not already set to a future date
+      const tomorrow = new Date()
+      tomorrow.setDate(tomorrow.getDate() + 1)
+      const currentPublishDate = formData.publish_date ? new Date(formData.publish_date) : null
+      
+      setFormData((prev) => ({ 
+        ...prev, 
+        is_public: false,
+        publish_date: (currentPublishDate && currentPublishDate > new Date()) ? prev.publish_date : tomorrow.toISOString()
+      }))
+    } else {
+      // If toggling to public, clear publish_date and set is_public to true
+      setFormData((prev) => ({ 
+        ...prev, 
+        is_public: true,
+        publish_date: null 
+      }))
+    }
+  }
+
+  const handlePublishDateChange = (date: string | null) => {
+    setFormData((prev) => ({ 
+      ...prev, 
+      publish_date: date ? date + 'T00:00:00.000Z' : null,
+      // Automatically set is_public based on whether date is in future
+      is_public: date ? new Date(date) <= new Date() : true
+    }))
   }
 
   const handleImageUpload = (url: string) => {
@@ -759,6 +796,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         role: roleInput.trim() || formData.role.trim(),
         project_date: formData.project_date,
         publish_date: formData.publish_date,
+        is_public: formData.is_public,
         thumbnail_url: formData.thumbnail_url || thumbnailUrl || null,
       }
 
@@ -1050,23 +1088,38 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-medium text-gray-400 mb-1">Release Date</label>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="text-xs font-medium text-gray-400">Visibility</label>
+                    <div className="flex items-center space-x-2">
+                      <span className={`text-xs ${isPrivate ? 'text-gray-400' : 'text-green-400'}`}>Public</span>
+                      <Switch
+                        checked={isPrivate}
+                        onCheckedChange={handlePrivateToggle}
+                      />
+                      <span className={`text-xs ${isPrivate ? 'text-orange-400' : 'text-gray-400'}`}>Private</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    {isPrivate 
+                      ? "Project is private and won't appear on the public site" 
+                      : "Project is public and visible to everyone"
+                    }
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">Release Date (Optional)</label>
                   <CustomDatePicker
                     value={formData.publish_date ? formData.publish_date.split('T')[0] : null}
-                    onChange={(date) => {
-                      setFormData((prev) => ({ 
-                        ...prev, 
-                        publish_date: date ? date + 'T00:00:00.000Z' : null 
-                      }))
-                    }}
+                    onChange={handlePublishDateChange}
                     minDate={new Date().toISOString().split('T')[0]}
-                    placeholder="Leave empty for immediate public release"
+                    placeholder="Leave empty for immediate release"
                     className="border-gray-800 bg-[#0f1520] text-gray-200"
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {formData.publish_date 
-                      ? `Project will be private until ${new Date(formData.publish_date).toLocaleDateString()}` 
-                      : "Project will be public immediately"
+                      ? `Project will automatically become public on ${new Date(formData.publish_date).toLocaleDateString()}` 
+                      : "No scheduled release date set"
                     }
                   </p>
                 </div>
