@@ -275,11 +275,11 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         project_date: (currentProjectDate && currentProjectDate > new Date()) ? prev.project_date : tomorrow.toISOString().split("T")[0]
       }))
     } else {
-      // If toggling to public, set project_date to today and set is_public to true
+      // If toggling to public, preserve the current date - don't automatically change it
       setFormData((prev) => ({ 
         ...prev, 
-        is_public: true,
-        project_date: new Date().toISOString().split("T")[0]
+        is_public: true
+        // Removed automatic date override - preserve user's chosen date
       }))
     }
   }
