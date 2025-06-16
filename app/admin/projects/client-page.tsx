@@ -324,6 +324,7 @@ export default function ClientProjectsPage() {
                 is_public={project.is_public}
                 isAdmin={true}
                 onEdit={() => router.push(`/admin/projects/${project.id}/edit`)}
+                onDelete={fetchProjects}
                 link={`/projects/${project.id}`}
               />
             ))}
