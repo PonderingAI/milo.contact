@@ -24,6 +24,7 @@ export default function FeaturedProjectSelector() {
         const { data: projectsData, error: projectsError } = await supabase
           .from("projects")
           .select("*")
+          .order("project_date", { ascending: false, nullsFirst: false })
           .order("created_at", { ascending: false })
 
         if (projectsError) {
