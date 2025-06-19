@@ -1481,11 +1481,13 @@ export default function UnifiedMediaLibrary({
       <div
         key={item.id}
         id={`media-item-${item.id}`}
-        className={`bg-gray-900 rounded-lg overflow-hidden cursor-pointer ${isSelected ? "ring-2 ring-blue-500" : ""}`}
+        className={`bg-gray-900 rounded-lg overflow-hidden cursor-pointer touch-manipulation transition-all ${
+          isSelected ? "ring-2 ring-blue-500 shadow-lg" : "hover:shadow-md"
+        }`}
         onClick={canSelect ? () => toggleItemSelection(item) : undefined}
       >
         <div
-          className="relative h-40" // Removed cursor-pointer here as outer div handles click
+          className="relative h-32 sm:h-40" // Responsive height
           // Removed redundant onClick from this inner div
         >
           {/* Visual cue for selection (checkbox) always visible if canSelect */}
@@ -1495,8 +1497,8 @@ export default function UnifiedMediaLibrary({
                 role="checkbox"
                 aria-checked={isSelected}
                 tabIndex={0} // Make it focusable
-                className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                  isSelected ? "bg-blue-500 border-blue-500" : "bg-black/30 border-white/50 group-hover:border-white"
+                className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all touch-manipulation ${
+                  isSelected ? "bg-blue-500 border-blue-500" : "bg-black/50 border-white/70 group-hover:border-white"
                 }`}
                 onClick={(e: React.MouseEvent<HTMLDivElement>) => { 
                   e.stopPropagation(); // Prevent card click when checkbox is clicked
@@ -1510,7 +1512,7 @@ export default function UnifiedMediaLibrary({
                   }
                 }}
               >
-                {isSelected && <Check className="h-3 w-3 text-white" />}
+                {isSelected && <Check className="h-4 w-4 text-white" />}
               </div>
             </div>
           )}
@@ -1563,20 +1565,22 @@ export default function UnifiedMediaLibrary({
           )}
         </div>
         <div className="p-3">
-          <p className="text-sm truncate" title={item.filename}>
+          <p className="text-sm font-medium truncate leading-tight" title={item.filename}>
             {item.filename}
           </p>
-          <p className="text-xs text-gray-500 flex items-center">
-            {isVimeo || isYoutube || isLinkedin ? (
-              "External Video"
-            ) : (
-              <>
-                <span className="bg-gray-800 text-blue-400 px-1.5 py-0.5 rounded mr-1 font-medium">
+          <div className="flex items-center justify-between mt-2">
+            <p className="text-xs text-gray-500 flex items-center">
+              {isVimeo || isYoutube || isLinkedin ? (
+                <span className="bg-gray-800 text-purple-400 px-2 py-1 rounded-full text-xs">
+                  External Video
+                </span>
+              ) : (
+                <span className="bg-gray-800 text-blue-400 px-2 py-1 rounded-full text-xs font-medium">
                   {formatFileSize(item.filesize)}
                 </span>
-              </>
-            )}
-          </p>
+              )}
+            </p>
+          </div>
 
           {item.tags && item.tags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-2">
@@ -1588,11 +1592,11 @@ export default function UnifiedMediaLibrary({
             </div>
           )}
 
-          <div className="flex justify-between items-center mt-3">
+          <div className="flex justify-between items-center mt-3 gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="flex items-center gap-1 text-xs"
+              className="flex items-center gap-1 text-xs flex-1 min-w-0 touch-manipulation"
               onClick={(e: React.MouseEvent<HTMLButtonElement>) => {
                 e.stopPropagation();
                 handleCopyUrl(item.public_url);
@@ -1600,18 +1604,18 @@ export default function UnifiedMediaLibrary({
             >
               {copiedUrl === item.public_url ? (
                 <>
-                  <CheckCircle className="h-3 w-3 text-green-500" />
-                  Copied
+                  <CheckCircle className="h-3 w-3 text-green-500 shrink-0" />
+                  <span className="truncate">Copied</span>
                 </>
               ) : (
                 <>
-                  <Link className="h-3 w-3" />
-                  Copy URL
+                  <Link className="h-3 w-3 shrink-0" />
+                  <span className="truncate">Copy URL</span>
                 </>
               )}
             </Button>
 
-            <div className="flex gap-1">
+            <div className="flex gap-1 shrink-0">
               <Button
                 variant="ghost"
                 size="icon"
@@ -1619,7 +1623,8 @@ export default function UnifiedMediaLibrary({
                   e.stopPropagation();
                   handleEditMedia(item);
                 }}
-                className="h-8 w-8"
+                className="h-9 w-9 touch-manipulation"
+                title="Edit media"
               >
                 <Edit className="h-4 w-4 text-blue-500" />
                 <span className="sr-only">Edit</span>
@@ -1632,7 +1637,8 @@ export default function UnifiedMediaLibrary({
                   e.stopPropagation();
                   handleDeleteMedia(item.id, item.filepath, item.filetype);
                 }}
-                className="h-8 w-8"
+                className="h-9 w-9 touch-manipulation"
+                title="Delete media"
               >
                 <Trash2 className="h-4 w-4 text-red-500" />
                 <span className="sr-only">Delete</span>
@@ -1672,13 +1678,13 @@ export default function UnifiedMediaLibrary({
         </Alert>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-gray-900 p-4 rounded-lg">
           <h2 className="text-xl mb-4">Upload Files</h2>
           <div className="space-y-4">
             <div
               ref={dropAreaRef}
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+              className={`border-2 border-dashed rounded-lg p-6 md:p-8 text-center transition-colors touch-manipulation ${
                 isDragging ? "border-blue-500 bg-blue-500/10" : "border-gray-700 hover:border-gray-500"
               }`}
               onDragEnter={handleDragEnter}
@@ -1688,10 +1694,10 @@ export default function UnifiedMediaLibrary({
               onClick={() => fileInputRef.current?.click()}
             >
               <div className="flex flex-col items-center justify-center gap-2">
-                <UploadCloud className="h-10 w-10 text-gray-400" />
-                <p className="text-lg font-medium">{isDragging ? "Drop files here" : "Drag & drop files here"}</p>
+                <UploadCloud className="h-8 w-8 md:h-10 md:w-10 text-gray-400" />
+                <p className="text-base md:text-lg font-medium">{isDragging ? "Drop files here" : "Drag & drop files here"}</p>
                 <p className="text-sm text-gray-400">
-                  or <span className="text-blue-500 cursor-pointer">browse</span> to upload
+                  or <span className="text-blue-500 cursor-pointer">tap to upload</span>
                 </p>
                 <p className="text-xs text-gray-500 mt-2">Supports single or multiple files</p>
                 {uploadingFile && (
@@ -1753,35 +1759,43 @@ export default function UnifiedMediaLibrary({
         </div>
       </div>
 
-      <div className="flex flex-col md:flex-row gap-4 mb-8">
-        <div className="flex-1">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
-            <Input
-              placeholder="Search media files..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="bg-gray-800 border-gray-700 pl-10"
-            />
-          </div>
+      <div className="flex flex-col gap-4 mb-6">
+        {/* Search bar */}
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
+          <Input
+            placeholder="Search media files..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="bg-gray-800 border-gray-700 pl-10 h-12 text-base"
+          />
         </div>
 
-        <div className="flex items-center gap-2">
-          <Filter size={18} className="text-gray-400" />
-          <span className="text-sm text-gray-400">Filter by tags:</span>
-          <div className="flex flex-wrap gap-1">
-            {allTags.slice(0, 5).map((tag) => (
+        {/* Filter tags - mobile responsive */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            <Filter size={18} className="text-gray-400" />
+            <span className="text-sm text-gray-400">Filter by tags:</span>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {allTags.slice(0, 6).map((tag) => (
               <button
                 key={tag}
                 onClick={() => handleTagClick(tag)}
-                className={`text-xs px-2 py-1 rounded ${
-                  selectedTags.includes(tag) ? "bg-blue-600 text-white" : "bg-gray-800 text-gray-300"
+                className={`text-xs px-3 py-2 rounded-full transition-colors touch-manipulation ${
+                  selectedTags.includes(tag) 
+                    ? "bg-blue-600 text-white" 
+                    : "bg-gray-800 text-gray-300 hover:bg-gray-700"
                 }`}
               >
                 {tag}
               </button>
             ))}
-            {allTags.length > 5 && <span className="text-xs text-gray-400">+{allTags.length - 5} more</span>}
+            {allTags.length > 6 && (
+              <span className="text-xs text-gray-400 px-2 py-2">
+                +{allTags.length - 6} more
+              </span>
+            )}
           </div>
         </div>
       </div>
@@ -1887,46 +1901,55 @@ export default function UnifiedMediaLibrary({
 
       {/* Bulk Actions UI */}
       {selectedItems.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-gray-900 p-3 rounded-lg shadow-xl flex items-center gap-3 z-50 border border-gray-700">
-          <span className="text-sm text-gray-300 pl-2">
-            {selectedItems.length} item{selectedItems.length > 1 ? "s" : ""} selected
-          </span>
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => setIsBulkDeleteDialogOpen(true)}
-            className="flex items-center gap-1.5"
-          >
-            <Trash2 size={16} />
-            Delete
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setBulkTagInput("")
-              setIsBulkAddTagDialogOpen(true)
-            }}
-            className="flex items-center gap-1.5"
-          >
-            <Plus size={16} />
-            Add Tag
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              setBulkTagInput("")
-              setIsBulkRemoveTagDialogOpen(true)
-            }}
-            className="flex items-center gap-1.5"
-          >
-            <X size={16} />
-            Remove Tag
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => setSelectedItems([])} className="text-gray-400 hover:text-white">
-            Clear Selection
-          </Button>
+        <div className="fixed bottom-4 left-4 right-4 bg-gray-900 p-3 rounded-lg shadow-xl border border-gray-700 z-50 md:left-1/2 md:right-auto md:transform md:-translate-x-1/2 md:w-auto">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+            <span className="text-sm text-gray-300 text-center md:text-left md:pl-2">
+              {selectedItems.length} item{selectedItems.length > 1 ? "s" : ""} selected
+            </span>
+            <div className="flex gap-2 justify-center md:justify-start">
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setIsBulkDeleteDialogOpen(true)}
+                className="flex items-center gap-1.5 touch-manipulation"
+              >
+                <Trash2 size={16} />
+                Delete
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBulkTagInput("")
+                  setIsBulkAddTagDialogOpen(true)
+                }}
+                className="flex items-center gap-1.5 touch-manipulation"
+              >
+                <Plus size={16} />
+                Add Tag
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setBulkTagInput("")
+                  setIsBulkRemoveTagDialogOpen(true)
+                }}
+                className="flex items-center gap-1.5 touch-manipulation"
+              >
+                <X size={16} />
+                Remove Tag
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedItems([])} 
+                className="text-gray-400 hover:text-white touch-manipulation"
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2263,7 +2286,7 @@ export default function UnifiedMediaLibrary({
     }
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 pb-20">{/* Added padding-bottom for bulk actions bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 pb-20">{/* Added padding-bottom for bulk actions bar */}
         {filteredMedia.map(renderMediaItem)}
       </div>
     )

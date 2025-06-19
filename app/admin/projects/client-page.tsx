@@ -150,11 +150,14 @@ export default function ClientProjectsPage() {
 
   return (
     <>
-      <div className="container mx-auto p-6">
+      <div className="container mx-auto p-4 md:p-6">
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
-          <h1 className="text-3xl font-bold">Projects</h1>
-          <div className="flex gap-2">
-            <Button onClick={() => router.push("/admin/projects/new")}>
+          <h1 className="text-2xl md:text-3xl font-bold">Projects</h1>
+          <div className="flex gap-2 w-full md:w-auto">
+            <Button 
+              onClick={() => router.push("/admin/projects/new")}
+              className="flex-1 md:flex-none touch-manipulation"
+            >
               <Plus className="h-4 w-4 mr-2" />
               New Project
             </Button>
@@ -170,41 +173,47 @@ export default function ClientProjectsPage() {
               placeholder="Search projects..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 bg-transparent border-gray-800 focus:border-gray-700"
+              className="pl-10 bg-transparent border-gray-800 focus:border-gray-700 h-12 text-base"
             />
           </div>
 
           {/* Filter Controls */}
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col sm:flex-row flex-wrap items-start sm:items-center gap-3">
             {/* Privacy Filter Toggles */}
-            <div className="flex items-center gap-2">
-              <Button
-                variant={privacyFilter === "all" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPrivacyFilter("all")}
-              >
-                All
-              </Button>
-              <Button
-                variant={privacyFilter === "public" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPrivacyFilter("public")}
-              >
-                Public
-              </Button>
-              <Button
-                variant={privacyFilter === "private" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setPrivacyFilter("private")}
-              >
-                Private
-              </Button>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <span className="text-sm text-gray-400 shrink-0">Privacy:</span>
+              <div className="flex gap-1 flex-1">
+                <Button
+                  variant={privacyFilter === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPrivacyFilter("all")}
+                  className="flex-1 sm:flex-none"
+                >
+                  All
+                </Button>
+                <Button
+                  variant={privacyFilter === "public" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPrivacyFilter("public")}
+                  className="flex-1 sm:flex-none"
+                >
+                  Public
+                </Button>
+                <Button
+                  variant={privacyFilter === "private" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setPrivacyFilter("private")}
+                  className="flex-1 sm:flex-none"
+                >
+                  Private
+                </Button>
+              </div>
             </div>
 
             {/* More Filters Dropdown */}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" className="w-full sm:w-auto">
                   <Filter className="h-4 w-4 mr-2" />
                   More Filters
                   <ChevronDown className="h-4 w-4 ml-2" />
@@ -248,7 +257,12 @@ export default function ClientProjectsPage() {
 
             {/* Clear Filters Button */}
             {(selectedCategory || selectedRole || searchQuery || privacyFilter !== "all") && (
-              <Button variant="ghost" size="sm" onClick={clearFilters}>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={clearFilters}
+                className="w-full sm:w-auto"
+              >
                 Clear Filters
               </Button>
             )}
@@ -260,7 +274,7 @@ export default function ClientProjectsPage() {
               {selectedCategory && (
                 <Badge
                   variant="secondary"
-                  className="cursor-pointer hover:bg-red-900/50"
+                  className="cursor-pointer hover:bg-red-900/50 touch-manipulation"
                   onClick={() => setSelectedCategory("")}
                 >
                   {selectedCategory} ×
@@ -269,6 +283,7 @@ export default function ClientProjectsPage() {
               {selectedRole && (
                 <Badge
                   variant="secondary"
+                  className="cursor-pointer hover:bg-red-900/50 touch-manipulation"
                   className="cursor-pointer hover:bg-red-900/50"
                   onClick={() => setSelectedRole("")}
                 >
