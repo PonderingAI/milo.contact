@@ -113,4 +113,36 @@ export async function fetchYouTubeTitle(videoId: string): Promise<string | null>
   }
 }
 
+/**
+ * Extract video release date from YouTube or Vimeo
+ */
+export async function extractVideoDate(url: string): Promise<Date | null> {
+  try {
+    const videoInfo = extractVideoInfo(url)
+    if (!videoInfo) return null
+
+    if (videoInfo.platform === "youtube") {
+      // For YouTube, we would need to use the YouTube Data API which requires an API key
+      // For now, we return a specific message indicating this limitation
+      console.log("YouTube date extraction requires YouTube Data API v3 with API key")
+      return null
+    } else if (videoInfo.platform === "vimeo") {
+      // Use Vimeo API v2 to get upload date
+      const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+      if (response.ok) {
+        const videoData = await response.json()
+        const video = videoData[0]
+        if (video.upload_date) {
+          return new Date(video.upload_date)
+        }
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error("Error extracting video date:", error)
+    return null
+  }
+}
+
 
