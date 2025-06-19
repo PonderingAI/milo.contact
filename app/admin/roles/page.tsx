@@ -204,8 +204,8 @@ export default function RolesPage() {
 
   if (!isAdmin) {
     return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-6">Role Management</h1>
+      <div className="container mx-auto p-4 md:p-6">
+        <h1 className="text-2xl md:text-3xl font-bold mb-6">Role Management</h1>
         <Card>
           <CardHeader>
             <CardTitle>Access Denied</CardTitle>
@@ -221,15 +221,16 @@ export default function RolesPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Role Management</h1>
-        <div className="flex gap-2">
+    <div className="container mx-auto p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">Role Management</h1>
+        <div className="flex gap-2 w-full sm:w-auto">
           <Button
             onClick={syncCurrentUserRoles}
             disabled={actionInProgress === 'sync-current'}
             variant="outline"
             size="sm"
+            className="flex-1 sm:flex-none touch-manipulation"
           >
             {actionInProgress === 'sync-current' ? (
               <Loader2 className="h-4 w-4 animate-spin mr-2" />
@@ -335,48 +336,53 @@ export default function RolesPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left border-b border-gray-700">
-                  <th className="pb-2">User</th>
-                  <th className="pb-2">Email</th>
-                  <th className="pb-2">Clerk Roles</th>
-                  <th className="pb-2">Supabase Roles</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => {
-                  const hasAdminRoleInClerk = user.clerkRoles.includes("admin")
-                  const hasAdminRoleInSupabase = user.supabaseRoles.includes("admin")
-                  const rolesInSync = hasAdminRoleInClerk === hasAdminRoleInSupabase
-                  
-                  return (
-                    <tr key={user.id} className="border-b border-gray-700">
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <div>
-                            {user.firstName && user.lastName
-                              ? `${user.firstName} ${user.lastName}`
-                              : "User " + user.id.substring(0, 6)}
-                            {user.isSuperAdmin && (
-                              <Badge variant="default" className="ml-2 text-xs">Super Admin</Badge>
-                            )}
+          <div className="overflow-x-auto -mx-6 md:mx-0">
+            <div className="min-w-full inline-block align-middle">
+              <table className="w-full min-w-[800px]">
+                <thead>
+                  <tr className="text-left border-b border-gray-700">
+                    <th className="pb-2 px-4 md:px-0">User</th>
+                    <th className="pb-2 px-4 md:px-0">Email</th>
+                    <th className="pb-2 px-4 md:px-0">Clerk Roles</th>
+                    <th className="pb-2 px-4 md:px-0">Supabase Roles</th>
+                    <th className="pb-2 px-4 md:px-0">Status</th>
+                    <th className="pb-2 px-4 md:px-0">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => {
+                    const hasAdminRoleInClerk = user.clerkRoles.includes("admin")
+                    const hasAdminRoleInSupabase = user.supabaseRoles.includes("admin")
+                    const rolesInSync = hasAdminRoleInClerk === hasAdminRoleInSupabase
+                    
+                    return (
+                      <tr key={user.id} className="border-b border-gray-700">
+                        <td className="py-3 px-4 md:px-0">
+                          <div className="flex items-center gap-2">
+                            <div>
+                              <div className="font-medium">
+                                {user.firstName && user.lastName
+                                  ? `${user.firstName} ${user.lastName}`
+                                  : "User " + user.id.substring(0, 6)}
+                              </div>
+                              {user.isSuperAdmin && (
+                                <Badge variant="default" className="mt-1 text-xs">Super Admin</Badge>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="py-3 text-sm">{user.email}</td>
-                      <td className="py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {user.clerkRoles.length > 0 ? (
-                            user.clerkRoles.map((role) => (
-                              <Badge key={role} variant="outline" className="text-xs">
-                                {role}
-                              </Badge>
-                            ))
-                          ) : (
+                        </td>
+                        <td className="py-3 px-4 md:px-0">
+                          <div className="text-sm break-all">{user.email}</div>
+                        </td>
+                        <td className="py-3 px-4 md:px-0">
+                          <div className="flex flex-wrap gap-1">
+                            {user.clerkRoles.length > 0 ? (
+                              user.clerkRoles.map((role) => (
+                                <Badge key={role} variant="outline" className="text-xs">
+                                  {role}
+                                </Badge>
+                              ))
+                            ) : (
                             <Badge variant="secondary" className="text-xs">None</Badge>
                           )}
                         </div>
@@ -437,6 +443,7 @@ export default function RolesPage() {
               </tbody>
             </table>
           </div>
+        </div>
 
           {/* Instructions */}
           <div className="mt-6 space-y-4">

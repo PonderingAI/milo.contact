@@ -16,6 +16,7 @@ import {
   Menu,
   X,
   TerminalSquare,
+  Home,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -62,6 +63,11 @@ export default function Sidebar({ className }: SidebarProps) {
       icon: <Users className="h-5 w-5" />,
     },
     {
+      name: "Roles",
+      href: "/admin/roles",
+      icon: <Shield className="h-5 w-5" />,
+    },
+    {
       name: "Database",
       href: "/admin/database",
       icon: <Database className="h-5 w-5" />,
@@ -82,8 +88,8 @@ export default function Sidebar({ className }: SidebarProps) {
       icon: <Settings className="h-5 w-5" />,
     },
     {
-      name: "Database Debug",
-      href: "/admin/database-debug",
+      name: "Debug",
+      href: "/admin/debug",
       icon: <Bug className="h-5 w-5" />,
     },
   ]
@@ -143,6 +149,20 @@ export default function Sidebar({ className }: SidebarProps) {
             >
               <TerminalSquare className="mr-3 h-5 w-5" />
               <span className="ml-3">Advanced Debug</span>
+            </Link>
+            
+            {/* Separator and back to website link */}
+            <div className="border-t border-gray-200 dark:border-gray-700 my-4"></div>
+            <Link
+              href="/"
+              onClick={closeSidebar}
+              className={cn(
+                "flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                "text-gray-700 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-white",
+              )}
+            >
+              <Home className="mr-3 h-5 w-5" />
+              <span className="ml-3">Back to Website</span>
             </Link>
           </nav>
         </div>

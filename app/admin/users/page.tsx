@@ -107,8 +107,8 @@ export default function UsersPage() {
 
   if (!isSuperAdmin) {
     return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-6">User Management</h1>
+      <div className="container mx-auto p-4 md:p-6">
+        <h1 className="text-2xl md:text-3xl font-bold mb-6">User Management</h1>
         <Card>
           <CardHeader>
             <CardTitle>Access Denied</CardTitle>
@@ -124,14 +124,14 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">User Management</h1>
+    <div className="container mx-auto p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">User Management</h1>
         <a
           href="https://dashboard.clerk.com/last-active?path=users"
           target="_blank"
           rel="noopener noreferrer"
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-center touch-manipulation"
         >
           Clerk Dashboard
         </a>
@@ -153,64 +153,77 @@ export default function UsersPage() {
           <CardTitle>Manage Users</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left border-b border-gray-700">
-                  <th className="pb-2">User</th>
-                  <th className="pb-2">Email</th>
-                  <th className="pb-2">Roles</th>
-                  <th className="pb-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => {
-                  const hasAdminRole = user.roles.includes("admin")
-                  return (
-                    <tr key={user.id} className="border-b border-gray-700">
-                      <td className="py-3">
-                        {user.firstName && user.lastName
-                          ? `${user.firstName} ${user.lastName}`
-                          : "User " + user.id.substring(0, 6)}
-                      </td>
-                      <td className="py-3">{user.email}</td>
-                      <td className="py-3">
-                        {user.roles.length > 0 ? (
-                          user.roles.map((role) => (
-                            <span
-                              key={role}
-                              className="inline-block px-2 py-1 mr-1 bg-blue-900/50 text-blue-400 rounded-full text-xs"
-                            >
-                              {role}
+          <div className="overflow-x-auto -mx-6 md:mx-0">
+            <div className="min-w-full inline-block align-middle">
+              <table className="w-full min-w-[600px]">
+                <thead>
+                  <tr className="text-left border-b border-gray-700">
+                    <th className="pb-2 px-4 md:px-0">User</th>
+                    <th className="pb-2 px-4 md:px-0">Email</th>
+                    <th className="pb-2 px-4 md:px-0">Roles</th>
+                    <th className="pb-2 px-4 md:px-0">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {users.map((user) => {
+                    const hasAdminRole = user.roles.includes("admin")
+                    return (
+                      <tr key={user.id} className="border-b border-gray-700">
+                        <td className="py-3 px-4 md:px-0">
+                          <div className="font-medium">
+                            {user.firstName && user.lastName
+                              ? `${user.firstName} ${user.lastName}`
+                              : "User " + user.id.substring(0, 6)}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 md:px-0">
+                          <div className="text-sm break-all">{user.email}</div>
+                        </td>
+                        <td className="py-3 px-4 md:px-0">
+                          <div className="flex flex-wrap gap-1">
+                            {user.roles.length > 0 ? (
+                              user.roles.map((role) => (
+                                <span
+                                  key={role}
+                                  className="inline-block px-2 py-1 bg-blue-900/50 text-blue-400 rounded-full text-xs"
+                                >
+                                  {role}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-gray-500 text-sm">No roles</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 md:px-0">
+                          <Button
+                            variant={hasAdminRole ? "destructive" : "default"}
+                            size="sm"
+                            onClick={() => toggleAdminRole(user.id, hasAdminRole)}
+                            disabled={actionInProgress === user.id}
+                            className="flex items-center gap-1 touch-manipulation w-full sm:w-auto"
+                          >
+                            {actionInProgress === user.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : hasAdminRole ? (
+                              <UserX className="h-4 w-4" />
+                            ) : (
+                              <UserCheck className="h-4 w-4" />
+                            )}
+                            <span className="hidden sm:inline">
+                              {hasAdminRole ? "Remove Admin" : "Make Admin"}
                             </span>
-                          ))
-                        ) : (
-                          <span className="text-gray-500">No roles</span>
-                        )}
-                      </td>
-                      <td className="py-3">
-                        <Button
-                          variant={hasAdminRole ? "destructive" : "default"}
-                          size="sm"
-                          onClick={() => toggleAdminRole(user.id, hasAdminRole)}
-                          disabled={actionInProgress === user.id}
-                          className="flex items-center gap-1"
-                        >
-                          {actionInProgress === user.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : hasAdminRole ? (
-                            <UserX className="h-4 w-4" />
-                          ) : (
-                            <UserCheck className="h-4 w-4" />
-                          )}
-                          {hasAdminRole ? "Remove Admin" : "Make Admin"}
-                        </Button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                            <span className="sm:hidden">
+                              {hasAdminRole ? "Remove" : "Add"}
+                            </span>
+                          </Button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="mt-6 p-4 bg-gray-900 rounded-lg">
