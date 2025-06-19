@@ -8,15 +8,15 @@ import TagOrderManager from "@/components/admin/tag-order-manager"
 
 export default function SettingsClientPage() {
   return (
-    <div className="container mx-auto py-10">
-      <h1 className="text-3xl font-bold mb-6">Settings</h1>
+    <div className="container mx-auto p-4 md:p-6 lg:py-10">
+      <h1 className="text-2xl md:text-3xl font-bold mb-6">Settings</h1>
 
       <Tabs defaultValue="site-info">
-        <TabsList className="mb-4">
-          <TabsTrigger value="site-info">Site Information</TabsTrigger>
-          <TabsTrigger value="featured">Featured Content</TabsTrigger>
-          <TabsTrigger value="tags">Tag Order</TabsTrigger>
-          <TabsTrigger value="app-icons">App Icons</TabsTrigger>
+        <TabsList className="mb-4 grid grid-cols-2 md:grid-cols-4 w-full">
+          <TabsTrigger value="site-info" className="text-xs md:text-sm">Site Info</TabsTrigger>
+          <TabsTrigger value="featured" className="text-xs md:text-sm">Featured</TabsTrigger>
+          <TabsTrigger value="tags" className="text-xs md:text-sm">Tag Order</TabsTrigger>
+          <TabsTrigger value="app-icons" className="text-xs md:text-sm">App Icons</TabsTrigger>
         </TabsList>
 
         <TabsContent value="site-info">
