@@ -11,7 +11,6 @@ import {
   ImageIcon,
   Database,
   Shield,
-  Package,
   Bug,
   Menu,
   X,
@@ -58,14 +57,9 @@ export default function Sidebar({ className }: SidebarProps) {
       icon: <ImageIcon className="h-5 w-5" />,
     },
     {
-      name: "Users",
+      name: "User Management",
       href: "/admin/users",
       icon: <Users className="h-5 w-5" />,
-    },
-    {
-      name: "Roles",
-      href: "/admin/roles",
-      icon: <Shield className="h-5 w-5" />,
     },
     {
       name: "Database",
@@ -76,11 +70,6 @@ export default function Sidebar({ className }: SidebarProps) {
       name: "Security",
       href: "/admin/security",
       icon: <Shield className="h-5 w-5" />,
-    },
-    {
-      name: "Dependencies",
-      href: "/admin/dependencies",
-      icon: <Package className="h-5 w-5" />,
     },
     {
       name: "Settings",

@@ -284,7 +284,6 @@ export default function ClientProjectsPage() {
                 <Badge
                   variant="secondary"
                   className="cursor-pointer hover:bg-red-900/50 touch-manipulation"
-                  className="cursor-pointer hover:bg-red-900/50"
                   onClick={() => setSelectedRole("")}
                 >
                   {selectedRole} ×
