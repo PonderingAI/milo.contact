@@ -190,7 +190,7 @@ export default function UnifiedMediaInput({
     setVideoUrlInput(e.target.value)
   }
 
-  const handleSubmitVideoUrl = (e: React.MouseEvent) => {
+  const handleSubmitVideoUrl = async (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
 
@@ -200,9 +200,26 @@ export default function UnifiedMediaInput({
       .filter((url) => url)
 
     if (urls.length > 0) {
-      urls.forEach((url) => onVideoUrlSubmit(url))
-      setVideoUrlInput("")
-      toast({ title: "Video Links Added", description: `${urls.length} link(s) submitted for processing.` })
+      try {
+        // Handle async video processing properly
+        await Promise.all(urls.map(async (url) => {
+          try {
+            await onVideoUrlSubmit(url)
+          } catch (error) {
+            console.error("UnifiedMediaInput: Error processing video URL:", url, error)
+          }
+        }))
+        
+        setVideoUrlInput("")
+        toast({ title: "Video Links Added", description: `${urls.length} link(s) submitted for processing.` })
+      } catch (error) {
+        console.error("UnifiedMediaInput: Error processing video URLs:", error)
+        toast({ 
+          title: "Error Processing Videos", 
+          description: "Some videos may not have been processed correctly. Check the console for details.",
+          variant: "destructive"
+        })
+      }
     } else {
       toast({ title: "No Links Entered", description: "Please enter valid video URLs.", variant: "default" })
     }
