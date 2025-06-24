@@ -146,37 +146,23 @@ export async function POST(request: NextRequest) {
 
     console.log("Attempting to insert media data:", baseMediaData)
 
-    // First try with file_path
+    // Try to insert with both filepath and file_path to handle different schema versions
     let data, error
     try {
       const result = await supabase
         .from("media")
         .insert({
           ...baseMediaData,
-          file_path: url,
+          filepath: url, // Primary attempt with filepath
+          file_path: url, // Also include file_path for compatibility
         })
         .select()
       
       data = result.data
       error = result.error
-    } catch (firstError) {
-      console.log("First attempt with file_path failed, trying filepath:", firstError)
-      // If that fails, try with filepath
-      try {
-        const result = await supabase
-          .from("media")
-          .insert({
-            ...baseMediaData,
-            filepath: url,
-          })
-          .select()
-        
-        data = result.data
-        error = result.error
-      } catch (secondError) {
-        console.error("Both column name attempts failed:", { firstError, secondError })
-        error = secondError
-      }
+    } catch (insertError) {
+      console.error("Insert failed:", insertError)
+      error = insertError
     }
 
     if (error) {

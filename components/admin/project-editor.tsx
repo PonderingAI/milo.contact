@@ -750,6 +750,46 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       const result = await response.json()
       console.log("Video processing result:", result)
 
+      // Handle duplicate case
+      if (result.duplicate) {
+        // Video already exists, add it to the interface but don't create a new database entry
+        if (!mainVideos.includes(url)) {
+          setMainVideos((prev) => [...prev, url])
+          setThumbnailUrl(url)
+          setFormData((prev) => ({ ...prev, thumbnail_url: url }))
+        }
+
+        // Use existing video data if available
+        const existingVideo = result.existingVideo
+        if (existingVideo) {
+          // If we have a thumbnail and no image is set, use the thumbnail
+          if (existingVideo.thumbnail_url && !formData.image && !mainImages.includes(existingVideo.thumbnail_url)) {
+            setFormData((prev) => ({ ...prev, image: existingVideo.thumbnail_url }))
+            setVideoThumbnail(existingVideo.thumbnail_url)
+            setMainImages((prev) => [...prev, existingVideo.thumbnail_url])
+          }
+
+          // If project title is empty, use video title
+          if (!formData.title && existingVideo.filename) {
+            setFormData((prev) => ({ ...prev, title: existingVideo.filename }))
+          }
+
+          // If project date is empty and we have metadata with upload date, use it
+          if (!formData.project_date && existingVideo.metadata?.uploadDate) {
+            const date = new Date(existingVideo.metadata.uploadDate)
+            setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+          }
+        }
+
+        toast({
+          id: toastId,
+          title: "Video already exists",
+          description: result.message || "Video was already in the media library and has been added to this project",
+        })
+        return
+      }
+
+      // Handle new video case
       // Add to mainVideos if not already in the list
       if (!mainVideos.includes(url)) {
         setMainVideos((prev) => [...prev, url])
@@ -819,6 +859,28 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       const result = await response.json()
       console.log("BTS video processing result:", result)
 
+      // Handle duplicate case
+      if (result.duplicate) {
+        // Video already exists, add it to the interface but don't create a new database entry
+        if (!btsVideos.includes(url)) {
+          setBtsVideos((prev) => [...prev, url])
+        }
+
+        // Use existing video data if available
+        const existingVideo = result.existingVideo
+        if (existingVideo && existingVideo.thumbnail_url && !btsImages.includes(existingVideo.thumbnail_url)) {
+          setBtsImages((prev) => [...prev, existingVideo.thumbnail_url])
+        }
+
+        toast({
+          id: toastId,
+          title: "BTS video already exists",
+          description: result.message || "Video was already in the media library and has been added to BTS",
+        })
+        return
+      }
+
+      // Handle new video case
       // Add to BTS videos if not already in the list
       if (!btsVideos.includes(url)) {
         setBtsVideos((prev) => [...prev, url])
