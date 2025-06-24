@@ -395,6 +395,9 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
               // Return null to indicate no date available
               console.log("YouTube video exists but upload date not available via oEmbed API")
               return null
+            } else {
+              console.warn(`YouTube oEmbed API failed: ${response.status} ${response.statusText}`)
+              return null
             }
           } catch (error) {
             console.error("Error checking YouTube video:", error)
@@ -805,7 +808,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     }
   }
 
-  // Process video URL and extract thumbnail
+  // Process video URL and extract thumbnail (simplified - just for display)
   useEffect(() => {
     const processVideoUrl = async () => {
       const url = formData.thumbnail_url?.trim()
@@ -849,81 +852,11 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           setIsUsingVideoThumbnail(true)
         }
 
-        // Check if this video is already in the media library
-        const { data: existingMedia } = await supabase
-          .from("media")
-          .select("id, public_url")
-          .eq("public_url", url)
-          .maybeSingle()
-
-        if (existingMedia) {
-          console.log("Video already exists in media library:", existingMedia.id)
-          return // Already in the library
-        }
-
-        // Get current user session
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const userId = session?.user?.id || "anonymous"
-
-        // Add video to media library
-        let videoTitle = `${videoInfo.platform} ${videoInfo.id}`
-        
-        // Get proper video title based on platform
-        if (videoInfo.platform === "vimeo") {
-          try {
-            const vimeoResponse = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-            if (vimeoResponse.ok) {
-              const vimeoData = await vimeoResponse.json()
-              const vimeoVideo = vimeoData[0]
-              videoTitle = vimeoVideo?.title || `Vimeo ${videoInfo.id}`
-            }
-          } catch (error) {
-            console.error("Error fetching Vimeo title:", error)
-            videoTitle = `Vimeo ${videoInfo.id}`
-          }
-        } else if (videoInfo.platform === "youtube") {
-          try {
-            // Use the YouTube oEmbed API to get the title
-            const youtubeResponse = await fetch(
-              `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoInfo.id}&format=json`
-            )
-            if (youtubeResponse.ok) {
-              const youtubeData = await youtubeResponse.json()
-              videoTitle = youtubeData?.title || `YouTube ${videoInfo.id}`
-            }
-          } catch (error) {
-            console.error("Error fetching YouTube title:", error)
-            videoTitle = `YouTube ${videoInfo.id}`
-          }
-        } else if (videoInfo.platform === "linkedin") {
-          videoTitle = `LinkedIn Post ${videoInfo.id}`
-        }
-
-        // Save to media table
-        const { error: dbError } = await supabase.from("media").insert({
-          filename: videoTitle,
-          filepath: url,
-          filesize: 0, // Not applicable for external videos
-          filetype: videoInfo.platform,
-          public_url: url,
-          thumbnail_url: thumbnailUrl,
-          tags: ["video", videoInfo.platform, "project"],
-          metadata: {
-            [videoInfo.platform + "Id"]: videoInfo.id,
-            uploadedBy: userId,
-          },
-        })
-
-        if (dbError) throw dbError
-
-        toast({
-          title: "Video added to media library",
-          description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been added to your media library`,
-        })
+        // Note: We no longer add videos to media library here
+        // This is handled by the /api/process-video-url endpoint when videos are actually used
+        console.log("Video thumbnail processed for display purposes")
       } catch (err) {
-        console.error("Error processing video URL:", err)
+        console.error("Error processing video URL for display:", err)
         // Don't show error to user, just log it
       } finally {
         setIsProcessingVideo(false)
@@ -935,7 +868,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     } else {
       setVideoThumbnail(null)
     }
-  }, [formData.thumbnail_url, formData.image, supabase])
+  }, [formData.thumbnail_url, formData.image])
 
   const useVideoThumbnail = () => {
     if (videoThumbnail) {

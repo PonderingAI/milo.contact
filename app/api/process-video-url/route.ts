@@ -8,12 +8,12 @@ export async function POST(request: NextRequest) {
     const supabase = createAdminClient()
     const { url, isBts = false } = await request.json()
 
-    if (!url) {
-      return NextResponse.json({ error: "No URL provided" }, { status: 400 })
+    if (!url || typeof url !== 'string' || url.trim() === '') {
+      return NextResponse.json({ error: "No valid URL provided" }, { status: 400 })
     }
 
     console.log("Processing video URL:", url)
-    const videoInfo = extractVideoInfo(url)
+    const videoInfo = extractVideoInfo(url.trim())
 
     if (!videoInfo) {
       return NextResponse.json({ error: "Invalid video URL format" }, { status: 400 })
@@ -77,27 +77,70 @@ export async function POST(request: NextRequest) {
       videoTitle = `LinkedIn Post ${videoInfo.id}`
     }
 
+    // Validate that we have essential data before database insertion
+    if (!videoTitle || videoTitle.trim() === '') {
+      videoTitle = `${videoInfo.platform} Video ${videoInfo.id}`
+    }
+
+    // Validate required data before insertion
+    if (!url.trim() || !videoTitle.trim()) {
+      console.error("Missing required data for media insertion:", { url, videoTitle })
+      return NextResponse.json({ error: "Missing required data for media insertion" }, { status: 400 })
+    }
+
     // Add to media library using admin client
-    const { data, error } = await supabase
-      .from("media")
-      .insert({
-        filename: videoTitle || `${videoInfo.platform} Video ${videoInfo.id}`,
-        filepath: url,
-        filesize: 0,
-        filetype: videoInfo.platform,
-        public_url: url,
-        thumbnail_url: thumbnailUrl,
-        tags: ["video", videoInfo.platform, ...(isBts ? ["bts"] : [])],
-        metadata: {
-          [videoInfo.platform + "Id"]: videoInfo.id,
-          uploadedBy: "admin", // Since we're using the admin client
-          isBts: isBts,
-          uploadDate: uploadDate,
-          originalUrl: url,
-          title: videoTitle,
-        },
-      })
-      .select()
+    // Try both possible column names: file_path and filepath
+    const baseMediaData = {
+      filename: videoTitle,
+      filesize: 0,
+      filetype: videoInfo.platform,
+      public_url: url,
+      thumbnail_url: thumbnailUrl,
+      tags: ["video", videoInfo.platform, ...(isBts ? ["bts"] : [])],
+      metadata: {
+        [videoInfo.platform + "Id"]: videoInfo.id,
+        uploadedBy: "admin", // Since we're using the admin client
+        isBts: isBts,
+        uploadDate: uploadDate,
+        originalUrl: url,
+        title: videoTitle,
+      },
+    }
+
+    console.log("Attempting to insert media data:", baseMediaData)
+
+    // First try with file_path
+    let data, error
+    try {
+      const result = await supabase
+        .from("media")
+        .insert({
+          ...baseMediaData,
+          file_path: url,
+        })
+        .select()
+      
+      data = result.data
+      error = result.error
+    } catch (firstError) {
+      console.log("First attempt with file_path failed, trying filepath:", firstError)
+      // If that fails, try with filepath
+      try {
+        const result = await supabase
+          .from("media")
+          .insert({
+            ...baseMediaData,
+            filepath: url,
+          })
+          .select()
+        
+        data = result.data
+        error = result.error
+      } catch (secondError) {
+        console.error("Both column name attempts failed:", { firstError, secondError })
+        error = secondError
+      }
+    }
 
     if (error) {
       console.error("Error adding video to media library:", error)
