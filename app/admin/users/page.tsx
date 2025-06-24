@@ -4,70 +4,162 @@ import { useState, useEffect } from "react"
 import { useUser } from "@clerk/nextjs"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Loader2, Shield, UserCheck, UserX } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Loader2, Shield, UserCheck, UserX, RefreshCw, AlertTriangle, CheckCircle, Settings, Users } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 
-interface ClerkUser {
+interface UserWithRoles {
   id: string
   email: string
   firstName?: string | null
   lastName?: string | null
-  roles: string[]
-  createdAt: Date
+  clerkRoles: string[]
+  supabaseRoles: string[]
+  isSuperAdmin: boolean
+  isOnline?: boolean
+  createdAt: string
+  lastSyncedAt?: string
 }
 
-export default function UsersPage() {
+interface RolesSyncStatus {
+  userId: string
+  success: boolean
+  isSuperAdmin: boolean
+  clerkRoles: string[]
+  supabaseRoles: string[]
+  adminRoleAssigned: boolean
+}
+
+export default function UserManagementPage() {
   const { user: currentUser, isLoaded, isSignedIn } = useUser()
-  const [users, setUsers] = useState<ClerkUser[]>([])
+  const [users, setUsers] = useState<UserWithRoles[]>([])
   const [loading, setLoading] = useState(true)
   const [isSuperAdmin, setIsSuperAdmin] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [actionInProgress, setActionInProgress] = useState<string | null>(null)
+  const [lastSync, setLastSync] = useState<string | null>(null)
+  const [syncStatus, setSyncStatus] = useState<RolesSyncStatus | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
-  // Fetch users and check if current user is super admin
+  // Check current user permissions
   useEffect(() => {
-    async function fetchData() {
-      if (isLoaded && isSignedIn && currentUser) {
-        try {
-          // Check if current user is super admin
-          const superAdminStatus = currentUser.publicMetadata?.superAdmin === true
-          setIsSuperAdmin(superAdminStatus)
+    if (isLoaded && isSignedIn && currentUser) {
+      const superAdminStatus = currentUser.publicMetadata?.superAdmin === true
+      const adminStatus = superAdminStatus || 
+        (Array.isArray(currentUser.publicMetadata?.roles) && 
+         (currentUser.publicMetadata?.roles as string[]).includes('admin'))
+      
+      setIsSuperAdmin(superAdminStatus)
+      setIsAdmin(adminStatus)
+    }
+  }, [isLoaded, isSignedIn, currentUser])
 
-          // If not super admin, don't fetch users
-          if (!superAdminStatus) {
-            setLoading(false)
-            return
-          }
+  // Fetch users data
+  useEffect(() => {
+    async function fetchUsers() {
+      if (!isLoaded || !isSignedIn || !currentUser || !isAdmin) {
+        setLoading(false)
+        return
+      }
 
-          // Fetch users (in a real app, this would be an API call)
-          // For now, we'll just show the current user
-          const userData: ClerkUser = {
-            id: currentUser.id,
-            email: currentUser.primaryEmailAddress?.emailAddress || "",
-            firstName: currentUser.firstName,
-            lastName: currentUser.lastName,
-            roles: (currentUser.publicMetadata?.roles as string[]) || [],
-            createdAt: new Date(currentUser.createdAt),
-          }
-          setUsers([userData])
-        } catch (error) {
-          console.error("Error fetching data:", error)
-        } finally {
-          setLoading(false)
+      try {
+        setError(null)
+        // For now, show current user as example
+        // In a production app, you'd fetch all users from an API
+        const userData: UserWithRoles = {
+          id: currentUser.id,
+          email: currentUser.primaryEmailAddress?.emailAddress || "",
+          firstName: currentUser.firstName,
+          lastName: currentUser.lastName,
+          clerkRoles: (currentUser.publicMetadata?.roles as string[]) || [],
+          supabaseRoles: [], // Will be fetched separately
+          isSuperAdmin: currentUser.publicMetadata?.superAdmin === true,
+          createdAt: new Date(currentUser.createdAt).toISOString(),
+          isOnline: true
         }
+
+        // Fetch Supabase roles for the user
+        try {
+          const rolesResponse = await fetch('/api/admin/get-user-roles', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id })
+          })
+          
+          if (rolesResponse.ok) {
+            const rolesData = await rolesResponse.json()
+            userData.supabaseRoles = rolesData.roles || []
+          }
+        } catch (rolesError) {
+          console.warn('Could not fetch Supabase roles:', rolesError)
+        }
+
+        setUsers([userData])
+      } catch (error) {
+        console.error("Error fetching users:", error)
+        setError(error instanceof Error ? error.message : "Failed to fetch users")
+      } finally {
+        setLoading(false)
       }
     }
 
-    fetchData()
-  }, [isLoaded, isSignedIn, currentUser])
+    fetchUsers()
+  }, [isLoaded, isSignedIn, currentUser, isAdmin])
 
-  async function toggleAdminRole(userId: string, hasAdminRole: boolean) {
-    setActionInProgress(userId)
+  // Sync current user roles
+  async function syncCurrentUserRoles() {
+    if (!currentUser) return
+
+    setActionInProgress('sync-current')
+    setError(null)
+    
     try {
-      // Call API to toggle admin role
+      const response = await fetch('/api/admin/sync-roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUser.id })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to sync roles')
+      }
+
+      setSyncStatus(data.debug)
+      setLastSync(new Date().toLocaleTimeString())
+
+      // Update local user data
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user.id === currentUser.id 
+            ? { ...user, supabaseRoles: data.debug.supabaseRoles, lastSyncedAt: new Date().toISOString() }
+            : user
+        )
+      )
+    } catch (error) {
+      console.error("Error syncing roles:", error)
+      setError(error instanceof Error ? error.message : "Failed to sync roles")
+    } finally {
+      setActionInProgress(null)
+    }
+  }
+
+  // Toggle admin role
+  async function toggleAdminRole(userId: string, hasAdminRole: boolean) {
+    if (!isSuperAdmin) {
+      setError("Only super admins can modify admin roles")
+      return
+    }
+
+    setActionInProgress(userId)
+    setError(null)
+    
+    try {
       const response = await fetch("/api/admin/toggle-role", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           userId,
           role: "admin",
@@ -76,22 +168,28 @@ export default function UsersPage() {
       })
 
       if (!response.ok) {
-        throw new Error("Failed to update role")
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Failed to update role")
       }
 
-      // Update the local state
-      setUsers((prevUsers) =>
-        prevUsers.map((user) => {
+      // Update local state
+      setUsers(prevUsers =>
+        prevUsers.map(user => {
           if (user.id === userId) {
-            const updatedRoles = hasAdminRole ? user.roles.filter((role) => role !== "admin") : [...user.roles, "admin"]
-            return { ...user, roles: updatedRoles }
+            const updatedClerkRoles = hasAdminRole 
+              ? user.clerkRoles.filter(role => role !== "admin")
+              : [...user.clerkRoles, "admin"]
+            return { ...user, clerkRoles: updatedClerkRoles }
           }
           return user
-        }),
+        })
       )
+
+      // Trigger a role sync after role change
+      await syncCurrentUserRoles()
     } catch (error) {
       console.error("Error toggling admin role:", error)
-      alert("Failed to update user role. Please try again.")
+      setError(error instanceof Error ? error.message : "Failed to update user role")
     } finally {
       setActionInProgress(null)
     }
@@ -105,17 +203,17 @@ export default function UsersPage() {
     )
   }
 
-  if (!isSuperAdmin) {
+  if (!isAdmin) {
     return (
-      <div className="container mx-auto p-6">
-        <h1 className="text-3xl font-bold mb-6">User Management</h1>
+      <div className="container mx-auto p-4 md:p-6">
+        <h1 className="text-2xl md:text-3xl font-bold mb-6">User Management</h1>
         <Card>
           <CardHeader>
             <CardTitle>Access Denied</CardTitle>
           </CardHeader>
           <CardContent>
             <p className="text-red-500">
-              Only super admins can access the user management page. Please contact the site owner if you need access.
+              You need admin privileges to access user management. Please contact a super admin if you need access.
             </p>
           </CardContent>
         </Card>
@@ -124,142 +222,421 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="container mx-auto p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">User Management</h1>
-        <a
-          href="https://dashboard.clerk.com/last-active?path=users"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
-        >
-          Clerk Dashboard
-        </a>
-      </div>
-
-      <div className="bg-gray-800 p-4 rounded-lg mb-6">
-        <div className="flex items-center gap-2 text-yellow-400 mb-2">
-          <Shield className="h-5 w-5" />
-          <h2 className="text-lg font-semibold">Super Admin Access</h2>
+    <div className="container mx-auto p-4 md:p-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">User Management</h1>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button
+            onClick={syncCurrentUserRoles}
+            disabled={actionInProgress === 'sync-current'}
+            variant="outline"
+            size="sm"
+            className="flex-1 sm:flex-none touch-manipulation"
+          >
+            {actionInProgress === 'sync-current' ? (
+              <Loader2 className="h-4 w-4 animate-spin mr-2" />
+            ) : (
+              <RefreshCw className="h-4 w-4 mr-2" />
+            )}
+            Sync My Roles
+          </Button>
+          <a
+            href="https://dashboard.clerk.com/last-active?path=users"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-center touch-manipulation"
+          >
+            Clerk Dashboard
+          </a>
         </div>
-        <p className="text-sm text-gray-400">
-          You have super admin privileges. You can manage user roles and access the Clerk Dashboard for full user
-          management.
-        </p>
       </div>
 
-      <Card className="bg-gray-800">
-        <CardHeader>
-          <CardTitle>Manage Users</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left border-b border-gray-700">
-                  <th className="pb-2">User</th>
-                  <th className="pb-2">Email</th>
-                  <th className="pb-2">Roles</th>
-                  <th className="pb-2">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => {
-                  const hasAdminRole = user.roles.includes("admin")
-                  return (
-                    <tr key={user.id} className="border-b border-gray-700">
-                      <td className="py-3">
-                        {user.firstName && user.lastName
-                          ? `${user.firstName} ${user.lastName}`
-                          : "User " + user.id.substring(0, 6)}
-                      </td>
-                      <td className="py-3">{user.email}</td>
-                      <td className="py-3">
-                        {user.roles.length > 0 ? (
-                          user.roles.map((role) => (
-                            <span
-                              key={role}
-                              className="inline-block px-2 py-1 mr-1 bg-blue-900/50 text-blue-400 rounded-full text-xs"
-                            >
-                              {role}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-gray-500">No roles</span>
-                        )}
-                      </td>
-                      <td className="py-3">
-                        <Button
-                          variant={hasAdminRole ? "destructive" : "default"}
-                          size="sm"
-                          onClick={() => toggleAdminRole(user.id, hasAdminRole)}
-                          disabled={actionInProgress === user.id}
-                          className="flex items-center gap-1"
-                        >
-                          {actionInProgress === user.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : hasAdminRole ? (
-                            <UserX className="h-4 w-4" />
-                          ) : (
-                            <UserCheck className="h-4 w-4" />
-                          )}
-                          {hasAdminRole ? "Remove Admin" : "Make Admin"}
-                        </Button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
+      {/* Error Alert */}
+      {error && (
+        <Alert variant="destructive" className="mb-6">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
 
-          <div className="mt-6 p-4 bg-gray-900 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">How to Add Users</h3>
-            <ol className="list-decimal list-inside space-y-2 text-gray-400">
-              <li>
-                Go to the{" "}
-                <a
-                  href="https://dashboard.clerk.com/last-active?path=users"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:underline"
-                >
-                  Clerk Dashboard
-                </a>
-              </li>
-              <li>Click "Add User" to create a new user</li>
-              <li>Once created, the user will appear in this list</li>
-              <li>Use the "Make Admin" button to grant admin privileges</li>
-            </ol>
-          </div>
+      <Tabs defaultValue="users" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="users" className="flex items-center gap-2">
+            <Users className="h-4 w-4" />
+            Users
+          </TabsTrigger>
+          <TabsTrigger value="roles" className="flex items-center gap-2">
+            <Shield className="h-4 w-4" />
+            Role Management
+          </TabsTrigger>
+        </TabsList>
 
-          <div className="mt-6 p-4 bg-gray-900 rounded-lg">
-            <h3 className="text-lg font-semibold mb-2">Super Admin Setup</h3>
-            <p className="text-gray-400 mb-2">
-              To set up a super admin, you need to manually update the user's metadata in the Clerk Dashboard:
+        <TabsContent value="users" className="space-y-6">
+          {/* Permission Info */}
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <div className="flex items-center gap-2 text-yellow-400 mb-2">
+              <Shield className="h-5 w-5" />
+              <h2 className="text-lg font-semibold">Super Admin Access</h2>
+            </div>
+            <p className="text-sm text-gray-400">
+              You have super admin privileges. You can manage user roles and access the Clerk Dashboard for full user
+              management.
             </p>
-            <ol className="list-decimal list-inside space-y-2 text-gray-400">
-              <li>
-                Go to the{" "}
-                <a
-                  href="https://dashboard.clerk.com/last-active?path=users"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-400 hover:underline"
-                >
-                  Clerk Dashboard
-                </a>
-              </li>
-              <li>Select the user you want to make a super admin</li>
-              <li>Go to the "Metadata" tab</li>
-              <li>
-                Add <code className="bg-gray-800 px-1 rounded">{'{ "superAdmin": true }'}</code> to the public metadata
-              </li>
-              <li>Save the changes</li>
-            </ol>
           </div>
-        </CardContent>
-      </Card>
+
+          <Card className="bg-gray-800">
+            <CardHeader>
+              <CardTitle>Manage Users</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto -mx-6 md:mx-0">
+                <div className="min-w-full inline-block align-middle">
+                  <table className="w-full min-w-[600px]">
+                    <thead>
+                      <tr className="text-left border-b border-gray-700">
+                        <th className="pb-2 px-4 md:px-0">User</th>
+                        <th className="pb-2 px-4 md:px-0">Email</th>
+                        <th className="pb-2 px-4 md:px-0">Roles</th>
+                        <th className="pb-2 px-4 md:px-0">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => {
+                        const hasAdminRole = user.clerkRoles.includes("admin")
+                        return (
+                          <tr key={user.id} className="border-b border-gray-700">
+                            <td className="py-3 px-4 md:px-0">
+                              <div className="font-medium">
+                                {user.firstName && user.lastName
+                                  ? `${user.firstName} ${user.lastName}`
+                                  : "User " + user.id.substring(0, 6)}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 md:px-0">
+                              <div className="text-sm break-all">{user.email}</div>
+                            </td>
+                            <td className="py-3 px-4 md:px-0">
+                              <div className="flex flex-wrap gap-1">
+                                {user.clerkRoles.length > 0 ? (
+                                  user.clerkRoles.map((role) => (
+                                    <span
+                                      key={role}
+                                      className="inline-block px-2 py-1 bg-blue-900/50 text-blue-400 rounded-full text-xs"
+                                    >
+                                      {role}
+                                    </span>
+                                  ))
+                                ) : (
+                                  <span className="text-gray-500 text-sm">No roles</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 md:px-0">
+                              <Button
+                                variant={hasAdminRole ? "destructive" : "default"}
+                                size="sm"
+                                onClick={() => toggleAdminRole(user.id, hasAdminRole)}
+                                disabled={actionInProgress === user.id}
+                                className="flex items-center gap-1 touch-manipulation w-full sm:w-auto"
+                              >
+                                {actionInProgress === user.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : hasAdminRole ? (
+                                  <UserX className="h-4 w-4" />
+                                ) : (
+                                  <UserCheck className="h-4 w-4" />
+                                )}
+                                <span className="hidden sm:inline">
+                                  {hasAdminRole ? "Remove Admin" : "Make Admin"}
+                                </span>
+                                <span className="sm:hidden">
+                                  {hasAdminRole ? "Remove" : "Add"}
+                                </span>
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-gray-900 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">How to Add Users</h3>
+                <ol className="list-decimal list-inside space-y-2 text-gray-400">
+                  <li>
+                    Go to the{" "}
+                    <a
+                      href="https://dashboard.clerk.com/last-active?path=users"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:underline"
+                    >
+                      Clerk Dashboard
+                    </a>
+                  </li>
+                  <li>Click "Add User" to create a new user</li>
+                  <li>Once created, the user will appear in this list</li>
+                  <li>Use the "Make Admin" button to grant admin privileges</li>
+                </ol>
+              </div>
+
+              <div className="mt-6 p-4 bg-gray-900 rounded-lg">
+                <h3 className="text-lg font-semibold mb-2">Super Admin Setup</h3>
+                <p className="text-gray-400 mb-2">
+                  To set up a super admin, you need to manually update the user's metadata in the Clerk Dashboard:
+                </p>
+                <ol className="list-decimal list-inside space-y-2 text-gray-400">
+                  <li>
+                    Go to the{" "}
+                    <a
+                      href="https://dashboard.clerk.com/last-active?path=users"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-400 hover:underline"
+                    >
+                      Clerk Dashboard
+                    </a>
+                  </li>
+                  <li>Select the user you want to make a super admin</li>
+                  <li>Go to the "Metadata" tab</li>
+                  <li>
+                    Add <code className="bg-gray-800 px-1 rounded">{'{ "superAdmin": true }'}</code> to the public metadata
+                  </li>
+                  <li>Save the changes</li>
+                </ol>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="roles" className="space-y-6">
+          {/* Permission Info */}
+          <div className="bg-gray-800 p-4 rounded-lg">
+            <div className="flex items-center gap-2 text-blue-400 mb-2">
+              <Shield className="h-5 w-5" />
+              <h2 className="text-lg font-semibold">Your Access Level</h2>
+            </div>
+            <div className="flex gap-4 text-sm">
+              <Badge variant={isSuperAdmin ? "default" : "secondary"}>
+                {isSuperAdmin ? "Super Admin" : "Not Super Admin"}
+              </Badge>
+              <Badge variant={isAdmin ? "default" : "secondary"}>
+                {isAdmin ? "Admin" : "Not Admin"}
+              </Badge>
+            </div>
+            <p className="text-sm text-gray-400 mt-2">
+              {isSuperAdmin 
+                ? "You have full privileges and can manage all user roles including admin assignments."
+                : isAdmin 
+                  ? "You have admin privileges but cannot assign admin roles to other users."
+                  : "You have limited access to role management."
+              }
+            </p>
+          </div>
+
+          {/* Sync Status */}
+          {syncStatus && (
+            <Card className="bg-gray-800">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5 text-green-400" />
+                  Last Role Sync Status
+                  {lastSync && <span className="text-sm font-normal text-gray-400">({lastSync})</span>}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <p className="text-gray-400">Super Admin</p>
+                    <Badge variant={syncStatus.isSuperAdmin ? "default" : "secondary"}>
+                      {syncStatus.isSuperAdmin ? "Yes" : "No"}
+                    </Badge>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Clerk Roles</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {syncStatus.clerkRoles.length > 0 ? (
+                        syncStatus.clerkRoles.map(role => (
+                          <Badge key={role} variant="outline" className="text-xs">{role}</Badge>
+                        ))
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">None</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Supabase Roles</p>
+                    <div className="flex flex-wrap gap-1 mt-1">
+                      {syncStatus.supabaseRoles.length > 0 ? (
+                        syncStatus.supabaseRoles.map(role => (
+                          <Badge key={role} variant="outline" className="text-xs">{role}</Badge>
+                        ))
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">None</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-gray-400">Admin Access</p>
+                    <Badge variant={syncStatus.adminRoleAssigned ? "default" : "destructive"}>
+                      {syncStatus.adminRoleAssigned ? "Granted" : "Denied"}
+                    </Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Detailed Roles Management */}
+          <Card className="bg-gray-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5" />
+                Detailed Role Management
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto -mx-6 md:mx-0">
+                <div className="min-w-full inline-block align-middle">
+                  <table className="w-full min-w-[800px]">
+                    <thead>
+                      <tr className="text-left border-b border-gray-700">
+                        <th className="pb-2 px-4 md:px-0">User</th>
+                        <th className="pb-2 px-4 md:px-0">Email</th>
+                        <th className="pb-2 px-4 md:px-0">Clerk Roles</th>
+                        <th className="pb-2 px-4 md:px-0">Supabase Roles</th>
+                        <th className="pb-2 px-4 md:px-0">Status</th>
+                        <th className="pb-2 px-4 md:px-0">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => {
+                        const hasAdminRoleInClerk = user.clerkRoles.includes("admin")
+                        const hasAdminRoleInSupabase = user.supabaseRoles.includes("admin")
+                        const rolesInSync = hasAdminRoleInClerk === hasAdminRoleInSupabase
+                        
+                        return (
+                          <tr key={user.id} className="border-b border-gray-700">
+                            <td className="py-3 px-4 md:px-0">
+                              <div className="flex items-center gap-2">
+                                <div>
+                                  <div className="font-medium">
+                                    {user.firstName && user.lastName
+                                      ? `${user.firstName} ${user.lastName}`
+                                      : "User " + user.id.substring(0, 6)}
+                                  </div>
+                                  {user.isSuperAdmin && (
+                                    <Badge variant="default" className="mt-1 text-xs">Super Admin</Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 md:px-0">
+                              <div className="text-sm break-all">{user.email}</div>
+                            </td>
+                            <td className="py-3 px-4 md:px-0">
+                              <div className="flex flex-wrap gap-1">
+                                {user.clerkRoles.length > 0 ? (
+                                  user.clerkRoles.map((role) => (
+                                    <Badge key={role} variant="outline" className="text-xs">
+                                      {role}
+                                    </Badge>
+                                  ))
+                                ) : (
+                                <Badge variant="secondary" className="text-xs">None</Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 md:px-0">
+                            <div className="flex flex-wrap gap-1">
+                              {user.supabaseRoles.length > 0 ? (
+                                user.supabaseRoles.map((role) => (
+                                  <Badge key={role} variant="outline" className="text-xs">
+                                    {role}
+                                  </Badge>
+                                ))
+                              ) : (
+                                <Badge variant="secondary" className="text-xs">None</Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 md:px-0">
+                            <div className="flex items-center gap-2">
+                              {rolesInSync ? (
+                                <Badge variant="default" className="text-xs">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Synced
+                                </Badge>
+                              ) : (
+                                <Badge variant="destructive" className="text-xs">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Out of Sync
+                                </Badge>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 md:px-0">
+                            <div className="flex gap-2">
+                              {isSuperAdmin && (
+                                <Button
+                                  variant={hasAdminRoleInClerk ? "destructive" : "default"}
+                                  size="sm"
+                                  onClick={() => toggleAdminRole(user.id, hasAdminRoleInClerk)}
+                                  disabled={actionInProgress === user.id}
+                                  className="flex items-center gap-1 touch-manipulation"
+                                >
+                                  {actionInProgress === user.id ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : hasAdminRoleInClerk ? (
+                                    <UserX className="h-4 w-4" />
+                                  ) : (
+                                    <UserCheck className="h-4 w-4" />
+                                  )}
+                                  <span className="hidden sm:inline">
+                                    {hasAdminRoleInClerk ? "Remove Admin" : "Make Admin"}
+                                  </span>
+                                  <span className="sm:hidden">
+                                    {hasAdminRoleInClerk ? "Remove" : "Add"}
+                                  </span>
+                                </Button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+              {/* Instructions */}
+              <div className="mt-6 space-y-4">
+                <div className="p-4 bg-gray-900 rounded-lg">
+                  <h3 className="text-lg font-semibold mb-2">Role Management Instructions</h3>
+                  <div className="space-y-2 text-gray-400 text-sm">
+                    <p><strong>Super Admin Setup:</strong> Set <code>superAdmin: true</code> in user's public metadata via Clerk Dashboard.</p>
+                    <p><strong>Admin Roles:</strong> Only super admins can assign/remove admin roles to other users.</p>
+                    <p><strong>Role Sync:</strong> Roles are automatically synced between Clerk and Supabase on admin page visits.</p>
+                    <p><strong>BTS Access:</strong> Users need admin role in Supabase database to save BTS images during project creation.</p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-gray-900 rounded-lg">
+                  <h3 className="text-lg font-semibold mb-2">Troubleshooting</h3>
+                  <div className="space-y-2 text-gray-400 text-sm">
+                    <p><strong>BTS Permission Denied:</strong> Click "Sync My Roles" to ensure Supabase has admin role.</p>
+                    <p><strong>Out of Sync Roles:</strong> Use the sync button to align Clerk and Supabase roles.</p>
+                    <p><strong>Can't Assign Admin:</strong> Only users with super admin status can modify admin roles.</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

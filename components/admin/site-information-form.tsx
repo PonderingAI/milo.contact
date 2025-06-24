@@ -335,15 +335,16 @@ function MediaUploader({
           </p>
         </div>
       ) : mediaType === "image" ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="text-sm text-gray-400 mb-2">Or upload a new file:</p>
-          <div className="flex items-center gap-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <Input
               id={`image-${settingKey}`}
               type="file"
               accept="image/*"
               onChange={handleFileChange}
               disabled={uploading}
+              className="h-12 touch-manipulation"
             />
             {uploading && <Loader2 className="h-5 w-5 animate-spin text-gray-400" />}
           </div>
@@ -358,17 +359,18 @@ function MediaUploader({
           )}
         </div>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <p className="text-sm text-gray-400 mb-2">Or enter a video URL:</p>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
             <Input
               id={`video-${settingKey}`}
               type="text"
               placeholder="https://vimeo.com/123456789 or YouTube/LinkedIn URL"
               value={videoUrl}
               onChange={handleVideoUrlChange}
+              className="flex-1 h-12 touch-manipulation"
             />
-            <Button type="button" onClick={saveVideoUrl} size="sm">
+            <Button type="button" onClick={saveVideoUrl} size="sm" className="w-full sm:w-auto h-12 touch-manipulation">
               <Film className="h-4 w-4 mr-2" />
               Save
             </Button>
@@ -378,7 +380,7 @@ function MediaUploader({
           {videoUrl && (
             <div className="mt-4">
               <p className="text-xs text-gray-400 mb-1">Current Video URL:</p>
-              <div className="bg-gray-900/50 rounded-lg p-2">
+              <div className="bg-gray-900/50 rounded-lg p-3">
                 <p className="text-sm break-all">{videoUrl}</p>
               </div>
             </div>
@@ -598,13 +600,13 @@ export default function SiteInformationForm() {
     <div className="space-y-6">
       <form onSubmit={handleSubmit}>
         <Tabs defaultValue="hero">
-          <TabsList className="mb-4">
-            <TabsTrigger value="hero">Hero</TabsTrigger>
-            <TabsTrigger value="projects">Projects</TabsTrigger>
-            <TabsTrigger value="about">About</TabsTrigger>
-            <TabsTrigger value="services">Services</TabsTrigger>
-            <TabsTrigger value="contact">Contact</TabsTrigger>
-            <TabsTrigger value="footer">Footer</TabsTrigger>
+          <TabsList className="mb-4 grid grid-cols-3 md:grid-cols-6 w-full">
+            <TabsTrigger value="hero" className="text-xs md:text-sm">Hero</TabsTrigger>
+            <TabsTrigger value="projects" className="text-xs md:text-sm">Projects</TabsTrigger>
+            <TabsTrigger value="about" className="text-xs md:text-sm">About</TabsTrigger>
+            <TabsTrigger value="services" className="text-xs md:text-sm">Services</TabsTrigger>
+            <TabsTrigger value="contact" className="text-xs md:text-sm">Contact</TabsTrigger>
+            <TabsTrigger value="footer" className="text-xs md:text-sm">Footer</TabsTrigger>
           </TabsList>
 
           <TabsContent value="hero">
@@ -613,18 +615,25 @@ export default function SiteInformationForm() {
                 <CardTitle>Hero Section</CardTitle>
                 <CardDescription>Update the main heading and background image of your site.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="hero_heading">Heading</Label>
-                  <Input id="hero_heading" name="hero_heading" value={settings.hero_heading} onChange={handleChange} />
+              <CardContent className="space-y-6">
+                <div className="space-y-3">
+                  <Label htmlFor="hero_heading" className="text-sm font-medium">Heading</Label>
+                  <Input 
+                    id="hero_heading" 
+                    name="hero_heading" 
+                    value={settings.hero_heading} 
+                    onChange={handleChange} 
+                    className="h-12 touch-manipulation"
+                  />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="hero_subheading">Subheading</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="hero_subheading" className="text-sm font-medium">Subheading</Label>
                   <Input
                     id="hero_subheading"
                     name="hero_subheading"
                     value={settings.hero_subheading}
                     onChange={handleChange}
+                    className="h-12 touch-manipulation"
                   />
                 </div>
                 <MediaUploader
@@ -637,9 +646,9 @@ export default function SiteInformationForm() {
                   bgType={settings.hero_bg_type}
                   onBgTypeChange={handleBgTypeChange}
                 />
-                <div className="space-y-2 mt-4">
-                  <Label htmlFor="background_color">Background Color</Label>
-                  <div className="flex items-center gap-2">
+                <div className="space-y-3 mt-6">
+                  <Label htmlFor="background_color" className="text-sm font-medium">Background Color</Label>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
                     <Input
                       id="background_color"
                       name="background_color"
@@ -650,7 +659,7 @@ export default function SiteInformationForm() {
                           : `#${settings.background_color}`
                       }
                       onChange={handleChange}
-                      className="w-16 h-10 p-1"
+                      className="w-16 h-12 p-1 touch-manipulation"
                     />
                     <Input
                       id="background_color_text"
@@ -665,7 +674,7 @@ export default function SiteInformationForm() {
                           background_color: value.startsWith("#") ? value : `#${value}`,
                         }))
                       }}
-                      className="flex-1"
+                      className="flex-1 h-12 touch-manipulation"
                       placeholder="#000000"
                     />
                   </div>
@@ -683,14 +692,14 @@ export default function SiteInformationForm() {
                 <CardTitle>Projects Section</CardTitle>
                 <CardDescription>Configure how projects are displayed on your site.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="projects_per_page">Projects Per Page</Label>
+              <CardContent className="space-y-6">
+                <div className="space-y-3">
+                  <Label htmlFor="projects_per_page" className="text-sm font-medium">Projects Per Page</Label>
                   <Select
                     value={settings.projects_per_page}
                     onValueChange={(value) => handleSelectChange("projects_per_page", value)}
                   >
-                    <SelectTrigger className="w-full">
+                    <SelectTrigger className="w-full h-12 touch-manipulation">
                       <SelectValue placeholder="Select number of projects" />
                     </SelectTrigger>
                     <SelectContent>
@@ -715,44 +724,48 @@ export default function SiteInformationForm() {
                 <CardTitle>About Section</CardTitle>
                 <CardDescription>Update your profile information and image.</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="about_heading">Heading</Label>
+              <CardContent className="space-y-6">
+                <div className="space-y-3">
+                  <Label htmlFor="about_heading" className="text-sm font-medium">Heading</Label>
                   <Input
                     id="about_heading"
                     name="about_heading"
                     value={settings.about_heading}
                     onChange={handleChange}
+                    className="h-12 touch-manipulation"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="about_text1">Paragraph 1</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="about_text1" className="text-sm font-medium">Paragraph 1</Label>
                   <Textarea
                     id="about_text1"
                     name="about_text1"
                     value={settings.about_text1}
                     onChange={handleChange}
                     rows={3}
+                    className="min-h-[80px] touch-manipulation"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="about_text2">Paragraph 2</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="about_text2" className="text-sm font-medium">Paragraph 2</Label>
                   <Textarea
                     id="about_text2"
                     name="about_text2"
                     value={settings.about_text2}
                     onChange={handleChange}
                     rows={3}
+                    className="min-h-[80px] touch-manipulation"
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="about_text3">Paragraph 3</Label>
+                <div className="space-y-3">
+                  <Label htmlFor="about_text3" className="text-sm font-medium">Paragraph 3</Label>
                   <Textarea
                     id="about_text3"
                     name="about_text3"
                     value={settings.about_text3}
                     onChange={handleChange}
                     rows={3}
+                    className="min-h-[80px] touch-manipulation"
                   />
                 </div>
                 <MediaUploader

@@ -96,10 +96,25 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
         if (response.ok) {
           const data = await response.json()
-          if (data.columns && Array.isArray(data.columns)) {
+          if (data.exists && data.columns && Array.isArray(data.columns)) {
             const columnNames = data.columns.map((col: any) => col.column_name)
             setSchemaColumns(columnNames)
             console.log("Available columns in projects table:", columnNames)
+          } else if (!data.exists) {
+            console.log("Projects table does not exist")
+            // Set some default columns as a fallback
+            setSchemaColumns([
+              "id",
+              "title",
+              "description",
+              "image",
+              "category",
+              "role",
+              "project_date",
+              "is_public",
+              "created_at",
+              "updated_at",
+            ])
           }
         } else {
           // Fallback: direct query to get columns
@@ -147,20 +162,27 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         // Fetch categories
         const { data: categoryData } = await supabase.from("projects").select("category")
 
-        if (categoryData) {
-          const categories = categoryData.map((item) => item.category).filter(Boolean)
-          setCategoryOptions(categories)
+        if (categoryData && Array.isArray(categoryData)) {
+          const categories = categoryData
+            .map((item) => item?.category)
+            .filter((category) => category && typeof category === 'string')
+          setCategoryOptions([...new Set(categories)])
         }
 
         // Fetch roles
         const { data: roleData } = await supabase.from("projects").select("role")
 
-        if (roleData) {
+        if (roleData && Array.isArray(roleData)) {
           // Split comma-separated roles and flatten the array
           const roles = roleData
-            .flatMap((item) => item.role?.split(",").map((r: string) => r.trim()) || [])
-            .filter(Boolean)
-          setRoleOptions(roles)
+            .flatMap((item) => {
+              if (item?.role && typeof item.role === 'string') {
+                return item.role.split(",").map((r: string) => r.trim())
+              }
+              return []
+            })
+            .filter((role) => role && typeof role === 'string')
+          setRoleOptions([...new Set(roles)])
         }
       } catch (err) {
         console.error("Error fetching existing values:", err)

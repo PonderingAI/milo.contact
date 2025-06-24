@@ -1154,15 +1154,26 @@ export default function SecurityClientPage() {
   }, [hasMounted, memoizedCheckForScheduledUpdates])
 
   return (
-    <div className="container mx-auto p-6 bg-gray-950 text-gray-100">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Security Center</h1>
-        <div className="flex space-x-2">
-          <Button onClick={fetchDependencies} variant="outline" size="sm" className="border-gray-700">
+    <div className="container mx-auto p-4 md:p-6 bg-gray-950 text-gray-100">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+        <h1 className="text-2xl md:text-3xl font-bold">Security Center</h1>
+        <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 w-full sm:w-auto">
+          <Button 
+            onClick={fetchDependencies} 
+            variant="outline" 
+            size="sm" 
+            className="border-gray-700 w-full sm:w-auto touch-manipulation"
+          >
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Button onClick={applyChanges} variant="destructive" size="sm" disabled={applyingChanges}>
+          <Button 
+            onClick={applyChanges} 
+            variant="destructive" 
+            size="sm" 
+            disabled={applyingChanges}
+            className="w-full sm:w-auto touch-manipulation"
+          >
             {applyingChanges ? (
               <>
                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
@@ -1282,13 +1293,13 @@ export default function SecurityClientPage() {
       </AnimatePresence>
 
       <Tabs defaultValue="overview" value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6 bg-gray-900 border-gray-800">
-          <TabsTrigger value="overview">Dashboard</TabsTrigger>
-          <TabsTrigger value="dependencies">Dependencies</TabsTrigger>
+        <TabsList className="mb-6 bg-gray-900 border-gray-800 grid grid-cols-2 w-full">
+          <TabsTrigger value="overview" className="text-sm">Dashboard</TabsTrigger>
+          <TabsTrigger value="dependencies" className="text-sm">Dependencies</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview">
-          <div className="mb-4 flex justify-between items-center">
+          <div className="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
             <h2 className="text-xl font-semibold">Security Dashboard</h2>
             <WidgetSelector availableWidgets={availableWidgetsForAdd} onAddWidget={handleAddWidget} />
           </div>
