@@ -19,6 +19,7 @@ import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import UnifiedMediaInput from "@/components/admin/unified-media-input"
+import ProjectEditorErrorBoundary from "@/components/admin/project-editor-error-boundary"
 
 interface ProjectEditorProps {
   project?: {
@@ -37,7 +38,7 @@ interface ProjectEditorProps {
   mode: "create" | "edit"
 }
 
-export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
+function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [formData, setFormData] = useState({
     title: project?.title || "",
     category: project?.category || "",
@@ -91,19 +92,31 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     async function fetchSchema() {
       try {
         setIsLoadingSchema(true)
+        console.log("fetchSchema: Starting schema detection")
+        
         // First try to get the schema from our API
         const response = await fetch("/api/check-projects-schema")
 
         if (response.ok) {
           const data = await response.json()
+          console.log("fetchSchema: API response received:", data)
+          
           if (data.exists && data.columns && Array.isArray(data.columns)) {
             const columnNames = data.columns.map((col: any) => col.column_name)
             setSchemaColumns(columnNames)
-            console.log("Available columns in projects table:", columnNames)
+            console.log("fetchSchema: Successfully loaded schema columns:", columnNames)
+            
+            // Log any warnings or method used
+            if (data.method) {
+              console.log(`fetchSchema: Schema loaded using method: ${data.method}`)
+            }
+            if (data.warning) {
+              console.warn(`fetchSchema: Schema warning: ${data.warning}`)
+            }
           } else if (!data.exists) {
-            console.log("Projects table does not exist")
-            // Set some default columns as a fallback
-            setSchemaColumns([
+            console.warn("fetchSchema: API reports projects table does not exist, using fallback")
+            // Use fallback columns even if API says table doesn't exist
+            const fallbackColumns = [
               "id",
               "title",
               "description",
@@ -112,24 +125,49 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
               "role",
               "project_date",
               "is_public",
+              "thumbnail_url",
               "created_at",
               "updated_at",
-            ])
+            ]
+            setSchemaColumns(fallbackColumns)
+            console.log("fetchSchema: Using fallback schema columns:", fallbackColumns)
           }
         } else {
+          console.warn(`fetchSchema: API request failed with status ${response.status}, using direct fallback`)
+          
           // Fallback: direct query to get columns
-          const { data, error } = await supabase.from("projects").select("*").limit(1)
+          try {
+            const { data, error } = await supabase.from("projects").select("*").limit(1)
 
-          if (!error && data) {
-            // Extract column names from the first row
-            const sampleRow = data[0] || {}
-            const columnNames = Object.keys(sampleRow)
-            setSchemaColumns(columnNames)
-            console.log("Available columns in projects table (fallback):", columnNames)
-          } else {
-            console.error("Error fetching schema:", error)
-            // Set some default columns as a last resort
-            setSchemaColumns([
+            if (!error && data) {
+              // Extract column names from the first row
+              const sampleRow = data[0] || {}
+              const columnNames = Object.keys(sampleRow)
+              setSchemaColumns(columnNames)
+              console.log("fetchSchema: Direct fallback successful, columns:", columnNames)
+            } else {
+              console.warn("fetchSchema: Direct fallback failed, using hardcoded defaults")
+              // Set default columns as a last resort
+              const defaultColumns = [
+                "id",
+                "title",
+                "description",
+                "image",
+                "category",
+                "role",
+                "project_date",
+                "is_public",
+                "thumbnail_url",
+                "created_at",
+                "updated_at",
+              ]
+              setSchemaColumns(defaultColumns)
+              console.log("fetchSchema: Using hardcoded default columns:", defaultColumns)
+            }
+          } catch (fallbackError) {
+            console.error("fetchSchema: Direct fallback failed with exception:", fallbackError)
+            // Use hardcoded defaults
+            const defaultColumns = [
               "id",
               "title",
               "description",
@@ -138,15 +176,35 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
               "role",
               "project_date",
               "is_public",
+              "thumbnail_url",
               "created_at",
               "updated_at",
-            ])
+            ]
+            setSchemaColumns(defaultColumns)
+            console.log("fetchSchema: Exception fallback, using defaults:", defaultColumns)
           }
         }
       } catch (err) {
-        console.error("Error fetching schema:", err)
+        console.error("fetchSchema: Unexpected error during schema detection:", err)
+        // Always provide a working set of columns
+        const defaultColumns = [
+          "id",
+          "title",
+          "description",
+          "image",
+          "category",
+          "role",
+          "project_date",
+          "is_public",
+          "thumbnail_url",
+          "created_at",
+          "updated_at",
+        ]
+        setSchemaColumns(defaultColumns)
+        console.log("fetchSchema: Error fallback, using defaults:", defaultColumns)
       } finally {
         setIsLoadingSchema(false)
+        console.log("fetchSchema: Schema detection completed")
       }
     }
 
@@ -733,6 +791,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     }).id
 
     try {
+      console.log("addMainVideoUrl: Starting video processing for URL:", url)
+      
       // Use the new API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
@@ -742,17 +802,28 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url }),
       })
 
+      console.log("addMainVideoUrl: API response status:", response.status)
+
       if (!response.ok) {
         const errorData = await response.json()
+        console.error("addMainVideoUrl: API error response:", errorData)
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
-      console.log("Video processing result:", result)
+      console.log("addMainVideoUrl: Video processing result:", result)
 
-      // Handle duplicate case
+      // Validate the response structure
+      if (!result || typeof result !== 'object') {
+        console.error("addMainVideoUrl: Invalid response format:", result)
+        throw new Error("Invalid response from video processing API")
+      }
+
+      // Handle duplicate case with defensive programming
       if (result.duplicate) {
         console.log("addMainVideoUrl: Video already exists, adding to interface")
+        console.log("addMainVideoUrl: Duplicate result:", JSON.stringify(result, null, 2))
+        
         // Video already exists, add it to the interface but don't create a new database entry
         if (!mainVideos.includes(url)) {
           setMainVideos((prev) => [...prev, url])
@@ -760,47 +831,73 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           setFormData((prev) => ({ ...prev, thumbnail_url: url }))
         }
 
-        // Use existing video data if available - defensive programming
+        // Use existing video data if available - defensive programming with extensive validation
         const existingVideo = result.existingVideo
-        if (existingVideo && typeof existingVideo === 'object') {
+        console.log("addMainVideoUrl: Examining existingVideo:", typeof existingVideo, existingVideo)
+        
+        if (existingVideo && typeof existingVideo === 'object' && existingVideo !== null) {
           console.log("addMainVideoUrl: Using existing video data:", existingVideo)
           
+          // Safely extract properties with fallbacks
+          const thumbnailUrl = typeof existingVideo.thumbnail_url === 'string' ? existingVideo.thumbnail_url : null
+          const filename = typeof existingVideo.filename === 'string' ? existingVideo.filename : null
+          const metadata = existingVideo.metadata && typeof existingVideo.metadata === 'object' ? existingVideo.metadata : {}
+          
           // If we have a thumbnail and no image is set, use the thumbnail
-          if (existingVideo.thumbnail_url && !formData.image && !mainImages.includes(existingVideo.thumbnail_url)) {
-            setFormData((prev) => ({ ...prev, image: existingVideo.thumbnail_url }))
-            setVideoThumbnail(existingVideo.thumbnail_url)
-            setMainImages((prev) => [...prev, existingVideo.thumbnail_url])
+          if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+            console.log("addMainVideoUrl: Setting thumbnail as main image:", thumbnailUrl)
+            setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
+            setVideoThumbnail(thumbnailUrl)
+            setMainImages((prev) => [...prev, thumbnailUrl])
           }
 
           // If project title is empty, use video title
-          if (!formData.title && existingVideo.filename) {
-            setFormData((prev) => ({ ...prev, title: existingVideo.filename }))
+          if (!formData.title && filename) {
+            console.log("addMainVideoUrl: Setting video filename as title:", filename)
+            setFormData((prev) => ({ ...prev, title: filename }))
           }
 
           // If project date is empty and we have metadata with upload date, use it
-          if (!formData.project_date && existingVideo.metadata?.uploadDate) {
+          if (!formData.project_date && metadata.uploadDate) {
             try {
-              const date = new Date(existingVideo.metadata.uploadDate)
+              console.log("addMainVideoUrl: Parsing upload date:", metadata.uploadDate)
+              const date = new Date(metadata.uploadDate)
               if (!isNaN(date.getTime())) {
-                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+                const formattedDate = formatDateForInput(date)
+                console.log("addMainVideoUrl: Setting project date:", formattedDate)
+                setFormData((prev) => ({ ...prev, project_date: formattedDate }))
+              } else {
+                console.warn("addMainVideoUrl: Invalid date parsed from metadata:", metadata.uploadDate)
               }
             } catch (dateError) {
               console.warn("addMainVideoUrl: Error parsing upload date:", dateError)
             }
           }
         } else {
-          console.warn("addMainVideoUrl: Existing video data is not in expected format:", existingVideo)
+          console.warn("addMainVideoUrl: Existing video data is not in expected format:", {
+            type: typeof existingVideo,
+            value: existingVideo,
+            isNull: existingVideo === null,
+            isArray: Array.isArray(existingVideo)
+          })
         }
 
+        // Display success message
+        const message = (result.message && typeof result.message === 'string') 
+          ? result.message 
+          : "Video was already in the media library and has been added to this project"
+        
         toast({
           id: toastId,
           title: "Video already exists",
-          description: result.message || "Video was already in the media library and has been added to this project",
+          description: message,
         })
         return
       }
 
-      // Handle new video case
+      // Handle new video case - also with validation
+      console.log("addMainVideoUrl: Processing new video")
+      
       // Add to mainVideos if not already in the list
       if (!mainVideos.includes(url)) {
         setMainVideos((prev) => [...prev, url])
@@ -808,22 +905,37 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         setFormData((prev) => ({ ...prev, thumbnail_url: url }))
       }
 
+      // Safely extract properties from result
+      const thumbnailUrl = typeof result.thumbnailUrl === 'string' ? result.thumbnailUrl : null
+      const title = typeof result.title === 'string' ? result.title : null
+      const uploadDate = typeof result.uploadDate === 'string' ? result.uploadDate : null
+
       // If we have a thumbnail and no image is set, use the thumbnail
-      if (result.thumbnailUrl && !formData.image && !mainImages.includes(result.thumbnailUrl)) {
-        setFormData((prev) => ({ ...prev, image: result.thumbnailUrl }))
-        setVideoThumbnail(result.thumbnailUrl)
-        setMainImages((prev) => [...prev, result.thumbnailUrl])
+      if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+        console.log("addMainVideoUrl: Setting new video thumbnail as main image:", thumbnailUrl)
+        setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
+        setVideoThumbnail(thumbnailUrl)
+        setMainImages((prev) => [...prev, thumbnailUrl])
       }
 
       // If project title is empty, use video title
-      if (!formData.title && result.title) {
-        setFormData((prev) => ({ ...prev, title: result.title }))
+      if (!formData.title && title) {
+        console.log("addMainVideoUrl: Setting new video title:", title)
+        setFormData((prev) => ({ ...prev, title }))
       }
 
       // If project date is empty and we have an upload date, use it
-      if (!formData.project_date && result.uploadDate) {
-        const date = new Date(result.uploadDate)
-        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+      if (!formData.project_date && uploadDate) {
+        try {
+          const date = new Date(uploadDate)
+          if (!isNaN(date.getTime())) {
+            const formattedDate = formatDateForInput(date)
+            console.log("addMainVideoUrl: Setting project date from new video:", formattedDate)
+            setFormData((prev) => ({ ...prev, project_date: formattedDate }))
+          }
+        } catch (dateError) {
+          console.warn("addMainVideoUrl: Error parsing new video upload date:", dateError)
+        }
       }
 
       toast({
@@ -832,7 +944,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         description: "Video has been added to the project and media library",
       })
     } catch (error) {
-      console.error("Error processing video:", error)
+      console.error("addMainVideoUrl: Error processing video:", error)
       toast({
         id: toastId,
         title: "Error adding video",
@@ -853,6 +965,8 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     }).id
 
     try {
+      console.log("addBtsVideoUrl: Starting BTS video processing for URL:", url)
+      
       // Use the new API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
@@ -862,46 +976,84 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url, isBts: true }),
       })
 
+      console.log("addBtsVideoUrl: API response status:", response.status)
+
       if (!response.ok) {
         const errorData = await response.json()
+        console.error("addBtsVideoUrl: API error response:", errorData)
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
-      console.log("BTS video processing result:", result)
+      console.log("addBtsVideoUrl: BTS video processing result:", result)
 
-      // Handle duplicate case
+      // Validate the response structure
+      if (!result || typeof result !== 'object') {
+        console.error("addBtsVideoUrl: Invalid response format:", result)
+        throw new Error("Invalid response from video processing API")
+      }
+
+      // Handle duplicate case with defensive programming
       if (result.duplicate) {
         console.log("addBtsVideoUrl: Video already exists, adding to interface")
+        console.log("addBtsVideoUrl: Duplicate result:", JSON.stringify(result, null, 2))
+        
         // Video already exists, add it to the interface but don't create a new database entry
         if (!btsVideos.includes(url)) {
           setBtsVideos((prev) => [...prev, url])
         }
 
-        // Use existing video data if available - defensive programming
+        // Use existing video data if available - defensive programming with extensive validation
         const existingVideo = result.existingVideo
-        if (existingVideo && typeof existingVideo === 'object' && existingVideo.thumbnail_url && !btsImages.includes(existingVideo.thumbnail_url)) {
-          console.log("addBtsVideoUrl: Adding existing video thumbnail to BTS images")
-          setBtsImages((prev) => [...prev, existingVideo.thumbnail_url])
+        console.log("addBtsVideoUrl: Examining existingVideo:", typeof existingVideo, existingVideo)
+        
+        if (existingVideo && typeof existingVideo === 'object' && existingVideo !== null) {
+          console.log("addBtsVideoUrl: Using existing video data for BTS")
+          
+          // Safely extract thumbnail_url with validation
+          const thumbnailUrl = typeof existingVideo.thumbnail_url === 'string' ? existingVideo.thumbnail_url : null
+          
+          if (thumbnailUrl && !btsImages.includes(thumbnailUrl)) {
+            console.log("addBtsVideoUrl: Adding existing video thumbnail to BTS images:", thumbnailUrl)
+            setBtsImages((prev) => [...prev, thumbnailUrl])
+          }
+        } else {
+          console.warn("addBtsVideoUrl: Existing video data is not in expected format:", {
+            type: typeof existingVideo,
+            value: existingVideo,
+            isNull: existingVideo === null,
+            isArray: Array.isArray(existingVideo)
+          })
         }
 
+        // Display success message
+        const message = (result.message && typeof result.message === 'string') 
+          ? result.message 
+          : "Video was already in the media library and has been added to BTS"
+        
         toast({
           id: toastId,
           title: "BTS video already exists",
-          description: result.message || "Video was already in the media library and has been added to BTS",
+          description: message,
         })
         return
       }
 
-      // Handle new video case
+      // Handle new video case - also with validation
+      console.log("addBtsVideoUrl: Processing new BTS video")
+      
       // Add to BTS videos if not already in the list
       if (!btsVideos.includes(url)) {
         setBtsVideos((prev) => [...prev, url])
       }
 
+      // Safely extract properties from result
+      const thumbnailUrl = typeof result.thumbnailUrl === 'string' ? result.thumbnailUrl : null
+
       // Add thumbnail to BTS images if available and not already in the list
-      if (result.thumbnailUrl && !btsImages.includes(result.thumbnailUrl)) {
-        setBtsImages((prev) => [...prev, result.thumbnailUrl])
+      if (thumbnailUrl && !btsImages.includes(thumbnailUrl)) {
+        console.log("addBtsVideoUrl: Adding new video thumbnail to BTS images:", thumbnailUrl)
+        setBtsImages((prev) => [...prev, thumbnailUrl])
       }
 
       toast({
@@ -910,7 +1062,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         description: "Behind the scenes video has been added to the project",
       })
     } catch (error) {
-      console.error("Error processing BTS video:", error)
+      console.error("addBtsVideoUrl: Error processing BTS video:", error)
       toast({
         id: toastId,
         title: "Error adding BTS video",
@@ -1607,4 +1759,11 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   )
 }
 
-
+// Wrap the main component with error boundary
+export default function ProjectEditor(props: ProjectEditorProps) {
+  return (
+    <ProjectEditorErrorBoundary>
+      <ProjectEditorComponent {...props} />
+    </ProjectEditorErrorBoundary>
+  )
+}

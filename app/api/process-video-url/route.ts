@@ -33,18 +33,27 @@ export async function POST(request: NextRequest) {
     const duplicateCheck = await checkMediaDuplicate({ url: trimmedUrl })
 
     if (duplicateCheck.isDuplicate) {
-      // Duplicate found
-      console.log("process-video-url: Duplicate video found")
-      console.log("process-video-url: Existing item:", duplicateCheck.existingItem)
-      return NextResponse.json(
-        {
-          duplicate: true,
-          existingVideo: duplicateCheck.existingItem,
-          message: duplicateCheck.reason || `Video already exists as "${duplicateCheck.existingItem?.filename || 'Unknown'}"`,
-          matchType: duplicateCheck.matchType,
-        },
-        { status: 200 },
-      )
+      // Duplicate found - add extensive logging and safe data handling
+      console.log("process-video-url: Duplicate video detected")
+      console.log("process-video-url: Duplicate check result:", JSON.stringify(duplicateCheck, null, 2))
+      
+      // Ensure existingItem is safely handled
+      const existingItem = duplicateCheck.existingItem
+      const safeExistingItem = (existingItem && typeof existingItem === 'object') ? existingItem : null
+      
+      console.log("process-video-url: Safe existing item:", safeExistingItem)
+      
+      // Create a safe response object
+      const safeResponse = {
+        duplicate: true,
+        existingVideo: safeExistingItem,
+        message: duplicateCheck.reason || `Video already exists${safeExistingItem?.filename ? ` as "${safeExistingItem.filename}"` : ''}`,
+        matchType: duplicateCheck.matchType || 'unknown',
+      }
+      
+      console.log("process-video-url: Returning safe duplicate response:", JSON.stringify(safeResponse, null, 2))
+      
+      return NextResponse.json(safeResponse, { status: 200 })
     }
 
     console.log("process-video-url: No duplicate found, proceeding with new video processing")
