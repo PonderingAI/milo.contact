@@ -1532,17 +1532,4 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   )
 }
 
-async function fetchYouTubeTitle(videoId: string): Promise<string | null> {
-  try {
-    const response = await fetch(`/api/youtube-title?videoId=${videoId}`)
-    if (!response.ok) {
-      console.error("Failed to fetch YouTube title:", response.status, response.statusText)
-      return null
-    }
-    const data = await response.json()
-    return data.title || null
-  } catch (error) {
-    console.error("Error fetching YouTube title:", error)
-    return null
-  }
-}
+

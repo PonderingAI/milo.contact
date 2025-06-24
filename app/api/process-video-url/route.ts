@@ -64,13 +64,50 @@ export async function POST(request: NextRequest) {
     } else if (videoInfo.platform === "youtube") {
       thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
 
-      // Fetch the actual YouTube title
-      try {
-        const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
-        videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
-      } catch (error) {
-        console.error("Error fetching YouTube title:", error)
-        videoTitle = `YouTube Video: ${videoInfo.id}`
+      // Use YouTube Data API if available to get both title and upload date
+      const apiKey = process.env.YOUTUBE_API_KEY
+      if (apiKey) {
+        try {
+          const response = await fetch(
+            `https://www.googleapis.com/youtube/v3/videos?id=${videoInfo.id}&part=snippet&key=${apiKey}`
+          )
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.items && data.items.length > 0) {
+              const snippet = data.items[0].snippet
+              videoTitle = snippet.title || `YouTube Video: ${videoInfo.id}`
+              uploadDate = snippet.publishedAt ? new Date(snippet.publishedAt).toISOString() : null
+            } else {
+              // Fall back to oEmbed API for title only
+              const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
+              videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
+            }
+          } else {
+            // Fall back to oEmbed API for title only
+            const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
+            videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
+          }
+        } catch (error) {
+          console.error("Error fetching YouTube data from API:", error)
+          // Fall back to oEmbed API for title only
+          try {
+            const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
+            videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
+          } catch (oembedError) {
+            console.error("Error fetching YouTube title from oEmbed:", oembedError)
+            videoTitle = `YouTube Video: ${videoInfo.id}`
+          }
+        }
+      } else {
+        // No API key available, use oEmbed API for title only
+        try {
+          const youtubeTitle = await fetchYouTubeTitle(videoInfo.id)
+          videoTitle = youtubeTitle || `YouTube Video: ${videoInfo.id}`
+        } catch (error) {
+          console.error("Error fetching YouTube title:", error)
+          videoTitle = `YouTube Video: ${videoInfo.id}`
+        }
       }
     } else if (videoInfo.platform === "linkedin") {
       thumbnailUrl = "/generic-icon.png"

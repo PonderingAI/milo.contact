@@ -122,10 +122,25 @@ export async function extractVideoDate(url: string): Promise<Date | null> {
     if (!videoInfo) return null
 
     if (videoInfo.platform === "youtube") {
-      // For YouTube, we would need to use the YouTube Data API which requires an API key
-      // For now, we return a specific message indicating this limitation
-      console.log("YouTube date extraction requires YouTube Data API v3 with API key")
-      return null
+      const apiKey = process.env.YOUTUBE_API_KEY
+      if (!apiKey) {
+        console.warn("YouTube API key not configured")
+        return null
+      }
+      
+      const response = await fetch(
+        `https://www.googleapis.com/youtube/v3/videos?id=${videoInfo.id}&part=snippet&key=${apiKey}`
+      )
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (data.items && data.items.length > 0) {
+          const publishedAt = data.items[0].snippet.publishedAt
+          if (publishedAt) {
+            return new Date(publishedAt)
+          }
+        }
+      }
     } else if (videoInfo.platform === "vimeo") {
       // Use Vimeo API v2 to get upload date
       const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
