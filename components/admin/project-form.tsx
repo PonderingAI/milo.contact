@@ -352,10 +352,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
       const processVideoUrl = async (url: string) => {
         setIsProcessingVideo(true)
-        const toastId = toast({
-          title: "Processing video",
-          description: "Fetching video information...",
-        }).id
+        let toastId: string
+        try {
+          const toastResult = toast({
+            title: "Processing video",
+            description: "Fetching video information...",
+          })
+          toastId = toastResult?.id || "fallback-id"
+        } catch (toastError) {
+          console.error("Error creating toast:", toastError)
+          toastId = "fallback-id"
+        }
 
         try {
           // Use the new API route to process the video URL
@@ -575,10 +582,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     if (!url.trim()) return
 
     setIsProcessingVideo(true)
-    const toastId = toast({
-      title: "Processing video",
-      description: "Fetching video information...",
-    }).id
+    let toastId: string
+    try {
+      const toastResult = toast({
+        title: "Processing video",
+        description: "Fetching video information...",
+      })
+      toastId = toastResult?.id || "fallback-id"
+    } catch (toastError) {
+      console.error("Error creating toast:", toastError)
+      toastId = "fallback-id"
+    }
 
     try {
       // Use the new API route to process the video URL
@@ -644,10 +658,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const addBtsVideoUrl = async (url: string) => {
     if (!url.trim()) return
 
-    const toastId = toast({
-      title: "Processing BTS video",
-      description: "Fetching video information...",
-    }).id
+    let toastId: string
+    try {
+      const toastResult = toast({
+        title: "Processing BTS video",
+        description: "Fetching video information...",
+      })
+      toastId = toastResult?.id || "fallback-id"
+    } catch (toastError) {
+      console.error("Error creating toast:", toastError)
+      toastId = "fallback-id"
+    }
 
     try {
       // Use the new API route to process the video URL
@@ -881,10 +902,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
           try {
             setIsSubmitting(true) // Keep the submitting state active
-            const toastId = toast({
-              title: "Saving BTS media",
-              description: "Uploading behind-the-scenes media...",
-            }).id
+            let toastId: string
+            try {
+              const toastResult = toast({
+                title: "Saving BTS media",
+                description: "Uploading behind-the-scenes media...",
+              })
+              toastId = toastResult?.id || "fallback-id"
+            } catch (toastError) {
+              console.error("Error creating toast:", toastError)
+              toastId = "fallback-id"
+            }
 
             const btsResponse = await fetch("/api/projects/bts-images", {
               method: "POST",
@@ -974,10 +1002,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         if (project?.id) {
           try {
             setIsSubmitting(true) // Keep the submitting state active
-            const toastId = toast({
-              title: "Updating BTS media",
-              description: "Updating behind-the-scenes media...",
-            }).id
+            let toastId: string
+            try {
+              const toastResult = toast({
+                title: "Updating BTS media",
+                description: "Updating behind-the-scenes media...",
+              })
+              toastId = toastResult?.id || "fallback-id"
+            } catch (toastError) {
+              console.error("Error creating toast:", toastError)
+              toastId = "fallback-id"
+            }
 
             const allBtsMedia = [...btsImages, ...btsVideos]
 

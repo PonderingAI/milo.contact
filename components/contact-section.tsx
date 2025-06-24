@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect, type FormEvent } from "react"
+import { useUser } from "@clerk/nextjs"
 import { Mail, Phone, MessageSquare, CheckCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -12,6 +13,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import ContactTableSetupGuide from "@/components/admin/contact-table-setup-guide"
 
 export default function ContactSection() {
+  const { user } = useUser()
   const [settings, setSettings] = useState({
     contact_heading: "Get in Touch",
     contact_text:
@@ -40,20 +42,11 @@ export default function ContactSection() {
         setIsLoading(true)
         const supabase = getSupabaseBrowserClient()
 
-        // Check if user is admin
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (user) {
-          const { data: roles } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", user.id)
-            .eq("role", "admin")
-            .single()
-
-          setIsAdmin(!!roles)
-        }
+        // Check if user is admin (using Clerk metadata)
+        const isUserAdmin = user?.publicMetadata?.superAdmin === true || 
+          (Array.isArray(user?.publicMetadata?.roles) && 
+           (user.publicMetadata.roles as string[]).includes('admin'))
+        setIsAdmin(isUserAdmin)
 
         const { data, error } = await supabase
           .from("site_settings")
@@ -89,7 +82,7 @@ export default function ContactSection() {
     }
 
     loadSettings()
-  }, [])
+  }, [user])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { id, value } = e.target

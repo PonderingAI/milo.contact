@@ -27,7 +27,7 @@ export default function DatabaseDebugger() {
   const [customTableName, setCustomTableName] = useState("")
 
   // Default tables to check
-  const defaultTables = ["projects", "bts_images", "media", "site_settings", "user_roles", "dependencies"]
+  const defaultTables = ["projects", "bts_images", "media", "site_settings", "dependencies"]
 
   useEffect(() => {
     // Initial check
