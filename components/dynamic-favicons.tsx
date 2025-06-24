@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import Head from "next/head"
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"
 
 /**
@@ -48,6 +47,9 @@ export default function DynamicFavicons() {
         })
 
         setFavicons(iconSettings)
+        
+        // Apply the favicons to the document
+        applyFaviconsToDocument(iconSettings)
       } catch (err) {
         console.error("Error in loadFavicons:", err)
         setError("An unexpected error occurred loading favicons")
@@ -59,76 +61,69 @@ export default function DynamicFavicons() {
     loadFavicons()
   }, [])
 
+  // Function to apply favicons to the document head
+  const applyFaviconsToDocument = (iconSettings: Record<string, string>) => {
+    const head = document.head
+
+    // Remove existing dynamic favicon links (but keep the defaults from layout)
+    const existingDynamicFavicons = head.querySelectorAll('link[data-dynamic-favicon]')
+    existingDynamicFavicons.forEach(link => link.remove())
+
+    // Add dynamic favicon links
+    const faviconMappings = [
+      { key: "favicon_ico", rel: "shortcut icon", href: iconSettings["favicon_ico"] },
+      { key: "favicon_16x16_png", rel: "icon", type: "image/png", sizes: "16x16", href: iconSettings["favicon_16x16_png"] },
+      { key: "favicon_32x32_png", rel: "icon", type: "image/png", sizes: "32x32", href: iconSettings["favicon_32x32_png"] },
+      { key: "favicon_96x96_png", rel: "icon", type: "image/png", sizes: "96x96", href: iconSettings["favicon_96x96_png"] },
+      { key: "apple_touch_icon_png", rel: "apple-touch-icon", href: iconSettings["apple_touch_icon_png"] },
+      { key: "apple_icon_57x57_png", rel: "apple-touch-icon", sizes: "57x57", href: iconSettings["apple_icon_57x57_png"] },
+      { key: "apple_icon_60x60_png", rel: "apple-touch-icon", sizes: "60x60", href: iconSettings["apple_icon_60x60_png"] },
+      { key: "apple_icon_72x72_png", rel: "apple-touch-icon", sizes: "72x72", href: iconSettings["apple_icon_72x72_png"] },
+      { key: "apple_icon_76x76_png", rel: "apple-touch-icon", sizes: "76x76", href: iconSettings["apple_icon_76x76_png"] },
+      { key: "apple_icon_114x114_png", rel: "apple-touch-icon", sizes: "114x114", href: iconSettings["apple_icon_114x114_png"] },
+      { key: "apple_icon_120x120_png", rel: "apple-touch-icon", sizes: "120x120", href: iconSettings["apple_icon_120x120_png"] },
+      { key: "apple_icon_144x144_png", rel: "apple-touch-icon", sizes: "144x144", href: iconSettings["apple_icon_144x144_png"] },
+      { key: "apple_icon_152x152_png", rel: "apple-touch-icon", sizes: "152x152", href: iconSettings["apple_icon_152x152_png"] },
+      { key: "apple_icon_180x180_png", rel: "apple-touch-icon", sizes: "180x180", href: iconSettings["apple_icon_180x180_png"] },
+      { key: "android_icon_192x192_png", rel: "icon", type: "image/png", sizes: "192x192", href: iconSettings["android_icon_192x192_png"] },
+    ]
+
+    faviconMappings.forEach(({ key, rel, type, sizes, href }) => {
+      if (href) {
+        const link = document.createElement('link')
+        link.rel = rel
+        if (type) link.type = type
+        if (sizes) link.setAttribute('sizes', sizes)
+        link.href = href
+        link.setAttribute('data-dynamic-favicon', 'true')
+        head.appendChild(link)
+      }
+    })
+
+    // Add Microsoft meta tags
+    const metaMappings = [
+      { name: "msapplication-TileImage", content: iconSettings["ms_icon_144x144_png"] },
+      { name: "msapplication-square70x70logo", content: iconSettings["ms_icon_70x70_png"] },
+      { name: "msapplication-square150x150logo", content: iconSettings["ms_icon_150x150_png"] },
+      { name: "msapplication-square310x310logo", content: iconSettings["ms_icon_310x310_png"] },
+    ]
+
+    metaMappings.forEach(({ name, content }) => {
+      if (content) {
+        const meta = document.createElement('meta')
+        meta.name = name
+        meta.content = content
+        meta.setAttribute('data-dynamic-favicon', 'true')
+        head.appendChild(meta)
+      }
+    })
+  }
+
   // If loading or error, return null (default favicons will be used)
-  if (loading || error || Object.keys(favicons).length === 0) {
+  if (loading || error) {
     return null
   }
 
-  return (
-    <Head>
-      {/* Basic favicons */}
-      {favicons["favicon_ico"] && <link rel="shortcut icon" href={favicons["favicon_ico"]} />}
-      {favicons["favicon_16x16_png"] && (
-        <link rel="icon" type="image/png" sizes="16x16" href={favicons["favicon_16x16_png"]} />
-      )}
-      {favicons["favicon_32x32_png"] && (
-        <link rel="icon" type="image/png" sizes="32x32" href={favicons["favicon_32x32_png"]} />
-      )}
-      {favicons["favicon_96x96_png"] && (
-        <link rel="icon" type="image/png" sizes="96x96" href={favicons["favicon_96x96_png"]} />
-      )}
-
-      {/* Apple touch icons */}
-      {/* Generic Apple Touch Icon (should come before specific sizes) */}
-      {favicons["apple_touch_icon_png"] && (
-        <link rel="apple-touch-icon" href={favicons["apple_touch_icon_png"]} />
-      )}
-      {favicons["apple_icon_57x57_png"] && (
-        <link rel="apple-touch-icon" sizes="57x57" href={favicons["apple_icon_57x57_png"]} />
-      )}
-      {favicons["apple_icon_60x60_png"] && (
-        <link rel="apple-touch-icon" sizes="60x60" href={favicons["apple_icon_60x60_png"]} />
-      )}
-      {favicons["apple_icon_72x72_png"] && (
-        <link rel="apple-touch-icon" sizes="72x72" href={favicons["apple_icon_72x72_png"]} />
-      )}
-      {favicons["apple_icon_76x76_png"] && (
-        <link rel="apple-touch-icon" sizes="76x76" href={favicons["apple_icon_76x76_png"]} />
-      )}
-      {favicons["apple_icon_114x114_png"] && (
-        <link rel="apple-touch-icon" sizes="114x114" href={favicons["apple_icon_114x114_png"]} />
-      )}
-      {favicons["apple_icon_120x120_png"] && (
-        <link rel="apple-touch-icon" sizes="120x120" href={favicons["apple_icon_120x120_png"]} />
-      )}
-      {favicons["apple_icon_144x144_png"] && (
-        <link rel="apple-touch-icon" sizes="144x144" href={favicons["apple_icon_144x144_png"]} />
-      )}
-      {favicons["apple_icon_152x152_png"] && (
-        <link rel="apple-touch-icon" sizes="152x152" href={favicons["apple_icon_152x152_png"]} />
-      )}
-      {favicons["apple_icon_180x180_png"] && (
-        <link rel="apple-touch-icon" sizes="180x180" href={favicons["apple_icon_180x180_png"]} />
-      )}
-
-      {/* Android icons */}
-      {favicons["android_icon_192x192_png"] && (
-        <link rel="icon" type="image/png" sizes="192x192" href={favicons["android_icon_192x192_png"]} />
-      )}
-
-      {/* Microsoft icons */}
-      {favicons["ms_icon_144x144_png"] && (
-        <meta name="msapplication-TileImage" content={favicons["ms_icon_144x144_png"]} />
-      )}
-      {favicons["ms_icon_70x70_png"] && (
-        <meta name="msapplication-square70x70logo" content={favicons["ms_icon_70x70_png"]} />
-      )}
-      {favicons["ms_icon_150x150_png"] && (
-        <meta name="msapplication-square150x150logo" content={favicons["ms_icon_150x150_png"]} />
-      )}
-      {favicons["ms_icon_310x310_png"] && (
-        <meta name="msapplication-square310x310logo" content={favicons["ms_icon_310x310_png"]} />
-      )}
-    </Head>
-  )
+  // Return null since we're applying favicons directly to the document
+  return null
 }

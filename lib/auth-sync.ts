@@ -19,12 +19,13 @@ export interface RoleData {
 }
 
 /**
- * Checks if a user has a specific role
+ * Custom hook to check if a user has a specific role
  * For use in client components - reads from Clerk metadata
  */
-export function hasRoleClient(role: UserRole): boolean {
+export function useHasRole(role: UserRole): boolean {
+  const { user } = useUser()
+  
   try {
-    const { user } = useUser()
     if (!user) return false
     
     // Get roles from Clerk metadata
@@ -40,11 +41,11 @@ export function hasRoleClient(role: UserRole): boolean {
 }
 
 /**
- * Checks if a user is an admin
+ * Custom hook to check if a user is an admin
  * For use in client components - reads from Clerk metadata
  */
-export function isAdminClient(): boolean {
-  return hasRoleClient('admin')
+export function useIsAdmin(): boolean {
+  return useHasRole('admin')
 }
 
 /**

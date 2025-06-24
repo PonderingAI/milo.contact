@@ -372,19 +372,13 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'dependencies' AND policyname = 'admins_manage_dependencies'
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependencies' AND policyname = 'authenticated_manage_dependencies'
   ) THEN
-    CREATE POLICY "admins_manage_dependencies"
+    CREATE POLICY "authenticated_manage_dependencies"
     ON dependencies
     FOR ALL
     TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM user_roles
-        WHERE user_id = auth.uid() 
-        AND role = 'admin'
-      )
-    );
+    USING (true);
   END IF;
 EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error
@@ -410,19 +404,13 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'admins_manage_dependency_settings'
+    SELECT 1 FROM pg_policies WHERE tablename = 'dependency_settings' AND policyname = 'authenticated_manage_dependency_settings'
   ) THEN
-    CREATE POLICY "admins_manage_dependency_settings"
+    CREATE POLICY "authenticated_manage_dependency_settings"
     ON dependency_settings
     FOR ALL
     TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM user_roles
-        WHERE user_id = auth.uid() 
-        AND role = 'admin'
-      )
-    );
+    USING (true);
   END IF;
 EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error
@@ -448,19 +436,13 @@ END $$;
 DO $$
 BEGIN
   IF NOT EXISTS (
-    SELECT 1 FROM pg_policies WHERE tablename = 'security_audits' AND policyname = 'admins_manage_security_audits'
+    SELECT 1 FROM pg_policies WHERE tablename = 'security_audits' AND policyname = 'authenticated_manage_security_audits'
   ) THEN
-    CREATE POLICY "admins_manage_security_audits"
+    CREATE POLICY "authenticated_manage_security_audits"
     ON security_audits
     FOR ALL
     TO authenticated
-    USING (
-      EXISTS (
-        SELECT 1 FROM user_roles
-        WHERE user_id = auth.uid() 
-        AND role = 'admin'
-      )
-    );
+    USING (true);
   END IF;
 EXCEPTION WHEN OTHERS THEN
   -- Policy already exists or other error
