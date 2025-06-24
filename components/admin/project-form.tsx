@@ -369,59 +369,59 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   // Helper function to extract date from file metadata
   async function extractDateFromMedia(url: string, type: "image" | "video"): Promise<Date | null> {
     try {
+      console.log("DEBUG: extractDateFromMedia called with:", { url, type })
+      
       if (type === "video") {
         const videoInfo = extractVideoInfo(url)
-        if (!videoInfo) return null
+        console.log("DEBUG: extractVideoInfo result:", videoInfo)
+        
+        if (!videoInfo) {
+          console.log("DEBUG: No video info extracted, returning null")
+          return null
+        }
 
         if (videoInfo.platform === "vimeo") {
+          console.log("DEBUG: Processing Vimeo video")
           // Get video metadata from Vimeo
           const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
           if (response.ok) {
             const videoData = await response.json()
             const video = videoData[0]
             if (video.upload_date) {
+              console.log("DEBUG: Found Vimeo upload date:", video.upload_date)
               return new Date(video.upload_date)
             }
           }
         } else if (videoInfo.platform === "youtube") {
-          // For YouTube, we can't get upload date without YouTube Data API v3
-          // However, we can try using the oEmbed API to check if video exists
-          try {
-            const response = await fetch(
-              `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoInfo.id}&format=json`
-            )
-            if (response.ok) {
-              // Video exists but oEmbed doesn't provide upload date
-              // Return null to indicate no date available
-              console.log("YouTube video exists but upload date not available via oEmbed API")
-              return null
-            } else {
-              console.warn(`YouTube oEmbed API failed: ${response.status} ${response.statusText}`)
-              return null
-            }
-          } catch (error) {
-            console.error("Error checking YouTube video:", error)
-            return null
-          }
+          // For YouTube, don't make client-side API calls that can cause CORS issues
+          // The server-side /api/process-video-url will handle this properly
+          console.log("DEBUG: YouTube video detected, skipping client-side date extraction")
+          console.log("DEBUG: Server-side processing will handle YouTube metadata extraction")
+          return null
         }
       } else if (type === "image") {
+        console.log("DEBUG: Processing image metadata")
         // For images in Supabase, check if we have metadata
         const { data } = await supabase.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
 
         if (data) {
+          console.log("DEBUG: Found image metadata:", data)
           // Try to get date from metadata
           if (data.metadata && data.metadata.dateTaken) {
+            console.log("DEBUG: Using metadata dateTaken:", data.metadata.dateTaken)
             return new Date(data.metadata.dateTaken)
           }
           // Fall back to created_at
           if (data.created_at) {
+            console.log("DEBUG: Using created_at:", data.created_at)
             return new Date(data.created_at)
           }
         }
       }
+      console.log("DEBUG: No date found, returning null")
       return null
     } catch (error) {
-      console.error("Error extracting date from media:", error)
+      console.error("DEBUG: Error in extractDateFromMedia:", error)
       return null
     }
   }
@@ -443,20 +443,24 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         mediaUrl.includes("youtu.be")
 
       const processVideoUrl = async (url: string) => {
+        console.log("DEBUG: processVideoUrl called with:", url)
         setIsProcessingVideo(true)
         let toastId: string
         try {
+          console.log("DEBUG: Creating processing toast")
           const toastResult = toast({
             title: "Processing video",
             description: "Fetching video information...",
           })
           toastId = toastResult?.id || "fallback-id"
+          console.log("DEBUG: Toast created with ID:", toastId)
         } catch (toastError) {
-          console.error("Error creating toast:", toastError)
+          console.error("DEBUG: Error creating toast:", toastError)
           toastId = "fallback-id"
         }
 
         try {
+          console.log("DEBUG: Making API call to /api/process-video-url")
           // Use the new API route to process the video URL
           const response = await fetch("/api/process-video-url", {
             method: "POST",
@@ -466,16 +470,20 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             body: JSON.stringify({ url }),
           })
 
+          console.log("DEBUG: API response status:", response.status)
+          
           if (!response.ok) {
             const errorData = await response.json()
+            console.error("DEBUG: API error response:", errorData)
             throw new Error(errorData.error || "Failed to process video URL")
           }
 
           const result = await response.json()
-          console.log("Video processing result:", result)
+          console.log("DEBUG: Video processing result:", result)
 
           // If we have a thumbnail and no image is set, use the thumbnail
           if (result.thumbnailUrl && !formData.image && !mainImages.includes(result.thumbnailUrl)) {
+            console.log("DEBUG: Setting thumbnail as main image:", result.thumbnailUrl)
             setFormData((prev) => ({ ...prev, image: result.thumbnailUrl }))
             setVideoThumbnail(result.thumbnailUrl)
             setMainImages((prev) => [...prev, result.thumbnailUrl])
@@ -483,22 +491,25 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
           // If project title is empty, use video title
           if (!formData.title && result.title) {
+            console.log("DEBUG: Setting video title as project title:", result.title)
             setFormData((prev) => ({ ...prev, title: result.title }))
           }
 
           // If project date is empty and we have an upload date, use it
           if (!formData.project_date && result.uploadDate) {
+            console.log("DEBUG: Setting video upload date as project date:", result.uploadDate)
             const date = new Date(result.uploadDate)
             setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
           }
 
+          console.log("DEBUG: Updating toast with success message")
           toast({
             id: toastId,
             title: "Video processed",
             description: "Video information has been processed",
           })
         } catch (error) {
-          console.error("Error processing video:", error)
+          console.error("DEBUG: Error processing video:", error)
           toast({
             id: toastId,
             title: "Error processing video",
@@ -506,22 +517,29 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             variant: "destructive",
           })
         } finally {
+          console.log("DEBUG: Setting isProcessingVideo to false")
           setIsProcessingVideo(false)
         }
       }
 
       if (isVideo) {
+        console.log("DEBUG: Processing video:", mediaUrl)
         if (!mainVideos.includes(mediaUrl)) {
           setMainVideos((prev) => [...prev, mediaUrl])
-          console.log("Added video to mainVideos:", mediaUrl)
+          console.log("DEBUG: Added video to mainVideos:", mediaUrl)
+        } else {
+          console.log("DEBUG: Video already in mainVideos:", mediaUrl)
         }
+        
         // Store video URL in thumbnail_url if that column exists
         if (schemaColumns.includes("thumbnail_url")) {
+          console.log("DEBUG: Setting thumbnailUrl and formData.thumbnail_url")
           setThumbnailUrl(mediaUrl)
           setFormData((prev) => ({ ...prev, thumbnail_url: mediaUrl }))
 
           // Process video to extract metadata
           try {
+            console.log("DEBUG: Checking if video exists in media library")
             // For videos from media library, try to get metadata from the library
             const supabase = getSupabaseBrowserClient()
             const { data: mediaData } = await supabase
@@ -532,15 +550,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
             if (mediaData) {
               // If we have media data, use it
-              console.log("Found video in media library:", mediaData)
+              console.log("DEBUG: Found video in media library:", mediaData)
 
               // Set title if empty
               if (!formData.title && mediaData.filename) {
+                console.log("DEBUG: Setting title from media library:", mediaData.filename)
                 setFormData((prev) => ({ ...prev, title: mediaData.filename }))
               }
 
               // Use thumbnail if available
               if (mediaData.thumbnail_url && !formData.image) {
+                console.log("DEBUG: Setting thumbnail from media library:", mediaData.thumbnail_url)
                 setFormData((prev) => ({ ...prev, image: mediaData.thumbnail_url }))
                 if (!mainImages.includes(mediaData.thumbnail_url)) {
                   setMainImages((prev) => [...prev, mediaData.thumbnail_url])
@@ -549,18 +569,23 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
               // Extract date if available
               if (mediaData.metadata?.uploadDate && !formData.project_date) {
+                console.log("DEBUG: Setting date from media library:", mediaData.metadata.uploadDate)
                 const date = new Date(mediaData.metadata.uploadDate)
                 setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
               }
             } else {
               // If not in media library, process as external video
+              console.log("DEBUG: Video not in media library, processing as external video")
               await processVideoUrl(mediaUrl)
             }
           } catch (error) {
-            console.error("Error processing video from media library:", error)
+            console.error("DEBUG: Error processing video from media library:", error)
             // Fall back to regular processing
+            console.log("DEBUG: Falling back to regular video processing")
             await processVideoUrl(mediaUrl)
           }
+        } else {
+          console.log("DEBUG: thumbnail_url column not available in schema")
         }
       } else {
         if (!mainImages.includes(mediaUrl)) {
@@ -671,8 +696,13 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   }
 
   const addMainVideoUrl = async (url: string) => {
-    if (!url.trim()) return
+    console.log("DEBUG: addMainVideoUrl called with:", url)
+    if (!url.trim()) {
+      console.log("DEBUG: Empty URL provided, returning")
+      return
+    }
 
+    console.log("DEBUG: Setting processing state and creating toast")
     setIsProcessingVideo(true)
     let toastId: string
     try {
@@ -681,12 +711,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         description: "Fetching video information...",
       })
       toastId = toastResult?.id || "fallback-id"
+      console.log("DEBUG: Toast created with ID:", toastId)
     } catch (toastError) {
-      console.error("Error creating toast:", toastError)
+      console.error("DEBUG: Error creating toast:", toastError)
       toastId = "fallback-id"
     }
 
     try {
+      console.log("DEBUG: Making API call to process video URL")
       // Use the new API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
@@ -696,13 +728,15 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         body: JSON.stringify({ url }),
       })
 
+      console.log("DEBUG: API response status:", response.status)
       if (!response.ok) {
         const errorData = await response.json()
+        console.error("DEBUG: API error response:", errorData)
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
-      console.log("Video processing result:", result)
+      console.log("DEBUG: Video processing result:", result)
 
       // Add to mainVideos if not already in the list
       if (!mainVideos.includes(url)) {
@@ -810,65 +844,89 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
   // Process video URL and extract thumbnail (simplified - just for display)
   useEffect(() => {
-    const processVideoUrl = async () => {
+    const processThumbnailDisplay = async () => {
       const url = formData.thumbnail_url?.trim()
-      if (!url || isProcessingVideo) return
+      console.log("DEBUG: processThumbnailDisplay called with:", url)
+      
+      if (!url) {
+        console.log("DEBUG: No URL provided, setting videoThumbnail to null")
+        setVideoThumbnail(null)
+        return
+      }
+      
+      if (isProcessingVideo) {
+        console.log("DEBUG: Already processing video, skipping thumbnail display processing")
+        return
+      }
 
       const videoInfo = extractVideoInfo(url)
+      console.log("DEBUG: extractVideoInfo result for thumbnail:", videoInfo)
+      
       if (!videoInfo) {
+        console.log("DEBUG: No video info, setting videoThumbnail to null")
         setVideoThumbnail(null)
         return
       }
 
+      console.log("DEBUG: Setting processing state for thumbnail display")
       setIsProcessingVideo(true)
 
       try {
         let thumbnailUrl = null
 
         if (videoInfo.platform === "vimeo") {
+          console.log("DEBUG: Fetching Vimeo thumbnail for display")
           // Get video thumbnail from Vimeo API
           const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
 
           if (!response.ok) {
+            console.warn("DEBUG: Failed to fetch Vimeo video info:", response.status, response.statusText)
             throw new Error("Failed to fetch Vimeo video info")
           }
 
           const videoData = await response.json()
           const video = videoData[0]
           thumbnailUrl = video.thumbnail_large
+          console.log("DEBUG: Got Vimeo thumbnail:", thumbnailUrl)
         } else if (videoInfo.platform === "youtube") {
           // Use YouTube thumbnail URL format
           thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
+          console.log("DEBUG: Using YouTube thumbnail format:", thumbnailUrl)
         } else if (videoInfo.platform === "linkedin") {
           // LinkedIn doesn't provide easy thumbnail access, use a placeholder
           thumbnailUrl = "/generic-icon.png"
+          console.log("DEBUG: Using LinkedIn placeholder thumbnail")
         }
 
+        console.log("DEBUG: Setting videoThumbnail:", thumbnailUrl)
         setVideoThumbnail(thumbnailUrl)
 
         // If no image is set yet, use the video thumbnail
         if (!formData.image && thumbnailUrl) {
+          console.log("DEBUG: No main image set, using video thumbnail as main image")
           setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
           setIsUsingVideoThumbnail(true)
         }
 
         // Note: We no longer add videos to media library here
         // This is handled by the /api/process-video-url endpoint when videos are actually used
-        console.log("Video thumbnail processed for display purposes")
+        console.log("DEBUG: Video thumbnail processed for display purposes")
       } catch (err) {
-        console.error("Error processing video URL for display:", err)
+        console.error("DEBUG: Error processing video URL for display:", err)
         // Don't show error to user, just log it
+        setVideoThumbnail(null)
       } finally {
+        console.log("DEBUG: Clearing processing state for thumbnail display")
         setIsProcessingVideo(false)
       }
     }
 
     if (formData.thumbnail_url) {
-      processVideoUrl()
+      processThumbnailDisplay()
     } else {
       setVideoThumbnail(null)
     }
-  }, [formData.thumbnail_url, formData.image])
+  }, [formData.thumbnail_url, formData.image, isProcessingVideo])
 
   const useVideoThumbnail = () => {
     if (videoThumbnail) {
