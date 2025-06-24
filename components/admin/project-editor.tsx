@@ -752,6 +752,7 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
       // Handle duplicate case
       if (result.duplicate) {
+        console.log("addMainVideoUrl: Video already exists, adding to interface")
         // Video already exists, add it to the interface but don't create a new database entry
         if (!mainVideos.includes(url)) {
           setMainVideos((prev) => [...prev, url])
@@ -759,9 +760,11 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
           setFormData((prev) => ({ ...prev, thumbnail_url: url }))
         }
 
-        // Use existing video data if available
+        // Use existing video data if available - defensive programming
         const existingVideo = result.existingVideo
-        if (existingVideo) {
+        if (existingVideo && typeof existingVideo === 'object') {
+          console.log("addMainVideoUrl: Using existing video data:", existingVideo)
+          
           // If we have a thumbnail and no image is set, use the thumbnail
           if (existingVideo.thumbnail_url && !formData.image && !mainImages.includes(existingVideo.thumbnail_url)) {
             setFormData((prev) => ({ ...prev, image: existingVideo.thumbnail_url }))
@@ -776,9 +779,17 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
           // If project date is empty and we have metadata with upload date, use it
           if (!formData.project_date && existingVideo.metadata?.uploadDate) {
-            const date = new Date(existingVideo.metadata.uploadDate)
-            setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+            try {
+              const date = new Date(existingVideo.metadata.uploadDate)
+              if (!isNaN(date.getTime())) {
+                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
+              }
+            } catch (dateError) {
+              console.warn("addMainVideoUrl: Error parsing upload date:", dateError)
+            }
           }
+        } else {
+          console.warn("addMainVideoUrl: Existing video data is not in expected format:", existingVideo)
         }
 
         toast({
@@ -861,14 +872,16 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
       // Handle duplicate case
       if (result.duplicate) {
+        console.log("addBtsVideoUrl: Video already exists, adding to interface")
         // Video already exists, add it to the interface but don't create a new database entry
         if (!btsVideos.includes(url)) {
           setBtsVideos((prev) => [...prev, url])
         }
 
-        // Use existing video data if available
+        // Use existing video data if available - defensive programming
         const existingVideo = result.existingVideo
-        if (existingVideo && existingVideo.thumbnail_url && !btsImages.includes(existingVideo.thumbnail_url)) {
+        if (existingVideo && typeof existingVideo === 'object' && existingVideo.thumbnail_url && !btsImages.includes(existingVideo.thumbnail_url)) {
+          console.log("addBtsVideoUrl: Adding existing video thumbnail to BTS images")
           setBtsImages((prev) => [...prev, existingVideo.thumbnail_url])
         }
 

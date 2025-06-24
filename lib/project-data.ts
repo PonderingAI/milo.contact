@@ -96,19 +96,22 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
 // Add this new function to fetch YouTube video titles using the oEmbed API
 export async function fetchYouTubeTitle(videoId: string): Promise<string | null> {
   try {
+    console.log(`fetchYouTubeTitle: Fetching title for video ID: ${videoId}`)
     const response = await fetch(
       `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
     )
 
     if (!response.ok) {
-      console.error(`Failed to fetch YouTube title: ${response.status} ${response.statusText}`)
+      console.log(`fetchYouTubeTitle: oEmbed API request failed: ${response.status} ${response.statusText}`)
       return null
     }
 
     const data = await response.json()
-    return data.title || null
+    const title = data.title || null
+    console.log(`fetchYouTubeTitle: Successfully fetched title: ${title}`)
+    return title
   } catch (error) {
-    console.error("Error fetching YouTube title:", error)
+    console.error("fetchYouTubeTitle: Error fetching YouTube title:", error)
     return null
   }
 }
@@ -119,43 +122,73 @@ export async function fetchYouTubeTitle(videoId: string): Promise<string | null>
 export async function extractVideoDate(url: string): Promise<Date | null> {
   try {
     const videoInfo = extractVideoInfo(url)
-    if (!videoInfo) return null
+    if (!videoInfo) {
+      console.log("extractVideoDate: Invalid video URL provided:", url)
+      return null
+    }
+
+    console.log(`extractVideoDate: Processing ${videoInfo.platform} video with ID: ${videoInfo.id}`)
 
     if (videoInfo.platform === "youtube") {
       const apiKey = process.env.YOUTUBE_API_KEY
-      if (!apiKey) {
-        console.warn("YouTube API key not configured")
+      if (!apiKey || apiKey.trim() === '') {
+        console.log("extractVideoDate: YouTube Data API key not found or empty - date extraction will be skipped")
+        console.log("extractVideoDate: To enable date extraction, set the YOUTUBE_API_KEY environment variable")
         return null
       }
       
-      const response = await fetch(
-        `https://www.googleapis.com/youtube/v3/videos?id=${videoInfo.id}&part=snippet&key=${apiKey}`
-      )
+      console.log("extractVideoDate: Using YouTube Data API v3 to fetch video date")
       
-      if (response.ok) {
-        const data = await response.json()
-        if (data.items && data.items.length > 0) {
-          const publishedAt = data.items[0].snippet.publishedAt
-          if (publishedAt) {
-            return new Date(publishedAt)
+      try {
+        const response = await fetch(
+          `https://www.googleapis.com/youtube/v3/videos?id=${videoInfo.id}&part=snippet&key=${apiKey}`
+        )
+        
+        if (response.ok) {
+          const data = await response.json()
+          if (data.items && data.items.length > 0) {
+            const publishedAt = data.items[0].snippet.publishedAt
+            if (publishedAt) {
+              console.log(`extractVideoDate: Successfully extracted YouTube video date: ${publishedAt}`)
+              return new Date(publishedAt)
+            }
+          } else {
+            console.log("extractVideoDate: No video data found in YouTube API response")
+          }
+        } else {
+          console.log(`extractVideoDate: YouTube Data API request failed: ${response.status} ${response.statusText}`)
+          if (response.status === 403) {
+            console.log("extractVideoDate: YouTube API key may be invalid or quota exceeded")
           }
         }
+      } catch (apiError) {
+        console.error("extractVideoDate: Error calling YouTube Data API:", apiError)
       }
     } else if (videoInfo.platform === "vimeo") {
-      // Use Vimeo API v2 to get upload date
-      const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-      if (response.ok) {
-        const videoData = await response.json()
-        const video = videoData[0]
-        if (video.upload_date) {
-          return new Date(video.upload_date)
+      console.log("extractVideoDate: Using Vimeo API v2 to fetch video date")
+      
+      try {
+        // Use Vimeo API v2 to get upload date
+        const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+        if (response.ok) {
+          const videoData = await response.json()
+          const video = videoData[0]
+          if (video && video.upload_date) {
+            console.log(`extractVideoDate: Successfully extracted Vimeo video date: ${video.upload_date}`)
+            return new Date(video.upload_date)
+          }
+        } else {
+          console.log(`extractVideoDate: Vimeo API request failed: ${response.status} ${response.statusText}`)
         }
+      } catch (vimeoError) {
+        console.error("extractVideoDate: Error calling Vimeo API:", vimeoError)
       }
     }
 
+    console.log("extractVideoDate: No date could be extracted for this video")
     return null
   } catch (error) {
-    console.error("Error extracting video date:", error)
+    console.error("extractVideoDate: Unexpected error:", error)
     return null
   }
 }
