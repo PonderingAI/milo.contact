@@ -77,6 +77,7 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
   const [isProcessingVideo, setIsProcessingVideo] = useState(false)
   const [videoThumbnail, setVideoThumbnail] = useState<string | null>(null)
   const [isUsingVideoThumbnail, setIsUsingVideoThumbnail] = useState(false)
+  const [vimeoThumbnails, setVimeoThumbnails] = useState<{ [key: string]: string }>({}) // Cache for Vimeo thumbnails
   const [schemaColumns, setSchemaColumns] = useState<string[]>([])
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
@@ -289,6 +290,77 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     }
   }
 
+  // Vimeo thumbnail component with async loading
+  const VimeoThumbnail = ({ url, alt, className }: { url: string; alt: string; className?: string }) => {
+    const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+
+    useEffect(() => {
+      const loadThumbnail = async () => {
+        setIsLoading(true)
+        const thumbnail = await getVimeoThumbnail(url)
+        setThumbnailUrl(thumbnail)
+        setIsLoading(false)
+      }
+      loadThumbnail()
+    }, [url])
+
+    if (isLoading) {
+      return (
+        <div className="text-gray-400 flex flex-col items-center">
+          <Loader2 className="animate-spin" size={24} />
+          <span className="text-xs mt-1">Loading...</span>
+        </div>
+      )
+    }
+
+    if (thumbnailUrl) {
+      return (
+        <img
+          src={thumbnailUrl}
+          alt={alt}
+          className={className || "w-full h-full object-cover"}
+          onError={() => setThumbnailUrl(null)}
+        />
+      )
+    }
+
+    return (
+      <div className="text-gray-400 flex flex-col items-center">
+        <Film size={24} />
+        <span className="text-xs mt-1">Vimeo Video</span>
+      </div>
+    )
+  }
+
+  // Helper function to get Vimeo thumbnail
+  const getVimeoThumbnail = async (url: string): Promise<string | null> => {
+    try {
+      const videoInfo = extractVideoInfo(url)
+      if (!videoInfo || videoInfo.platform !== "vimeo") return null
+
+      // Check cache first
+      if (vimeoThumbnails[videoInfo.id]) {
+        return vimeoThumbnails[videoInfo.id]
+      }
+
+      const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+      if (response.ok) {
+        const videoData = await response.json()
+        const video = videoData[0]
+        const thumbnailUrl = video.thumbnail_large
+        
+        // Cache the thumbnail
+        setVimeoThumbnails(prev => ({ ...prev, [videoInfo.id]: thumbnailUrl }))
+        
+        return thumbnailUrl
+      }
+    } catch (error) {
+      console.error("Error fetching Vimeo thumbnail:", error)
+    }
+    return null
+  }
+
   // Helper function to format date for input field
   function formatDateForInput(date: Date): string {
     return date.toISOString().split("T")[0]
@@ -310,6 +382,23 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             if (video.upload_date) {
               return new Date(video.upload_date)
             }
+          }
+        } else if (videoInfo.platform === "youtube") {
+          // For YouTube, we can't get upload date without YouTube Data API v3
+          // However, we can try using the oEmbed API to check if video exists
+          try {
+            const response = await fetch(
+              `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoInfo.id}&format=json`
+            )
+            if (response.ok) {
+              // Video exists but oEmbed doesn't provide upload date
+              // Return null to indicate no date available
+              console.log("YouTube video exists but upload date not available via oEmbed API")
+              return null
+            }
+          } catch (error) {
+            console.error("Error checking YouTube video:", error)
+            return null
           }
         }
       } else if (type === "image") {
@@ -779,13 +868,38 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         const userId = session?.user?.id || "anonymous"
 
         // Add video to media library
-        const videoTitle =
-          videoInfo.platform === "vimeo"
-            ? (await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`).then((r) => r.json()))[0]?.title ||
-              `Vimeo ${videoInfo.id}`
-            : videoInfo.platform === "youtube"
-              ? `YouTube ${videoInfo.id}`
-              : `LinkedIn Post ${videoInfo.id}`
+        let videoTitle = `${videoInfo.platform} ${videoInfo.id}`
+        
+        // Get proper video title based on platform
+        if (videoInfo.platform === "vimeo") {
+          try {
+            const vimeoResponse = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
+            if (vimeoResponse.ok) {
+              const vimeoData = await vimeoResponse.json()
+              const vimeoVideo = vimeoData[0]
+              videoTitle = vimeoVideo?.title || `Vimeo ${videoInfo.id}`
+            }
+          } catch (error) {
+            console.error("Error fetching Vimeo title:", error)
+            videoTitle = `Vimeo ${videoInfo.id}`
+          }
+        } else if (videoInfo.platform === "youtube") {
+          try {
+            // Use the YouTube oEmbed API to get the title
+            const youtubeResponse = await fetch(
+              `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoInfo.id}&format=json`
+            )
+            if (youtubeResponse.ok) {
+              const youtubeData = await youtubeResponse.json()
+              videoTitle = youtubeData?.title || `YouTube ${videoInfo.id}`
+            }
+          } catch (error) {
+            console.error("Error fetching YouTube title:", error)
+            videoTitle = `YouTube ${videoInfo.id}`
+          }
+        } else if (videoInfo.platform === "linkedin") {
+          videoTitle = `LinkedIn Post ${videoInfo.id}`
+        }
 
         // Save to media table
         const { error: dbError } = await supabase.from("media").insert({
@@ -1362,10 +1476,11 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
                             className="w-full h-full object-cover"
                           />
                         ) : video.includes("vimeo.com") ? (
-                          <div className="text-gray-400 flex flex-col items-center">
-                            <Film size={24} />
-                            <span className="text-xs mt-1">Vimeo Video</span>
-                          </div>
+                          <VimeoThumbnail
+                            url={video}
+                            alt={`Vimeo video ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
                           <div className="text-gray-400 flex flex-col items-center">
                             <Film size={24} />
@@ -1464,10 +1579,11 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
                             className="w-full h-full object-cover"
                           />
                         ) : video.includes("vimeo.com") ? (
-                          <div className="text-gray-400 flex flex-col items-center">
-                            <Film size={24} />
-                            <span className="text-xs mt-1">Vimeo Video</span>
-                          </div>
+                          <VimeoThumbnail
+                            url={video}
+                            alt={`BTS Vimeo video ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
                           <div className="text-gray-400 flex flex-col items-center">
                             <Film size={24} />
