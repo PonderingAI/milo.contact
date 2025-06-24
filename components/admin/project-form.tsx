@@ -444,6 +444,26 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
       const processVideoUrl = async (url: string) => {
         console.log("DEBUG: processVideoUrl called with:", url)
+        
+        // Basic validation
+        if (!url || typeof url !== 'string') {
+          console.error("DEBUG: Invalid URL provided to processVideoUrl:", url)
+          return
+        }
+        
+        // Check if functions are available
+        if (typeof toast !== 'function') {
+          console.error("DEBUG: toast function is not available")
+          return
+        }
+        
+        if (typeof extractVideoInfo !== 'function') {
+          console.error("DEBUG: extractVideoInfo function is not available")
+          return
+        }
+        
+        console.log("DEBUG: All required functions are available, proceeding...")
+        
         setIsProcessingVideo(true)
         let toastId: string
         try {
@@ -452,7 +472,12 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
             title: "Processing video",
             description: "Fetching video information...",
           })
-          toastId = toastResult?.id || "fallback-id"
+          // Safely extract the ID without chaining
+          if (toastResult && typeof toastResult === 'object' && 'id' in toastResult) {
+            toastId = toastResult.id || "fallback-id"
+          } else {
+            toastId = "fallback-id"
+          }
           console.log("DEBUG: Toast created with ID:", toastId)
         } catch (toastError) {
           console.error("DEBUG: Error creating toast:", toastError)
@@ -706,11 +731,17 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
     setIsProcessingVideo(true)
     let toastId: string
     try {
+      console.log("DEBUG: Creating processing toast")
       const toastResult = toast({
         title: "Processing video",
         description: "Fetching video information...",
       })
-      toastId = toastResult?.id || "fallback-id"
+      // Safely extract the ID without chaining
+      if (toastResult && typeof toastResult === 'object' && 'id' in toastResult) {
+        toastId = toastResult.id || "fallback-id"
+      } else {
+        toastId = "fallback-id"
+      }
       console.log("DEBUG: Toast created with ID:", toastId)
     } catch (toastError) {
       console.error("DEBUG: Error creating toast:", toastError)
@@ -790,7 +821,12 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         title: "Processing BTS video",
         description: "Fetching video information...",
       })
-      toastId = toastResult?.id || "fallback-id"
+      // Safely extract the ID without chaining
+      if (toastResult && typeof toastResult === 'object' && 'id' in toastResult) {
+        toastId = toastResult.id || "fallback-id"
+      } else {
+        toastId = "fallback-id"
+      }
     } catch (toastError) {
       console.error("Error creating toast:", toastError)
       toastId = "fallback-id"
@@ -1013,7 +1049,12 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
                 title: "Saving BTS media",
                 description: "Uploading behind-the-scenes media...",
               })
-              toastId = toastResult?.id || "fallback-id"
+              // Safely extract the ID without chaining
+              if (toastResult && typeof toastResult === 'object' && 'id' in toastResult) {
+                toastId = toastResult.id || "fallback-id"
+              } else {
+                toastId = "fallback-id"
+              }
             } catch (toastError) {
               console.error("Error creating toast:", toastError)
               toastId = "fallback-id"
@@ -1113,7 +1154,12 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
                 title: "Updating BTS media",
                 description: "Updating behind-the-scenes media...",
               })
-              toastId = toastResult?.id || "fallback-id"
+              // Safely extract the ID without chaining
+              if (toastResult && typeof toastResult === 'object' && 'id' in toastResult) {
+                toastId = toastResult.id || "fallback-id"
+              } else {
+                toastId = "fallback-id"
+              }
             } catch (toastError) {
               console.error("Error creating toast:", toastError)
               toastId = "fallback-id"
