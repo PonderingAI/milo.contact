@@ -39,6 +39,8 @@ interface ProjectEditorProps {
 }
 
 function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
+  console.log("ProjectEditor: Component rendering, mode:", mode, "project:", project?.id)
+
   // Add a ref to track if component is mounted
   const isMountedRef = useRef(true)
   
@@ -87,7 +89,6 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [schemaColumns, setSchemaColumns] = useState<string[]>([])
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
-  const [processedVideoUrls, setProcessedVideoUrls] = useState<Set<string>>(new Set())
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
 
@@ -95,67 +96,6 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   useEffect(() => {
     return () => {
       isMountedRef.current = false
-    }
-  }, [])
-
-  // Safe state setter that checks if component is still mounted
-  const safeSetFormData = useCallback((updater: any) => {
-    if (isMountedRef.current) {
-      try {
-        setFormData(updater)
-      } catch (error) {
-        console.error("safeSetFormData: Error updating form data:", error)
-      }
-    } else {
-      console.warn("safeSetFormData: Attempted to update form data after component unmounted")
-    }
-  }, [])
-
-  const safeSetMainVideos = useCallback((updater: any) => {
-    if (isMountedRef.current) {
-      try {
-        setMainVideos(updater)
-      } catch (error) {
-        console.error("safeSetMainVideos: Error updating main videos:", error)
-      }
-    } else {
-      console.warn("safeSetMainVideos: Attempted to update main videos after component unmounted")
-    }
-  }, [])
-
-  const safeSetMainImages = useCallback((updater: any) => {
-    if (isMountedRef.current) {
-      try {
-        setMainImages(updater)
-      } catch (error) {
-        console.error("safeSetMainImages: Error updating main images:", error)
-      }
-    } else {
-      console.warn("safeSetMainImages: Attempted to update main images after component unmounted")
-    }
-  }, [])
-
-  const safeSetThumbnailUrl = useCallback((url: string) => {
-    if (isMountedRef.current) {
-      try {
-        setThumbnailUrl(url)
-      } catch (error) {
-        console.error("safeSetThumbnailUrl: Error updating thumbnail URL:", error)
-      }
-    } else {
-      console.warn("safeSetThumbnailUrl: Attempted to update thumbnail URL after component unmounted")
-    }
-  }, [])
-
-  const safeSetVideoThumbnail = useCallback((thumbnail: string) => {
-    if (isMountedRef.current) {
-      try {
-        setVideoThumbnail(thumbnail)
-      } catch (error) {
-        console.error("safeSetVideoThumbnail: Error updating video thumbnail:", error)
-      }
-    } else {
-      console.warn("safeSetVideoThumbnail: Attempted to update video thumbnail after component unmounted")
     }
   }, [])
 
@@ -850,9 +790,6 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
     // Prevent duplicate calls
     if (isProcessingVideo) return
-
-    // Mark this URL as processed to prevent useEffect from reprocessing it
-    setProcessedVideoUrls(prev => new Set([...prev, url]))
 
     setIsProcessingVideo(true)
     let toastId: string | undefined
