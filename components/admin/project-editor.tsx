@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
@@ -39,6 +39,9 @@ interface ProjectEditorProps {
 }
 
 function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
+  // Add a ref to track if component is mounted
+  const isMountedRef = useRef(true)
+  
   const [formData, setFormData] = useState({
     title: project?.title || "",
     category: project?.category || "",
@@ -86,6 +89,74 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
+
+  // Cleanup effect to track component mount status
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
+
+  // Safe state setter that checks if component is still mounted
+  const safeSetFormData = useCallback((updater: any) => {
+    if (isMountedRef.current) {
+      try {
+        setFormData(updater)
+      } catch (error) {
+        console.error("safeSetFormData: Error updating form data:", error)
+      }
+    } else {
+      console.warn("safeSetFormData: Attempted to update form data after component unmounted")
+    }
+  }, [])
+
+  const safeSetMainVideos = useCallback((updater: any) => {
+    if (isMountedRef.current) {
+      try {
+        setMainVideos(updater)
+      } catch (error) {
+        console.error("safeSetMainVideos: Error updating main videos:", error)
+      }
+    } else {
+      console.warn("safeSetMainVideos: Attempted to update main videos after component unmounted")
+    }
+  }, [])
+
+  const safeSetMainImages = useCallback((updater: any) => {
+    if (isMountedRef.current) {
+      try {
+        setMainImages(updater)
+      } catch (error) {
+        console.error("safeSetMainImages: Error updating main images:", error)
+      }
+    } else {
+      console.warn("safeSetMainImages: Attempted to update main images after component unmounted")
+    }
+  }, [])
+
+  const safeSetThumbnailUrl = useCallback((url: string) => {
+    if (isMountedRef.current) {
+      try {
+        setThumbnailUrl(url)
+      } catch (error) {
+        console.error("safeSetThumbnailUrl: Error updating thumbnail URL:", error)
+      }
+    } else {
+      console.warn("safeSetThumbnailUrl: Attempted to update thumbnail URL after component unmounted")
+    }
+  }, [])
+
+  const safeSetVideoThumbnail = useCallback((thumbnail: string) => {
+    if (isMountedRef.current) {
+      try {
+        setVideoThumbnail(thumbnail)
+      } catch (error) {
+        console.error("safeSetVideoThumbnail: Error updating video thumbnail:", error)
+      }
+    } else {
+      console.warn("safeSetVideoThumbnail: Attempted to update video thumbnail after component unmounted")
+    }
+  }, [])
 
   // Fetch the actual schema columns when the component mounts
   useEffect(() => {
@@ -822,8 +893,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         if (!mainVideos.includes(url)) {
           console.log("addMainVideoUrl: Adding existing video to interface:", url)
           try {
-            // Use React's automatic batching for state updates with error boundaries
-            setMainVideos((prev) => {
+            // Use safe state setters that check for component mount status
+            safeSetMainVideos((prev) => {
               console.log("addMainVideoUrl: setMainVideos prev:", prev)
               if (!prev || !Array.isArray(prev)) {
                 console.warn("addMainVideoUrl: mainVideos prev is not an array:", prev)
@@ -831,8 +902,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               }
               return [...prev, url]
             })
-            setThumbnailUrl(url)
-            setFormData((prev) => {
+            safeSetThumbnailUrl(url)
+            safeSetFormData((prev) => {
               console.log("addMainVideoUrl: setFormData prev:", prev)
               if (!prev || typeof prev !== 'object') {
                 console.warn("addMainVideoUrl: formData prev is not an object:", prev)
@@ -867,15 +938,15 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
             if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
               console.log("addMainVideoUrl: Setting thumbnail as main image:", thumbnailUrl)
               try {
-                setFormData((prev) => {
+                safeSetFormData((prev) => {
                   if (!prev || typeof prev !== 'object') {
                     console.warn("addMainVideoUrl: formData prev is not an object for image update:", prev)
                     return { image: thumbnailUrl }
                   }
                   return { ...prev, image: thumbnailUrl }
                 })
-                setVideoThumbnail(thumbnailUrl)
-                setMainImages((prev) => {
+                safeSetVideoThumbnail(thumbnailUrl)
+                safeSetMainImages((prev) => {
                   if (!prev || !Array.isArray(prev)) {
                     console.warn("addMainVideoUrl: mainImages prev is not an array:", prev)
                     return [thumbnailUrl]
@@ -892,7 +963,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
             if (!formData.title && filename) {
               console.log("addMainVideoUrl: Setting video filename as title:", filename)
               try {
-                setFormData((prev) => {
+                safeSetFormData((prev) => {
                   if (!prev || typeof prev !== 'object') {
                     console.warn("addMainVideoUrl: formData prev is not an object for title update:", prev)
                     return { title: filename }
@@ -915,7 +986,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                   const formattedDate = formatDateForInput(date)
                   console.log("addMainVideoUrl: Setting project date:", formattedDate)
                   try {
-                    setFormData((prev) => {
+                    safeSetFormData((prev) => {
                       if (!prev || typeof prev !== 'object') {
                         console.warn("addMainVideoUrl: formData prev is not an object for date update:", prev)
                         return { project_date: formattedDate }
