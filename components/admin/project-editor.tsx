@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
@@ -39,7 +39,13 @@ interface ProjectEditorProps {
 }
 
 function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
-  console.log("ProjectEditor: Component rendering, mode:", mode, "project:", project?.id)
+  // Only log on mount and specific state changes, not every render
+  const hasLoggedMount = useRef(false)
+  
+  if (!hasLoggedMount.current) {
+    console.log("ProjectEditor: Component mounting, mode:", mode, "project:", project?.id)
+    hasLoggedMount.current = true
+  }
 
   // Add a ref to track if component is mounted
   const isMountedRef = useRef(true)
@@ -90,7 +96,9 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
   const router = useRouter()
-  const supabase = getSupabaseBrowserClient()
+  
+  // Use a memoized supabase client to prevent dependency issues
+  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
 
   // Cleanup effect to track component mount status
   useEffect(() => {
@@ -221,7 +229,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
 
     fetchSchema()
-  }, [supabase])
+  }, []) // Remove supabase dependency
 
   // Fetch existing categories and roles for suggestions
   useEffect(() => {
@@ -786,21 +794,32 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   }
 
   const addMainVideoUrl = async (url: string) => {
-    if (!url?.trim()) return
+    if (!url?.trim()) {
+      console.log("addMainVideoUrl: Empty URL provided")
+      return
+    }
 
     // Prevent duplicate calls
-    if (isProcessingVideo) return
+    if (isProcessingVideo) {
+      console.log("addMainVideoUrl: Already processing a video, skipping")
+      return
+    }
+
+    const sessionId = Date.now().toString()
+    console.log(`=== addMainVideoUrl [${sessionId}]: Function entry ===`)
+    console.log(`addMainVideoUrl [${sessionId}]: Input URL: ${url}`)
 
     setIsProcessingVideo(true)
-    let toastId: string | undefined
-
+    
     try {
-      toastId = toast({
+      const toastId = toast({
         title: "Processing video",
         description: "Fetching video information...",
       }).id
       
-      // Use the new API route to process the video URL
+      console.log(`addMainVideoUrl [${sessionId}]: Starting API call`)
+      
+      // Use the API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
         headers: {
@@ -809,138 +828,140 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url }),
       })
 
+      console.log(`addMainVideoUrl [${sessionId}]: API response status: ${response.status}`)
+
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown API error" }))
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
+      
+      console.log(`addMainVideoUrl [${sessionId}]: Video processing result:`)
+      console.log(result)
 
-      // Validate the response structure
-      if (!result || typeof result !== 'object') {
-        throw new Error("Invalid response from video processing API")
-      }
-
-      // Handle duplicate case
-      if (result.duplicate && result.existingVideo) {
-        // Video already exists, add it to the interface but don't create a new database entry
+      // Handle duplicate case with safer checks
+      if (result && typeof result === 'object' && result.duplicate === true) {
+        console.log(`addMainVideoUrl [${sessionId}]: Handling duplicate video`)
+        
+        // Add to interface if not already present
         if (!mainVideos.includes(url)) {
           setMainVideos(prev => [...prev, url])
           setThumbnailUrl(url)
           setFormData(prev => ({ ...prev, thumbnail_url: url }))
         }
 
-        // Use existing video data if available
-        const existingVideo = result.existingVideo
-        
-        if (existingVideo && typeof existingVideo === 'object') {
+        // Use existing video data safely
+        if (result.existingVideo && typeof result.existingVideo === 'object') {
+          const existingVideo = result.existingVideo
           const filename = existingVideo.filename
           
           // If project title is empty, use video title
-          if (!formData.title && filename) {
+          if (!formData.title && filename && typeof filename === 'string') {
             setFormData(prev => ({ ...prev, title: filename }))
           }
         }
 
-        // Display success message
+        // Show success message
         const message = result.message || "Video was already in the media library and has been added to this project"
         
-        if (toastId) {
-          toast({
-            id: toastId,
-            title: "Video already exists",
-            description: message,
-          })
-        } else {
-          toast({
-            title: "Video already exists",
-            description: message,
-          })
-        }
+        toast({
+          id: toastId,
+          title: "Video already exists",
+          description: message,
+        })
+        
+        console.log(`addMainVideoUrl [${sessionId}]: Successfully handled duplicate`)
         return
       }
 
       // Handle new video case
-      if (!mainVideos.includes(url)) {
-        setMainVideos(prev => [...prev, url])
-        setThumbnailUrl(url)
-        setFormData(prev => ({ ...prev, thumbnail_url: url }))
-      }
-
-      // Extract properties from result
-      const thumbnailUrl = result.thumbnailUrl
-      const title = result.title
-      const uploadDate = result.uploadDate
-
-      // Use thumbnail if available and no image is set
-      if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
-        setFormData(prev => ({ ...prev, image: thumbnailUrl }))
-        setVideoThumbnail(thumbnailUrl)
-        setMainImages(prev => [...prev, thumbnailUrl])
-      }
-
-      // Use video title if project title is empty
-      if (!formData.title && title) {
-        setFormData(prev => ({ ...prev, title }))
-      }
-
-      // Use upload date if project date is empty
-      if (!formData.project_date && uploadDate) {
-        try {
-          const date = new Date(uploadDate)
-          if (!isNaN(date.getTime())) {
-            const formattedDate = formatDateForInput(date)
-            setFormData(prev => ({ ...prev, project_date: formattedDate }))
-          }
-        } catch (dateError) {
-          console.warn("Error parsing upload date:", dateError)
+      if (result && typeof result === 'object' && result.success === true) {
+        console.log(`addMainVideoUrl [${sessionId}]: Handling new video`)
+        
+        if (!mainVideos.includes(url)) {
+          setMainVideos(prev => [...prev, url])
+          setThumbnailUrl(url)
+          setFormData(prev => ({ ...prev, thumbnail_url: url }))
         }
-      }
 
-      if (toastId) {
+        // Extract properties from result safely
+        const thumbnailUrl = result.thumbnailUrl
+        const title = result.title
+        const uploadDate = result.uploadDate
+
+        // Use thumbnail if available and no image is set
+        if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+          setFormData(prev => ({ ...prev, image: thumbnailUrl }))
+          setVideoThumbnail(thumbnailUrl)
+          setMainImages(prev => [...prev, thumbnailUrl])
+        }
+
+        // Use video title if project title is empty
+        if (!formData.title && title && typeof title === 'string') {
+          setFormData(prev => ({ ...prev, title }))
+        }
+
+        // Use upload date if project date is empty
+        if (!formData.project_date && uploadDate) {
+          try {
+            const date = new Date(uploadDate)
+            if (!isNaN(date.getTime())) {
+              const formattedDate = formatDateForInput(date)
+              setFormData(prev => ({ ...prev, project_date: formattedDate }))
+            }
+          } catch (dateError) {
+            console.warn(`addMainVideoUrl [${sessionId}]: Error parsing upload date:`, dateError)
+          }
+        }
+
         toast({
           id: toastId,
           title: "Video added",
           description: "Video has been added to the project and media library",
         })
-      } else {
-        toast({
-          title: "Video added",
-          description: "Video has been added to the project and media library",
-        })
+        
+        console.log(`addMainVideoUrl [${sessionId}]: Successfully handled new video`)
+        return
       }
-    } catch (error) {
-      console.error("Error processing video:", error)
       
-      if (toastId) {
-        toast({
-          id: toastId,
-          title: "Error adding video",
-          description: error instanceof Error ? error.message : "Failed to process video URL",
-          variant: "destructive",
-        })
-      } else {
-        toast({
-          title: "Error adding video",
-          description: error instanceof Error ? error.message : "Failed to process video URL",
-          variant: "destructive",
-        })
-      }
+      // If we get here, the response format was unexpected
+      console.warn(`addMainVideoUrl [${sessionId}]: Unexpected response format:`, result)
+      throw new Error("Unexpected response format from video processing API")
+      
+    } catch (error) {
+      console.error(`addMainVideoUrl [${sessionId}]: Error processing video:`, error)
+      
+      toast({
+        title: "Error adding video",
+        description: error instanceof Error ? error.message : "Failed to process video URL",
+        variant: "destructive",
+      })
     } finally {
       setIsProcessingVideo(false)
+      console.log(`addMainVideoUrl [${sessionId}]: Process completed`)
     }
   }
 
   const addBtsVideoUrl = async (url: string) => {
-    if (!url.trim()) return
+    if (!url?.trim()) {
+      console.log("addBtsVideoUrl: Empty URL provided")
+      return
+    }
 
-    const toastId = toast({
-      title: "Processing BTS video",
-      description: "Fetching video information...",
-    }).id
+    const sessionId = Date.now().toString()
+    console.log(`=== addBtsVideoUrl [${sessionId}]: Function entry ===`)
+    console.log(`addBtsVideoUrl [${sessionId}]: Input URL: ${url}`)
 
-    try {      
-      // Use the new API route to process the video URL
+    try {
+      const toastId = toast({
+        title: "Processing BTS video",
+        description: "Fetching video information...",
+      }).id
+
+      console.log(`addBtsVideoUrl [${sessionId}]: Starting API call`)
+      
+      // Use the API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
         headers: {
@@ -949,239 +970,90 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url, isBts: true }),
       })
 
+      console.log(`addBtsVideoUrl [${sessionId}]: API response status: ${response.status}`)
+
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ error: "Unknown API error" }))
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
+      
+      console.log(`addBtsVideoUrl [${sessionId}]: Video processing result:`)
+      console.log(result)
 
-      // Validate the response structure
-      if (!result || typeof result !== 'object') {
-        throw new Error("Invalid response from video processing API")
-      }
-
-      // Handle duplicate case with defensive programming
-      if (result.duplicate) {
-        console.log("addBtsVideoUrl: Video already exists, adding to interface")
-        console.log("addBtsVideoUrl: Duplicate result:", JSON.stringify(result, null, 2))
+      // Handle duplicate case
+      if (result && typeof result === 'object' && result.duplicate === true) {
+        console.log(`addBtsVideoUrl [${sessionId}]: Handling duplicate BTS video`)
         
-        // Video already exists, add it to the interface but don't create a new database entry
+        // Add to interface if not already present
         if (!btsVideos.includes(url)) {
-          // Use batched state updates to prevent rendering issues
-          setTimeout(() => {
-            setBtsVideos((prev) => [...prev, url])
-          }, 0)
+          setBtsVideos(prev => [...prev, url])
         }
 
-        // Use existing video data if available - defensive programming with extensive validation
-        const existingVideo = result.existingVideo
-        console.log("addBtsVideoUrl: Examining existingVideo:", typeof existingVideo, existingVideo)
-        
-        if (existingVideo && typeof existingVideo === 'object' && existingVideo !== null) {
-          console.log("addBtsVideoUrl: Using existing video data for BTS")
+        // Use existing video data safely
+        if (result.existingVideo && typeof result.existingVideo === 'object') {
+          const existingVideo = result.existingVideo
+          const thumbnailUrl = existingVideo.thumbnail_url
           
-          // Safely extract thumbnail_url with validation
-          const thumbnailUrl = typeof existingVideo.thumbnail_url === 'string' ? existingVideo.thumbnail_url : null
-          
-          if (thumbnailUrl && !btsImages.includes(thumbnailUrl)) {
-            console.log("addBtsVideoUrl: Adding existing video thumbnail to BTS images:", thumbnailUrl)
-            // Use batched state updates
-            setTimeout(() => {
-              setBtsImages((prev) => [...prev, thumbnailUrl])
-            }, 0)
+          if (thumbnailUrl && typeof thumbnailUrl === 'string' && !btsImages.includes(thumbnailUrl)) {
+            setBtsImages(prev => [...prev, thumbnailUrl])
           }
-        } else {
-          console.warn("addBtsVideoUrl: Existing video data is not in expected format:", {
-            type: typeof existingVideo,
-            value: existingVideo,
-            isNull: existingVideo === null,
-            isArray: Array.isArray(existingVideo)
-          })
         }
 
-        // Display success message
-        const message = (result.message && typeof result.message === 'string') 
-          ? result.message 
-          : "Video was already in the media library and has been added to BTS"
+        // Show success message
+        const message = result.message || "Video was already in the media library and has been added to BTS"
         
         toast({
           id: toastId,
           title: "BTS video already exists",
           description: message,
         })
+        
+        console.log(`addBtsVideoUrl [${sessionId}]: Successfully handled duplicate`)
         return
       }
 
-      // Handle new video case - also with validation
-      console.log("addBtsVideoUrl: Processing new BTS video")
+      // Handle new video case
+      if (result && typeof result === 'object' && result.success === true) {
+        console.log(`addBtsVideoUrl [${sessionId}]: Handling new BTS video`)
+        
+        if (!btsVideos.includes(url)) {
+          setBtsVideos(prev => [...prev, url])
+        }
+
+        // Extract properties from result safely
+        const thumbnailUrl = result.thumbnailUrl
+
+        // Add thumbnail to BTS images if available
+        if (thumbnailUrl && typeof thumbnailUrl === 'string' && !btsImages.includes(thumbnailUrl)) {
+          setBtsImages(prev => [...prev, thumbnailUrl])
+        }
+
+        toast({
+          id: toastId,
+          title: "BTS video added",
+          description: "Video has been added to BTS and media library",
+        })
+        
+        console.log(`addBtsVideoUrl [${sessionId}]: Successfully handled new video`)
+        return
+      }
       
-      // Add to BTS videos if not already in the list
-      if (!btsVideos.includes(url)) {
-        // Use batched state updates
-        setTimeout(() => {
-          setBtsVideos((prev) => [...prev, url])
-        }, 0)
-      }
-
-      // Safely extract properties from result
-      const thumbnailUrl = typeof result.thumbnailUrl === 'string' ? result.thumbnailUrl : null
-
-      // Add thumbnail to BTS images if available and not already in the list
-      if (thumbnailUrl && !btsImages.includes(thumbnailUrl)) {
-        console.log("addBtsVideoUrl: Adding new video thumbnail to BTS images:", thumbnailUrl)
-        // Use batched state updates
-        setTimeout(() => {
-          setBtsImages((prev) => [...prev, thumbnailUrl])
-        }, 0)
-      }
-
-      toast({
-        id: toastId,
-        title: "BTS Video added",
-        description: "Behind the scenes video has been added to the project",
-      })
+      // If we get here, the response format was unexpected
+      console.warn(`addBtsVideoUrl [${sessionId}]: Unexpected response format:`, result)
+      throw new Error("Unexpected response format from video processing API")
+      
     } catch (error) {
-      console.error("addBtsVideoUrl: Error processing BTS video:", error)
+      console.error(`addBtsVideoUrl [${sessionId}]: Error processing BTS video:`, error)
+      
       toast({
-        id: toastId,
         title: "Error adding BTS video",
         description: error instanceof Error ? error.message : "Failed to process video URL",
         variant: "destructive",
       })
-    } finally {
-      setIsProcessingVideo(false)
     }
   }
-
-  // Process video URL and extract thumbnail - DISABLED TO PREVENT CONFLICTS
-  // This useEffect was causing "j is not a function" errors when processing duplicate videos
-  // The addMainVideoUrl function handles all video processing now
-  /*
-  useEffect(() => {
-    const processVideoUrl = async () => {
-      const url = formData.thumbnail_url?.trim()
-      if (!url || isProcessingVideo) return
-
-      // Skip processing if this URL was already processed by addMainVideoUrl
-      if (processedVideoUrls.has(url)) {
-        console.log("useEffect: Skipping already processed URL:", url)
-        return
-      }
-
-      // Skip processing if we're currently processing a video
-      if (isProcessingVideo) {
-        return
-      }
-
-      const videoInfo = extractVideoInfo(url)
-      if (!videoInfo) {
-        setVideoThumbnail(null)
-        return
-      }
-
-      // Don't auto-process videos that could conflict with manual processing
-      // This useEffect should mainly handle videos that come from other sources
-      console.log("useEffect: Auto-processing video URL:", url)
-      setIsProcessingVideo(true)
-
-      try {
-        let thumbnailUrl = null
-
-        if (videoInfo.platform === "vimeo") {
-          // Get video thumbnail from Vimeo API
-          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-
-          if (!response.ok) {
-            throw new Error("Failed to fetch Vimeo video info")
-          }
-
-          const videoData = await response.json()
-          const video = videoData[0]
-          thumbnailUrl = video.thumbnail_large
-        } else if (videoInfo.platform === "youtube") {
-          // Use YouTube thumbnail URL format
-          thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-        } else if (videoInfo.platform === "linkedin") {
-          // LinkedIn doesn't provide easy thumbnail access, use a placeholder
-          thumbnailUrl = "/generic-icon.png"
-        }
-
-        setVideoThumbnail(thumbnailUrl)
-
-        // If no image is set yet, use the video thumbnail
-        if (!formData.image && thumbnailUrl) {
-          setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-          setIsUsingVideoThumbnail(true)
-        }
-
-        // Check if this video is already in the media library
-        const { data: existingMedia } = await supabase
-          .from("media")
-          .select("id, public_url")
-          .eq("public_url", url)
-          .maybeSingle()
-
-        if (existingMedia) {
-          console.log("useEffect processVideoUrl: Video already exists in media library:", existingMedia.id)
-          return // Already in the library
-        }
-
-        // Get current user session
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const userId = session?.user?.id || "anonymous"
-
-        // Add video to media library - only if not already processed
-        const videoTitle =
-          videoInfo.platform === "vimeo"
-            ? (await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`).then((r) => r.json()))[0]?.title ||
-              `Vimeo ${videoInfo.id}`
-            : videoInfo.platform === "youtube"
-              ? `YouTube ${videoInfo.id}`
-              : `LinkedIn Post ${videoInfo.id}`
-
-        // Save to media table with error handling
-        const { error: dbError } = await supabase.from("media").insert({
-          filename: videoTitle,
-          filepath: url,
-          filesize: 0, // Not applicable for external videos
-          filetype: videoInfo.platform,
-          public_url: url,
-          thumbnail_url: thumbnailUrl,
-          tags: ["video", videoInfo.platform, "project"],
-          metadata: {
-            [videoInfo.platform + "Id"]: videoInfo.id,
-            uploadedBy: userId,
-          },
-        })
-
-        if (dbError) {
-          console.warn("useEffect processVideoUrl: Error inserting video to media library (might be duplicate):", dbError)
-          // Don't throw here, as this might be a duplicate
-        } else {
-          console.log("useEffect processVideoUrl: Successfully added video to media library")
-          toast({
-            title: "Video added to media library",
-            description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been added to your media library`,
-          })
-        }
-      } catch (err) {
-        console.error("useEffect processVideoUrl: Error processing video URL:", err)
-        // Don't show error to user, just log it - this could be a duplicate processing
-      } finally {
-        setIsProcessingVideo(false)
-      }
-    }
-
-    if (formData.thumbnail_url) {
-      processVideoUrl()
-    } else {
-      setVideoThumbnail(null)
-    }
-  }, [formData.thumbnail_url, formData.image, supabase, processedVideoUrls])
-  */
 
   const useVideoThumbnail = () => {
     if (videoThumbnail) {
