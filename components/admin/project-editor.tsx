@@ -820,10 +820,31 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         
         // Video already exists, add it to the interface but don't create a new database entry
         if (!mainVideos.includes(url)) {
-          // Use React's automatic batching for state updates
-          setMainVideos((prev) => [...prev, url])
-          setThumbnailUrl(url)
-          setFormData((prev) => ({ ...prev, thumbnail_url: url }))
+          console.log("addMainVideoUrl: Adding existing video to interface:", url)
+          try {
+            // Use React's automatic batching for state updates with error boundaries
+            setMainVideos((prev) => {
+              console.log("addMainVideoUrl: setMainVideos prev:", prev)
+              if (!prev || !Array.isArray(prev)) {
+                console.warn("addMainVideoUrl: mainVideos prev is not an array:", prev)
+                return [url]
+              }
+              return [...prev, url]
+            })
+            setThumbnailUrl(url)
+            setFormData((prev) => {
+              console.log("addMainVideoUrl: setFormData prev:", prev)
+              if (!prev || typeof prev !== 'object') {
+                console.warn("addMainVideoUrl: formData prev is not an object:", prev)
+                return { thumbnail_url: url }
+              }
+              return { ...prev, thumbnail_url: url }
+            })
+            console.log("addMainVideoUrl: Successfully updated interface state for existing video")
+          } catch (stateError) {
+            console.error("addMainVideoUrl: Error updating interface state for existing video:", stateError)
+            // Continue processing even if state update fails
+          }
         }
 
         // Use existing video data if available - defensive programming with extensive validation
@@ -840,29 +861,71 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           
           // Use React's automatic batching for state updates
           try {
+            console.log("addMainVideoUrl: Processing existing video metadata...")
+            
             // If we have a thumbnail and no image is set, use the thumbnail
             if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
               console.log("addMainVideoUrl: Setting thumbnail as main image:", thumbnailUrl)
-              setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-              setVideoThumbnail(thumbnailUrl)
-              setMainImages((prev) => [...prev, thumbnailUrl])
+              try {
+                setFormData((prev) => {
+                  if (!prev || typeof prev !== 'object') {
+                    console.warn("addMainVideoUrl: formData prev is not an object for image update:", prev)
+                    return { image: thumbnailUrl }
+                  }
+                  return { ...prev, image: thumbnailUrl }
+                })
+                setVideoThumbnail(thumbnailUrl)
+                setMainImages((prev) => {
+                  if (!prev || !Array.isArray(prev)) {
+                    console.warn("addMainVideoUrl: mainImages prev is not an array:", prev)
+                    return [thumbnailUrl]
+                  }
+                  return [...prev, thumbnailUrl]
+                })
+                console.log("addMainVideoUrl: Successfully set thumbnail as main image")
+              } catch (thumbnailError) {
+                console.error("addMainVideoUrl: Error setting thumbnail as main image:", thumbnailError)
+              }
             }
 
             // If project title is empty, use video title
             if (!formData.title && filename) {
               console.log("addMainVideoUrl: Setting video filename as title:", filename)
-              setFormData((prev) => ({ ...prev, title: filename }))
+              try {
+                setFormData((prev) => {
+                  if (!prev || typeof prev !== 'object') {
+                    console.warn("addMainVideoUrl: formData prev is not an object for title update:", prev)
+                    return { title: filename }
+                  }
+                  return { ...prev, title: filename }
+                })
+                console.log("addMainVideoUrl: Successfully set video title")
+              } catch (titleError) {
+                console.error("addMainVideoUrl: Error setting video title:", titleError)
+              }
             }
 
             // If project date is empty and we have metadata with upload date, use it
             if (!formData.project_date && metadata.uploadDate) {
+              console.log("addMainVideoUrl: Processing upload date from metadata...")
               try {
                 console.log("addMainVideoUrl: Parsing upload date:", metadata.uploadDate)
                 const date = new Date(metadata.uploadDate)
                 if (!isNaN(date.getTime())) {
                   const formattedDate = formatDateForInput(date)
                   console.log("addMainVideoUrl: Setting project date:", formattedDate)
-                  setFormData((prev) => ({ ...prev, project_date: formattedDate }))
+                  try {
+                    setFormData((prev) => {
+                      if (!prev || typeof prev !== 'object') {
+                        console.warn("addMainVideoUrl: formData prev is not an object for date update:", prev)
+                        return { project_date: formattedDate }
+                      }
+                      return { ...prev, project_date: formattedDate }
+                    })
+                    console.log("addMainVideoUrl: Successfully set project date")
+                  } catch (dateSetError) {
+                    console.error("addMainVideoUrl: Error setting project date:", dateSetError)
+                  }
                 } else {
                   console.warn("addMainVideoUrl: Invalid date parsed from metadata:", metadata.uploadDate)
                 }
@@ -870,8 +933,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                 console.warn("addMainVideoUrl: Error parsing upload date:", dateError)
               }
             }
+            
+            console.log("addMainVideoUrl: Completed processing existing video metadata")
           } catch (stateError) {
             console.error("addMainVideoUrl: Error during state updates:", stateError)
+            // Continue processing even if state updates fail
           }
         } else {
           console.warn("addMainVideoUrl: Existing video data is not in expected format:", {
@@ -882,16 +948,29 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           })
         }
 
-        // Display success message
+        // Display success message with safe toast handling
         const message = (result.message && typeof result.message === 'string') 
           ? result.message 
           : "Video was already in the media library and has been added to this project"
         
-        toast({
-          id: toastId,
-          title: "Video already exists",
-          description: message,
-        })
+        console.log("addMainVideoUrl: Displaying success toast for existing video")
+        try {
+          if (toastId) {
+            toast({
+              id: toastId,
+              title: "Video already exists",
+              description: message,
+            })
+          } else {
+            toast({
+              title: "Video already exists",
+              description: message,
+            })
+          }
+        } catch (toastError) {
+          console.error("addMainVideoUrl: Error showing success toast:", toastError)
+        }
+        console.log("addMainVideoUrl: Completed processing for existing video")
         return
       }
 
@@ -943,29 +1022,67 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         console.error("addMainVideoUrl: Error during new video state updates:", stateError)
       }
 
-      toast({
-        id: toastId,
-        title: "Video added",
-        description: "Video has been added to the project and media library",
-      })
+      console.log("addMainVideoUrl: Displaying success toast for new video")
+      try {
+        if (toastId) {
+          toast({
+            id: toastId,
+            title: "Video added",
+            description: "Video has been added to the project and media library",
+          })
+        } else {
+          toast({
+            title: "Video added",
+            description: "Video has been added to the project and media library",
+          })
+        }
+      } catch (toastError) {
+        console.error("addMainVideoUrl: Error showing success toast for new video:", toastError)
+      }
     } catch (error) {
       console.error("addMainVideoUrl: Error processing video:", error)
-      if (toastId) {
-        toast({
-          id: toastId,
-          title: "Error adding video",
-          description: error instanceof Error ? error.message : "Failed to process video URL",
-          variant: "destructive",
-        })
-      } else {
-        toast({
-          title: "Error adding video",
-          description: error instanceof Error ? error.message : "Failed to process video URL",
-          variant: "destructive",
-        })
+      console.error("addMainVideoUrl: Error details:", {
+        name: error instanceof Error ? error.name : 'Unknown',
+        message: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : 'No stack trace'
+      })
+      
+      try {
+        if (toastId) {
+          toast({
+            id: toastId,
+            title: "Error adding video",
+            description: error instanceof Error ? error.message : "Failed to process video URL",
+            variant: "destructive",
+          })
+        } else {
+          toast({
+            title: "Error adding video",
+            description: error instanceof Error ? error.message : "Failed to process video URL",
+            variant: "destructive",
+          })
+        }
+      } catch (toastError) {
+        console.error("addMainVideoUrl: Error showing error toast:", toastError)
+        // Last resort - try to show a generic error message
+        try {
+          toast({
+            title: "Error",
+            description: "An error occurred while processing the video",
+            variant: "destructive",
+          })
+        } catch (finalToastError) {
+          console.error("addMainVideoUrl: Failed to show any error toast:", finalToastError)
+        }
       }
     } finally {
-      setIsProcessingVideo(false)
+      console.log("addMainVideoUrl: Cleaning up...")
+      try {
+        setIsProcessingVideo(false)
+      } catch (cleanupError) {
+        console.error("addMainVideoUrl: Error during cleanup:", cleanupError)
+      }
+      console.log("addMainVideoUrl: Function completed")
     }
   }
 
