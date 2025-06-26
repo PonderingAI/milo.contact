@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { extractVideoInfo, extractVideoDate } from "@/lib/project-data"
+import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X, ArrowLeft, Save } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
@@ -386,8 +386,9 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   async function extractDateFromMedia(url: string, type: "image" | "video"): Promise<Date | null> {
     try {
       if (type === "video") {
-        // Use the new extractVideoDate function that handles both YouTube and Vimeo
-        return await extractVideoDate(url)
+        // For videos, we'll skip the API call here since it requires server-side access
+        // The video processing API endpoint will handle this instead
+        return null
       } else if (type === "image") {
         // For images in Supabase, check if we have metadata
         const { data } = await supabase.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
@@ -556,16 +557,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       return date ? date.toLocaleDateString() : null
     }
 
-    try {
-      const date = await extractVideoDate(videoUrl)
-      if (date) {
-        setVideoReleaseDates((prev) => new Map(prev).set(videoUrl, date))
-        return date.toLocaleDateString()
-      }
-    } catch (error) {
-      console.error("Error fetching video release date:", error)
-    }
-
+    // For now, return null since we're handling video date extraction server-side
     return null
   }
 
@@ -782,15 +774,17 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   }
 
   const addMainVideoUrl = async (url: string) => {
-    if (!url.trim()) return
+    if (!url?.trim()) return
 
     setIsProcessingVideo(true)
-    const toastId = toast({
-      title: "Processing video",
-      description: "Fetching video information...",
-    }).id
+    let toastId: string | undefined
 
     try {
+      toastId = toast({
+        title: "Processing video",
+        description: "Fetching video information...",
+      }).id
+
       console.log("addMainVideoUrl: Starting video processing for URL:", url)
       
       // Use the new API route to process the video URL
@@ -805,7 +799,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       console.log("addMainVideoUrl: API response status:", response.status)
 
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ error: "Unknown API error" }))
         console.error("addMainVideoUrl: API error response:", errorData)
         throw new Error(errorData.error || "Failed to process video URL")
       }
@@ -826,12 +820,10 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         
         // Video already exists, add it to the interface but don't create a new database entry
         if (!mainVideos.includes(url)) {
-          // Use batched state updates to prevent rendering issues
-          setTimeout(() => {
-            setMainVideos((prev) => [...prev, url])
-            setThumbnailUrl(url)
-            setFormData((prev) => ({ ...prev, thumbnail_url: url }))
-          }, 0)
+          // Use React's automatic batching for state updates
+          setMainVideos((prev) => [...prev, url])
+          setThumbnailUrl(url)
+          setFormData((prev) => ({ ...prev, thumbnail_url: url }))
         }
 
         // Use existing video data if available - defensive programming with extensive validation
@@ -846,43 +838,41 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           const filename = typeof existingVideo.filename === 'string' ? existingVideo.filename : null
           const metadata = existingVideo.metadata && typeof existingVideo.metadata === 'object' ? existingVideo.metadata : {}
           
-          // Use batched state updates to prevent React rendering issues
-          setTimeout(() => {
-            try {
-              // If we have a thumbnail and no image is set, use the thumbnail
-              if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
-                console.log("addMainVideoUrl: Setting thumbnail as main image:", thumbnailUrl)
-                setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-                setVideoThumbnail(thumbnailUrl)
-                setMainImages((prev) => [...prev, thumbnailUrl])
-              }
-
-              // If project title is empty, use video title
-              if (!formData.title && filename) {
-                console.log("addMainVideoUrl: Setting video filename as title:", filename)
-                setFormData((prev) => ({ ...prev, title: filename }))
-              }
-
-              // If project date is empty and we have metadata with upload date, use it
-              if (!formData.project_date && metadata.uploadDate) {
-                try {
-                  console.log("addMainVideoUrl: Parsing upload date:", metadata.uploadDate)
-                  const date = new Date(metadata.uploadDate)
-                  if (!isNaN(date.getTime())) {
-                    const formattedDate = formatDateForInput(date)
-                    console.log("addMainVideoUrl: Setting project date:", formattedDate)
-                    setFormData((prev) => ({ ...prev, project_date: formattedDate }))
-                  } else {
-                    console.warn("addMainVideoUrl: Invalid date parsed from metadata:", metadata.uploadDate)
-                  }
-                } catch (dateError) {
-                  console.warn("addMainVideoUrl: Error parsing upload date:", dateError)
-                }
-              }
-            } catch (stateError) {
-              console.error("addMainVideoUrl: Error during state updates:", stateError)
+          // Use React's automatic batching for state updates
+          try {
+            // If we have a thumbnail and no image is set, use the thumbnail
+            if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+              console.log("addMainVideoUrl: Setting thumbnail as main image:", thumbnailUrl)
+              setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
+              setVideoThumbnail(thumbnailUrl)
+              setMainImages((prev) => [...prev, thumbnailUrl])
             }
-          }, 0)
+
+            // If project title is empty, use video title
+            if (!formData.title && filename) {
+              console.log("addMainVideoUrl: Setting video filename as title:", filename)
+              setFormData((prev) => ({ ...prev, title: filename }))
+            }
+
+            // If project date is empty and we have metadata with upload date, use it
+            if (!formData.project_date && metadata.uploadDate) {
+              try {
+                console.log("addMainVideoUrl: Parsing upload date:", metadata.uploadDate)
+                const date = new Date(metadata.uploadDate)
+                if (!isNaN(date.getTime())) {
+                  const formattedDate = formatDateForInput(date)
+                  console.log("addMainVideoUrl: Setting project date:", formattedDate)
+                  setFormData((prev) => ({ ...prev, project_date: formattedDate }))
+                } else {
+                  console.warn("addMainVideoUrl: Invalid date parsed from metadata:", metadata.uploadDate)
+                }
+              } catch (dateError) {
+                console.warn("addMainVideoUrl: Error parsing upload date:", dateError)
+              }
+            }
+          } catch (stateError) {
+            console.error("addMainVideoUrl: Error during state updates:", stateError)
+          }
         } else {
           console.warn("addMainVideoUrl: Existing video data is not in expected format:", {
             type: typeof existingVideo,
@@ -910,11 +900,9 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       
       // Add to mainVideos if not already in the list
       if (!mainVideos.includes(url)) {
-        setTimeout(() => {
-          setMainVideos((prev) => [...prev, url])
-          setThumbnailUrl(url)
-          setFormData((prev) => ({ ...prev, thumbnail_url: url }))
-        }, 0)
+        setMainVideos((prev) => [...prev, url])
+        setThumbnailUrl(url)
+        setFormData((prev) => ({ ...prev, thumbnail_url: url }))
       }
 
       // Safely extract properties from result
@@ -922,40 +910,38 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       const title = typeof result.title === 'string' ? result.title : null
       const uploadDate = typeof result.uploadDate === 'string' ? result.uploadDate : null
 
-      // Use batched state updates for new videos too
-      setTimeout(() => {
-        try {
-          // If we have a thumbnail and no image is set, use the thumbnail
-          if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
-            console.log("addMainVideoUrl: Setting new video thumbnail as main image:", thumbnailUrl)
-            setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-            setVideoThumbnail(thumbnailUrl)
-            setMainImages((prev) => [...prev, thumbnailUrl])
-          }
-
-          // If project title is empty, use video title
-          if (!formData.title && title) {
-            console.log("addMainVideoUrl: Setting new video title:", title)
-            setFormData((prev) => ({ ...prev, title }))
-          }
-
-          // If project date is empty and we have an upload date, use it
-          if (!formData.project_date && uploadDate) {
-            try {
-              const date = new Date(uploadDate)
-              if (!isNaN(date.getTime())) {
-                const formattedDate = formatDateForInput(date)
-                console.log("addMainVideoUrl: Setting project date from new video:", formattedDate)
-                setFormData((prev) => ({ ...prev, project_date: formattedDate }))
-              }
-            } catch (dateError) {
-              console.warn("addMainVideoUrl: Error parsing new video upload date:", dateError)
-            }
-          }
-        } catch (stateError) {
-          console.error("addMainVideoUrl: Error during new video state updates:", stateError)
+      // Use React's automatic batching for new videos
+      try {
+        // If we have a thumbnail and no image is set, use the thumbnail
+        if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+          console.log("addMainVideoUrl: Setting new video thumbnail as main image:", thumbnailUrl)
+          setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
+          setVideoThumbnail(thumbnailUrl)
+          setMainImages((prev) => [...prev, thumbnailUrl])
         }
-      }, 0)
+
+        // If project title is empty, use video title
+        if (!formData.title && title) {
+          console.log("addMainVideoUrl: Setting new video title:", title)
+          setFormData((prev) => ({ ...prev, title }))
+        }
+
+        // If project date is empty and we have an upload date, use it
+        if (!formData.project_date && uploadDate) {
+          try {
+            const date = new Date(uploadDate)
+            if (!isNaN(date.getTime())) {
+              const formattedDate = formatDateForInput(date)
+              console.log("addMainVideoUrl: Setting project date from new video:", formattedDate)
+              setFormData((prev) => ({ ...prev, project_date: formattedDate }))
+            }
+          } catch (dateError) {
+            console.warn("addMainVideoUrl: Error parsing new video upload date:", dateError)
+          }
+        }
+      } catch (stateError) {
+        console.error("addMainVideoUrl: Error during new video state updates:", stateError)
+      }
 
       toast({
         id: toastId,
@@ -964,12 +950,20 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       })
     } catch (error) {
       console.error("addMainVideoUrl: Error processing video:", error)
-      toast({
-        id: toastId,
-        title: "Error adding video",
-        description: error instanceof Error ? error.message : "Failed to process video URL",
-        variant: "destructive",
-      })
+      if (toastId) {
+        toast({
+          id: toastId,
+          title: "Error adding video",
+          description: error instanceof Error ? error.message : "Failed to process video URL",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error adding video",
+          description: error instanceof Error ? error.message : "Failed to process video URL",
+          variant: "destructive",
+        })
+      }
     } finally {
       setIsProcessingVideo(false)
     }
