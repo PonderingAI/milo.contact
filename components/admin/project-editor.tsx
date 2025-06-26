@@ -87,6 +87,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [schemaColumns, setSchemaColumns] = useState<string[]>([])
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
+  const [processedVideoUrls, setProcessedVideoUrls] = useState<Set<string>>(new Set())
   const router = useRouter()
   const supabase = getSupabaseBrowserClient()
 
@@ -859,6 +860,10 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       return
     }
 
+    // Mark this URL as processed to prevent useEffect from reprocessing it
+    setProcessedVideoUrls(prev => new Set([...prev, url]))
+    console.log(`addMainVideoUrl [${executionId}]: Marked URL as processed:`, url)
+
     setIsProcessingVideo(true)
     let toastId: string | undefined
 
@@ -905,13 +910,70 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         throw validationError
       }
 
-      // Handle duplicate case with defensive programming
-      if (result.duplicate) {
-        console.log("addMainVideoUrl: Video already exists, adding to interface")
-        console.log("addMainVideoUrl: Duplicate result:", JSON.stringify(result, null, 2))
+      // Handle duplicate case with ultra-defensive programming
+      console.log(`addMainVideoUrl [${executionId}]: About to check result.duplicate`)
+      console.log(`addMainVideoUrl [${executionId}]: result at this point:`, result)
+      console.log(`addMainVideoUrl [${executionId}]: typeof result:`, typeof result)
+      console.log(`addMainVideoUrl [${executionId}]: result.hasOwnProperty('duplicate'):`, result ? result.hasOwnProperty('duplicate') : 'result is null/undefined')
+      
+      // Ultra-defensive duplicate checking with multiple fallback strategies
+      let isDuplicate = false
+      let safeResult = null
+      
+      try {
+        // Strategy 1: Direct property access with existence check
+        if (result && typeof result === 'object' && 'duplicate' in result) {
+          isDuplicate = Boolean(result.duplicate)
+          safeResult = result
+          console.log(`addMainVideoUrl [${executionId}]: Strategy 1 success - isDuplicate:`, isDuplicate)
+        } else {
+          console.log(`addMainVideoUrl [${executionId}]: Strategy 1 failed - result structure invalid`)
+        }
+      } catch (strategyError) {
+        console.error(`addMainVideoUrl [${executionId}]: Strategy 1 error:`, strategyError)
         
-        // Video already exists, add it to the interface but don't create a new database entry
-        if (!mainVideos.includes(url)) {
+        // Strategy 2: JSON parse/stringify to eliminate reference issues
+        try {
+          const resultStr = JSON.stringify(result)
+          const parsedResult = JSON.parse(resultStr)
+          if (parsedResult && typeof parsedResult === 'object' && 'duplicate' in parsedResult) {
+            isDuplicate = Boolean(parsedResult.duplicate)
+            safeResult = parsedResult
+            console.log(`addMainVideoUrl [${executionId}]: Strategy 2 success - isDuplicate:`, isDuplicate)
+          } else {
+            console.log(`addMainVideoUrl [${executionId}]: Strategy 2 failed - parsed result invalid`)
+          }
+        } catch (strategyError2) {
+          console.error(`addMainVideoUrl [${executionId}]: Strategy 2 error:`, strategyError2)
+          
+          // Strategy 3: Property descriptor check
+          try {
+            const descriptor = Object.getOwnPropertyDescriptor(result, 'duplicate')
+            if (descriptor) {
+              isDuplicate = Boolean(descriptor.value)
+              safeResult = result
+              console.log(`addMainVideoUrl [${executionId}]: Strategy 3 success - isDuplicate:`, isDuplicate)
+            } else {
+              console.log(`addMainVideoUrl [${executionId}]: Strategy 3 failed - no property descriptor`)
+            }
+          } catch (strategyError3) {
+            console.error(`addMainVideoUrl [${executionId}]: All strategies failed:`, strategyError3)
+            // Default to false and continue processing
+            isDuplicate = false
+            safeResult = result
+          }
+        }
+      }
+      
+      console.log(`addMainVideoUrl [${executionId}]: Final isDuplicate value:`, isDuplicate)
+      console.log(`addMainVideoUrl [${executionId}]: Final safeResult:`, safeResult)
+      
+      if (isDuplicate && safeResult) {
+          console.log(`addMainVideoUrl [${executionId}]: Video already exists, adding to interface`)
+          console.log(`addMainVideoUrl [${executionId}]: Duplicate result:`, JSON.stringify(result, null, 2))
+          
+          // Video already exists, add it to the interface but don't create a new database entry
+          if (!mainVideos.includes(url)) {
           console.log("addMainVideoUrl: Adding existing video to interface:", url)
           try {
             // Use direct state updates instead of functional updates to avoid corruption
@@ -932,9 +994,20 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           }
         }
 
-        // Use existing video data if available - defensive programming with extensive validation
-        const existingVideo = result.existingVideo
-        console.log("addMainVideoUrl: Examining existingVideo:", typeof existingVideo, existingVideo)
+        // Use existing video data if available - ultra-defensive programming
+        let existingVideo = null
+        
+        try {
+          // Safe extraction of existingVideo property
+          if (safeResult && typeof safeResult === 'object' && 'existingVideo' in safeResult) {
+            existingVideo = safeResult.existingVideo
+          }
+        } catch (extractError) {
+          console.error(`addMainVideoUrl [${executionId}]: Error extracting existingVideo:`, extractError)
+          existingVideo = null
+        }
+        
+        console.log(`addMainVideoUrl [${executionId}]: Examining existingVideo:`, typeof existingVideo, existingVideo)
         
         if (existingVideo && typeof existingVideo === 'object' && existingVideo !== null) {
           console.log("addMainVideoUrl: Using existing video data:", existingVideo)
@@ -1294,6 +1367,14 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       const url = formData.thumbnail_url?.trim()
       if (!url || isProcessingVideo) return
 
+      // Skip processing if this URL was already processed by addMainVideoUrl
+      if (processedVideoUrls.has(url)) {
+        console.log("useEffect processVideoUrl: Skipping already processed URL:", url)
+        return
+      }
+
+      console.log("useEffect processVideoUrl: Processing URL:", url)
+
       const videoInfo = extractVideoInfo(url)
       if (!videoInfo) {
         setVideoThumbnail(null)
@@ -1340,7 +1421,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           .maybeSingle()
 
         if (existingMedia) {
-          console.log("Video already exists in media library:", existingMedia.id)
+          console.log("useEffect processVideoUrl: Video already exists in media library:", existingMedia.id)
           return // Already in the library
         }
 
@@ -1350,7 +1431,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         } = await supabase.auth.getSession()
         const userId = session?.user?.id || "anonymous"
 
-        // Add video to media library
+        // Add video to media library - only if not already processed
         const videoTitle =
           videoInfo.platform === "vimeo"
             ? (await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`).then((r) => r.json()))[0]?.title ||
@@ -1359,7 +1440,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               ? `YouTube ${videoInfo.id}`
               : `LinkedIn Post ${videoInfo.id}`
 
-        // Save to media table
+        // Save to media table with error handling
         const { error: dbError } = await supabase.from("media").insert({
           filename: videoTitle,
           filepath: url,
@@ -1374,15 +1455,19 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           },
         })
 
-        if (dbError) throw dbError
-
-        toast({
-          title: "Video added to media library",
-          description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been added to your media library`,
-        })
+        if (dbError) {
+          console.warn("useEffect processVideoUrl: Error inserting video to media library (might be duplicate):", dbError)
+          // Don't throw here, as this might be a duplicate
+        } else {
+          console.log("useEffect processVideoUrl: Successfully added video to media library")
+          toast({
+            title: "Video added to media library",
+            description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been added to your media library`,
+          })
+        }
       } catch (err) {
-        console.error("Error processing video URL:", err)
-        // Don't show error to user, just log it
+        console.error("useEffect processVideoUrl: Error processing video URL:", err)
+        // Don't show error to user, just log it - this could be a duplicate processing
       } finally {
         setIsProcessingVideo(false)
       }
@@ -1393,7 +1478,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     } else {
       setVideoThumbnail(null)
     }
-  }, [formData.thumbnail_url, formData.image, supabase])
+  }, [formData.thumbnail_url, formData.image, supabase, processedVideoUrls])
 
   const useVideoThumbnail = () => {
     if (videoThumbnail) {
