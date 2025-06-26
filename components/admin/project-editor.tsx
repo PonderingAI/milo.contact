@@ -825,9 +825,9 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       if (result.duplicate && result.existingVideo) {
         // Video already exists, add it to the interface but don't create a new database entry
         if (!mainVideos.includes(url)) {
-          setMainVideos([...mainVideos, url])
+          setMainVideos(prev => [...prev, url])
           setThumbnailUrl(url)
-          setFormData({ ...formData, thumbnail_url: url })
+          setFormData(prev => ({ ...prev, thumbnail_url: url }))
         }
 
         // Use existing video data if available
