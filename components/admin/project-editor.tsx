@@ -847,6 +847,18 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const addMainVideoUrl = async (url: string) => {
     if (!url?.trim()) return
 
+    // Add unique execution ID to track multiple calls
+    const executionId = Math.random().toString(36).substr(2, 9)
+    console.log(`=== addMainVideoUrl [${executionId}]: Function entry ===`)
+    console.log(`addMainVideoUrl [${executionId}]: Input URL:`, url)
+    console.log(`addMainVideoUrl [${executionId}]: isProcessingVideo:`, isProcessingVideo)
+
+    // Prevent duplicate calls - this might be the real issue
+    if (isProcessingVideo) {
+      console.warn(`addMainVideoUrl [${executionId}]: Already processing video, ignoring duplicate call`)
+      return
+    }
+
     setIsProcessingVideo(true)
     let toastId: string | undefined
 
@@ -855,11 +867,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         title: "Processing video",
         description: "Fetching video information...",
       }).id
-
-      console.log("addMainVideoUrl: Starting video processing for URL:", url)
       
-      // Use the new API route to process the video URL
-      const response = await fetch("/api/process-video-url", {
+      console.log(`addMainVideoUrl [${executionId}]: Starting video processing`)
+        
+        // Use the new API route to process the video URL
+        const response = await fetch("/api/process-video-url", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -893,24 +905,17 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         if (!mainVideos.includes(url)) {
           console.log("addMainVideoUrl: Adding existing video to interface:", url)
           try {
-            // Use safe state setters that check for component mount status
-            safeSetMainVideos((prev) => {
-              console.log("addMainVideoUrl: setMainVideos prev:", prev)
-              if (!prev || !Array.isArray(prev)) {
-                console.warn("addMainVideoUrl: mainVideos prev is not an array:", prev)
-                return [url]
-              }
-              return [...prev, url]
-            })
-            safeSetThumbnailUrl(url)
-            safeSetFormData((prev) => {
-              console.log("addMainVideoUrl: setFormData prev:", prev)
-              if (!prev || typeof prev !== 'object') {
-                console.warn("addMainVideoUrl: formData prev is not an object:", prev)
-                return { thumbnail_url: url }
-              }
-              return { ...prev, thumbnail_url: url }
-            })
+            // Use direct state updates instead of functional updates to avoid corruption
+            const newMainVideos = [...mainVideos, url]
+            console.log("addMainVideoUrl: Setting main videos directly:", newMainVideos)
+            setMainVideos(newMainVideos)
+            
+            setThumbnailUrl(url)
+            
+            const newFormData = { ...formData, thumbnail_url: url }
+            console.log("addMainVideoUrl: Setting form data directly:", newFormData)
+            setFormData(newFormData)
+            
             console.log("addMainVideoUrl: Successfully updated interface state for existing video")
           } catch (stateError) {
             console.error("addMainVideoUrl: Error updating interface state for existing video:", stateError)
@@ -938,21 +943,16 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
             if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
               console.log("addMainVideoUrl: Setting thumbnail as main image:", thumbnailUrl)
               try {
-                safeSetFormData((prev) => {
-                  if (!prev || typeof prev !== 'object') {
-                    console.warn("addMainVideoUrl: formData prev is not an object for image update:", prev)
-                    return { image: thumbnailUrl }
-                  }
-                  return { ...prev, image: thumbnailUrl }
-                })
-                safeSetVideoThumbnail(thumbnailUrl)
-                safeSetMainImages((prev) => {
-                  if (!prev || !Array.isArray(prev)) {
-                    console.warn("addMainVideoUrl: mainImages prev is not an array:", prev)
-                    return [thumbnailUrl]
-                  }
-                  return [...prev, thumbnailUrl]
-                })
+                const newFormData = { ...formData, image: thumbnailUrl }
+                console.log("addMainVideoUrl: Setting form data with image directly:", newFormData)
+                setFormData(newFormData)
+                
+                setVideoThumbnail(thumbnailUrl)
+                
+                const newMainImages = [...mainImages, thumbnailUrl]
+                console.log("addMainVideoUrl: Setting main images directly:", newMainImages)
+                setMainImages(newMainImages)
+                
                 console.log("addMainVideoUrl: Successfully set thumbnail as main image")
               } catch (thumbnailError) {
                 console.error("addMainVideoUrl: Error setting thumbnail as main image:", thumbnailError)
@@ -963,13 +963,9 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
             if (!formData.title && filename) {
               console.log("addMainVideoUrl: Setting video filename as title:", filename)
               try {
-                safeSetFormData((prev) => {
-                  if (!prev || typeof prev !== 'object') {
-                    console.warn("addMainVideoUrl: formData prev is not an object for title update:", prev)
-                    return { title: filename }
-                  }
-                  return { ...prev, title: filename }
-                })
+                const newFormData = { ...formData, title: filename }
+                console.log("addMainVideoUrl: Setting form data with title directly:", newFormData)
+                setFormData(newFormData)
                 console.log("addMainVideoUrl: Successfully set video title")
               } catch (titleError) {
                 console.error("addMainVideoUrl: Error setting video title:", titleError)
@@ -986,13 +982,9 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                   const formattedDate = formatDateForInput(date)
                   console.log("addMainVideoUrl: Setting project date:", formattedDate)
                   try {
-                    safeSetFormData((prev) => {
-                      if (!prev || typeof prev !== 'object') {
-                        console.warn("addMainVideoUrl: formData prev is not an object for date update:", prev)
-                        return { project_date: formattedDate }
-                      }
-                      return { ...prev, project_date: formattedDate }
-                    })
+                    const newFormData = { ...formData, project_date: formattedDate }
+                    console.log("addMainVideoUrl: Setting form data with date directly:", newFormData)
+                    setFormData(newFormData)
                     console.log("addMainVideoUrl: Successfully set project date")
                   } catch (dateSetError) {
                     console.error("addMainVideoUrl: Error setting project date:", dateSetError)
