@@ -888,12 +888,21 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       }
 
       const result = await response.json()
-      console.log("addMainVideoUrl: Video processing result:", result)
+      console.log(`addMainVideoUrl [${executionId}]: Video processing result:`, result)
+      console.log(`addMainVideoUrl [${executionId}]: Result type:`, typeof result)
+      console.log(`addMainVideoUrl [${executionId}]: Result is object:`, result && typeof result === 'object')
+      console.log(`addMainVideoUrl [${executionId}]: Result has duplicate property:`, result && 'duplicate' in result)
 
-      // Validate the response structure
-      if (!result || typeof result !== 'object') {
-        console.error("addMainVideoUrl: Invalid response format:", result)
-        throw new Error("Invalid response from video processing API")
+      // Validate the response structure with extra safety
+      try {
+        if (!result || typeof result !== 'object') {
+          console.error(`addMainVideoUrl [${executionId}]: Invalid response format:`, result)
+          throw new Error("Invalid response from video processing API")
+        }
+        console.log(`addMainVideoUrl [${executionId}]: Response validation passed`)
+      } catch (validationError) {
+        console.error(`addMainVideoUrl [${executionId}]: Error during response validation:`, validationError)
+        throw validationError
       }
 
       // Handle duplicate case with defensive programming
