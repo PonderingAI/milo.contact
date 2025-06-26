@@ -848,21 +848,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const addMainVideoUrl = async (url: string) => {
     if (!url?.trim()) return
 
-    // Add unique execution ID to track multiple calls
-    const executionId = Math.random().toString(36).substr(2, 9)
-    console.log(`=== addMainVideoUrl [${executionId}]: Function entry ===`)
-    console.log(`addMainVideoUrl [${executionId}]: Input URL:`, url)
-    console.log(`addMainVideoUrl [${executionId}]: isProcessingVideo:`, isProcessingVideo)
-
-    // Prevent duplicate calls - this might be the real issue
-    if (isProcessingVideo) {
-      console.warn(`addMainVideoUrl [${executionId}]: Already processing video, ignoring duplicate call`)
-      return
-    }
+    // Prevent duplicate calls
+    if (isProcessingVideo) return
 
     // Mark this URL as processed to prevent useEffect from reprocessing it
     setProcessedVideoUrls(prev => new Set([...prev, url]))
-    console.log(`addMainVideoUrl [${executionId}]: Marked URL as processed:`, url)
 
     setIsProcessingVideo(true)
     let toastId: string | undefined
@@ -873,10 +863,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         description: "Fetching video information...",
       }).id
       
-      console.log(`addMainVideoUrl [${executionId}]: Starting video processing`)
-        
-        // Use the new API route to process the video URL
-        const response = await fetch("/api/process-video-url", {
+      // Use the new API route to process the video URL
+      const response = await fetch("/api/process-video-url", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -884,350 +872,125 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url }),
       })
 
-      console.log("addMainVideoUrl: API response status:", response.status)
-
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown API error" }))
-        console.error("addMainVideoUrl: API error response:", errorData)
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
-      console.log(`addMainVideoUrl [${executionId}]: Video processing result:`, result)
-      console.log(`addMainVideoUrl [${executionId}]: Result type:`, typeof result)
-      console.log(`addMainVideoUrl [${executionId}]: Result is object:`, result && typeof result === 'object')
-      console.log(`addMainVideoUrl [${executionId}]: Result has duplicate property:`, result && 'duplicate' in result)
 
-      // Validate the response structure with extra safety
-      try {
-        if (!result || typeof result !== 'object') {
-          console.error(`addMainVideoUrl [${executionId}]: Invalid response format:`, result)
-          throw new Error("Invalid response from video processing API")
-        }
-        console.log(`addMainVideoUrl [${executionId}]: Response validation passed`)
-      } catch (validationError) {
-        console.error(`addMainVideoUrl [${executionId}]: Error during response validation:`, validationError)
-        throw validationError
+      // Validate the response structure
+      if (!result || typeof result !== 'object') {
+        throw new Error("Invalid response from video processing API")
       }
 
-      // Handle duplicate case with ultra-defensive programming
-      console.log(`addMainVideoUrl [${executionId}]: About to check result.duplicate`)
-      console.log(`addMainVideoUrl [${executionId}]: result at this point:`, result)
-      console.log(`addMainVideoUrl [${executionId}]: typeof result:`, typeof result)
-      console.log(`addMainVideoUrl [${executionId}]: result.hasOwnProperty('duplicate'):`, result ? result.hasOwnProperty('duplicate') : 'result is null/undefined')
-      
-      // Ultra-defensive duplicate checking with multiple fallback strategies
-      let isDuplicate = false
-      let safeResult = null
-      
-      try {
-        // Strategy 1: Direct property access with existence check
-        if (result && typeof result === 'object' && 'duplicate' in result) {
-          isDuplicate = Boolean(result.duplicate)
-          safeResult = result
-          console.log(`addMainVideoUrl [${executionId}]: Strategy 1 success - isDuplicate:`, isDuplicate)
+      // Handle duplicate case
+      if (result.duplicate && result.existingVideo) {
+        // Video already exists, add it to the interface but don't create a new database entry
+        if (!mainVideos.includes(url)) {
+          setMainVideos([...mainVideos, url])
+          setThumbnailUrl(url)
+          setFormData({ ...formData, thumbnail_url: url })
+        }
+
+        // Use existing video data if available
+        const existingVideo = result.existingVideo
+        
+        if (existingVideo && typeof existingVideo === 'object') {
+          const filename = existingVideo.filename
+          
+          // If project title is empty, use video title
+          if (!formData.title && filename) {
+            setFormData(prev => ({ ...prev, title: filename }))
+          }
+        }
+
+        // Display success message
+        const message = result.message || "Video was already in the media library and has been added to this project"
+        
+        if (toastId) {
+          toast({
+            id: toastId,
+            title: "Video already exists",
+            description: message,
+          })
         } else {
-          console.log(`addMainVideoUrl [${executionId}]: Strategy 1 failed - result structure invalid`)
-        }
-      } catch (strategyError) {
-        console.error(`addMainVideoUrl [${executionId}]: Strategy 1 error:`, strategyError)
-        
-        // Strategy 2: JSON parse/stringify to eliminate reference issues
-        try {
-          const resultStr = JSON.stringify(result)
-          const parsedResult = JSON.parse(resultStr)
-          if (parsedResult && typeof parsedResult === 'object' && 'duplicate' in parsedResult) {
-            isDuplicate = Boolean(parsedResult.duplicate)
-            safeResult = parsedResult
-            console.log(`addMainVideoUrl [${executionId}]: Strategy 2 success - isDuplicate:`, isDuplicate)
-          } else {
-            console.log(`addMainVideoUrl [${executionId}]: Strategy 2 failed - parsed result invalid`)
-          }
-        } catch (strategyError2) {
-          console.error(`addMainVideoUrl [${executionId}]: Strategy 2 error:`, strategyError2)
-          
-          // Strategy 3: Property descriptor check
-          try {
-            const descriptor = Object.getOwnPropertyDescriptor(result, 'duplicate')
-            if (descriptor) {
-              isDuplicate = Boolean(descriptor.value)
-              safeResult = result
-              console.log(`addMainVideoUrl [${executionId}]: Strategy 3 success - isDuplicate:`, isDuplicate)
-            } else {
-              console.log(`addMainVideoUrl [${executionId}]: Strategy 3 failed - no property descriptor`)
-            }
-          } catch (strategyError3) {
-            console.error(`addMainVideoUrl [${executionId}]: All strategies failed:`, strategyError3)
-            // Default to false and continue processing
-            isDuplicate = false
-            safeResult = result
-          }
-        }
-      }
-      
-      console.log(`addMainVideoUrl [${executionId}]: Final isDuplicate value:`, isDuplicate)
-      console.log(`addMainVideoUrl [${executionId}]: Final safeResult:`, safeResult)
-      
-      if (isDuplicate && safeResult) {
-          console.log(`addMainVideoUrl [${executionId}]: Video already exists, adding to interface`)
-          console.log(`addMainVideoUrl [${executionId}]: Duplicate result:`, JSON.stringify(result, null, 2))
-          
-          // Video already exists, add it to the interface but don't create a new database entry
-          if (!mainVideos.includes(url)) {
-          console.log("addMainVideoUrl: Adding existing video to interface:", url)
-          try {
-            // Use direct state updates instead of functional updates to avoid corruption
-            const newMainVideos = [...mainVideos, url]
-            console.log("addMainVideoUrl: Setting main videos directly:", newMainVideos)
-            setMainVideos(newMainVideos)
-            
-            setThumbnailUrl(url)
-            
-            const newFormData = { ...formData, thumbnail_url: url }
-            console.log("addMainVideoUrl: Setting form data directly:", newFormData)
-            setFormData(newFormData)
-            
-            console.log("addMainVideoUrl: Successfully updated interface state for existing video")
-          } catch (stateError) {
-            console.error("addMainVideoUrl: Error updating interface state for existing video:", stateError)
-            // Continue processing even if state update fails
-          }
-        }
-
-        // Use existing video data if available - ultra-defensive programming
-        let existingVideo = null
-        
-        try {
-          // Safe extraction of existingVideo property
-          if (safeResult && typeof safeResult === 'object' && 'existingVideo' in safeResult) {
-            existingVideo = safeResult.existingVideo
-          }
-        } catch (extractError) {
-          console.error(`addMainVideoUrl [${executionId}]: Error extracting existingVideo:`, extractError)
-          existingVideo = null
-        }
-        
-        console.log(`addMainVideoUrl [${executionId}]: Examining existingVideo:`, typeof existingVideo, existingVideo)
-        
-        if (existingVideo && typeof existingVideo === 'object' && existingVideo !== null) {
-          console.log("addMainVideoUrl: Using existing video data:", existingVideo)
-          
-          // Safely extract properties with fallbacks
-          const thumbnailUrl = typeof existingVideo.thumbnail_url === 'string' ? existingVideo.thumbnail_url : null
-          const filename = typeof existingVideo.filename === 'string' ? existingVideo.filename : null
-          const metadata = existingVideo.metadata && typeof existingVideo.metadata === 'object' ? existingVideo.metadata : {}
-          
-          // Use React's automatic batching for state updates
-          try {
-            console.log("addMainVideoUrl: Processing existing video metadata...")
-            
-            // If we have a thumbnail and no image is set, use the thumbnail
-            if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
-              console.log("addMainVideoUrl: Setting thumbnail as main image:", thumbnailUrl)
-              try {
-                const newFormData = { ...formData, image: thumbnailUrl }
-                console.log("addMainVideoUrl: Setting form data with image directly:", newFormData)
-                setFormData(newFormData)
-                
-                setVideoThumbnail(thumbnailUrl)
-                
-                const newMainImages = [...mainImages, thumbnailUrl]
-                console.log("addMainVideoUrl: Setting main images directly:", newMainImages)
-                setMainImages(newMainImages)
-                
-                console.log("addMainVideoUrl: Successfully set thumbnail as main image")
-              } catch (thumbnailError) {
-                console.error("addMainVideoUrl: Error setting thumbnail as main image:", thumbnailError)
-              }
-            }
-
-            // If project title is empty, use video title
-            if (!formData.title && filename) {
-              console.log("addMainVideoUrl: Setting video filename as title:", filename)
-              try {
-                const newFormData = { ...formData, title: filename }
-                console.log("addMainVideoUrl: Setting form data with title directly:", newFormData)
-                setFormData(newFormData)
-                console.log("addMainVideoUrl: Successfully set video title")
-              } catch (titleError) {
-                console.error("addMainVideoUrl: Error setting video title:", titleError)
-              }
-            }
-
-            // If project date is empty and we have metadata with upload date, use it
-            if (!formData.project_date && metadata.uploadDate) {
-              console.log("addMainVideoUrl: Processing upload date from metadata...")
-              try {
-                console.log("addMainVideoUrl: Parsing upload date:", metadata.uploadDate)
-                const date = new Date(metadata.uploadDate)
-                if (!isNaN(date.getTime())) {
-                  const formattedDate = formatDateForInput(date)
-                  console.log("addMainVideoUrl: Setting project date:", formattedDate)
-                  try {
-                    const newFormData = { ...formData, project_date: formattedDate }
-                    console.log("addMainVideoUrl: Setting form data with date directly:", newFormData)
-                    setFormData(newFormData)
-                    console.log("addMainVideoUrl: Successfully set project date")
-                  } catch (dateSetError) {
-                    console.error("addMainVideoUrl: Error setting project date:", dateSetError)
-                  }
-                } else {
-                  console.warn("addMainVideoUrl: Invalid date parsed from metadata:", metadata.uploadDate)
-                }
-              } catch (dateError) {
-                console.warn("addMainVideoUrl: Error parsing upload date:", dateError)
-              }
-            }
-            
-            console.log("addMainVideoUrl: Completed processing existing video metadata")
-          } catch (stateError) {
-            console.error("addMainVideoUrl: Error during state updates:", stateError)
-            // Continue processing even if state updates fail
-          }
-        } else {
-          console.warn("addMainVideoUrl: Existing video data is not in expected format:", {
-            type: typeof existingVideo,
-            value: existingVideo,
-            isNull: existingVideo === null,
-            isArray: Array.isArray(existingVideo)
+          toast({
+            title: "Video already exists",
+            description: message,
           })
         }
-
-        // Display success message with safe toast handling
-        const message = (result.message && typeof result.message === 'string') 
-          ? result.message 
-          : "Video was already in the media library and has been added to this project"
-        
-        console.log("addMainVideoUrl: Displaying success toast for existing video")
-        try {
-          if (toastId) {
-            toast({
-              id: toastId,
-              title: "Video already exists",
-              description: message,
-            })
-          } else {
-            toast({
-              title: "Video already exists",
-              description: message,
-            })
-          }
-        } catch (toastError) {
-          console.error("addMainVideoUrl: Error showing success toast:", toastError)
-        }
-        console.log("addMainVideoUrl: Completed processing for existing video")
         return
       }
 
-      // Handle new video case - also with validation
-      console.log("addMainVideoUrl: Processing new video")
-      
-      // Add to mainVideos if not already in the list
+      // Handle new video case
       if (!mainVideos.includes(url)) {
-        setMainVideos((prev) => [...prev, url])
+        setMainVideos(prev => [...prev, url])
         setThumbnailUrl(url)
-        setFormData((prev) => ({ ...prev, thumbnail_url: url }))
+        setFormData(prev => ({ ...prev, thumbnail_url: url }))
       }
 
-      // Safely extract properties from result
-      const thumbnailUrl = typeof result.thumbnailUrl === 'string' ? result.thumbnailUrl : null
-      const title = typeof result.title === 'string' ? result.title : null
-      const uploadDate = typeof result.uploadDate === 'string' ? result.uploadDate : null
+      // Extract properties from result
+      const thumbnailUrl = result.thumbnailUrl
+      const title = result.title
+      const uploadDate = result.uploadDate
 
-      // Use React's automatic batching for new videos
-      try {
-        // If we have a thumbnail and no image is set, use the thumbnail
-        if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
-          console.log("addMainVideoUrl: Setting new video thumbnail as main image:", thumbnailUrl)
-          setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-          setVideoThumbnail(thumbnailUrl)
-          setMainImages((prev) => [...prev, thumbnailUrl])
-        }
+      // Use thumbnail if available and no image is set
+      if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+        setFormData(prev => ({ ...prev, image: thumbnailUrl }))
+        setVideoThumbnail(thumbnailUrl)
+        setMainImages(prev => [...prev, thumbnailUrl])
+      }
 
-        // If project title is empty, use video title
-        if (!formData.title && title) {
-          console.log("addMainVideoUrl: Setting new video title:", title)
-          setFormData((prev) => ({ ...prev, title }))
-        }
+      // Use video title if project title is empty
+      if (!formData.title && title) {
+        setFormData(prev => ({ ...prev, title }))
+      }
 
-        // If project date is empty and we have an upload date, use it
-        if (!formData.project_date && uploadDate) {
-          try {
-            const date = new Date(uploadDate)
-            if (!isNaN(date.getTime())) {
-              const formattedDate = formatDateForInput(date)
-              console.log("addMainVideoUrl: Setting project date from new video:", formattedDate)
-              setFormData((prev) => ({ ...prev, project_date: formattedDate }))
-            }
-          } catch (dateError) {
-            console.warn("addMainVideoUrl: Error parsing new video upload date:", dateError)
+      // Use upload date if project date is empty
+      if (!formData.project_date && uploadDate) {
+        try {
+          const date = new Date(uploadDate)
+          if (!isNaN(date.getTime())) {
+            const formattedDate = formatDateForInput(date)
+            setFormData(prev => ({ ...prev, project_date: formattedDate }))
           }
+        } catch (dateError) {
+          console.warn("Error parsing upload date:", dateError)
         }
-      } catch (stateError) {
-        console.error("addMainVideoUrl: Error during new video state updates:", stateError)
       }
 
-      console.log("addMainVideoUrl: Displaying success toast for new video")
-      try {
-        if (toastId) {
-          toast({
-            id: toastId,
-            title: "Video added",
-            description: "Video has been added to the project and media library",
-          })
-        } else {
-          toast({
-            title: "Video added",
-            description: "Video has been added to the project and media library",
-          })
-        }
-      } catch (toastError) {
-        console.error("addMainVideoUrl: Error showing success toast for new video:", toastError)
+      if (toastId) {
+        toast({
+          id: toastId,
+          title: "Video added",
+          description: "Video has been added to the project and media library",
+        })
+      } else {
+        toast({
+          title: "Video added",
+          description: "Video has been added to the project and media library",
+        })
       }
     } catch (error) {
-      console.error("addMainVideoUrl: Error processing video:", error)
-      console.error("addMainVideoUrl: Error details:", {
-        name: error instanceof Error ? error.name : 'Unknown',
-        message: error instanceof Error ? error.message : String(error),
-        stack: error instanceof Error ? error.stack : 'No stack trace'
-      })
+      console.error("Error processing video:", error)
       
-      try {
-        if (toastId) {
-          toast({
-            id: toastId,
-            title: "Error adding video",
-            description: error instanceof Error ? error.message : "Failed to process video URL",
-            variant: "destructive",
-          })
-        } else {
-          toast({
-            title: "Error adding video",
-            description: error instanceof Error ? error.message : "Failed to process video URL",
-            variant: "destructive",
-          })
-        }
-      } catch (toastError) {
-        console.error("addMainVideoUrl: Error showing error toast:", toastError)
-        // Last resort - try to show a generic error message
-        try {
-          toast({
-            title: "Error",
-            description: "An error occurred while processing the video",
-            variant: "destructive",
-          })
-        } catch (finalToastError) {
-          console.error("addMainVideoUrl: Failed to show any error toast:", finalToastError)
-        }
+      if (toastId) {
+        toast({
+          id: toastId,
+          title: "Error adding video",
+          description: error instanceof Error ? error.message : "Failed to process video URL",
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error adding video",
+          description: error instanceof Error ? error.message : "Failed to process video URL",
+          variant: "destructive",
+        })
       }
     } finally {
-      console.log("addMainVideoUrl: Cleaning up...")
-      try {
-        setIsProcessingVideo(false)
-      } catch (cleanupError) {
-        console.error("addMainVideoUrl: Error during cleanup:", cleanupError)
-      }
-      console.log("addMainVideoUrl: Function completed")
+      setIsProcessingVideo(false)
     }
   }
 
@@ -1239,9 +1002,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       description: "Fetching video information...",
     }).id
 
-    try {
-      console.log("addBtsVideoUrl: Starting BTS video processing for URL:", url)
-      
+    try {      
       // Use the new API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
@@ -1251,20 +1012,15 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url, isBts: true }),
       })
 
-      console.log("addBtsVideoUrl: API response status:", response.status)
-
       if (!response.ok) {
         const errorData = await response.json()
-        console.error("addBtsVideoUrl: API error response:", errorData)
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
-      console.log("addBtsVideoUrl: BTS video processing result:", result)
 
       // Validate the response structure
       if (!result || typeof result !== 'object') {
-        console.error("addBtsVideoUrl: Invalid response format:", result)
         throw new Error("Invalid response from video processing API")
       }
 
@@ -1361,7 +1117,10 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
   }
 
-  // Process video URL and extract thumbnail
+  // Process video URL and extract thumbnail - DISABLED TO PREVENT CONFLICTS
+  // This useEffect was causing "j is not a function" errors when processing duplicate videos
+  // The addMainVideoUrl function handles all video processing now
+  /*
   useEffect(() => {
     const processVideoUrl = async () => {
       const url = formData.thumbnail_url?.trim()
@@ -1369,11 +1128,14 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
       // Skip processing if this URL was already processed by addMainVideoUrl
       if (processedVideoUrls.has(url)) {
-        console.log("useEffect processVideoUrl: Skipping already processed URL:", url)
+        console.log("useEffect: Skipping already processed URL:", url)
         return
       }
 
-      console.log("useEffect processVideoUrl: Processing URL:", url)
+      // Skip processing if we're currently processing a video
+      if (isProcessingVideo) {
+        return
+      }
 
       const videoInfo = extractVideoInfo(url)
       if (!videoInfo) {
@@ -1381,6 +1143,9 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         return
       }
 
+      // Don't auto-process videos that could conflict with manual processing
+      // This useEffect should mainly handle videos that come from other sources
+      console.log("useEffect: Auto-processing video URL:", url)
       setIsProcessingVideo(true)
 
       try {
@@ -1479,6 +1244,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       setVideoThumbnail(null)
     }
   }, [formData.thumbnail_url, formData.image, supabase, processedVideoUrls])
+  */
 
   const useVideoThumbnail = () => {
     if (videoThumbnail) {
