@@ -7,7 +7,7 @@
 
 import "server-only"
 import { createServerClient } from "./supabase-server"
-import { mockProjects, mockBtsImages, type Project, type BtsImage } from "./mock-data"
+import { mockProjects, mockBtsImages, type Project, type BtsImage, type MainMedia } from "./mock-data"
 import { extractVideoInfo, extractTagsFromRole, isValidUUID } from "./project-data"
 import { currentUser } from "@clerk/nextjs/server"
 import { checkAdminPermission } from "@/lib/auth-server"
@@ -188,9 +188,9 @@ export async function getAllProjectsForAdmin(): Promise<Project[]> {
 }
 
 /**
- * Get a project by ID with its BTS images
+ * Get a project by ID with its BTS images and main media
  */
-export async function getProjectById(id: string): Promise<(Project & { bts_images: BtsImage[] }) | null> {
+export async function getProjectById(id: string): Promise<(Project & { bts_images: BtsImage[], main_media: MainMedia[] }) | null> {
   try {
     // First check if database is set up
     const isDbSetup = await isDatabaseSetup()
@@ -215,6 +215,7 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
         return {
           ...mockProject,
           bts_images: mockBtsImages.filter((img) => img.project_id === id),
+          main_media: [], // Mock projects don't have main media for now
         }
       }
       return null
@@ -228,6 +229,7 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
         return {
           ...mockProject,
           bts_images: mockBtsImages.filter((img) => img.project_id === id),
+          main_media: [], // Mock projects don't have main media for now
         }
       }
       return null
@@ -252,6 +254,7 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
         return {
           ...mockProject,
           bts_images: mockBtsImages.filter((img) => img.project_id === id),
+          main_media: [], // Mock projects don't have main media for now
         }
       }
       return null
@@ -277,6 +280,18 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       console.error("Error fetching BTS images:", btsError)
     }
 
+    // Get main media for the project
+    const { data: mainMedia, error: mainMediaError } = await supabase
+      .from("main_media")
+      .select("*")
+      .eq("project_id", id)
+      .order("display_order", { ascending: true })
+      .order("created_at", { ascending: true })
+
+    if (mainMediaError) {
+      console.error("Error fetching main media:", mainMediaError)
+    }
+
     // Extract tags from role field
     const roleTags = extractTagsFromRole(project.role)
 
@@ -289,7 +304,8 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       ...project,
       tags: [project.category, ...roleTags].filter(Boolean),
       bts_images: btsImages || [],
-    } as Project & { bts_images: BtsImage[] }
+      main_media: mainMedia || [],
+    } as Project & { bts_images: BtsImage[], main_media: MainMedia[] }
   } catch (error) {
     console.error("Error in getProjectById:", error)
     const mockProject = mockProjects.find((p) => p.id === id)
@@ -306,6 +322,7 @@ export async function getProjectById(id: string): Promise<(Project & { bts_image
       return {
         ...mockProject,
         bts_images: mockBtsImages.filter((img) => img.project_id === id),
+        main_media: [], // Mock projects don't have main media for now
       }
     }
     return null

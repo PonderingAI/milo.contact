@@ -2,17 +2,28 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ArrowLeft, Play, ExternalLink } from "lucide-react"
+import { ArrowLeft, Play, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import VideoPlayer from "@/components/video-player"
 import BTSLightbox from "@/components/bts-lightbox"
+import MainMediaLightbox from "@/components/main-media-lightbox"
 import { extractVideoInfo } from "@/lib/project-data"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface BTSMedia {
+  id: string
+  image_url: string
+  caption?: string
+  is_video?: boolean
+  video_url?: string
+  video_platform?: string
+  video_id?: string
+}
+
+interface MainMedia {
   id: string
   image_url: string
   caption?: string
@@ -37,6 +48,7 @@ interface ProjectDetailContentProps {
     project_date?: string
     tags?: string[]
     bts_images?: BTSMedia[]
+    main_media?: MainMedia[]
     external_url?: string
   }
 }
@@ -48,6 +60,11 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const [videoError, setVideoError] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
+  
+  // Main media lightbox state
+  const [mainMediaLightboxOpen, setMainMediaLightboxOpen] = useState(false)
+  const [mainMediaIndex, setMainMediaIndex] = useState(0)
+  const [currentMainMediaIndex, setCurrentMainMediaIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
@@ -56,6 +73,40 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
 
   // Process BTS media to ensure they have proper video info
   const [btsMedia, setBtsMedia] = useState<BTSMedia[]>([])
+  
+  // Process main media to ensure they have proper video info
+  const [mainMedia, setMainMedia] = useState<MainMedia[]>([])
+  
+  // Combined main media from main_media table and fallback to project.image/thumbnail_url
+  const combinedMainMedia = useMemo(() => {
+    const media: MainMedia[] = []
+    
+    // Add main media from database if available
+    if (project.main_media && project.main_media.length > 0) {
+      media.push(...project.main_media)
+    } else {
+      // Fallback to project.image and thumbnail_url for backward compatibility
+      if (project.image) {
+        media.push({
+          id: 'cover-image',
+          image_url: project.image,
+          is_video: false,
+        })
+      }
+      if (project.thumbnail_url && videoInfo) {
+        media.push({
+          id: 'main-video',
+          image_url: project.thumbnail_url,
+          is_video: true,
+          video_url: project.thumbnail_url,
+          video_platform: videoInfo.platform,
+          video_id: videoInfo.id,
+        })
+      }
+    }
+    
+    return media
+  }, [project.main_media, project.image, project.thumbnail_url, videoInfo])
 
   // Extract video info from thumbnail_url if not already available
   useEffect(() => {
@@ -135,6 +186,24 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     announceToScreenReader("Lightbox closed")
   }
 
+  // Main media lightbox functions
+  const openMainMediaLightbox = (index: number) => {
+    setMainMediaIndex(index)
+    setMainMediaLightboxOpen(true)
+    // Announce to screen readers
+    announceToScreenReader(`Opened main media ${index + 1} of ${combinedMainMedia.length}`)
+  }
+
+  const closeMainMediaLightbox = () => {
+    setMainMediaLightboxOpen(false)
+    // Return focus to the main content
+    if (mainRef.current) {
+      mainRef.current.focus()
+    }
+    // Announce to screen readers
+    announceToScreenReader("Main media lightbox closed")
+  }
+
   const navigateLightbox = useCallback(
     (direction: "next" | "prev") => {
       if (!btsMedia || btsMedia.length === 0) return
@@ -198,27 +267,93 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
       <div id="sr-announcement" className="sr-only" aria-live="polite" aria-atomic="true"></div>
 
       {/* Full-width video/image section - no width constraints */}
+      {/* Main Media Section - Support for multiple images/videos */}
       <div className="w-full mb-8">
-        {videoInfo && !videoError ? (
-          <div className="w-full aspect-video">
-            <VideoPlayer
-              platform={videoInfo.platform}
-              videoId={videoInfo.id}
-              onError={handleVideoError}
-              autoplay={false} // Disable autoplay to preserve audio
-              useNativeControls={true} // Use native YouTube/Vimeo controls
-            />
+        {combinedMainMedia.length > 0 ? (
+          <div className="relative">
+            {/* Main media display */}
+            <div className="w-full aspect-video relative group">
+              {combinedMainMedia[currentMainMediaIndex]?.is_video && combinedMainMedia[currentMainMediaIndex]?.video_platform && combinedMainMedia[currentMainMediaIndex]?.video_id ? (
+                <VideoPlayer
+                  platform={combinedMainMedia[currentMainMediaIndex].video_platform!}
+                  videoId={combinedMainMedia[currentMainMediaIndex].video_id!}
+                  onError={handleVideoError}
+                  autoplay={false}
+                  useNativeControls={true}
+                />
+              ) : (
+                <Image
+                  src={combinedMainMedia[currentMainMediaIndex]?.image_url || "/placeholder.svg"}
+                  alt={project.title}
+                  fill
+                  className="object-cover cursor-pointer"
+                  priority
+                  sizes="100vw"
+                  onClick={() => openMainMediaLightbox(currentMainMediaIndex)}
+                />
+              )}
+              
+              {/* Navigation arrows for multiple main media */}
+              {combinedMainMedia.length > 1 && (
+                <>
+                  <button
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white p-3 rounded-full bg-black/50 hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white"
+                    onClick={() => setCurrentMainMediaIndex((prev) => (prev - 1 + combinedMainMedia.length) % combinedMainMedia.length)}
+                    aria-label="Previous media"
+                  >
+                    <ChevronLeft className="h-8 w-8" />
+                  </button>
+                  <button
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white p-3 rounded-full bg-black/50 hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white"
+                    onClick={() => setCurrentMainMediaIndex((prev) => (prev + 1) % combinedMainMedia.length)}
+                    aria-label="Next media"
+                  >
+                    <ChevronRight className="h-8 w-8" />
+                  </button>
+                </>
+              )}
+              
+              {/* Media counter */}
+              {combinedMainMedia.length > 1 && (
+                <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
+                  {currentMainMediaIndex + 1} / {combinedMainMedia.length}
+                </div>
+              )}
+            </div>
+            
+            {/* Thumbnail gallery for multiple main media */}
+            {combinedMainMedia.length > 1 && (
+              <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+                {combinedMainMedia.map((media, index) => (
+                  <button
+                    key={media.id || index}
+                    className={`flex-shrink-0 w-20 h-20 relative rounded-md overflow-hidden border-2 transition-all ${
+                      index === currentMainMediaIndex ? 'border-white shadow-lg' : 'border-gray-600 hover:border-gray-400'
+                    }`}
+                    onClick={() => setCurrentMainMediaIndex(index)}
+                    aria-label={`View ${media.is_video ? 'video' : 'image'} ${index + 1}`}
+                  >
+                    <Image
+                      src={media.image_url || "/placeholder.svg"}
+                      alt={`${project.title} ${index + 1}`}
+                      fill
+                      className="object-cover"
+                      sizes="80px"
+                    />
+                    {media.is_video && (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Play className="h-6 w-6 text-white drop-shadow-lg" />
+                      </div>
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
-          <div className="w-full aspect-video relative">
-            <Image
-              src={project.image || "/placeholder.svg"}
-              alt={project.title}
-              fill
-              className="object-cover"
-              priority
-              sizes="100vw"
-            />
+          // Fallback display if no main media
+          <div className="w-full aspect-video relative bg-gray-800 flex items-center justify-center">
+            <p className="text-gray-400">No media available</p>
           </div>
         )}
       </div>
@@ -395,6 +530,33 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
             isOpen={lightboxOpen}
             onClose={closeLightbox}
             onNavigate={navigateLightbox}
+            isMobile={isMobile}
+          />
+        </div>
+      )}
+
+      {/* Main Media Lightbox */}
+      {mainMediaLightboxOpen && combinedMainMedia.length > 0 && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-sm"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Main media gallery"
+        >
+          <MainMediaLightbox
+            media={combinedMainMedia}
+            initialIndex={mainMediaIndex}
+            isOpen={mainMediaLightboxOpen}
+            onClose={closeMainMediaLightbox}
+            onNavigate={(direction) => {
+              const newIndex = direction === "next" 
+                ? (mainMediaIndex + 1) % combinedMainMedia.length 
+                : (mainMediaIndex - 1 + combinedMainMedia.length) % combinedMainMedia.length
+              setMainMediaIndex(newIndex)
+            }}
             isMobile={isMobile}
           />
         </div>

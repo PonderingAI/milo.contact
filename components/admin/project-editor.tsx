@@ -327,21 +327,73 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
   }, [mode, project?.id])
 
-  // Fetch main images and videos if in edit mode
+  // Fetch main media if in edit mode
   useEffect(() => {
-    if (mode === "edit" && project) {
-      // Set the main image
-      if (project.image) {
-        setMainImages([project.image])
+    if (mode === "edit" && project?.id) {
+      async function fetchMainMedia() {
+        try {
+          const response = await fetch(`/api/projects/main-media/${project.id}`)
+
+          if (response.ok) {
+            const data = await response.json()
+            
+            if (data.fullData && Array.isArray(data.fullData)) {
+              // Separate images and videos from main media
+              const images: string[] = []
+              const videos: string[] = []
+
+              data.fullData.forEach((item: any) => {
+                if (!item.image_url || typeof item.image_url !== 'string') {
+                  console.warn('Skipping invalid main media URL:', item)
+                  return
+                }
+
+                if (item.is_video) {
+                  // For videos, use the original video URL if available, otherwise image_url
+                  const videoUrl = item.video_url || item.image_url
+                  videos.push(videoUrl)
+                } else {
+                  images.push(item.image_url)
+                }
+              })
+
+              setMainImages(images)
+              setMainVideos(videos)
+              
+              console.log("Loaded main media - images:", images, "videos:", videos)
+            }
+          } else {
+            // No main media found, use fallback from project fields
+            console.log("No main media table data, using fallback from project fields")
+            
+            // Set the main image from project.image
+            if (project.image) {
+              setMainImages([project.image])
+            }
+
+            // Set the main video from project.thumbnail_url
+            if (project.thumbnail_url) {
+              setMainVideos([project.thumbnail_url])
+              setThumbnailUrl(project.thumbnail_url)
+            }
+          }
+        } catch (err) {
+          console.error("Error fetching main media:", err)
+          
+          // Use fallback from project fields on error
+          if (project.image) {
+            setMainImages([project.image])
+          }
+          if (project.thumbnail_url) {
+            setMainVideos([project.thumbnail_url])
+            setThumbnailUrl(project.thumbnail_url)
+          }
+        }
       }
 
-      // Set the main video if thumbnail_url exists
-      if (project.thumbnail_url) {
-        setMainVideos([project.thumbnail_url])
-        setThumbnailUrl(project.thumbnail_url)
-      }
+      fetchMainMedia()
     }
-  }, [mode, project])
+  }, [mode, project?.id])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -1154,6 +1206,33 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           throw new Error(responseData.error || "Failed to create project")
         }
 
+        // Save main media if any
+        if ((mainImages.length > 0 || mainVideos.length > 0) && responseData.data && responseData.data[0]) {
+          const projectId = responseData.data[0].id
+
+          try {
+            const mainMediaResponse = await fetch("/api/projects/main-media", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                projectId,
+                media: [...mainImages, ...mainVideos],
+                replaceExisting: true,
+              }),
+            })
+
+            if (!mainMediaResponse.ok) {
+              console.error("Error saving main media:", await mainMediaResponse.json())
+              // Continue with success flow even if main media save fails
+            }
+          } catch (mainMediaError) {
+            console.error("Error saving main media:", mainMediaError)
+            // Continue with success flow even if main media save fails
+          }
+        }
+
         // Save BTS images if any
         if ((btsImages.length > 0 || btsVideos.length > 0) && responseData.data && responseData.data[0]) {
           const projectId = responseData.data[0].id
@@ -1214,7 +1293,32 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           throw new Error(responseData.error || "Failed to update project")
         }
 
-        console.log("Project updated successfully, updating BTS media...")
+        console.log("Project updated successfully, updating main media and BTS media...")
+
+        // Update main media if any
+        if (project?.id) {
+          try {
+            const mainMediaResponse = await fetch("/api/projects/main-media", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                projectId: project.id,
+                media: [...mainImages, ...mainVideos],
+                replaceExisting: true,
+              }),
+            })
+
+            if (!mainMediaResponse.ok) {
+              console.error("Error updating main media:", await mainMediaResponse.json())
+              // Continue with success flow even if main media update fails
+            }
+          } catch (mainMediaError) {
+            console.error("Error updating main media:", mainMediaError)
+            // Continue with success flow even if main media update fails
+          }
+        }
 
         // Update BTS images if any
         if (project?.id) {

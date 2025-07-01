@@ -42,6 +42,23 @@ export interface BtsImage {
   created_at?: string
 }
 
+/**
+ * Main media interface
+ */
+export interface MainMedia {
+  id: string
+  project_id: string
+  image_url: string
+  caption?: string
+  is_video?: boolean
+  video_url?: string
+  video_platform?: string
+  video_id?: string
+  display_order?: number
+  created_at?: string
+  updated_at?: string
+}
+
 // Mock data for development - will be replaced by Supabase data in production
 export const mockProjects: Project[] = [
   // Directed Projects
