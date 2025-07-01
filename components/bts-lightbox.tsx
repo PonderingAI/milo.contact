@@ -64,6 +64,17 @@ export default function BTSLightbox({
     setIsVideoPlaying(isVideo) // Auto-play videos, show static images immediately
   }, [currentIndex, media])
 
+  // Auto-play video when lightbox initially opens
+  useEffect(() => {
+    if (isOpen) {
+      const currentMedia = media[currentIndex]
+      const isVideo = currentMedia?.is_video && currentMedia?.video_url
+      if (isVideo) {
+        setIsVideoPlaying(true)
+      }
+    }
+  }, [isOpen, currentIndex, media])
+
   const navigate = useCallback(
     (direction: "next" | "prev") => {
       if (media.length <= 1) return
