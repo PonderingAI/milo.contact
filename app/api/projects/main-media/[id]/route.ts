@@ -28,6 +28,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     if (error) {
       console.error("Error fetching main media:", error)
+      
+      // If the table doesn't exist, return empty result instead of error
+      if (error.code === '42P01' || error.message.includes('does not exist')) {
+        console.log("main_media table does not exist, returning empty result")
+        return NextResponse.json({
+          success: true,
+          media: [],
+          fullData: [],
+          count: 0,
+        })
+      }
+      
       return NextResponse.json(
         {
           success: false,

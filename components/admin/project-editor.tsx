@@ -83,6 +83,15 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [mainVideos, setMainVideos] = useState<string[]>([])
   const [thumbnailUrl, setThumbnailUrl] = useState<string>(project?.thumbnail_url || "")
 
+  // Debug logging for main media state changes
+  useEffect(() => {
+    console.log("MainImages state changed:", mainImages)
+  }, [mainImages])
+
+  useEffect(() => {
+    console.log("MainVideos state changed:", mainVideos)
+  }, [mainVideos])
+
   // Refs for input elements
   const categoryInputRef = useRef<HTMLInputElement>(null)
   const roleInputRef = useRef<HTMLInputElement>(null)
@@ -376,7 +385,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           if (response.ok) {
             const data = await response.json()
             
-            if (data.fullData && Array.isArray(data.fullData)) {
+            if (data.fullData && Array.isArray(data.fullData) && data.fullData.length > 0) {
               // Separate images and videos from main media
               const images: string[] = []
               const videos: string[] = []
@@ -410,17 +419,25 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               setMainVideos(videos)
               
               console.log("Loaded main media - images:", images, "videos:", videos)
+            } else {
+              // No main media in database, use project fields as fallback (for backward compatibility)
+              console.log("No main media in database, using project fields as fallback")
+              
+              if (project.image) {
+                setMainImages([project.image])
+              }
+              if (project.thumbnail_url) {
+                setMainVideos([project.thumbnail_url])
+                setThumbnailUrl(project.thumbnail_url)
+              }
             }
           } else {
-            // No main media found, use fallback from project fields
-            console.log("No main media table data, using fallback from project fields")
+            // API call failed, use project fields as fallback
+            console.log("Failed to fetch main media, using project fields as fallback")
             
-            // Set the main image from project.image
             if (project.image) {
               setMainImages([project.image])
             }
-
-            // Set the main video from project.thumbnail_url
             if (project.thumbnail_url) {
               setMainVideos([project.thumbnail_url])
               setThumbnailUrl(project.thumbnail_url)
