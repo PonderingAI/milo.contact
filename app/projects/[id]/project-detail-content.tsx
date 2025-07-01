@@ -88,13 +88,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
       media.push(...project.main_media)
     } else {
       // Fallback to project.image and thumbnail_url for backward compatibility
-      if (project.image) {
-        media.push({
-          id: 'cover-image',
-          image_url: project.image,
-          is_video: false,
-        })
-      }
+      // For videos, only use the video (don't double-count with cover image)
       if (project.thumbnail_url && videoInfo) {
         media.push({
           id: 'main-video',
@@ -103,6 +97,13 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           video_url: project.thumbnail_url,
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
+        })
+      } else if (project.image) {
+        // Only add cover image if there's no video
+        media.push({
+          id: 'cover-image',
+          image_url: project.image,
+          is_video: false,
         })
       }
     }
