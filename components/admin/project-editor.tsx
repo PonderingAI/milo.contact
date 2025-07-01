@@ -1260,6 +1260,10 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           const projectId = responseData.data[0].id
 
           try {
+            console.log("Saving main media - mainImages:", mainImages, "mainVideos:", mainVideos)
+            const combinedMedia = [...mainImages, ...mainVideos]
+            console.log("Combined media being sent:", combinedMedia)
+            
             const mainMediaResponse = await fetch("/api/projects/main-media", {
               method: "POST",
               headers: {
@@ -1267,14 +1271,17 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               },
               body: JSON.stringify({
                 projectId,
-                media: [...mainImages, ...mainVideos],
+                media: combinedMedia,
                 replaceExisting: true,
               }),
             })
 
+            const mainMediaResult = await mainMediaResponse.json()
             if (!mainMediaResponse.ok) {
-              console.error("Error saving main media:", await mainMediaResponse.json())
+              console.error("Error saving main media:", mainMediaResult)
               // Continue with success flow even if main media save fails
+            } else {
+              console.log("Main media saved successfully:", mainMediaResult)
             }
           } catch (mainMediaError) {
             console.error("Error saving main media:", mainMediaError)
@@ -1347,6 +1354,10 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         // Update main media if any
         if (project?.id) {
           try {
+            console.log("Updating main media - mainImages:", mainImages, "mainVideos:", mainVideos)
+            const combinedMedia = [...mainImages, ...mainVideos]
+            console.log("Combined media being sent:", combinedMedia)
+            
             const mainMediaResponse = await fetch("/api/projects/main-media", {
               method: "POST",
               headers: {
@@ -1354,14 +1365,17 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               },
               body: JSON.stringify({
                 projectId: project.id,
-                media: [...mainImages, ...mainVideos],
+                media: combinedMedia,
                 replaceExisting: true,
               }),
             })
 
+            const mainMediaResult = await mainMediaResponse.json()
             if (!mainMediaResponse.ok) {
-              console.error("Error updating main media:", await mainMediaResponse.json())
+              console.error("Error updating main media:", mainMediaResult)
               // Continue with success flow even if main media update fails
+            } else {
+              console.log("Main media updated successfully:", mainMediaResult)
             }
           } catch (mainMediaError) {
             console.error("Error updating main media:", mainMediaError)

@@ -331,6 +331,97 @@ END $$;`,
     policies: ["public_read_media", "admins_manage_media"]
   },
 
+  main_media: {
+    name: "main_media",
+    displayName: "Main Media",
+    description: "Stores main images and videos for projects (multiple main media support)",
+    sql: `
+CREATE TABLE IF NOT EXISTS main_media (
+  id SERIAL PRIMARY KEY,
+  project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  image_url TEXT NOT NULL,
+  caption TEXT,
+  is_video BOOLEAN DEFAULT FALSE,
+  video_url TEXT,
+  video_platform TEXT,
+  video_id TEXT,
+  display_order INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Create indexes for better performance
+CREATE INDEX IF NOT EXISTS idx_main_media_project_id ON main_media(project_id);
+CREATE INDEX IF NOT EXISTS idx_main_media_display_order ON main_media(project_id, display_order);
+
+-- Set up Row Level Security (RLS) policies
+ALTER TABLE main_media ENABLE ROW LEVEL SECURITY;
+
+-- Allow public read access
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'main_media' AND policyname = 'public_read_main_media'
+  ) THEN
+    CREATE POLICY "public_read_main_media"
+    ON main_media
+    FOR SELECT
+    TO public
+    USING (true);
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;
+
+-- Allow authenticated users with admin role to manage main media
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policies WHERE tablename = 'main_media' AND policyname = 'admins_manage_main_media'
+  ) THEN
+    CREATE POLICY "admins_manage_main_media"
+    ON main_media
+    FOR ALL
+    TO authenticated
+    USING (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    )
+    WITH CHECK (
+      EXISTS (
+        SELECT 1 FROM user_roles
+        WHERE user_id = auth.uid() 
+        AND role = 'admin'
+      )
+    );
+  END IF;
+EXCEPTION WHEN OTHERS THEN
+  -- Policy already exists or other error
+END $$;`,
+    dependencies: ["projects"],
+    required: false,
+    category: "media",
+    version: 1,
+    columns: [
+      { name: "id", type: "SERIAL", constraints: ["PRIMARY KEY"] },
+      { name: "project_id", type: "UUID", constraints: ["NOT NULL", "REFERENCES projects(id) ON DELETE CASCADE"] },
+      { name: "image_url", type: "TEXT", constraints: ["NOT NULL"] },
+      { name: "caption", type: "TEXT" },
+      { name: "is_video", type: "BOOLEAN", default: "FALSE" },
+      { name: "video_url", type: "TEXT" },
+      { name: "video_platform", type: "TEXT" },
+      { name: "video_id", type: "TEXT" },
+      { name: "display_order", type: "INTEGER", default: "0" },
+      { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
+      { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
+    ],
+    indexes: ["idx_main_media_project_id", "idx_main_media_display_order"],
+    policies: ["public_read_main_media", "admins_manage_main_media"]
+  },
+
   bts_images: {
     name: "bts_images",
     displayName: "Behind the Scenes Images",
