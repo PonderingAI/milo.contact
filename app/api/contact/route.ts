@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server"
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase-server"
 import nodemailer from "nodemailer"
 
 // Create a transporter for sending emails
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     }
 
     // Initialize Supabase client with service role key to bypass RLS
-    const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+    const supabase = createAdminClient()
 
     // Check if the contact_messages table exists
     const { error: checkError } = await supabase.from("contact_messages").select("count").limit(1)
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
 
       // Send email notification
       try {
-        await sendEmailNotification(name, email, message)
+        await sendEmailNotification(name, email, message, supabase)
         // Return success response even though we couldn't save to database
         return NextResponse.json({
           success: true,
@@ -68,7 +68,7 @@ export async function POST(request: Request) {
 
     // Send email notification
     try {
-      await sendEmailNotification(name, email, message)
+      await sendEmailNotification(name, email, message, supabase)
     } catch (emailError: any) {
       console.error("Failed to send email notification:", emailError)
       // Continue execution even if email fails since we saved to database
@@ -96,16 +96,32 @@ export async function POST(request: Request) {
   }
 }
 
-async function sendEmailNotification(name: string, email: string, message: string) {
+async function sendEmailNotification(name: string, email: string, message: string, supabase: any) {
   // Check if email credentials are configured
   if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
     console.warn("Email credentials not configured. Skipping email notification.")
     return
   }
 
+  // Fetch contact email from site settings
+  let contactEmail = "me@milo.contact" // fallback to original hardcoded value
+  try {
+    const { data: settingsData, error: settingsError } = await supabase
+      .from("site_settings")
+      .select("value")
+      .eq("key", "contact_email")
+      .single()
+
+    if (!settingsError && settingsData?.value) {
+      contactEmail = settingsData.value
+    }
+  } catch (error) {
+    console.warn("Could not fetch contact email from settings, using fallback:", error)
+  }
+
   const mailOptions = {
     from: process.env.EMAIL_FROM || "Portfolio Contact Form <noreply@example.com>",
-    to: "me@milo.contact",
+    to: contactEmail,
     subject: `New Contact Form Submission from ${name}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
