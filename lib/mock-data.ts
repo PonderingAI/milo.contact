@@ -82,7 +82,7 @@ export const mockProjects: Project[] = [
     category: "Music Video",
     role: "Director",
     image: "/images/project2.jpg",
-    thumbnail_url: "https://vimeo.com/123456789", // Changed from video_url to thumbnail_url
+    thumbnail_url: "https://player.vimeo.com/video/123456789", // Changed from video_url to thumbnail_url
     description: "An experimental music video featuring innovative visual techniques and storytelling.",
     special_notes:
       "Working with the artist to develop a visual language that complemented the music was a rewarding creative challenge.",

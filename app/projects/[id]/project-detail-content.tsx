@@ -85,7 +85,31 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     
     // Add main media from database if available
     if (project.main_media && project.main_media.length > 0) {
-      media.push(...project.main_media)
+      // Process main media and filter out duplicates based on video ID
+      const seenVideoIds = new Set<string>()
+      const seenImageUrls = new Set<string>()
+      
+      project.main_media.forEach((item) => {
+        // For videos, check if we've already seen this video ID
+        if (item.is_video && item.video_id) {
+          const videoKey = `${item.video_platform}-${item.video_id}`
+          if (!seenVideoIds.has(videoKey)) {
+            seenVideoIds.add(videoKey)
+            media.push(item)
+          }
+        } else if (!item.is_video) {
+          // For images, check if we've already seen this image URL
+          // Also skip if this image URL is already being used as a thumbnail for a video
+          const isVideoThumbnail = project.main_media.some(
+            (videoItem) => videoItem.is_video && videoItem.image_url === item.image_url
+          )
+          
+          if (!seenImageUrls.has(item.image_url) && !isVideoThumbnail) {
+            seenImageUrls.add(item.image_url)
+            media.push(item)
+          }
+        }
+      })
     } else {
       // Fallback to project.image and thumbnail_url for backward compatibility
       // For videos, only use the video (don't double-count with cover image)
