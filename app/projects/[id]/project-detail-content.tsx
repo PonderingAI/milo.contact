@@ -166,10 +166,10 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     return () => clearTimeout(timer)
   }, [project.bts_images])
 
-  const handleVideoError = () => {
+  const handleVideoError = useCallback(() => {
     console.error("Video failed to load")
     setVideoError(true)
-  }
+  }, [])
 
   const openLightbox = (index: number) => {
     setLightboxIndex(index)
