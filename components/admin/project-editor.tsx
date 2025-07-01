@@ -318,7 +318,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                     if (item.video_platform.toLowerCase() === "youtube") {
                       originalUrl = `https://www.youtube.com/watch?v=${item.video_id}`
                     } else if (item.video_platform.toLowerCase() === "vimeo") {
-                      originalUrl = `https://vimeo.com/${item.video_id}`
+                      originalUrl = `https://player.vimeo.com/video/${item.video_id}`
                     } else if (item.video_platform.toLowerCase() === "linkedin") {
                       // For LinkedIn, we may need to store the original URL differently
                       originalUrl = item.video_url || item.image_url
@@ -407,7 +407,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                     if (item.video_platform.toLowerCase() === "youtube") {
                       videoUrl = `https://www.youtube.com/watch?v=${item.video_id}`
                     } else if (item.video_platform.toLowerCase() === "vimeo") {
-                      videoUrl = `https://vimeo.com/${item.video_id}`
+                      videoUrl = `https://player.vimeo.com/video/${item.video_id}`
                     }
                   }
                   

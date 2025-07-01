@@ -83,21 +83,13 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const combinedMainMedia = useMemo(() => {
     const media: MainMedia[] = []
     
-    console.log("Processing main media - project.main_media:", project.main_media)
-    console.log("Processing main media - project.image:", project.image)
-    console.log("Processing main media - project.thumbnail_url:", project.thumbnail_url)
-    console.log("Processing main media - videoInfo:", videoInfo)
-    
     // Add main media from database if available
     if (project.main_media && project.main_media.length > 0) {
-      console.log("Using main_media from database:", project.main_media)
       media.push(...project.main_media)
     } else {
-      console.log("No main_media found, using fallback logic")
       // Fallback to project.image and thumbnail_url for backward compatibility
       // For videos, only use the video (don't double-count with cover image)
       if (project.thumbnail_url && videoInfo) {
-        console.log("Adding video from thumbnail_url and videoInfo")
         media.push({
           id: 'main-video',
           image_url: project.thumbnail_url,
@@ -106,7 +98,6 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           video_id: videoInfo.id,
         })
       } else if (project.image) {
-        console.log("Adding image from project.image")
         // Only add cover image if there's no video
         media.push({
           id: 'cover-image',
@@ -116,7 +107,6 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
       }
     }
     
-    console.log("Final combinedMainMedia:", media)
     return media
   }, [project.main_media, project.image, project.thumbnail_url, videoInfo])
 
