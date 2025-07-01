@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { extractVideoInfo, extractVideoDate } from "@/lib/project-data"
+import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X, ArrowLeft, Save } from "lucide-react"
 import { Switch } from "@/components/ui/switch"
@@ -19,6 +19,7 @@ import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import UnifiedMediaInput from "@/components/admin/unified-media-input"
+import ProjectEditorErrorBoundary from "@/components/admin/project-editor-error-boundary"
 
 interface ProjectEditorProps {
   project?: {
@@ -37,7 +38,18 @@ interface ProjectEditorProps {
   mode: "create" | "edit"
 }
 
-export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
+function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
+  // Only log on mount and specific state changes, not every render
+  const hasLoggedMount = useRef(false)
+  
+  if (!hasLoggedMount.current) {
+    console.log("ProjectEditor: Component mounting, mode:", mode, "project:", project?.id)
+    hasLoggedMount.current = true
+  }
+
+  // Add a ref to track if component is mounted
+  const isMountedRef = useRef(true)
+  
   const [formData, setFormData] = useState({
     title: project?.title || "",
     category: project?.category || "",
@@ -84,26 +96,44 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
   const router = useRouter()
-  const supabase = getSupabaseBrowserClient()
+
+  // Cleanup effect to track component mount status
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   // Fetch the actual schema columns when the component mounts
   useEffect(() => {
     async function fetchSchema() {
       try {
         setIsLoadingSchema(true)
+        console.log("fetchSchema: Starting schema detection")
+        
         // First try to get the schema from our API
         const response = await fetch("/api/check-projects-schema")
 
         if (response.ok) {
           const data = await response.json()
+          console.log("fetchSchema: API response received:", data)
+          
           if (data.exists && data.columns && Array.isArray(data.columns)) {
             const columnNames = data.columns.map((col: any) => col.column_name)
             setSchemaColumns(columnNames)
-            console.log("Available columns in projects table:", columnNames)
+            console.log("fetchSchema: Successfully loaded schema columns:", columnNames)
+            
+            // Log any warnings or method used
+            if (data.method) {
+              console.log(`fetchSchema: Schema loaded using method: ${data.method}`)
+            }
+            if (data.warning) {
+              console.warn(`fetchSchema: Schema warning: ${data.warning}`)
+            }
           } else if (!data.exists) {
-            console.log("Projects table does not exist")
-            // Set some default columns as a fallback
-            setSchemaColumns([
+            console.warn("fetchSchema: API reports projects table does not exist, using fallback")
+            // Use fallback columns even if API says table doesn't exist
+            const fallbackColumns = [
               "id",
               "title",
               "description",
@@ -112,24 +142,50 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
               "role",
               "project_date",
               "is_public",
+              "thumbnail_url",
               "created_at",
               "updated_at",
-            ])
+            ]
+            setSchemaColumns(fallbackColumns)
+            console.log("fetchSchema: Using fallback schema columns:", fallbackColumns)
           }
         } else {
+          console.warn(`fetchSchema: API request failed with status ${response.status}, using direct fallback`)
+          
           // Fallback: direct query to get columns
-          const { data, error } = await supabase.from("projects").select("*").limit(1)
+          try {
+            const supabaseClient = getSupabaseBrowserClient()
+            const { data, error } = await supabaseClient.from("projects").select("*").limit(1)
 
-          if (!error && data) {
-            // Extract column names from the first row
-            const sampleRow = data[0] || {}
-            const columnNames = Object.keys(sampleRow)
-            setSchemaColumns(columnNames)
-            console.log("Available columns in projects table (fallback):", columnNames)
-          } else {
-            console.error("Error fetching schema:", error)
-            // Set some default columns as a last resort
-            setSchemaColumns([
+            if (!error && data) {
+              // Extract column names from the first row
+              const sampleRow = data[0] || {}
+              const columnNames = Object.keys(sampleRow)
+              setSchemaColumns(columnNames)
+              console.log("fetchSchema: Direct fallback successful, columns:", columnNames)
+            } else {
+              console.warn("fetchSchema: Direct fallback failed, using hardcoded defaults")
+              // Set default columns as a last resort
+              const defaultColumns = [
+                "id",
+                "title",
+                "description",
+                "image",
+                "category",
+                "role",
+                "project_date",
+                "is_public",
+                "thumbnail_url",
+                "created_at",
+                "updated_at",
+              ]
+              setSchemaColumns(defaultColumns)
+              console.log("fetchSchema: Using hardcoded default columns:", defaultColumns)
+            }
+          } catch (fallbackError) {
+            console.error("fetchSchema: Direct fallback failed with exception:", fallbackError)
+            // Use hardcoded defaults
+            const defaultColumns = [
               "id",
               "title",
               "description",
@@ -138,20 +194,40 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
               "role",
               "project_date",
               "is_public",
+              "thumbnail_url",
               "created_at",
               "updated_at",
-            ])
+            ]
+            setSchemaColumns(defaultColumns)
+            console.log("fetchSchema: Exception fallback, using defaults:", defaultColumns)
           }
         }
       } catch (err) {
-        console.error("Error fetching schema:", err)
+        console.error("fetchSchema: Unexpected error during schema detection:", err)
+        // Always provide a working set of columns
+        const defaultColumns = [
+          "id",
+          "title",
+          "description",
+          "image",
+          "category",
+          "role",
+          "project_date",
+          "is_public",
+          "thumbnail_url",
+          "created_at",
+          "updated_at",
+        ]
+        setSchemaColumns(defaultColumns)
+        console.log("fetchSchema: Error fallback, using defaults:", defaultColumns)
       } finally {
         setIsLoadingSchema(false)
+        console.log("fetchSchema: Schema detection completed")
       }
     }
 
     fetchSchema()
-  }, [supabase])
+  }, []) // Fixed: Using getSupabaseBrowserClient() directly to avoid dependency issues
 
   // Fetch existing categories and roles for suggestions
   useEffect(() => {
@@ -202,12 +278,25 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
 
           if (response.ok) {
             const data = await response.json()
+            
+            // Add additional safety checks for the response data
+            if (!data) {
+              console.warn('BTS API returned null/undefined data')
+              return
+            }
+            
             if (data.images && Array.isArray(data.images)) {
               // Separate images and videos
               const images: string[] = []
               const videos: string[] = []
 
               data.images.forEach((url: string) => {
+                // Skip null, undefined, or non-string values
+                if (!url || typeof url !== 'string') {
+                  console.warn('Skipping invalid BTS URL:', url)
+                  return
+                }
+
                 const isVideo =
                   url.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
                   url.includes("youtube.com") ||
@@ -328,11 +417,13 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   async function extractDateFromMedia(url: string, type: "image" | "video"): Promise<Date | null> {
     try {
       if (type === "video") {
-        // Use the new extractVideoDate function that handles both YouTube and Vimeo
-        return await extractVideoDate(url)
+        // For videos, we'll skip the API call here since it requires server-side access
+        // The video processing API endpoint will handle this instead
+        return null
       } else if (type === "image") {
         // For images in Supabase, check if we have metadata
-        const { data } = await supabase.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
+        const supabaseClient = getSupabaseBrowserClient()
+        const { data } = await supabaseClient.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
 
         if (data) {
           // Try to get date from metadata
@@ -350,6 +441,18 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       console.error("Error extracting date from media:", error)
       return null
     }
+  }
+
+  // Function to get video release date for tooltip display
+  const getVideoReleaseDate = async (videoUrl: string): Promise<string | null> => {
+    // Check if we already have this date cached
+    if (videoReleaseDates.has(videoUrl)) {
+      const date = videoReleaseDates.get(videoUrl)
+      return date ? date.toLocaleDateString() : null
+    }
+
+    // For now, return null since we're handling video date extraction server-side
+    return null
   }
 
   // Video display component with tooltip for release date
@@ -383,6 +486,15 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
       }
     }
 
+    const getVideoThumbnail = () => {
+      if (video.includes("youtube.com")) {
+        return `https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`
+      } else if (video.includes("youtu.be")) {
+        return `https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`
+      }
+      return null
+    }
+
     const getVideoInfo = () => {
       if (video.includes("youtube.com") || video.includes("youtu.be")) {
         return { platform: "YouTube", thumbnail: getVideoThumbnail() }
@@ -393,15 +505,6 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     }
 
     const videoInfo = getVideoInfo()
-
-    const getVideoThumbnail = () => {
-      if (video.includes("youtube.com")) {
-        return `https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`
-      } else if (video.includes("youtu.be")) {
-        return `https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`
-      }
-      return null
-    }
 
     const thumbnailUrl = videoInfo.thumbnail
 
@@ -490,27 +593,6 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     )
   }
 
-  // Function to get video release date for tooltip display
-  const getVideoReleaseDate = async (videoUrl: string): Promise<string | null> => {
-    // Check if we already have this date cached
-    if (videoReleaseDates.has(videoUrl)) {
-      const date = videoReleaseDates.get(videoUrl)
-      return date ? date.toLocaleDateString() : null
-    }
-
-    try {
-      const date = await extractVideoDate(videoUrl)
-      if (date) {
-        setVideoReleaseDates((prev) => new Map(prev).set(videoUrl, date))
-        return date.toLocaleDateString()
-      }
-    } catch (error) {
-      console.error("Error fetching video release date:", error)
-    }
-
-    return null
-  }
-
   // Function to process external videos and extract dates
   const processExternalVideo = async (mediaUrl: string) => {
     const toastId = toast({
@@ -554,7 +636,10 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     console.log("handleMainMediaSelect received URLs:", urls)
 
     for (const mediaUrl of urls) {
-      if (!mediaUrl) continue
+      if (!mediaUrl || typeof mediaUrl !== 'string') {
+        console.warn('Skipping invalid main media URL:', mediaUrl)
+        continue
+      }
 
       // Determine if it's an image or video based on extension or URL
       const isVideo =
@@ -654,6 +739,12 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
     console.log("handleBtsMediaSelect received URLs:", urls)
 
     urls.forEach((mediaUrl) => {
+      // Skip null, undefined, or non-string values
+      if (!mediaUrl || typeof mediaUrl !== 'string') {
+        console.warn('Skipping invalid BTS media URL:', mediaUrl)
+        return
+      }
+
       // Determine if it's an image or video based on extension or URL
       const isVideo =
         mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
@@ -724,16 +815,32 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   }
 
   const addMainVideoUrl = async (url: string) => {
-    if (!url.trim()) return
+    if (!url?.trim()) {
+      console.log("addMainVideoUrl: Empty URL provided")
+      return
+    }
+
+    // Prevent duplicate calls
+    if (isProcessingVideo) {
+      console.log("addMainVideoUrl: Already processing a video, skipping")
+      return
+    }
+
+    const sessionId = Date.now().toString()
+    console.log(`=== addMainVideoUrl [${sessionId}]: Function entry ===`)
+    console.log(`addMainVideoUrl [${sessionId}]: Input URL: ${url}`)
 
     setIsProcessingVideo(true)
-    const toastId = toast({
-      title: "Processing video",
-      description: "Fetching video information...",
-    }).id
-
+    
     try {
-      // Use the new API route to process the video URL
+      const toastId = toast({
+        title: "Processing video",
+        description: "Fetching video information...",
+      }).id
+      
+      console.log(`addMainVideoUrl [${sessionId}]: Starting API call`)
+      
+      // Use the API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
         headers: {
@@ -742,67 +849,140 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url }),
       })
 
+      console.log(`addMainVideoUrl [${sessionId}]: API response status: ${response.status}`)
+
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ error: "Unknown API error" }))
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
-      console.log("Video processing result:", result)
+      
+      console.log(`addMainVideoUrl [${sessionId}]: Video processing result:`)
+      console.log(result)
 
-      // Add to mainVideos if not already in the list
-      if (!mainVideos.includes(url)) {
-        setMainVideos((prev) => [...prev, url])
-        setThumbnailUrl(url)
-        setFormData((prev) => ({ ...prev, thumbnail_url: url }))
+      // Handle duplicate case with safer checks
+      if (result && typeof result === 'object' && result.duplicate === true) {
+        console.log(`addMainVideoUrl [${sessionId}]: Handling duplicate video`)
+        
+        // Add to interface if not already present
+        if (!mainVideos.includes(url)) {
+          setMainVideos(prev => [...prev, url])
+          setThumbnailUrl(url)
+          setFormData(prev => ({ ...prev, thumbnail_url: url }))
+        }
+
+        // Use existing video data safely
+        if (result.existingVideo && typeof result.existingVideo === 'object') {
+          const existingVideo = result.existingVideo
+          const filename = existingVideo.filename
+          
+          // If project title is empty, use video title
+          if (!formData.title && filename && typeof filename === 'string') {
+            setFormData(prev => ({ ...prev, title: filename }))
+          }
+        }
+
+        // Show success message
+        const message = result.message || "Video was already in the media library and has been added to this project"
+        
+        toast({
+          id: toastId,
+          title: "Video already exists",
+          description: message,
+        })
+        
+        console.log(`addMainVideoUrl [${sessionId}]: Successfully handled duplicate`)
+        return
       }
 
-      // If we have a thumbnail and no image is set, use the thumbnail
-      if (result.thumbnailUrl && !formData.image && !mainImages.includes(result.thumbnailUrl)) {
-        setFormData((prev) => ({ ...prev, image: result.thumbnailUrl }))
-        setVideoThumbnail(result.thumbnailUrl)
-        setMainImages((prev) => [...prev, result.thumbnailUrl])
-      }
+      // Handle new video case
+      if (result && typeof result === 'object' && result.success === true) {
+        console.log(`addMainVideoUrl [${sessionId}]: Handling new video`)
+        
+        if (!mainVideos.includes(url)) {
+          setMainVideos(prev => [...prev, url])
+          setThumbnailUrl(url)
+          setFormData(prev => ({ ...prev, thumbnail_url: url }))
+        }
 
-      // If project title is empty, use video title
-      if (!formData.title && result.title) {
-        setFormData((prev) => ({ ...prev, title: result.title }))
-      }
+        // Extract properties from result safely
+        const thumbnailUrl = result.thumbnailUrl
+        const title = result.title
+        const uploadDate = result.uploadDate
 
-      // If project date is empty and we have an upload date, use it
-      if (!formData.project_date && result.uploadDate) {
-        const date = new Date(result.uploadDate)
-        setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
-      }
+        // Use thumbnail if available and no image is set
+        if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+          setFormData(prev => ({ ...prev, image: thumbnailUrl }))
+          setVideoThumbnail(thumbnailUrl)
+          setMainImages(prev => [...prev, thumbnailUrl])
+        }
 
-      toast({
-        id: toastId,
-        title: "Video added",
-        description: "Video has been added to the project and media library",
-      })
+        // Use video title if project title is empty
+        if (!formData.title && title && typeof title === 'string') {
+          setFormData(prev => ({ ...prev, title }))
+        }
+
+        // Use upload date if project date is empty
+        if (!formData.project_date && uploadDate) {
+          try {
+            const date = new Date(uploadDate)
+            if (!isNaN(date.getTime())) {
+              const formattedDate = formatDateForInput(date)
+              setFormData(prev => ({ ...prev, project_date: formattedDate }))
+            }
+          } catch (dateError) {
+            console.warn(`addMainVideoUrl [${sessionId}]: Error parsing upload date:`, dateError)
+          }
+        }
+
+        toast({
+          id: toastId,
+          title: "Video added",
+          description: "Video has been added to the project and media library",
+        })
+        
+        console.log(`addMainVideoUrl [${sessionId}]: Successfully handled new video`)
+        return
+      }
+      
+      // If we get here, the response format was unexpected
+      console.warn(`addMainVideoUrl [${sessionId}]: Unexpected response format:`, result)
+      throw new Error("Unexpected response format from video processing API")
+      
     } catch (error) {
-      console.error("Error processing video:", error)
+      console.error(`addMainVideoUrl [${sessionId}]: Error processing video:`, error)
+      
       toast({
-        id: toastId,
         title: "Error adding video",
         description: error instanceof Error ? error.message : "Failed to process video URL",
         variant: "destructive",
       })
     } finally {
       setIsProcessingVideo(false)
+      console.log(`addMainVideoUrl [${sessionId}]: Process completed`)
     }
   }
 
   const addBtsVideoUrl = async (url: string) => {
-    if (!url.trim()) return
+    if (!url?.trim()) {
+      console.log("addBtsVideoUrl: Empty URL provided")
+      return
+    }
 
-    const toastId = toast({
-      title: "Processing BTS video",
-      description: "Fetching video information...",
-    }).id
+    const sessionId = Date.now().toString()
+    console.log(`=== addBtsVideoUrl [${sessionId}]: Function entry ===`)
+    console.log(`addBtsVideoUrl [${sessionId}]: Input URL: ${url}`)
 
     try {
-      // Use the new API route to process the video URL
+      const toastId = toast({
+        title: "Processing BTS video",
+        description: "Fetching video information...",
+      }).id
+
+      console.log(`addBtsVideoUrl [${sessionId}]: Starting API call`)
+      
+      // Use the API route to process the video URL
       const response = await fetch("/api/process-video-url", {
         method: "POST",
         headers: {
@@ -811,148 +991,90 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
         body: JSON.stringify({ url, isBts: true }),
       })
 
+      console.log(`addBtsVideoUrl [${sessionId}]: API response status: ${response.status}`)
+
       if (!response.ok) {
-        const errorData = await response.json()
+        const errorData = await response.json().catch(() => ({ error: "Unknown API error" }))
         throw new Error(errorData.error || "Failed to process video URL")
       }
 
       const result = await response.json()
-      console.log("BTS video processing result:", result)
+      
+      console.log(`addBtsVideoUrl [${sessionId}]: Video processing result:`)
+      console.log(result)
 
-      // Add to BTS videos if not already in the list
-      if (!btsVideos.includes(url)) {
-        setBtsVideos((prev) => [...prev, url])
+      // Handle duplicate case
+      if (result && typeof result === 'object' && result.duplicate === true) {
+        console.log(`addBtsVideoUrl [${sessionId}]: Handling duplicate BTS video`)
+        
+        // Add to interface if not already present
+        if (!btsVideos.includes(url)) {
+          setBtsVideos(prev => [...prev, url])
+        }
+
+        // Use existing video data safely
+        if (result.existingVideo && typeof result.existingVideo === 'object') {
+          const existingVideo = result.existingVideo
+          const thumbnailUrl = existingVideo.thumbnail_url
+          
+          if (thumbnailUrl && typeof thumbnailUrl === 'string' && !btsImages.includes(thumbnailUrl)) {
+            setBtsImages(prev => [...prev, thumbnailUrl])
+          }
+        }
+
+        // Show success message
+        const message = result.message || "Video was already in the media library and has been added to BTS"
+        
+        toast({
+          id: toastId,
+          title: "BTS video already exists",
+          description: message,
+        })
+        
+        console.log(`addBtsVideoUrl [${sessionId}]: Successfully handled duplicate`)
+        return
       }
 
-      // Add thumbnail to BTS images if available and not already in the list
-      if (result.thumbnailUrl && !btsImages.includes(result.thumbnailUrl)) {
-        setBtsImages((prev) => [...prev, result.thumbnailUrl])
-      }
+      // Handle new video case
+      if (result && typeof result === 'object' && result.success === true) {
+        console.log(`addBtsVideoUrl [${sessionId}]: Handling new BTS video`)
+        
+        if (!btsVideos.includes(url)) {
+          setBtsVideos(prev => [...prev, url])
+        }
 
-      toast({
-        id: toastId,
-        title: "BTS Video added",
-        description: "Behind the scenes video has been added to the project",
-      })
+        // Extract properties from result safely
+        const thumbnailUrl = result.thumbnailUrl
+
+        // Add thumbnail to BTS images if available
+        if (thumbnailUrl && typeof thumbnailUrl === 'string' && !btsImages.includes(thumbnailUrl)) {
+          setBtsImages(prev => [...prev, thumbnailUrl])
+        }
+
+        toast({
+          id: toastId,
+          title: "BTS video added",
+          description: "Video has been added to BTS and media library",
+        })
+        
+        console.log(`addBtsVideoUrl [${sessionId}]: Successfully handled new video`)
+        return
+      }
+      
+      // If we get here, the response format was unexpected
+      console.warn(`addBtsVideoUrl [${sessionId}]: Unexpected response format:`, result)
+      throw new Error("Unexpected response format from video processing API")
+      
     } catch (error) {
-      console.error("Error processing BTS video:", error)
+      console.error(`addBtsVideoUrl [${sessionId}]: Error processing BTS video:`, error)
+      
       toast({
-        id: toastId,
         title: "Error adding BTS video",
         description: error instanceof Error ? error.message : "Failed to process video URL",
         variant: "destructive",
       })
-    } finally {
-      setIsProcessingVideo(false)
     }
   }
-
-  // Process video URL and extract thumbnail
-  useEffect(() => {
-    const processVideoUrl = async () => {
-      const url = formData.thumbnail_url?.trim()
-      if (!url || isProcessingVideo) return
-
-      const videoInfo = extractVideoInfo(url)
-      if (!videoInfo) {
-        setVideoThumbnail(null)
-        return
-      }
-
-      setIsProcessingVideo(true)
-
-      try {
-        let thumbnailUrl = null
-
-        if (videoInfo.platform === "vimeo") {
-          // Get video thumbnail from Vimeo API
-          const response = await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`)
-
-          if (!response.ok) {
-            throw new Error("Failed to fetch Vimeo video info")
-          }
-
-          const videoData = await response.json()
-          const video = videoData[0]
-          thumbnailUrl = video.thumbnail_large
-        } else if (videoInfo.platform === "youtube") {
-          // Use YouTube thumbnail URL format
-          thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/hqdefault.jpg`
-        } else if (videoInfo.platform === "linkedin") {
-          // LinkedIn doesn't provide easy thumbnail access, use a placeholder
-          thumbnailUrl = "/generic-icon.png"
-        }
-
-        setVideoThumbnail(thumbnailUrl)
-
-        // If no image is set yet, use the video thumbnail
-        if (!formData.image && thumbnailUrl) {
-          setFormData((prev) => ({ ...prev, image: thumbnailUrl }))
-          setIsUsingVideoThumbnail(true)
-        }
-
-        // Check if this video is already in the media library
-        const { data: existingMedia } = await supabase
-          .from("media")
-          .select("id, public_url")
-          .eq("public_url", url)
-          .maybeSingle()
-
-        if (existingMedia) {
-          console.log("Video already exists in media library:", existingMedia.id)
-          return // Already in the library
-        }
-
-        // Get current user session
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const userId = session?.user?.id || "anonymous"
-
-        // Add video to media library
-        const videoTitle =
-          videoInfo.platform === "vimeo"
-            ? (await fetch(`https://vimeo.com/api/v2/video/${videoInfo.id}.json`).then((r) => r.json()))[0]?.title ||
-              `Vimeo ${videoInfo.id}`
-            : videoInfo.platform === "youtube"
-              ? `YouTube ${videoInfo.id}`
-              : `LinkedIn Post ${videoInfo.id}`
-
-        // Save to media table
-        const { error: dbError } = await supabase.from("media").insert({
-          filename: videoTitle,
-          filepath: url,
-          filesize: 0, // Not applicable for external videos
-          filetype: videoInfo.platform,
-          public_url: url,
-          thumbnail_url: thumbnailUrl,
-          tags: ["video", videoInfo.platform, "project"],
-          metadata: {
-            [videoInfo.platform + "Id"]: videoInfo.id,
-            uploadedBy: userId,
-          },
-        })
-
-        if (dbError) throw dbError
-
-        toast({
-          title: "Video added to media library",
-          description: `${videoInfo.platform.charAt(0).toUpperCase() + videoInfo.platform.slice(1)} video has been added to your media library`,
-        })
-      } catch (err) {
-        console.error("Error processing video URL:", err)
-        // Don't show error to user, just log it
-      } finally {
-        setIsProcessingVideo(false)
-      }
-    }
-
-    if (formData.thumbnail_url) {
-      processVideoUrl()
-    } else {
-      setVideoThumbnail(null)
-    }
-  }, [formData.thumbnail_url, formData.image, supabase])
 
   const useVideoThumbnail = () => {
     if (videoThumbnail) {
@@ -1532,17 +1654,11 @@ export default function ProjectEditor({ project, mode }: ProjectEditorProps) {
   )
 }
 
-async function fetchYouTubeTitle(videoId: string): Promise<string | null> {
-  try {
-    const response = await fetch(`/api/youtube-title?videoId=${videoId}`)
-    if (!response.ok) {
-      console.error("Failed to fetch YouTube title:", response.status, response.statusText)
-      return null
-    }
-    const data = await response.json()
-    return data.title || null
-  } catch (error) {
-    console.error("Error fetching YouTube title:", error)
-    return null
-  }
+// Wrap the main component with error boundary
+export default function ProjectEditor(props: ProjectEditorProps) {
+  return (
+    <ProjectEditorErrorBoundary>
+      <ProjectEditorComponent {...props} />
+    </ProjectEditorErrorBoundary>
+  )
 }
