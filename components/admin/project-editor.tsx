@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { getSupabaseBrowserClient } from "@/lib/supabase"
@@ -96,9 +96,6 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [isLoadingSchema, setIsLoadingSchema] = useState(true)
   const [isLoadingBtsImages, setIsLoadingBtsImages] = useState(mode === "edit")
   const router = useRouter()
-  
-  // Use a memoized supabase client to prevent dependency issues
-  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
 
   // Cleanup effect to track component mount status
   useEffect(() => {
@@ -281,12 +278,25 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
           if (response.ok) {
             const data = await response.json()
+            
+            // Add additional safety checks for the response data
+            if (!data) {
+              console.warn('BTS API returned null/undefined data')
+              return
+            }
+            
             if (data.images && Array.isArray(data.images)) {
               // Separate images and videos
               const images: string[] = []
               const videos: string[] = []
 
               data.images.forEach((url: string) => {
+                // Skip null, undefined, or non-string values
+                if (!url || typeof url !== 'string') {
+                  console.warn('Skipping invalid BTS URL:', url)
+                  return
+                }
+
                 const isVideo =
                   url.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
                   url.includes("youtube.com") ||
@@ -412,7 +422,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         return null
       } else if (type === "image") {
         // For images in Supabase, check if we have metadata
-        const { data } = await supabase.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
+        const supabaseClient = getSupabaseBrowserClient()
+        const { data } = await supabaseClient.from("media").select("metadata, created_at").eq("public_url", url).maybeSingle()
 
         if (data) {
           // Try to get date from metadata
@@ -625,7 +636,10 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     console.log("handleMainMediaSelect received URLs:", urls)
 
     for (const mediaUrl of urls) {
-      if (!mediaUrl) continue
+      if (!mediaUrl || typeof mediaUrl !== 'string') {
+        console.warn('Skipping invalid main media URL:', mediaUrl)
+        continue
+      }
 
       // Determine if it's an image or video based on extension or URL
       const isVideo =
@@ -725,6 +739,12 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     console.log("handleBtsMediaSelect received URLs:", urls)
 
     urls.forEach((mediaUrl) => {
+      // Skip null, undefined, or non-string values
+      if (!mediaUrl || typeof mediaUrl !== 'string') {
+        console.warn('Skipping invalid BTS media URL:', mediaUrl)
+        return
+      }
+
       // Determine if it's an image or video based on extension or URL
       const isVideo =
         mediaUrl.match(/\.(mp4|webm|ogg|mov)$/) !== null ||
