@@ -157,7 +157,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           
           // Fallback: direct query to get columns
           try {
-            const { data, error } = await supabase.from("projects").select("*").limit(1)
+            const supabaseClient = getSupabaseBrowserClient()
+            const { data, error } = await supabaseClient.from("projects").select("*").limit(1)
 
             if (!error && data) {
               // Extract column names from the first row
@@ -229,7 +230,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
 
     fetchSchema()
-  }, []) // Remove supabase dependency
+  }, []) // Fixed: Using getSupabaseBrowserClient() directly to avoid dependency issues
 
   // Fetch existing categories and roles for suggestions
   useEffect(() => {
