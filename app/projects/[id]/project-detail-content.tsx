@@ -75,14 +75,13 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   useEffect(() => {
     if (project.bts_images && project.bts_images.length > 0) {
       const processedMedia = project.bts_images.map((media) => {
-        // If it's already processed with is_video flag, return as is
-        if (media.is_video !== undefined) return media
+        // If it's already properly processed, return as is
+        if (media.is_video !== undefined && media.is_video && media.video_url) {
+          return media
+        }
 
-        // Check if it has video_url, video_platform, or video_id
-        const isVideo = media.video_url || (media.video_platform && media.video_id)
-
-        // If it's a video, ensure it has video_url
-        if (isVideo && !media.video_url && media.video_platform && media.video_id) {
+        // Check if it has video metadata to construct video_url
+        if (media.video_platform && media.video_id && !media.video_url) {
           let videoUrl = ""
           if (media.video_platform.toLowerCase() === "youtube") {
             videoUrl = `https://www.youtube.com/embed/${media.video_id}?rel=0&modestbranding=1`
@@ -97,6 +96,9 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           }
         }
 
+        // Handle legacy detection (fallback for old data without is_video flag)
+        const isVideo = media.video_url || (media.video_platform && media.video_id)
+        
         return {
           ...media,
           is_video: Boolean(isVideo),

@@ -35,6 +35,10 @@ export interface BtsImage {
   caption?: string
   size?: "small" | "medium" | "large"
   aspect_ratio?: "square" | "portrait" | "landscape"
+  is_video?: boolean
+  video_url?: string
+  video_platform?: string
+  video_id?: string
   created_at?: string
 }
 
@@ -238,5 +242,31 @@ export const mockBtsImages: BtsImage[] = [
     caption: "Equipment preparation",
     size: "medium",
     aspect_ratio: "portrait",
+  },
+
+  // BTS Video examples for testing
+  {
+    id: "bts-video-1",
+    project_id: "directed-1",
+    image_url: "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
+    caption: "Behind the scenes video - Director's commentary",
+    is_video: true,
+    video_url: "https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0&modestbranding=1",
+    video_platform: "youtube",
+    video_id: "dQw4w9WgXcQ",
+    size: "large",
+    aspect_ratio: "landscape",
+  },
+  {
+    id: "bts-video-2",
+    project_id: "camera-1",
+    image_url: "https://img.youtube.com/vi/i_HtDNSxCnE/maxresdefault.jpg",
+    caption: "Camera setup and operation footage",
+    is_video: true,
+    video_url: "https://www.youtube.com/embed/i_HtDNSxCnE?rel=0&modestbranding=1",
+    video_platform: "youtube",
+    video_id: "i_HtDNSxCnE",
+    size: "large",
+    aspect_ratio: "landscape",
   },
 ]
