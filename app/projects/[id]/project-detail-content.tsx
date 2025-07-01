@@ -65,8 +65,13 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const [isLoading, setIsLoading] = useState(true)
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
+  const [showControls, setShowControls] = useState(true)
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [showLeftArrow, setShowLeftArrow] = useState(false)
+  const [showRightArrow, setShowRightArrow] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const mainRef = useRef<HTMLDivElement>(null)
+  const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Process BTS media to ensure they have proper video info
   const [btsMedia, setBtsMedia] = useState<BTSMedia[]>([])
@@ -232,6 +237,54 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     }
   }
 
+  // Handle mouse movement for auto-hide controls and region-based arrow display
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const width = rect.width
+    const leftThird = width / 3
+    const rightThird = width * 2 / 3
+
+    setMousePosition({ x, y: e.clientY - rect.top })
+    setShowControls(true)
+    
+    // Only show arrows on desktop and when there are multiple media items
+    if (!isMobile && combinedMainMedia.length > 1) {
+      setShowLeftArrow(x < leftThird && currentMainMediaIndex > 0)
+      setShowRightArrow(x > rightThird && currentMainMediaIndex < combinedMainMedia.length - 1)
+    }
+
+    // Clear existing timeout
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current)
+    }
+
+    // Set new timeout to hide controls after 1.5 seconds
+    hideControlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false)
+      setShowLeftArrow(false)
+      setShowRightArrow(false)
+    }, 1500)
+  }, [isMobile, combinedMainMedia.length, currentMainMediaIndex])
+
+  const handleMouseLeave = useCallback(() => {
+    setShowControls(false)
+    setShowLeftArrow(false)
+    setShowRightArrow(false)
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current)
+    }
+  }, [])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimeoutRef.current) {
+        clearTimeout(hideControlsTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const formattedDate = project.project_date
     ? new Date(project.project_date).toLocaleDateString("en-US", {
         year: "numeric",
@@ -251,7 +304,11 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
         {combinedMainMedia.length > 0 ? (
           <div className="relative">
             {/* Main media display */}
-            <div className="w-full aspect-video relative group">
+            <div 
+              className="w-full aspect-video relative bg-black"
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            >
               {combinedMainMedia[currentMainMediaIndex]?.is_video && combinedMainMedia[currentMainMediaIndex]?.video_platform && combinedMainMedia[currentMainMediaIndex]?.video_id ? (
                 <VideoPlayer
                   platform={combinedMainMedia[currentMainMediaIndex].video_platform!}
@@ -265,74 +322,82 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                   src={combinedMainMedia[currentMainMediaIndex]?.image_url || "/placeholder.svg"}
                   alt={project.title}
                   fill
-                  className="object-cover"
+                  className="object-contain"
                   priority
                   sizes="100vw"
                 />
               )}
               
-              {/* Navigation arrows for multiple main media */}
+              {/* Navigation arrows for multiple main media - region-based display */}
               {combinedMainMedia.length > 1 && (
                 <>
-                  <button
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-white p-3 rounded-full bg-black/50 hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white"
-                    onClick={() => setCurrentMainMediaIndex((prev) => (prev - 1 + combinedMainMedia.length) % combinedMainMedia.length)}
-                    aria-label="Previous media"
-                  >
-                    <ChevronLeft className="h-8 w-8" />
-                  </button>
-                  <button
-                    className="absolute right-4 top-1/2 -translate-y-1/2 text-white p-3 rounded-full bg-black/50 hover:bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white"
-                    onClick={() => setCurrentMainMediaIndex((prev) => (prev + 1) % combinedMainMedia.length)}
-                    aria-label="Next media"
-                  >
-                    <ChevronRight className="h-8 w-8" />
-                  </button>
+                  {showLeftArrow && (
+                    <button
+                      className={`absolute left-4 top-1/2 -translate-y-1/2 text-white p-2 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white ${showControls ? 'opacity-100' : 'opacity-0'}`}
+                      onClick={() => setCurrentMainMediaIndex((prev) => (prev - 1 + combinedMainMedia.length) % combinedMainMedia.length)}
+                      aria-label="Previous media"
+                    >
+                      <ChevronLeft className="h-8 w-8 drop-shadow-lg" />
+                    </button>
+                  )}
+                  {showRightArrow && (
+                    <button
+                      className={`absolute right-4 top-1/2 -translate-y-1/2 text-white p-2 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white ${showControls ? 'opacity-100' : 'opacity-0'}`}
+                      onClick={() => setCurrentMainMediaIndex((prev) => (prev + 1) % combinedMainMedia.length)}
+                      aria-label="Next media"
+                    >
+                      <ChevronRight className="h-8 w-8 drop-shadow-lg" />
+                    </button>
+                  )}
                 </>
               )}
               
-              {/* Media counter */}
-              {combinedMainMedia.length > 1 && (
-                <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
+              {/* Media counter - auto-hide */}
+              {combinedMainMedia.length > 1 && showControls && (
+                <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm transition-opacity">
                   {currentMainMediaIndex + 1} / {combinedMainMedia.length}
                 </div>
               )}
             </div>
             
-            {/* Thumbnail gallery for multiple main media */}
+            {/* Thumbnail gallery for multiple main media - only show if there's enough space */}
             {combinedMainMedia.length > 1 && (
-              <div className="mt-6 flex gap-3 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
-                {combinedMainMedia.map((media, index) => (
-                  <button
-                    key={media.id || index}
-                    className={`flex-shrink-0 w-24 h-24 relative rounded-lg overflow-hidden border-2 transition-all duration-200 ${
-                      index === currentMainMediaIndex 
-                        ? 'border-blue-500 shadow-lg shadow-blue-500/25 scale-105' 
-                        : 'border-gray-700 hover:border-gray-500 hover:scale-102'
-                    }`}
-                    onClick={() => setCurrentMainMediaIndex(index)}
-                    aria-label={`View ${media.is_video ? 'video' : 'image'} ${index + 1}`}
-                  >
-                    <Image
-                      src={media.image_url || "/placeholder.svg"}
-                      alt={`${project.title} ${index + 1}`}
-                      fill
-                      className="object-cover transition-all duration-200"
-                      sizes="96px"
-                    />
-                    {media.is_video && (
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-                        <div className="bg-white/90 rounded-full p-2">
-                          <Play className="h-4 w-4 text-black" fill="currentColor" />
-                        </div>
+              <div className="mt-6">
+                <div className="flex gap-3 justify-center overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+                  {combinedMainMedia.map((media, index) => (
+                    <button
+                      key={media.id || index}
+                      className={`flex-shrink-0 w-20 h-20 relative rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+                        index === currentMainMediaIndex 
+                          ? 'border-blue-500 shadow-lg shadow-blue-500/25' 
+                          : 'border-gray-700 hover:border-gray-500'
+                      }`}
+                      onClick={() => setCurrentMainMediaIndex(index)}
+                      aria-label={`View ${media.is_video ? 'video' : 'image'} ${index + 1}`}
+                    >
+                      <div className="relative w-full h-full bg-black">
+                        <Image
+                          src={media.image_url || "/placeholder.svg"}
+                          alt={`${project.title} ${index + 1}`}
+                          fill
+                          className="object-contain"
+                          sizes="80px"
+                        />
+                        {media.is_video && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="bg-white/90 rounded-full p-1.5">
+                              <Play className="h-3 w-3 text-black" fill="currentColor" />
+                            </div>
+                          </div>
+                        )}
+                        {/* Active indicator - positioned above the thumbnail */}
+                        {index === currentMainMediaIndex && (
+                          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-500 rounded-full z-10"></div>
+                        )}
                       </div>
-                    )}
-                    {/* Active indicator */}
-                    {index === currentMainMediaIndex && (
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-500 rounded-full"></div>
-                    )}
-                  </button>
-                ))}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
