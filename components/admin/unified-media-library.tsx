@@ -1168,7 +1168,7 @@ export default function UnifiedMediaLibrary({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id, filepath, filetype }),
+        body: JSON.stringify({ items: [{ id, filepath, filetype }] }),
       })
 
       if (!response.ok) {
