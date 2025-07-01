@@ -7,6 +7,7 @@ const publicRoutes = [
   "/",
   "/projects",
   "/projects/(.*)",
+  "/test-bts-videos",
   "/media-hosting",
   "/backend-setup",
   "/setup",

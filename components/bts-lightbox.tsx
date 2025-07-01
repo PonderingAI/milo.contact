@@ -57,10 +57,23 @@ export default function BTSLightbox({
     }
   }, [currentIndex, isOpen])
 
-  // Reset video playing state when index changes
+  // Reset video playing state when index changes and auto-play videos
   useEffect(() => {
-    setIsVideoPlaying(false)
-  }, [currentIndex])
+    const currentMedia = media[currentIndex]
+    const isVideo = currentMedia?.is_video && currentMedia?.video_url
+    setIsVideoPlaying(isVideo) // Auto-play videos, show static images immediately
+  }, [currentIndex, media])
+
+  // Auto-play video when lightbox initially opens
+  useEffect(() => {
+    if (isOpen) {
+      const currentMedia = media[currentIndex]
+      const isVideo = currentMedia?.is_video && currentMedia?.video_url
+      if (isVideo) {
+        setIsVideoPlaying(true)
+      }
+    }
+  }, [isOpen, currentIndex, media])
 
   const navigate = useCallback(
     (direction: "next" | "prev") => {
@@ -187,8 +200,8 @@ export default function BTSLightbox({
         </div>
       )}
 
-      {/* Media container */}
-      <div className="relative w-full max-w-5xl max-h-[90vh] px-4">
+      {/* Media container - fullscreen approach */}
+      <div className="relative w-full h-full max-w-[95vw] max-h-[95vh] flex items-center justify-center">
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -196,7 +209,7 @@ export default function BTSLightbox({
         )}
 
         {isVideo ? (
-          <div className="relative aspect-video">
+          <div className="relative w-full h-full">
             {!isVideoPlaying ? (
               <div
                 className="absolute inset-0 flex flex-col items-center justify-center cursor-pointer"
@@ -211,13 +224,13 @@ export default function BTSLightbox({
                 role="button"
                 aria-label="Play video"
               >
-                <div className="relative aspect-video w-full">
+                <div className="relative w-full h-full">
                   <Image
                     src={currentMedia.image_url || "/placeholder.svg"}
                     alt=""
                     fill
                     className="object-cover"
-                    sizes="(max-width: 768px) 100vw, 80vw"
+                    sizes="95vw"
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                     <div className="rounded-full bg-white/20 p-6 backdrop-blur-sm">
@@ -229,7 +242,7 @@ export default function BTSLightbox({
             ) : (
               <iframe
                 src={currentMedia.video_url}
-                className="w-full h-full"
+                className="w-full h-full min-h-[70vh]"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
@@ -238,13 +251,13 @@ export default function BTSLightbox({
             )}
           </div>
         ) : (
-          <div className="relative aspect-video">
+          <div className="relative w-full h-full">
             <Image
               src={currentMedia.image_url || "/placeholder.svg"}
               alt={currentMedia.caption || `Behind the scenes ${currentIndex + 1}`}
               fill
-              className="object-contain"
-              sizes="(max-width: 768px) 100vw, 80vw"
+              className="object-cover"
+              sizes="95vw"
               priority
             />
           </div>

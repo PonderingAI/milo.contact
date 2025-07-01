@@ -81,6 +81,10 @@ export async function POST() {
           caption TEXT,
           size TEXT,
           aspect_ratio TEXT,
+          is_video BOOLEAN DEFAULT FALSE,
+          video_url TEXT,
+          video_platform TEXT,
+          video_id TEXT,
           created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
           updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         );
