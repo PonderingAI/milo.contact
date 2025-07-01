@@ -797,110 +797,16 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
   }
 
-  const removeBtsImage = async (index: number) => {
-    const imageUrl = btsImages[index]
-    
-    // In edit mode, ask for confirmation before deleting from database
-    if (mode === "edit" && project?.id && imageUrl) {
-      const confirmed = window.confirm("Are you sure you want to delete this BTS image? This action cannot be undone.")
-      if (!confirmed) {
-        return
-      }
-    }
-
+  const removeBtsImage = (index: number) => {
     const newImages = [...btsImages]
     newImages.splice(index, 1)
     setBtsImages(newImages)
-
-    // If in edit mode and we have a project ID, immediately delete from database
-    if (mode === "edit" && project?.id && imageUrl) {
-      try {
-        const response = await fetch("/api/projects/bts-images/delete-item", {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            projectId: project.id,
-            imageUrl: imageUrl,
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to delete BTS image")
-        }
-
-        toast({
-          title: "Image deleted",
-          description: "BTS image has been deleted successfully",
-        })
-      } catch (error) {
-        console.error("Error deleting BTS image:", error)
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to delete BTS image",
-          variant: "destructive",
-        })
-        // Restore the image to the list since deletion failed
-        const restoredImages = [...btsImages]
-        restoredImages.splice(index, 0, imageUrl)
-        setBtsImages(restoredImages)
-      }
-    }
   }
 
-  const removeBtsVideo = async (index: number) => {
-    const videoUrl = btsVideos[index]
-    
-    // In edit mode, ask for confirmation before deleting from database
-    if (mode === "edit" && project?.id && videoUrl) {
-      const confirmed = window.confirm("Are you sure you want to delete this BTS video? This action cannot be undone.")
-      if (!confirmed) {
-        return
-      }
-    }
-
+  const removeBtsVideo = (index: number) => {
     const newVideos = [...btsVideos]
     newVideos.splice(index, 1)
     setBtsVideos(newVideos)
-
-    // If in edit mode and we have a project ID, immediately delete from database
-    if (mode === "edit" && project?.id && videoUrl) {
-      try {
-        const response = await fetch("/api/projects/bts-images/delete-item", {
-          method: "DELETE",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            projectId: project.id,
-            imageUrl: videoUrl,
-          }),
-        })
-
-        if (!response.ok) {
-          const errorData = await response.json()
-          throw new Error(errorData.error || "Failed to delete BTS video")
-        }
-
-        toast({
-          title: "Video deleted",
-          description: "BTS video has been deleted successfully",
-        })
-      } catch (error) {
-        console.error("Error deleting BTS video:", error)
-        toast({
-          title: "Error",
-          description: error instanceof Error ? error.message : "Failed to delete BTS video",
-          variant: "destructive",
-        })
-        // Restore the video to the list since deletion failed
-        const restoredVideos = [...btsVideos]
-        restoredVideos.splice(index, 0, videoUrl)
-        setBtsVideos(restoredVideos)
-      }
-    }
   }
 
   const setCoverImage = (url: string) => {
@@ -1673,11 +1579,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                           />
                         </div>
                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity">
-                          {/* Large clickable delete area covering the right side */}
+                          {/* Full area clickable for delete */}
                           <button
                             type="button"
                             onClick={() => removeBtsImage(index)}
-                            className="absolute right-0 top-0 w-1/2 h-full flex items-center justify-center bg-red-600/20 hover:bg-red-600/40 transition-colors"
+                            className="absolute inset-0 w-full h-full flex items-center justify-center bg-red-600/20 hover:bg-red-600/40 transition-colors"
                             title="Remove image"
                           >
                             <div className="p-2 bg-red-600 rounded-full hover:bg-red-700 transition-colors">
