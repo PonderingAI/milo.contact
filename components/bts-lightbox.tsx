@@ -229,7 +229,7 @@ export default function BTSLightbox({
                     src={currentMedia.image_url || "/placeholder.svg"}
                     alt=""
                     fill
-                    className="object-cover"
+                    className="object-contain"
                     sizes="95vw"
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -256,7 +256,7 @@ export default function BTSLightbox({
               src={currentMedia.image_url || "/placeholder.svg"}
               alt={currentMedia.caption || `Behind the scenes ${currentIndex + 1}`}
               fill
-              className="object-cover"
+              className="object-contain"
               sizes="95vw"
               priority
             />
