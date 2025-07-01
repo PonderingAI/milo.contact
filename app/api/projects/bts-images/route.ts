@@ -130,6 +130,7 @@ export async function POST(request: Request) {
           video_url: embedUrl,
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
+          caption: imageUrl, // Store original URL in caption field for reconstruction
         }
       } else {
         // Regular image

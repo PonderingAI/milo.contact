@@ -286,8 +286,47 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               return
             }
             
-            if (data.images && Array.isArray(data.images)) {
-              // Separate images and videos
+            if (data.rawData && Array.isArray(data.rawData)) {
+              // Use rawData which contains full BTS media information
+              const images: string[] = []
+              const videos: string[] = []
+
+              data.rawData.forEach((item: any) => {
+                // Skip null, undefined, or invalid values
+                if (!item || !item.image_url || typeof item.image_url !== 'string') {
+                  console.warn('Skipping invalid BTS item:', item)
+                  return
+                }
+
+                if (item.is_video) {
+                  // For videos, try to get the original URL
+                  let originalUrl = item.caption || item.video_url || item.image_url
+                  
+                  // If we have platform and ID but no caption, reconstruct the original URL
+                  if (!item.caption && item.video_platform && item.video_id) {
+                    if (item.video_platform.toLowerCase() === "youtube") {
+                      originalUrl = `https://www.youtube.com/watch?v=${item.video_id}`
+                    } else if (item.video_platform.toLowerCase() === "vimeo") {
+                      originalUrl = `https://vimeo.com/${item.video_id}`
+                    } else if (item.video_platform.toLowerCase() === "linkedin") {
+                      // For LinkedIn, we may need to store the original URL differently
+                      originalUrl = item.video_url || item.image_url
+                    }
+                  }
+                  
+                  videos.push(originalUrl)
+                } else {
+                  images.push(item.image_url)
+                }
+              })
+
+              setBtsImages(images)
+              setBtsVideos(videos)
+              hasBtsImagesLoaded.current = true
+              
+              console.log("Loaded BTS media - images:", images, "videos:", videos)
+            } else if (data.images && Array.isArray(data.images)) {
+              // Fallback to old method if rawData is not available
               const images: string[] = []
               const videos: string[] = []
 
@@ -349,8 +388,18 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                 }
 
                 if (item.is_video) {
-                  // For videos, use the original video URL if available, otherwise image_url
-                  const videoUrl = item.video_url || item.image_url
+                  // For videos, try to get the original URL from caption field or reconstruct it
+                  let videoUrl = item.caption || item.video_url || item.image_url
+                  
+                  // If we have platform and ID but no caption, reconstruct the original URL
+                  if (!item.caption && item.video_platform && item.video_id) {
+                    if (item.video_platform.toLowerCase() === "youtube") {
+                      videoUrl = `https://www.youtube.com/watch?v=${item.video_id}`
+                    } else if (item.video_platform.toLowerCase() === "vimeo") {
+                      videoUrl = `https://vimeo.com/${item.video_id}`
+                    }
+                  }
+                  
                   videos.push(videoUrl)
                 } else {
                   images.push(item.image_url)
