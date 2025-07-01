@@ -30,7 +30,7 @@ const testProject = {
       image_url: "https://img.youtube.com/vi/dQw4w9WgXcQ/maxresdefault.jpg",
       caption: "BTS Video - Behind the scenes footage",
       is_video: true,
-      video_url: "https://www.youtube.com/embed/dQw4w9WgXcQ?rel=0&modestbranding=1",
+      video_url: "https://www.youtube.com/embed/dQw4w9WgXcQ?autoplay=1&rel=0&modestbranding=1&mute=0",
       video_platform: "youtube",
       video_id: "dQw4w9WgXcQ",
     },
@@ -41,7 +41,7 @@ const testProject = {
       image_url: "https://img.youtube.com/vi/i_HtDNSxCnE/maxresdefault.jpg",
       caption: "Camera operation demonstration",
       is_video: true,
-      video_url: "https://www.youtube.com/embed/i_HtDNSxCnE?rel=0&modestbranding=1",
+      video_url: "https://www.youtube.com/embed/i_HtDNSxCnE?autoplay=1&rel=0&modestbranding=1&mute=0",
       video_platform: "youtube",
       video_id: "i_HtDNSxCnE",
     },
@@ -59,7 +59,10 @@ export default function TestBTSPage() {
             <li>Scroll down to the "Behind the Scenes" section</li>
             <li>Look for items with play button overlays (these are videos)</li>
             <li>Click on BTS videos to open them in the lightbox</li>
-            <li>Videos should play in an embedded iframe within the lightbox</li>
+            <li>Videos should automatically start playing with audio when opened</li>
+            <li>Use arrow keys to navigate between media items</li>
+            <li>Videos should autoplay when navigated to via arrows</li>
+            <li>Media should fill the screen as much as possible (fullscreen-like experience)</li>
             <li>Regular images should display normally without video controls</li>
           </ul>
         </div>

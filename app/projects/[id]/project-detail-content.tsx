@@ -84,9 +84,9 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
         if (media.video_platform && media.video_id && !media.video_url) {
           let videoUrl = ""
           if (media.video_platform.toLowerCase() === "youtube") {
-            videoUrl = `https://www.youtube.com/embed/${media.video_id}?rel=0&modestbranding=1`
+            videoUrl = `https://www.youtube.com/embed/${media.video_id}?autoplay=1&rel=0&modestbranding=1&mute=0`
           } else if (media.video_platform.toLowerCase() === "vimeo") {
-            videoUrl = `https://player.vimeo.com/video/${media.video_id}?title=0&byline=0&portrait=0`
+            videoUrl = `https://player.vimeo.com/video/${media.video_id}?autoplay=1&title=0&byline=0&portrait=0&muted=0`
           }
 
           return {

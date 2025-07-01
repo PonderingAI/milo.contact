@@ -116,10 +116,10 @@ export async function POST(request: Request) {
         let thumbnailUrl = imageUrl // Use original URL as fallback thumbnail
 
         if (videoInfo.platform === "youtube") {
-          embedUrl = `https://www.youtube.com/embed/${videoInfo.id}?rel=0&modestbranding=1`
+          embedUrl = `https://www.youtube.com/embed/${videoInfo.id}?autoplay=1&rel=0&modestbranding=1&mute=0`
           thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/maxresdefault.jpg`
         } else if (videoInfo.platform === "vimeo") {
-          embedUrl = `https://player.vimeo.com/video/${videoInfo.id}?title=0&byline=0&portrait=0`
+          embedUrl = `https://player.vimeo.com/video/${videoInfo.id}?autoplay=1&title=0&byline=0&portrait=0&muted=0`
           // Keep original URL as thumbnail for Vimeo (more complex to get thumbnail)
         }
 
