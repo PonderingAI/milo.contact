@@ -50,6 +50,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   // Add a ref to track if component is mounted
   const isMountedRef = useRef(true)
   const hasBtsImagesLoaded = useRef(false)
+  const hasMainMediaLoaded = useRef(false)
+  const userHasModifiedMainMedia = useRef(false)
   
   const [formData, setFormData] = useState({
     title: project?.title || "",
@@ -377,7 +379,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
   // Fetch main media if in edit mode
   useEffect(() => {
-    if (mode === "edit" && project?.id) {
+    if (mode === "edit" && project?.id && !hasMainMediaLoaded.current) {
       async function fetchMainMedia() {
         try {
           const response = await fetch(`/api/projects/main-media/${project.id}`)
@@ -417,6 +419,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
               setMainImages(images)
               setMainVideos(videos)
+              hasMainMediaLoaded.current = true
               
               console.log("Loaded main media - images:", images, "videos:", videos)
             } else {
@@ -430,6 +433,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                 setMainVideos([project.thumbnail_url])
                 setThumbnailUrl(project.thumbnail_url)
               }
+              hasMainMediaLoaded.current = true
             }
           } else {
             // API call failed, use project fields as fallback
@@ -442,6 +446,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               setMainVideos([project.thumbnail_url])
               setThumbnailUrl(project.thumbnail_url)
             }
+            hasMainMediaLoaded.current = true
           }
         } catch (err) {
           console.error("Error fetching main media:", err)
@@ -454,6 +459,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
             setMainVideos([project.thumbnail_url])
             setThumbnailUrl(project.thumbnail_url)
           }
+          hasMainMediaLoaded.current = true
         }
       }
 
@@ -525,6 +531,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     // Add to mainImages if not already there
     if (!mainImages.includes(url)) {
       setMainImages((prev) => [...prev, url])
+      userHasModifiedMainMedia.current = true
     }
   }
 
@@ -775,6 +782,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       if (isVideo) {
         if (!mainVideos.includes(mediaUrl)) {
           setMainVideos((prev) => [...prev, mediaUrl])
+          userHasModifiedMainMedia.current = true
         }
         // Store video URL in thumbnail_url if that column exists
         if (schemaColumns.includes("thumbnail_url")) {
@@ -805,6 +813,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                 setFormData((prev) => ({ ...prev, image: mediaData.thumbnail_url }))
                 if (!mainImages.includes(mediaData.thumbnail_url)) {
                   setMainImages((prev) => [...prev, mediaData.thumbnail_url])
+                  userHasModifiedMainMedia.current = true
                 }
               }
 
@@ -826,6 +835,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       } else {
         if (!mainImages.includes(mediaUrl)) {
           setMainImages((prev) => [...prev, mediaUrl])
+          userHasModifiedMainMedia.current = true
           console.log("Added image to mainImages:", mediaUrl)
         }
         // Set as cover image if none is set
@@ -894,6 +904,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     const newImages = [...mainImages]
     const removedImage = newImages.splice(index, 1)[0]
     setMainImages(newImages)
+    userHasModifiedMainMedia.current = true
 
     // If the removed image was the cover image, set a new one if available
     if (formData.image === removedImage) {
@@ -906,9 +917,12 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   }
 
   const removeMainVideo = (index: number) => {
+    console.log("removeMainVideo called for index:", index, "current videos:", mainVideos)
     const newVideos = [...mainVideos]
     const removedVideo = newVideos.splice(index, 1)[0]
+    console.log("Removed video:", removedVideo, "remaining videos:", newVideos)
     setMainVideos(newVideos)
+    userHasModifiedMainMedia.current = true
 
     // If the removed video was the main video, clear the thumbnail_url
     if (thumbnailUrl === removedVideo) {
@@ -994,6 +1008,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           setMainVideos(prev => [...prev, url])
           setThumbnailUrl(url)
           setFormData(prev => ({ ...prev, thumbnail_url: url }))
+          userHasModifiedMainMedia.current = true
         }
 
         // Use existing video data safely
@@ -1028,6 +1043,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           setMainVideos(prev => [...prev, url])
           setThumbnailUrl(url)
           setFormData(prev => ({ ...prev, thumbnail_url: url }))
+          userHasModifiedMainMedia.current = true
         }
 
         // Extract properties from result safely
@@ -1040,6 +1056,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           setFormData(prev => ({ ...prev, image: thumbnailUrl }))
           setVideoThumbnail(thumbnailUrl)
           setMainImages(prev => [...prev, thumbnailUrl])
+          userHasModifiedMainMedia.current = true
         }
 
         // Use video title if project title is empty
