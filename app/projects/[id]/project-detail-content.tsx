@@ -94,7 +94,6 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           id: 'main-video',
           image_url: project.thumbnail_url,
           is_video: true,
-          video_url: project.thumbnail_url,
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
         })
