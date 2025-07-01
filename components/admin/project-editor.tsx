@@ -443,6 +443,18 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
   }
 
+  // Function to get video release date for tooltip display
+  const getVideoReleaseDate = async (videoUrl: string): Promise<string | null> => {
+    // Check if we already have this date cached
+    if (videoReleaseDates.has(videoUrl)) {
+      const date = videoReleaseDates.get(videoUrl)
+      return date ? date.toLocaleDateString() : null
+    }
+
+    // For now, return null since we're handling video date extraction server-side
+    return null
+  }
+
   // Video display component with tooltip for release date
   const VideoDisplayWithTooltip = ({ 
     video, 
@@ -474,6 +486,15 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       }
     }
 
+    const getVideoThumbnail = () => {
+      if (video.includes("youtube.com")) {
+        return `https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`
+      } else if (video.includes("youtu.be")) {
+        return `https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`
+      }
+      return null
+    }
+
     const getVideoInfo = () => {
       if (video.includes("youtube.com") || video.includes("youtu.be")) {
         return { platform: "YouTube", thumbnail: getVideoThumbnail() }
@@ -484,15 +505,6 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
 
     const videoInfo = getVideoInfo()
-
-    const getVideoThumbnail = () => {
-      if (video.includes("youtube.com")) {
-        return `https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`
-      } else if (video.includes("youtu.be")) {
-        return `https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`
-      }
-      return null
-    }
 
     const thumbnailUrl = videoInfo.thumbnail
 
@@ -579,18 +591,6 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         </Tooltip>
       </TooltipProvider>
     )
-  }
-
-  // Function to get video release date for tooltip display
-  const getVideoReleaseDate = async (videoUrl: string): Promise<string | null> => {
-    // Check if we already have this date cached
-    if (videoReleaseDates.has(videoUrl)) {
-      const date = videoReleaseDates.get(videoUrl)
-      return date ? date.toLocaleDateString() : null
-    }
-
-    // For now, return null since we're handling video date extraction server-side
-    return null
   }
 
   // Function to process external videos and extract dates
