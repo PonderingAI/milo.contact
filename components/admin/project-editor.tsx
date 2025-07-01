@@ -49,6 +49,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
   // Add a ref to track if component is mounted
   const isMountedRef = useRef(true)
+  const hasBtsImagesLoaded = useRef(false)
   
   const [formData, setFormData] = useState({
     title: project?.title || "",
@@ -270,7 +271,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
   // Fetch BTS images if in edit mode
   useEffect(() => {
-    if (mode === "edit" && project?.id) {
+    if (mode === "edit" && project?.id && !hasBtsImagesLoaded.current) {
       async function fetchBtsImages() {
         try {
           setIsLoadingBtsImages(true)
@@ -312,6 +313,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
 
               setBtsImages(images)
               setBtsVideos(videos)
+              hasBtsImagesLoaded.current = true
             }
           }
         } catch (err) {
@@ -1165,6 +1167,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               body: JSON.stringify({
                 projectId,
                 images: [...btsImages, ...btsVideos],
+                replaceExisting: true,
               }),
             })
 
@@ -1224,6 +1227,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               body: JSON.stringify({
                 projectId: project.id,
                 images: [...btsImages, ...btsVideos],
+                replaceExisting: true,
               }),
             })
 
