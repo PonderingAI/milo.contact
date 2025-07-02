@@ -64,7 +64,8 @@ export async function POST(request: Request) {
     let convertedToWebP = false
 
     // Handle image files - convert to WebP for better performance with advanced compression for large images
-    if (fileType === "image" && ["jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"].includes(fileExtension)) {
+    // Skip processing for WebP files - upload them as-is
+    if (fileType === "image" && ["jpg", "jpeg", "png", "gif", "bmp", "tiff"].includes(fileExtension)) {
       try {
         // Generate a unique filename for the WebP version
         const webpFilename = `${uuidv4()}.webp`
