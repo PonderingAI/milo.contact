@@ -265,7 +265,8 @@ export async function POST(request: Request) {
       .from("media")
       .insert({
         filename,
-        filepath: uploadPath,
+        filepath: uploadPath, // Include filepath for compatibility
+        file_path: uploadPath, // Also include file_path for compatibility with different schema versions
         filesize, // Keep original filesize for now - we could enhance this later to track compressed size
         filetype: fileType,
         public_url: publicUrl,

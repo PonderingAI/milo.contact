@@ -2153,8 +2153,8 @@ export default function UnifiedMediaLibrary({
             ))}
           </div>
 
-          <div className="flex justify-between gap-2 mt-2">
-            <div className="space-x-2">
+          <div className="flex justify-between items-center gap-2 mt-2">
+            <div className="flex items-center gap-2">
               <Button variant="outline" onClick={clearUploadQueue} disabled={isProcessingQueue}>
                 Clear Completed
               </Button>
