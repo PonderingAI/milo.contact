@@ -21,10 +21,12 @@ export async function POST(request: Request) {
     const filename = file.name
     const filesize = file.size
     
-    // Validate file size before processing (max 100MB)
-    if (filesize > 100 * 1024 * 1024) {
+    // Validate file size before processing - Vercel has a 50MB limit for serverless functions
+    const maxSize = 50 * 1024 * 1024 // 50MB limit for Vercel
+    if (filesize > maxSize) {
+      const fileSizeMB = Math.round(filesize / 1024 / 1024)
       return NextResponse.json({ 
-        error: "File too large. Maximum file size is 100MB. Please compress your image first." 
+        error: `File "${filename}" is ${fileSizeMB}MB, which exceeds the 50MB limit. Please compress or resize your file first.` 
       }, { status: 413 })
     }
 
@@ -129,10 +131,10 @@ export async function POST(request: Request) {
           console.log(`Huge file detected (${Math.round(filesize / 1024 / 1024)}MB), using very aggressive compression`)
         }
         
-        // Extreme compression for massive files (>40MB)
+        // Extreme compression for files close to the limit (>40MB)
         if (filesize > 40 * 1024 * 1024) {
           quality = 50
-          maxWidth = 1600  // Reduce further for massive files
+          maxWidth = 1600  // Reduce further for files close to the limit
           maxHeight = 900
           console.log(`Massive file detected (${Math.round(filesize / 1024 / 1024)}MB), using extreme compression`)
         }

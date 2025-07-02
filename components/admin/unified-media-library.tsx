@@ -310,6 +310,30 @@ export default function UnifiedMediaLibrary({
   const handleFileUpload = async (files: File[]) => {
     if (files.length === 0) return
 
+    // Check file sizes before processing - Vercel has a 50MB limit
+    const maxSize = 50 * 1024 * 1024 // 50MB
+    const oversizedFiles = files.filter(file => file.size > maxSize)
+    
+    if (oversizedFiles.length > 0) {
+      const fileList = oversizedFiles.map(file => {
+        const sizeMB = Math.round(file.size / 1024 / 1024)
+        return `"${file.name}" (${sizeMB}MB)`
+      }).join(', ')
+      
+      toast({
+        title: "Files too large",
+        description: `The following files exceed the 50MB limit: ${fileList}. Please compress or resize them first.`,
+        variant: "destructive",
+      })
+      
+      // Only process files that are within the size limit
+      const validFiles = files.filter(file => file.size <= maxSize)
+      if (validFiles.length === 0) return
+      
+      // Continue with valid files only
+      files = validFiles
+    }
+
     // First check if the media table exists
     const tableExists = await checkMediaTable()
 
@@ -405,6 +429,10 @@ export default function UnifiedMediaLibrary({
 
         if (!response.ok) {
           console.error("Upload error response:", result)
+          // Provide specific error message for file size issues
+          if (response.status === 413) {
+            throw new Error(result.error || `File "${file.name}" is too large. Maximum file size is 50MB.`)
+          }
           throw new Error("Failed to upload file: " + (result.error || response.statusText))
         }
 
@@ -684,6 +712,11 @@ export default function UnifiedMediaLibrary({
             }
 
             if (!response.ok) {
+              // Provide specific error message for file size issues
+              if (response.status === 413) {
+                const fileSizeMB = Math.round(item.file.size / 1024 / 1024)
+                throw new Error(result.error || `File "${item.file.name}" (${fileSizeMB}MB) exceeds the 50MB limit`)
+              }
               throw new Error(result.error || `Upload failed with status ${response.status}`)
             }
 
@@ -797,8 +830,79 @@ export default function UnifiedMediaLibrary({
   }
 
   const clearUploadQueue = () => {
-    // Only clear completed uploads
-    setUploadQueue((prev) => prev.filter((item) => item.status === "pending" || item.status === "uploading"))
+    // Only clear completed successful uploads and duplicates, keep failed uploads for retry
+    setUploadQueue((prev) => prev.filter((item) => 
+      item.status === "pending" || 
+      item.status === "uploading" || 
+      item.status === "error"
+    ))
+  }
+
+  const retryFailedUpload = (index: number) => {
+    setUploadQueue((prev) => {
+      const updated = [...prev]
+      if (updated[index] && updated[index].status === "error") {
+        updated[index] = {
+          ...updated[index],
+          status: "pending",
+          progress: 0,
+          error: undefined,
+        }
+      }
+      return updated
+    })
+
+    // Trigger processing if not already running
+    if (!isProcessingQueue) {
+      pendingQueueRef.current = true
+      setTimeout(() => {
+        if (!isProcessingQueue) {
+          processBulkUpload()
+        }
+      }, 100)
+    }
+  }
+
+  const retryAllFailed = () => {
+    const failedCount = uploadQueue.filter((item) => item.status === "error").length
+    
+    if (failedCount === 0) {
+      toast({
+        title: "No failed uploads",
+        description: "There are no failed uploads to retry",
+        variant: "default",
+      })
+      return
+    }
+
+    setUploadQueue((prev) => {
+      return prev.map((item) => {
+        if (item.status === "error") {
+          return {
+            ...item,
+            status: "pending",
+            progress: 0,
+            error: undefined,
+          }
+        }
+        return item
+      })
+    })
+
+    // Trigger processing if not already running
+    if (!isProcessingQueue) {
+      pendingQueueRef.current = true
+      setTimeout(() => {
+        if (!isProcessingQueue) {
+          processBulkUpload()
+        }
+      }, 100)
+    }
+
+    toast({
+      title: "Retrying uploads",
+      description: `Retrying ${failedCount} failed uploads`,
+    })
   }
 
   const resetUploadQueue = () => {
@@ -2136,7 +2240,16 @@ export default function UnifiedMediaLibrary({
                 {item.status === "error" && (
                   <div className="text-xs text-red-400 flex items-center gap-1 mt-1">
                     <AlertCircle className="h-3 w-3" />
-                    {item.error || "Upload failed"}
+                    <span>{item.error || "Upload failed"}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
+                      onClick={() => retryFailedUpload(index)}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Retry
+                    </Button>
                   </div>
                 )}
 
@@ -2156,10 +2269,19 @@ export default function UnifiedMediaLibrary({
           <div className="flex justify-between items-center gap-2 mt-2">
             <div className="flex items-center gap-2">
               <Button variant="outline" onClick={clearUploadQueue} disabled={isProcessingQueue}>
-                Clear Completed
+                Clear Successful
               </Button>
               <Button variant="outline" onClick={resetUploadQueue} disabled={isProcessingQueue}>
                 Reset All
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={retryAllFailed} 
+                disabled={isProcessingQueue || uploadQueue.filter(i => i.status === "error").length === 0}
+                className="flex items-center gap-2 text-blue-400 border-blue-600 hover:bg-blue-900/20 hover:text-blue-300"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry All Failed
               </Button>
               <Button 
                 variant="destructive" 
