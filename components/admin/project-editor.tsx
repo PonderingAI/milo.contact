@@ -50,6 +50,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   // Add a ref to track if component is mounted
   const isMountedRef = useRef(true)
   const hasBtsImagesLoaded = useRef(false)
+  const hasMainMediaLoaded = useRef(false)
+  const userHasModifiedMainMedia = useRef(false)
   
   const [formData, setFormData] = useState({
     title: project?.title || "",
@@ -82,6 +84,15 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   const [mainImages, setMainImages] = useState<string[]>([])
   const [mainVideos, setMainVideos] = useState<string[]>([])
   const [thumbnailUrl, setThumbnailUrl] = useState<string>(project?.thumbnail_url || "")
+
+  // Debug logging for main media state changes
+  useEffect(() => {
+    console.log("MainImages state changed:", mainImages)
+  }, [mainImages])
+
+  useEffect(() => {
+    console.log("MainVideos state changed:", mainVideos)
+  }, [mainVideos])
 
   // Refs for input elements
   const categoryInputRef = useRef<HTMLInputElement>(null)
@@ -286,8 +297,47 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               return
             }
             
-            if (data.images && Array.isArray(data.images)) {
-              // Separate images and videos
+            if (data.rawData && Array.isArray(data.rawData)) {
+              // Use rawData which contains full BTS media information
+              const images: string[] = []
+              const videos: string[] = []
+
+              data.rawData.forEach((item: any) => {
+                // Skip null, undefined, or invalid values
+                if (!item || !item.image_url || typeof item.image_url !== 'string') {
+                  console.warn('Skipping invalid BTS item:', item)
+                  return
+                }
+
+                if (item.is_video) {
+                  // For videos, try to get the original URL
+                  let originalUrl = item.caption || item.video_url || item.image_url
+                  
+                  // If we have platform and ID but no caption, reconstruct the original URL
+                  if (!item.caption && item.video_platform && item.video_id) {
+                    if (item.video_platform.toLowerCase() === "youtube") {
+                      originalUrl = `https://www.youtube.com/watch?v=${item.video_id}`
+                    } else if (item.video_platform.toLowerCase() === "vimeo") {
+                      originalUrl = `https://player.vimeo.com/video/${item.video_id}`
+                    } else if (item.video_platform.toLowerCase() === "linkedin") {
+                      // For LinkedIn, we may need to store the original URL differently
+                      originalUrl = item.video_url || item.image_url
+                    }
+                  }
+                  
+                  videos.push(originalUrl)
+                } else {
+                  images.push(item.image_url)
+                }
+              })
+
+              setBtsImages(images)
+              setBtsVideos(videos)
+              hasBtsImagesLoaded.current = true
+              
+              console.log("Loaded BTS media - images:", images, "videos:", videos)
+            } else if (data.images && Array.isArray(data.images)) {
+              // Fallback to old method if rawData is not available
               const images: string[] = []
               const videos: string[] = []
 
@@ -327,21 +377,95 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     }
   }, [mode, project?.id])
 
-  // Fetch main images and videos if in edit mode
+  // Fetch main media if in edit mode
   useEffect(() => {
-    if (mode === "edit" && project) {
-      // Set the main image
-      if (project.image) {
-        setMainImages([project.image])
+    if (mode === "edit" && project?.id && !hasMainMediaLoaded.current) {
+      async function fetchMainMedia() {
+        try {
+          const response = await fetch(`/api/projects/main-media/${project.id}`)
+
+          if (response.ok) {
+            const data = await response.json()
+            
+            if (data.fullData && Array.isArray(data.fullData) && data.fullData.length > 0) {
+              // Separate images and videos from main media
+              const images: string[] = []
+              const videos: string[] = []
+
+              data.fullData.forEach((item: any) => {
+                if (!item.image_url || typeof item.image_url !== 'string') {
+                  console.warn('Skipping invalid main media URL:', item)
+                  return
+                }
+
+                if (item.is_video) {
+                  // For videos, try to get the original URL from caption field or reconstruct it
+                  let videoUrl = item.caption || item.video_url || item.image_url
+                  
+                  // If we have platform and ID but no caption, reconstruct the original URL
+                  if (!item.caption && item.video_platform && item.video_id) {
+                    if (item.video_platform.toLowerCase() === "youtube") {
+                      videoUrl = `https://www.youtube.com/watch?v=${item.video_id}`
+                    } else if (item.video_platform.toLowerCase() === "vimeo") {
+                      videoUrl = `https://player.vimeo.com/video/${item.video_id}`
+                    }
+                  }
+                  
+                  videos.push(videoUrl)
+                } else {
+                  images.push(item.image_url)
+                }
+              })
+
+              setMainImages(images)
+              setMainVideos(videos)
+              hasMainMediaLoaded.current = true
+              
+              console.log("Loaded main media - images:", images, "videos:", videos)
+            } else {
+              // No main media in database, use project fields as fallback (for backward compatibility)
+              console.log("No main media in database, using project fields as fallback")
+              
+              if (project.image) {
+                setMainImages([project.image])
+              }
+              if (project.thumbnail_url) {
+                setMainVideos([project.thumbnail_url])
+                setThumbnailUrl(project.thumbnail_url)
+              }
+              hasMainMediaLoaded.current = true
+            }
+          } else {
+            // API call failed, use project fields as fallback
+            console.log("Failed to fetch main media, using project fields as fallback")
+            
+            if (project.image) {
+              setMainImages([project.image])
+            }
+            if (project.thumbnail_url) {
+              setMainVideos([project.thumbnail_url])
+              setThumbnailUrl(project.thumbnail_url)
+            }
+            hasMainMediaLoaded.current = true
+          }
+        } catch (err) {
+          console.error("Error fetching main media:", err)
+          
+          // Use fallback from project fields on error
+          if (project.image) {
+            setMainImages([project.image])
+          }
+          if (project.thumbnail_url) {
+            setMainVideos([project.thumbnail_url])
+            setThumbnailUrl(project.thumbnail_url)
+          }
+          hasMainMediaLoaded.current = true
+        }
       }
 
-      // Set the main video if thumbnail_url exists
-      if (project.thumbnail_url) {
-        setMainVideos([project.thumbnail_url])
-        setThumbnailUrl(project.thumbnail_url)
-      }
+      fetchMainMedia()
     }
-  }, [mode, project])
+  }, [mode, project?.id])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
@@ -407,6 +531,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     // Add to mainImages if not already there
     if (!mainImages.includes(url)) {
       setMainImages((prev) => [...prev, url])
+      userHasModifiedMainMedia.current = true
     }
   }
 
@@ -657,6 +782,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       if (isVideo) {
         if (!mainVideos.includes(mediaUrl)) {
           setMainVideos((prev) => [...prev, mediaUrl])
+          userHasModifiedMainMedia.current = true
         }
         // Store video URL in thumbnail_url if that column exists
         if (schemaColumns.includes("thumbnail_url")) {
@@ -687,6 +813,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
                 setFormData((prev) => ({ ...prev, image: mediaData.thumbnail_url }))
                 if (!mainImages.includes(mediaData.thumbnail_url)) {
                   setMainImages((prev) => [...prev, mediaData.thumbnail_url])
+                  userHasModifiedMainMedia.current = true
                 }
               }
 
@@ -708,6 +835,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
       } else {
         if (!mainImages.includes(mediaUrl)) {
           setMainImages((prev) => [...prev, mediaUrl])
+          userHasModifiedMainMedia.current = true
           console.log("Added image to mainImages:", mediaUrl)
         }
         // Set as cover image if none is set
@@ -776,6 +904,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
     const newImages = [...mainImages]
     const removedImage = newImages.splice(index, 1)[0]
     setMainImages(newImages)
+    userHasModifiedMainMedia.current = true
 
     // If the removed image was the cover image, set a new one if available
     if (formData.image === removedImage) {
@@ -788,9 +917,12 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
   }
 
   const removeMainVideo = (index: number) => {
+    console.log("removeMainVideo called for index:", index, "current videos:", mainVideos)
     const newVideos = [...mainVideos]
     const removedVideo = newVideos.splice(index, 1)[0]
+    console.log("Removed video:", removedVideo, "remaining videos:", newVideos)
     setMainVideos(newVideos)
+    userHasModifiedMainMedia.current = true
 
     // If the removed video was the main video, clear the thumbnail_url
     if (thumbnailUrl === removedVideo) {
@@ -876,6 +1008,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           setMainVideos(prev => [...prev, url])
           setThumbnailUrl(url)
           setFormData(prev => ({ ...prev, thumbnail_url: url }))
+          userHasModifiedMainMedia.current = true
         }
 
         // Use existing video data safely
@@ -910,6 +1043,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           setMainVideos(prev => [...prev, url])
           setThumbnailUrl(url)
           setFormData(prev => ({ ...prev, thumbnail_url: url }))
+          userHasModifiedMainMedia.current = true
         }
 
         // Extract properties from result safely
@@ -922,6 +1056,7 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           setFormData(prev => ({ ...prev, image: thumbnailUrl }))
           setVideoThumbnail(thumbnailUrl)
           setMainImages(prev => [...prev, thumbnailUrl])
+          userHasModifiedMainMedia.current = true
         }
 
         // Use video title if project title is empty
@@ -1154,6 +1289,40 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           throw new Error(responseData.error || "Failed to create project")
         }
 
+        // Save main media if any
+        if ((mainImages.length > 0 || mainVideos.length > 0) && responseData.data && responseData.data[0]) {
+          const projectId = responseData.data[0].id
+
+          try {
+            console.log("Saving main media - mainImages:", mainImages, "mainVideos:", mainVideos)
+            const combinedMedia = [...mainImages, ...mainVideos]
+            console.log("Combined media being sent:", combinedMedia)
+            
+            const mainMediaResponse = await fetch("/api/projects/main-media", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                projectId,
+                media: combinedMedia,
+                replaceExisting: true,
+              }),
+            })
+
+            const mainMediaResult = await mainMediaResponse.json()
+            if (!mainMediaResponse.ok) {
+              console.error("Error saving main media:", mainMediaResult)
+              // Continue with success flow even if main media save fails
+            } else {
+              console.log("Main media saved successfully:", mainMediaResult)
+            }
+          } catch (mainMediaError) {
+            console.error("Error saving main media:", mainMediaError)
+            // Continue with success flow even if main media save fails
+          }
+        }
+
         // Save BTS images if any
         if ((btsImages.length > 0 || btsVideos.length > 0) && responseData.data && responseData.data[0]) {
           const projectId = responseData.data[0].id
@@ -1214,7 +1383,39 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           throw new Error(responseData.error || "Failed to update project")
         }
 
-        console.log("Project updated successfully, updating BTS media...")
+        console.log("Project updated successfully, updating main media and BTS media...")
+
+        // Update main media if any
+        if (project?.id) {
+          try {
+            console.log("Updating main media - mainImages:", mainImages, "mainVideos:", mainVideos)
+            const combinedMedia = [...mainImages, ...mainVideos]
+            console.log("Combined media being sent:", combinedMedia)
+            
+            const mainMediaResponse = await fetch("/api/projects/main-media", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                projectId: project.id,
+                media: combinedMedia,
+                replaceExisting: true,
+              }),
+            })
+
+            const mainMediaResult = await mainMediaResponse.json()
+            if (!mainMediaResponse.ok) {
+              console.error("Error updating main media:", mainMediaResult)
+              // Continue with success flow even if main media update fails
+            } else {
+              console.log("Main media updated successfully:", mainMediaResult)
+            }
+          } catch (mainMediaError) {
+            console.error("Error updating main media:", mainMediaError)
+            // Continue with success flow even if main media update fails
+          }
+        }
 
         // Update BTS images if any
         if (project?.id) {

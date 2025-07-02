@@ -2,10 +2,10 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import Image from "next/image"
 import Link from "next/link"
-import { ArrowLeft, Play, ExternalLink } from "lucide-react"
+import { ArrowLeft, Play, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import VideoPlayer from "@/components/video-player"
 import BTSLightbox from "@/components/bts-lightbox"
@@ -13,6 +13,16 @@ import { extractVideoInfo } from "@/lib/project-data"
 import { useMediaQuery } from "@/hooks/use-media-query"
 
 interface BTSMedia {
+  id: string
+  image_url: string
+  caption?: string
+  is_video?: boolean
+  video_url?: string
+  video_platform?: string
+  video_id?: string
+}
+
+interface MainMedia {
   id: string
   image_url: string
   caption?: string
@@ -37,6 +47,7 @@ interface ProjectDetailContentProps {
     project_date?: string
     tags?: string[]
     bts_images?: BTSMedia[]
+    main_media?: MainMedia[]
     external_url?: string
   }
 }
@@ -48,14 +59,80 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const [videoError, setVideoError] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
+  
+  // Main media state
+  const [currentMainMediaIndex, setCurrentMainMediaIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
+  const [showControls, setShowControls] = useState(true)
+  const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
+  const [showLeftArrow, setShowLeftArrow] = useState(false)
+  const [showRightArrow, setShowRightArrow] = useState(false)
   const isMobile = useMediaQuery("(max-width: 768px)")
   const mainRef = useRef<HTMLDivElement>(null)
+  const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   // Process BTS media to ensure they have proper video info
   const [btsMedia, setBtsMedia] = useState<BTSMedia[]>([])
+  
+  // Process main media to ensure they have proper video info
+  const [mainMedia, setMainMedia] = useState<MainMedia[]>([])
+  
+  // Combined main media from main_media table and fallback to project.image/thumbnail_url
+  const combinedMainMedia = useMemo(() => {
+    const media: MainMedia[] = []
+    
+    // Add main media from database if available
+    if (project.main_media && project.main_media.length > 0) {
+      // Process main media and filter out duplicates based on video ID
+      const seenVideoIds = new Set<string>()
+      const seenImageUrls = new Set<string>()
+      
+      project.main_media.forEach((item) => {
+        // For videos, check if we've already seen this video ID
+        if (item.is_video && item.video_id) {
+          const videoKey = `${item.video_platform}-${item.video_id}`
+          if (!seenVideoIds.has(videoKey)) {
+            seenVideoIds.add(videoKey)
+            media.push(item)
+          }
+        } else if (!item.is_video) {
+          // For images, check if we've already seen this image URL
+          // Also skip if this image URL is already being used as a thumbnail for a video
+          const isVideoThumbnail = project.main_media.some(
+            (videoItem) => videoItem.is_video && videoItem.image_url === item.image_url
+          )
+          
+          if (!seenImageUrls.has(item.image_url) && !isVideoThumbnail) {
+            seenImageUrls.add(item.image_url)
+            media.push(item)
+          }
+        }
+      })
+    } else {
+      // Fallback to project.image and thumbnail_url for backward compatibility
+      // For videos, only use the video (don't double-count with cover image)
+      if (project.thumbnail_url && videoInfo) {
+        media.push({
+          id: 'main-video',
+          image_url: project.thumbnail_url,
+          is_video: true,
+          video_platform: videoInfo.platform,
+          video_id: videoInfo.id,
+        })
+      } else if (project.image) {
+        // Only add cover image if there's no video
+        media.push({
+          id: 'cover-image',
+          image_url: project.image,
+          is_video: false,
+        })
+      }
+    }
+    
+    return media
+  }, [project.main_media, project.image, project.thumbnail_url, videoInfo])
 
   // Extract video info from thumbnail_url if not already available
   useEffect(() => {
@@ -113,10 +190,10 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     return () => clearTimeout(timer)
   }, [project.bts_images])
 
-  const handleVideoError = () => {
+  const handleVideoError = useCallback(() => {
     console.error("Video failed to load")
     setVideoError(true)
-  }
+  }, [])
 
   const openLightbox = (index: number) => {
     setLightboxIndex(index)
@@ -184,6 +261,54 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     }
   }
 
+  // Handle mouse movement for auto-hide controls and region-based arrow display
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const width = rect.width
+    const leftThird = width / 3
+    const rightThird = width * 2 / 3
+
+    setMousePosition({ x, y: e.clientY - rect.top })
+    setShowControls(true)
+    
+    // Only show arrows on desktop and when there are multiple media items
+    if (!isMobile && combinedMainMedia.length > 1) {
+      setShowLeftArrow(x < leftThird && currentMainMediaIndex > 0)
+      setShowRightArrow(x > rightThird && currentMainMediaIndex < combinedMainMedia.length - 1)
+    }
+
+    // Clear existing timeout
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current)
+    }
+
+    // Set new timeout to hide controls after 1.5 seconds
+    hideControlsTimeoutRef.current = setTimeout(() => {
+      setShowControls(false)
+      setShowLeftArrow(false)
+      setShowRightArrow(false)
+    }, 1500)
+  }, [isMobile, combinedMainMedia.length, currentMainMediaIndex])
+
+  const handleMouseLeave = useCallback(() => {
+    setShowControls(false)
+    setShowLeftArrow(false)
+    setShowRightArrow(false)
+    if (hideControlsTimeoutRef.current) {
+      clearTimeout(hideControlsTimeoutRef.current)
+    }
+  }, [])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hideControlsTimeoutRef.current) {
+        clearTimeout(hideControlsTimeoutRef.current)
+      }
+    }
+  }, [])
+
   const formattedDate = project.project_date
     ? new Date(project.project_date).toLocaleDateString("en-US", {
         year: "numeric",
@@ -198,27 +323,112 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
       <div id="sr-announcement" className="sr-only" aria-live="polite" aria-atomic="true"></div>
 
       {/* Full-width video/image section - no width constraints */}
+      {/* Main Media Section - Support for multiple images/videos */}
       <div className="w-full mb-8">
-        {videoInfo && !videoError ? (
-          <div className="w-full aspect-video">
-            <VideoPlayer
-              platform={videoInfo.platform}
-              videoId={videoInfo.id}
-              onError={handleVideoError}
-              autoplay={false} // Disable autoplay to preserve audio
-              useNativeControls={true} // Use native YouTube/Vimeo controls
-            />
+        {combinedMainMedia.length > 0 ? (
+          <div className="relative">
+            {/* Main media display */}
+            <div 
+              className="w-full aspect-video relative bg-black"
+              onMouseMove={handleMouseMove}
+              onMouseLeave={handleMouseLeave}
+            >
+              {combinedMainMedia[currentMainMediaIndex]?.is_video && combinedMainMedia[currentMainMediaIndex]?.video_platform && combinedMainMedia[currentMainMediaIndex]?.video_id ? (
+                <VideoPlayer
+                  platform={combinedMainMedia[currentMainMediaIndex].video_platform!}
+                  videoId={combinedMainMedia[currentMainMediaIndex].video_id!}
+                  onError={handleVideoError}
+                  autoplay={false}
+                  useNativeControls={true}
+                />
+              ) : (
+                <Image
+                  src={combinedMainMedia[currentMainMediaIndex]?.image_url || "/placeholder.svg"}
+                  alt={project.title}
+                  fill
+                  className="object-contain"
+                  priority
+                  sizes="100vw"
+                />
+              )}
+              
+              {/* Navigation arrows for multiple main media - region-based display */}
+              {combinedMainMedia.length > 1 && (
+                <>
+                  {showLeftArrow && (
+                    <button
+                      className={`absolute left-4 top-1/2 -translate-y-1/2 text-white p-2 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white ${showControls ? 'opacity-100' : 'opacity-0'}`}
+                      onClick={() => setCurrentMainMediaIndex((prev) => (prev - 1 + combinedMainMedia.length) % combinedMainMedia.length)}
+                      aria-label="Previous media"
+                    >
+                      <ChevronLeft className="h-8 w-8 drop-shadow-lg" />
+                    </button>
+                  )}
+                  {showRightArrow && (
+                    <button
+                      className={`absolute right-4 top-1/2 -translate-y-1/2 text-white p-2 transition-opacity z-10 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-white ${showControls ? 'opacity-100' : 'opacity-0'}`}
+                      onClick={() => setCurrentMainMediaIndex((prev) => (prev + 1) % combinedMainMedia.length)}
+                      aria-label="Next media"
+                    >
+                      <ChevronRight className="h-8 w-8 drop-shadow-lg" />
+                    </button>
+                  )}
+                </>
+              )}
+              
+              {/* Media counter - auto-hide */}
+              {combinedMainMedia.length > 1 && showControls && (
+                <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm transition-opacity">
+                  {currentMainMediaIndex + 1} / {combinedMainMedia.length}
+                </div>
+              )}
+            </div>
+            
+            {/* Thumbnail gallery for multiple main media - only show if there's enough space */}
+            {combinedMainMedia.length > 1 && (
+              <div className="mt-6">
+                <div className="flex gap-3 justify-center overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+                  {combinedMainMedia.map((media, index) => (
+                    <button
+                      key={media.id || index}
+                      className={`flex-shrink-0 w-20 h-20 relative rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+                        index === currentMainMediaIndex 
+                          ? 'border-blue-500 shadow-lg shadow-blue-500/25' 
+                          : 'border-gray-700 hover:border-gray-500'
+                      }`}
+                      onClick={() => setCurrentMainMediaIndex(index)}
+                      aria-label={`View ${media.is_video ? 'video' : 'image'} ${index + 1}`}
+                    >
+                      <div className="relative w-full h-full bg-black">
+                        <Image
+                          src={media.image_url || "/placeholder.svg"}
+                          alt={`${project.title} ${index + 1}`}
+                          fill
+                          className="object-contain"
+                          sizes="80px"
+                        />
+                        {media.is_video && (
+                          <div className="absolute inset-0 flex items-center justify-center">
+                            <div className="bg-white/90 rounded-full p-1.5">
+                              <Play className="h-3 w-3 text-black" fill="currentColor" />
+                            </div>
+                          </div>
+                        )}
+                        {/* Active indicator - positioned above the thumbnail */}
+                        {index === currentMainMediaIndex && (
+                          <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-blue-500 rounded-full z-10"></div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
-          <div className="w-full aspect-video relative">
-            <Image
-              src={project.image || "/placeholder.svg"}
-              alt={project.title}
-              fill
-              className="object-cover"
-              priority
-              sizes="100vw"
-            />
+          // Fallback display if no main media
+          <div className="w-full aspect-video relative bg-gray-800 flex items-center justify-center">
+            <p className="text-gray-400">No media available</p>
           </div>
         )}
       </div>
@@ -350,7 +560,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                         src={media.image_url || "/placeholder.svg"}
                         alt=""
                         fill
-                        className="object-cover transition-transform group-hover:scale-105 group-focus:scale-105"
+                        className="object-contain transition-transform group-hover:scale-105 group-focus:scale-105"
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 45vw, 600px"
                       />
 
@@ -399,6 +609,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           />
         </div>
       )}
+
     </>
   )
 }

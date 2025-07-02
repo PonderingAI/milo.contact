@@ -42,44 +42,70 @@ export function extractVideoInfo(url: string): { platform: string; id: string } 
       return null
     }
 
-    // YouTube URL patterns
+    // Clean up the URL and remove fragments
+    const cleanUrl = url.trim().split('#')[0]
+
+    // YouTube URL patterns - Updated to handle various query parameters and formats
     const youtubePatterns = [
-      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
-      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
-      /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
+      // Standard watch URLs with various query parameters
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?(?:[^&]*&)*v=([a-zA-Z0-9_-]{11})(?:&[^&]*)*$/i,
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})(?:[&?].*)?$/i,
+      // Embed URLs with query parameters 
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})(?:\?.*)?$/i,
+      /(?:https?:\/\/)?(?:www\.)?youtube-nocookie\.com\/embed\/([a-zA-Z0-9_-]{11})(?:\?.*)?$/i,
+      // Short URLs
+      /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})(?:\?.*)?$/i,
+      // Live URLs
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/live\/([a-zA-Z0-9_-]{11})(?:\?.*)?$/i,
+      // Shorts URLs
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/shorts\/([a-zA-Z0-9_-]{11})(?:\?.*)?$/i,
     ]
 
-    // Vimeo URL patterns
+    // Vimeo URL patterns - Updated to handle query parameters properly
     const vimeoPatterns = [
-      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
-      /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
+      // Player embed URLs with query parameters (like the problematic URL)
+      /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)(?:\?.*)?$/i,
+      // Standard vimeo.com URLs
+      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)(?:[/?].*)?$/i,
+      // Private/unlisted URLs
+      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)\/[a-zA-Z0-9]+(?:\?.*)?$/i,
     ]
 
-    // LinkedIn URL patterns
+    // LinkedIn URL patterns - Improved for various formats
     const linkedinPatterns = [
-      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/feed\/update\/urn:li:activity:([0-9a-zA-Z-]+)/i,
-      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/posts\/[^/]+-([0-9a-zA-Z-]+)/i,
+      // Activity URLs
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/feed\/update\/urn:li:activity:([0-9a-zA-Z-]+)(?:\?.*)?$/i,
+      // Posts URLs  
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/posts\/[^/]+-([0-9a-zA-Z-]+)(?:\?.*)?$/i,
+      // Company posts
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/company\/[^/]+\/posts\/([0-9a-zA-Z-]+)(?:\?.*)?$/i,
     ]
 
     // Check YouTube patterns
     for (const pattern of youtubePatterns) {
-      const match = url.match(pattern)
+      const match = cleanUrl.match(pattern)
       if (match && match[1]) {
-        return { platform: "youtube", id: match[1] }
+        // Validate YouTube video ID (should be 11 characters)
+        if (match[1].length === 11) {
+          return { platform: "youtube", id: match[1] }
+        }
       }
     }
 
     // Check Vimeo patterns
     for (const pattern of vimeoPatterns) {
-      const match = url.match(pattern)
+      const match = cleanUrl.match(pattern)
       if (match && match[1]) {
-        return { platform: "vimeo", id: match[1] }
+        // Validate Vimeo video ID (should be numeric)
+        if (/^\d+$/.test(match[1])) {
+          return { platform: "vimeo", id: match[1] }
+        }
       }
     }
 
     // Check LinkedIn patterns
     for (const pattern of linkedinPatterns) {
-      const match = url.match(pattern)
+      const match = cleanUrl.match(pattern)
       if (match && match[1]) {
         return { platform: "linkedin", id: match[1] }
       }

@@ -4,7 +4,7 @@ import { checkAdminPermission } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
 export async function POST(request: Request) {
-  console.log("=== BTS IMAGES API CALLED ===")
+  console.log("=== MAIN MEDIA API CALLED ===")
   
   try {
     // Check if user is authenticated and has admin role
@@ -20,7 +20,6 @@ export async function POST(request: Request) {
     }
     
     // Get authenticated Supabase client with service role to bypass RLS
-    // Since we're already checking admin permissions via Clerk metadata above
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -28,11 +27,11 @@ export async function POST(request: Request) {
     
     // Parse request body
     const req = await request.json()
-    const { projectId, images, replaceExisting } = req
+    const { projectId, media, replaceExisting } = req
 
-    if (!projectId || !images || !Array.isArray(images)) {
+    if (!projectId || !media || !Array.isArray(media)) {
       return NextResponse.json({ 
-        error: "Project ID and images are required",
+        error: "Project ID and media are required",
         debug_userIdFromAuth: userId
       }, { status: 400 })
     }
@@ -49,15 +48,14 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
-
-    // Delete existing images if requested
+    // Delete existing main media if requested
     if (replaceExisting) {
-      const { error: deleteError } = await supabase.from("bts_images").delete().eq("project_id", projectId)
+      const { error: deleteError } = await supabase.from("main_media").delete().eq("project_id", projectId)
 
       if (deleteError) {
-        console.error("Error deleting existing BTS images:", deleteError)
+        console.error("Error deleting existing main media:", deleteError)
         return NextResponse.json({ 
-          error: "Error deleting existing BTS images",
+          error: "Error deleting existing main media",
           debug_userIdFromAuth: userId,
           supabaseError: deleteError.message,
           supabaseCode: deleteError.code
@@ -106,14 +104,14 @@ export async function POST(request: Request) {
       }
     }
 
-    // Prepare BTS image data with video detection and processing
-    const btsImageData = images.map((imageUrl) => {
-      const videoInfo = extractVideoInfo(imageUrl)
+    // Prepare main media data with video detection and processing
+    const mainMediaData = media.map((mediaUrl, index) => {
+      const videoInfo = extractVideoInfo(mediaUrl)
       
       if (videoInfo) {
         // This is a video URL - construct proper embed URL and metadata
         let embedUrl = ""
-        let thumbnailUrl = imageUrl // Use original URL as fallback thumbnail
+        let thumbnailUrl = mediaUrl // Use original URL as fallback thumbnail
 
         if (videoInfo.platform === "youtube") {
           embedUrl = `https://www.youtube.com/embed/${videoInfo.id}?autoplay=1&rel=0&modestbranding=1&mute=0`
@@ -130,28 +128,30 @@ export async function POST(request: Request) {
           video_url: embedUrl,
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
-          caption: imageUrl, // Store original URL in caption field for reconstruction
+          display_order: index,
+          caption: mediaUrl, // Store original URL in caption field for reconstruction
         }
       } else {
         // Regular image
         return {
           project_id: projectId,
-          image_url: imageUrl,
+          image_url: mediaUrl,
           is_video: false,
           video_url: null,
           video_platform: null,
           video_id: null,
+          display_order: index,
         }
       }
     })
 
-    // Insert BTS images
-    const { data, error } = await supabase.from("bts_images").insert(btsImageData).select()
+    // Insert main media
+    const { data, error } = await supabase.from("main_media").insert(mainMediaData).select()
 
     if (error) {
-      console.error("Error inserting BTS images:", error)
+      console.error("Error inserting main media:", error)
       return NextResponse.json({ 
-        error: "Error inserting BTS images", 
+        error: "Error inserting main media", 
         debug_userIdFromAuth: userId,
         supabaseError: error.message,
         supabaseCode: error.code,
@@ -163,11 +163,11 @@ export async function POST(request: Request) {
     return NextResponse.json({
       success: true,
       data: data || [],
-      message: `Successfully processed ${data?.length || 0} BTS images`,
+      message: `Successfully processed ${data?.length || 0} main media items`,
       count: data?.length || 0
     })
   } catch (error) {
-    console.error("=== BTS IMAGES API ERROR ===", error)
+    console.error("=== MAIN MEDIA API ERROR ===", error)
     
     // Always return JSON, never let the error propagate as HTML
     let userId = null

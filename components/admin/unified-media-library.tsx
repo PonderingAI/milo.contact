@@ -310,6 +310,31 @@ export default function UnifiedMediaLibrary({
   const handleFileUpload = async (files: File[]) => {
     if (files.length === 0) return
 
+    // Check file sizes before processing - Vercel has infrastructure limits
+    // Even though the function can handle 50MB, the request body limit is much lower
+    const maxSize = 4.5 * 1024 * 1024 // 4.5MB - safe limit for Vercel hobby plan
+    const oversizedFiles = files.filter(file => file.size > maxSize)
+    
+    if (oversizedFiles.length > 0) {
+      const fileList = oversizedFiles.map(file => {
+        const sizeMB = Math.round((file.size / 1024 / 1024) * 10) / 10 // Round to 1 decimal
+        return `"${file.name}" (${sizeMB}MB)`
+      }).join(', ')
+      
+      toast({
+        title: "Files too large",
+        description: `The following files exceed the 4.5MB limit: ${fileList}. Please compress or resize them first. Vercel has strict upload limits for the free plan.`,
+        variant: "destructive",
+      })
+      
+      // Only process files that are within the size limit
+      const validFiles = files.filter(file => file.size <= maxSize)
+      if (validFiles.length === 0) return
+      
+      // Continue with valid files only
+      files = validFiles
+    }
+
     // First check if the media table exists
     const tableExists = await checkMediaTable()
 
@@ -375,9 +400,11 @@ export default function UnifiedMediaLibrary({
         const formData = new FormData()
         formData.append("file", file)
 
-        // Upload the file directly with timeout
+        // Upload the file directly with extended timeout for large images
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+        const isLargeFile = file.size > 10 * 1024 * 1024 // 10MB+
+        const timeoutDuration = isLargeFile ? 180000 : 30000 // 3 minutes for large files, 30 seconds for others
+        const timeoutId = setTimeout(() => controller.abort(), timeoutDuration)
 
         const response = await fetch("/api/bulk-upload", {
           method: "POST",
@@ -387,13 +414,36 @@ export default function UnifiedMediaLibrary({
 
         clearTimeout(timeoutId)
 
-        if (!response.ok) {
-          const result = await response.text()
-          console.error("Upload error response:", result)
-          throw new Error("Failed to upload file: " + (result || response.statusText))
+        let result
+        try {
+          // Attempt to parse as JSON
+          const responseText = await response.text()
+          if (!responseText) {
+            throw new Error("Empty response from server")
+          }
+          result = JSON.parse(responseText)
+        } catch (parseError) {
+          console.error("Failed to parse server response as JSON:", parseError)
+          console.error("Response status:", response.status, "Response headers:", Object.fromEntries(response.headers.entries()))
+          
+          // Special handling for Vercel infrastructure errors (413)
+          if (response.status === 413) {
+            const fileSizeMB = Math.round((file.size / 1024 / 1024) * 10) / 10
+            throw new Error(`File "${file.name}" (${fileSizeMB}MB) exceeds Vercel's upload limits. Please compress or resize to under 4.5MB.`)
+          }
+          
+          throw new Error(`Server returned invalid response. Status: ${response.status}`)
         }
 
-        const result = await response.json()
+        if (!response.ok) {
+          console.error("Upload error response:", result)
+          // Provide specific error message for file size issues
+          if (response.status === 413) {
+            const fileSizeMB = Math.round((file.size / 1024 / 1024) * 10) / 10
+            throw new Error(result.error || `File "${file.name}" (${fileSizeMB}MB) exceeds the upload limit. Please compress to under 4.5MB.`)
+          }
+          throw new Error("Failed to upload file: " + (result.error || response.statusText))
+        }
 
         // Check if the file was a duplicate
         if (result.duplicate) {
@@ -423,9 +473,14 @@ export default function UnifiedMediaLibrary({
             toggleItemSelection(result.existingFile)
           }
         } else {
+          // Enhanced success message with compression details
+          const isLargeFile = file.size > 10 * 1024 * 1024 // 10MB+
+          const compressionMessage = result.convertedToWebP ? 
+            (isLargeFile ? " and optimized for web delivery" : " (converted to WebP)") : ""
+          
           toast({
             title: "Success",
-            description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
+            description: `File uploaded successfully${compressionMessage}`,
           })
 
           // If in selection mode, select the new file
@@ -651,10 +706,34 @@ export default function UnifiedMediaLibrary({
               return updated
             })
 
-            const result = await response.json()
+            let result
+            try {
+              // Attempt to parse as JSON
+              const responseText = await response.text()
+              if (!responseText) {
+                throw new Error("Empty response from server")
+              }
+              result = JSON.parse(responseText)
+            } catch (parseError) {
+              console.error("Failed to parse server response as JSON:", parseError)
+              console.error("Response status:", response.status, "Response headers:", Object.fromEntries(response.headers.entries()))
+              
+              // Special handling for Vercel infrastructure errors (413)
+              if (response.status === 413) {
+                const fileSizeMB = Math.round((item.file.size / 1024 / 1024) * 10) / 10
+                throw new Error(`File "${item.file.name}" (${fileSizeMB}MB) exceeds Vercel's upload limits. Please compress to under 4.5MB.`)
+              }
+              
+              throw new Error(`Server returned invalid response. Status: ${response.status}`)
+            }
 
             if (!response.ok) {
-              throw new Error(result.error || "Upload failed")
+              // Provide specific error message for file size issues
+              if (response.status === 413) {
+                const fileSizeMB = Math.round((item.file.size / 1024 / 1024) * 10) / 10
+                throw new Error(result.error || `File "${item.file.name}" (${fileSizeMB}MB) exceeds the upload limit. Please compress to under 4.5MB.`)
+              }
+              throw new Error(result.error || `Upload failed with status ${response.status}`)
             }
 
             // Check if the file was a duplicate
@@ -731,16 +810,26 @@ export default function UnifiedMediaLibrary({
     fetchMedia()
     setIsProcessingQueue(false)
 
-    // Count results
+    // Count results with enhanced feedback
     const successful = uploadQueue.filter((item) => item.status === "success").length
     const converted = uploadQueue.filter((item) => item.status === "success" && item.response?.convertedToWebP).length
     const failed = uploadQueue.filter((item) => item.status === "error").length
     const pending = uploadQueue.filter((item) => item.status === "pending").length
     const duplicateCount = duplicates.length
+    
+    // Check if any large images were processed
+    const largeImagesProcessed = uploadQueue.filter((item) => 
+      item.status === "success" && 
+      item.response?.convertedToWebP && 
+      item.file.size > 10 * 1024 * 1024
+    ).length
+
+    const compressionMessage = converted > 0 ? 
+      (largeImagesProcessed > 0 ? ` (${converted} optimized, ${largeImagesProcessed} large images compressed)` : ` (${converted} converted to WebP)`) : ""
 
     toast({
       title: "Bulk upload progress",
-      description: `${successful} files uploaded successfully${converted > 0 ? ` (${converted} converted to WebP)` : ""}${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ""}, ${failed} files failed, ${pending} files pending`,
+      description: `${successful} files uploaded successfully${compressionMessage}${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ""}${failed > 0 ? `, ${failed} files failed` : ""}${pending > 0 ? `, ${pending} files pending` : ""}`,
       variant: successful > 0 ? "default" : "destructive",
     })
 
@@ -757,8 +846,79 @@ export default function UnifiedMediaLibrary({
   }
 
   const clearUploadQueue = () => {
-    // Only clear completed uploads
-    setUploadQueue((prev) => prev.filter((item) => item.status === "pending" || item.status === "uploading"))
+    // Only clear completed successful uploads and duplicates, keep failed uploads for retry
+    setUploadQueue((prev) => prev.filter((item) => 
+      item.status === "pending" || 
+      item.status === "uploading" || 
+      item.status === "error"
+    ))
+  }
+
+  const retryFailedUpload = (index: number) => {
+    setUploadQueue((prev) => {
+      const updated = [...prev]
+      if (updated[index] && updated[index].status === "error") {
+        updated[index] = {
+          ...updated[index],
+          status: "pending",
+          progress: 0,
+          error: undefined,
+        }
+      }
+      return updated
+    })
+
+    // Trigger processing if not already running
+    if (!isProcessingQueue) {
+      pendingQueueRef.current = true
+      setTimeout(() => {
+        if (!isProcessingQueue) {
+          processBulkUpload()
+        }
+      }, 100)
+    }
+  }
+
+  const retryAllFailed = () => {
+    const failedCount = uploadQueue.filter((item) => item.status === "error").length
+    
+    if (failedCount === 0) {
+      toast({
+        title: "No failed uploads",
+        description: "There are no failed uploads to retry",
+        variant: "default",
+      })
+      return
+    }
+
+    setUploadQueue((prev) => {
+      return prev.map((item) => {
+        if (item.status === "error") {
+          return {
+            ...item,
+            status: "pending",
+            progress: 0,
+            error: undefined,
+          }
+        }
+        return item
+      })
+    })
+
+    // Trigger processing if not already running
+    if (!isProcessingQueue) {
+      pendingQueueRef.current = true
+      setTimeout(() => {
+        if (!isProcessingQueue) {
+          processBulkUpload()
+        }
+      }, 100)
+    }
+
+    toast({
+      title: "Retrying uploads",
+      description: `Retrying ${failedCount} failed uploads`,
+    })
   }
 
   const resetUploadQueue = () => {
@@ -776,11 +936,39 @@ export default function UnifiedMediaLibrary({
   const cancelUpload = (index: number) => {
     setUploadQueue((prev) => {
       const updated = [...prev]
-      // Only allow canceling pending uploads
+      // Allow canceling pending uploads or mark as cancelled if uploading
       if (updated[index].status === "pending") {
         updated[index] = { ...updated[index], status: "error", progress: 0, error: "Cancelled by user" }
+      } else if (updated[index].status === "uploading") {
+        updated[index] = { ...updated[index], status: "error", error: "Cancelled by user" }
       }
       return updated
+    })
+  }
+
+  const removeFromQueue = (index: number) => {
+    setUploadQueue((prev) => {
+      const updated = [...prev]
+      // Remove item from queue entirely
+      updated.splice(index, 1)
+      return updated
+    })
+  }
+
+  const stopAllUploads = () => {
+    setUploadQueue((prev) => {
+      return prev.map((item) => {
+        if (item.status === "pending" || item.status === "uploading") {
+          return { ...item, status: "error", error: "Stopped by user" }
+        }
+        return item
+      })
+    })
+    setIsProcessingQueue(false)
+    toast({
+      title: "All uploads stopped",
+      description: "All pending and active uploads have been cancelled",
+      variant: "default",
     })
   }
 
@@ -1168,7 +1356,7 @@ export default function UnifiedMediaLibrary({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ id, filepath, filetype }),
+        body: JSON.stringify({ items: [{ id, filepath, filetype }] }),
       })
 
       if (!response.ok) {
@@ -1725,6 +1913,9 @@ export default function UnifiedMediaLibrary({
             <div className="text-sm text-gray-400">
               <p>Upload files directly to the media library.</p>
               <p className="mt-1">Select multiple files or drag and drop a folder to upload in bulk.</p>
+              <p className="mt-1 text-xs">
+                <span className="text-blue-400">✓ Large images</span> (up to 50MB) are automatically compressed to WebP format for optimal performance.
+              </p>
             </div>
           </div>
         </div>
@@ -2023,7 +2214,18 @@ export default function UnifiedMediaLibrary({
                   <div className="truncate mr-2 text-sm" title={item.file.name}>
                     {item.file.name}
                   </div>
-                  <div className="text-xs whitespace-nowrap">{(item.file.size / 1024).toFixed(2)} KB</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs whitespace-nowrap">{(item.file.size / 1024).toFixed(2)} KB</div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 p-0 hover:bg-red-600/20" 
+                      onClick={() => removeFromQueue(index)}
+                      title="Remove from queue"
+                    >
+                      <X className="h-4 w-4 text-red-400" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 mb-1">
@@ -2033,11 +2235,18 @@ export default function UnifiedMediaLibrary({
                       <span className="flex items-center justify-end gap-1">
                         Pending
                         <Button variant="ghost" size="icon" className="h-4 w-4 p-0" onClick={() => cancelUpload(index)}>
-                          <AlertCircle className="h-3 w-3 text-red-400" />
+                          <AlertCircle className="h-3 w-3 text-yellow-400" />
                         </Button>
                       </span>
                     )}
-                    {item.status === "uploading" && `${item.progress}%`}
+                    {item.status === "uploading" && (
+                      <span className="flex items-center justify-end gap-1">
+                        {item.progress}%
+                        <Button variant="ghost" size="icon" className="h-4 w-4 p-0" onClick={() => cancelUpload(index)}>
+                          <AlertCircle className="h-3 w-3 text-yellow-400" />
+                        </Button>
+                      </span>
+                    )}
                     {item.status === "success" && "Complete"}
                     {item.status === "duplicate" && "Duplicate"}
                     {item.status === "error" && "Failed"}
@@ -2047,7 +2256,16 @@ export default function UnifiedMediaLibrary({
                 {item.status === "error" && (
                   <div className="text-xs text-red-400 flex items-center gap-1 mt-1">
                     <AlertCircle className="h-3 w-3" />
-                    {item.error || "Upload failed"}
+                    <span>{item.error || "Upload failed"}</span>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 px-2 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-900/20"
+                      onClick={() => retryFailedUpload(index)}
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Retry
+                    </Button>
                   </div>
                 )}
 
@@ -2064,13 +2282,31 @@ export default function UnifiedMediaLibrary({
             ))}
           </div>
 
-          <div className="flex justify-between gap-2 mt-2">
-            <div className="space-x-2">
+          <div className="flex justify-between items-center gap-2 mt-2">
+            <div className="flex items-center gap-2">
               <Button variant="outline" onClick={clearUploadQueue} disabled={isProcessingQueue}>
-                Clear Completed
+                Clear Successful
               </Button>
               <Button variant="outline" onClick={resetUploadQueue} disabled={isProcessingQueue}>
                 Reset All
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={retryAllFailed} 
+                disabled={isProcessingQueue || uploadQueue.filter(i => i.status === "error").length === 0}
+                className="flex items-center gap-2 text-blue-400 border-blue-600 hover:bg-blue-900/20 hover:text-blue-300"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Retry All Failed
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={stopAllUploads} 
+                disabled={!isProcessingQueue && uploadQueue.filter(i => i.status === "pending").length === 0}
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700 transition-all duration-200 shadow-sm hover:shadow-md"
+              >
+                <X className="h-4 w-4" />
+                Stop All
               </Button>
             </div>
 

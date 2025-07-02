@@ -117,10 +117,10 @@ export function normalizeUrl(url: string): string {
 
     // Handle Vimeo URLs specially
     if (urlObj.hostname.includes("vimeo.com")) {
-      // Extract just the video ID for Vimeo
+      // Extract just the video ID for Vimeo - but use embed URL format
       const videoInfo = extractVideoInfo(url)
       if (videoInfo && videoInfo.id) {
-        return `https://vimeo.com/${videoInfo.id}`
+        return `https://player.vimeo.com/video/${videoInfo.id}`
       }
     }
 

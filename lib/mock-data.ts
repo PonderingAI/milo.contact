@@ -42,6 +42,23 @@ export interface BtsImage {
   created_at?: string
 }
 
+/**
+ * Main media interface
+ */
+export interface MainMedia {
+  id: string
+  project_id: string
+  image_url: string
+  caption?: string
+  is_video?: boolean
+  video_url?: string
+  video_platform?: string
+  video_id?: string
+  display_order?: number
+  created_at?: string
+  updated_at?: string
+}
+
 // Mock data for development - will be replaced by Supabase data in production
 export const mockProjects: Project[] = [
   // Directed Projects
@@ -65,7 +82,7 @@ export const mockProjects: Project[] = [
     category: "Music Video",
     role: "Director",
     image: "/images/project2.jpg",
-    thumbnail_url: "https://vimeo.com/123456789", // Changed from video_url to thumbnail_url
+    thumbnail_url: "https://player.vimeo.com/video/123456789", // Changed from video_url to thumbnail_url
     description: "An experimental music video featuring innovative visual techniques and storytelling.",
     special_notes:
       "Working with the artist to develop a visual language that complemented the music was a rewarding creative challenge.",

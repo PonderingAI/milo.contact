@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import Image from "next/image"
 import { X, ChevronLeft, ChevronRight, Play } from "lucide-react"
 
-interface BTSMedia {
+interface MainMedia {
   id: string
   image_url: string
   caption?: string
@@ -12,8 +12,8 @@ interface BTSMedia {
   video_url?: string
 }
 
-interface BTSLightboxProps {
-  media: BTSMedia[]
+interface MainMediaLightboxProps {
+  media: MainMedia[]
   initialIndex: number
   isOpen: boolean
   onClose: () => void
@@ -21,14 +21,14 @@ interface BTSLightboxProps {
   isMobile?: boolean
 }
 
-export default function BTSLightbox({
+export default function MainMediaLightbox({
   media,
   initialIndex,
   isOpen,
   onClose,
   onNavigate,
   isMobile = false,
-}: BTSLightboxProps) {
+}: MainMediaLightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
   const [isLoading, setIsLoading] = useState(true)
   const [isVideoPlaying, setIsVideoPlaying] = useState(false)
@@ -229,7 +229,7 @@ export default function BTSLightbox({
                     src={currentMedia.image_url || "/placeholder.svg"}
                     alt=""
                     fill
-                    className="object-contain"
+                    className="object-cover"
                     sizes="95vw"
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
@@ -256,7 +256,7 @@ export default function BTSLightbox({
               src={currentMedia.image_url || "/placeholder.svg"}
               alt={currentMedia.caption || `Behind the scenes ${currentIndex + 1}`}
               fill
-              className="object-contain"
+              className="object-cover"
               sizes="95vw"
               priority
             />
