@@ -414,7 +414,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
             {/* Bottom gallery - always visible */}
             {combinedMainMedia.length > 1 && (
               <div className="bg-black/90 backdrop-blur-sm border-t border-gray-800">
-                <div className="flex gap-3 justify-center overflow-x-auto py-4 px-4 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+                <div className="flex gap-3 overflow-x-auto py-4 px-6 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent" style={{ scrollPadding: '0 24px' }}>
                   {combinedMainMedia.map((media, index) => (
                     <button
                       key={media.id || index}
@@ -676,7 +676,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
               {/* Thumbnail gallery for desktop */}
               {combinedMainMedia.length > 1 && (
                 <div className="mt-6">
-                  <div className="flex gap-3 justify-center overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent p-4">
+                  <div className="flex gap-3 overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent px-6" style={{ scrollPadding: '0 24px' }}>
                     {combinedMainMedia.map((media, index) => (
                       <button
                         key={media.id || index}
