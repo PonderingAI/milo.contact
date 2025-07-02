@@ -15,20 +15,19 @@ const TRAIL_AMOUNT = 25; // number of segments in the trail
 const EASING_FACTOR = 0.3; // easing factor for smooth following
 
 export default function CustomCursor() {
+  // All hooks must be called at the top level
   const isTouchDevice = useTouchDevice();
+  const [position, setPosition] = useState({ x: -100, y: -100 });
+  const [currentRotation, setCurrentRotation] = useState(0);
+  const [isVisible, setIsVisible] = useState(false);
+  const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]);
+  const requestRef = useRef<number>();
+  const lastPositionRef = useRef({ x: -100, y: -100 });
   
   // Don't render the custom cursor on touch devices
   if (isTouchDevice) {
     return null;
   }
-
-  const [position, setPosition] = useState({ x: -100, y: -100 });
-  const [currentRotation, setCurrentRotation] = useState(0);
-  const [isVisible, setIsVisible] = useState(false);
-  const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]);
-
-  const requestRef = useRef<number>();
-  const lastPositionRef = useRef({ x: -100, y: -100 });
 
   // initialise segments once on mount
   useEffect(() => {
