@@ -71,6 +71,38 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const mainRef = useRef<HTMLDivElement>(null)
   const hideControlsTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Touch navigation state for main media
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
+
+  // Touch handlers for main media navigation
+  const minSwipeDistance = 50
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (combinedMainMedia.length <= 1 || !isMobile) return
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    if (!isMobile) return
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd || combinedMainMedia.length <= 1 || !isMobile) return
+    
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > minSwipeDistance
+    const isRightSwipe = distance < -minSwipeDistance
+
+    if (isLeftSwipe) {
+      setCurrentMainMediaIndex((prev) => (prev + 1) % combinedMainMedia.length)
+    } else if (isRightSwipe) {
+      setCurrentMainMediaIndex((prev) => (prev - 1 + combinedMainMedia.length) % combinedMainMedia.length)
+    }
+  }
+
   // Process BTS media to ensure they have proper video info
   const [btsMedia, setBtsMedia] = useState<BTSMedia[]>([])
   
@@ -227,8 +259,6 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     [btsMedia, lightboxIndex],
   )
 
-  // Touch event handlers are now handled directly in the lightbox components
-
   // Screen reader announcements
   const announceToScreenReader = (message: string) => {
     const announcement = document.getElementById("sr-announcement")
@@ -305,9 +335,16 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           <div className="relative">
             {/* Main media display */}
             <div 
-              className="w-full aspect-video relative bg-black"
+              className={`w-full relative bg-black ${
+                isMobile 
+                  ? 'min-h-[50vh] max-h-[90vh] aspect-auto' 
+                  : 'aspect-video'
+              }`}
               onMouseMove={handleMouseMove}
               onMouseLeave={handleMouseLeave}
+              onTouchStart={onTouchStart}
+              onTouchMove={onTouchMove}
+              onTouchEnd={onTouchEnd}
             >
               {combinedMainMedia[currentMainMediaIndex]?.is_video && combinedMainMedia[currentMainMediaIndex]?.video_platform && combinedMainMedia[currentMainMediaIndex]?.video_id ? (
                 <VideoPlayer
@@ -322,14 +359,14 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                   src={combinedMainMedia[currentMainMediaIndex]?.image_url || "/placeholder.svg"}
                   alt={project.title}
                   fill
-                  className="object-contain"
+                  className={isMobile ? "object-cover" : "object-contain"}
                   priority
                   sizes="100vw"
                 />
               )}
               
               {/* Navigation arrows for multiple main media - region-based display */}
-              {combinedMainMedia.length > 1 && (
+              {combinedMainMedia.length > 1 && !isMobile && (
                 <>
                   {showLeftArrow && (
                     <button
@@ -358,6 +395,13 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                   {currentMainMediaIndex + 1} / {combinedMainMedia.length}
                 </div>
               )}
+              
+              {/* Mobile swipe indicator */}
+              {combinedMainMedia.length > 1 && isMobile && (
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
+                  ← Swipe to navigate → ({currentMainMediaIndex + 1}/{combinedMainMedia.length})
+                </div>
+              )}
             </div>
             
             {/* Thumbnail gallery for multiple main media - only show if there's enough space */}
@@ -375,7 +419,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                       onClick={() => setCurrentMainMediaIndex(index)}
                       aria-label={`View ${media.is_video ? 'video' : 'image'} ${index + 1}`}
                     >
-                      <div className="relative w-full h-full bg-black">
+                      <div className="relative w-full h-full">
                         <Image
                           src={media.image_url || "/placeholder.svg"}
                           alt={`${project.title} ${index + 1}`}
