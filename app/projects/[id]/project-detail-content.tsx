@@ -63,8 +63,6 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   // Main media state
   const [currentMainMediaIndex, setCurrentMainMediaIndex] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
-  const [touchStart, setTouchStart] = useState<number | null>(null)
-  const [touchEnd, setTouchEnd] = useState<number | null>(null)
   const [showControls, setShowControls] = useState(true)
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 })
   const [showLeftArrow, setShowLeftArrow] = useState(false)
@@ -229,29 +227,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     [btsMedia, lightboxIndex],
   )
 
-  // Touch event handlers for swipe navigation
-  const onTouchStart = (e: React.TouchEvent) => {
-    setTouchEnd(null)
-    setTouchStart(e.targetTouches[0].clientX)
-  }
-
-  const onTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd(e.targetTouches[0].clientX)
-  }
-
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return
-
-    const distance = touchStart - touchEnd
-    const isLeftSwipe = distance > 50
-    const isRightSwipe = distance < -50
-
-    if (isLeftSwipe) {
-      navigateLightbox("next")
-    } else if (isRightSwipe) {
-      navigateLightbox("prev")
-    }
-  }
+  // Touch event handlers are now handled directly in the lightbox components
 
   // Screen reader announcements
   const announceToScreenReader = (message: string) => {
@@ -588,26 +564,16 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
         )}
       </div>
 
-      {/* BTS Lightbox with touch support */}
+      {/* BTS Lightbox */}
       {lightboxOpen && (
-        <div
-          className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center"
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Image gallery"
-        >
-          <BTSLightbox
-            media={btsMedia}
-            initialIndex={lightboxIndex}
-            isOpen={lightboxOpen}
-            onClose={closeLightbox}
-            onNavigate={navigateLightbox}
-            isMobile={isMobile}
-          />
-        </div>
+        <BTSLightbox
+          media={btsMedia}
+          initialIndex={lightboxIndex}
+          isOpen={lightboxOpen}
+          onClose={closeLightbox}
+          onNavigate={navigateLightbox}
+          isMobile={isMobile}
+        />
       )}
 
     </>
