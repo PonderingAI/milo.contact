@@ -75,6 +75,21 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   const [touchStart, setTouchStart] = useState<number | null>(null)
   const [touchEnd, setTouchEnd] = useState<number | null>(null)
 
+  // UI visibility state for main media
+  const [showMainMediaUI, setShowMainMediaUI] = useState(true)
+  const mainMediaUITimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Reset UI visibility timer
+  const resetMainMediaUITimer = () => {
+    setShowMainMediaUI(true)
+    if (mainMediaUITimeoutRef.current) {
+      clearTimeout(mainMediaUITimeoutRef.current)
+    }
+    mainMediaUITimeoutRef.current = setTimeout(() => {
+      setShowMainMediaUI(false)
+    }, 1000) // Hide after 1 second of inactivity
+  }
+
   // Touch handlers for main media navigation
   const minSwipeDistance = 50
 
@@ -82,11 +97,13 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     if (combinedMainMedia.length <= 1 || !isMobile) return
     setTouchEnd(null)
     setTouchStart(e.targetTouches[0].clientX)
+    resetMainMediaUITimer()
   }
 
   const onTouchMove = (e: React.TouchEvent) => {
     if (!isMobile) return
     setTouchEnd(e.targetTouches[0].clientX)
+    resetMainMediaUITimer()
   }
 
   const onTouchEnd = () => {
@@ -101,6 +118,8 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     } else if (isRightSwipe) {
       setCurrentMainMediaIndex((prev) => (prev - 1 + combinedMainMedia.length) % combinedMainMedia.length)
     }
+    
+    resetMainMediaUITimer()
   }
 
   // Process BTS media to ensure they have proper video info
@@ -109,6 +128,20 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
   // Process main media to ensure they have proper video info
   const [mainMedia, setMainMedia] = useState<MainMedia[]>([])
   
+  // Initialize UI timer on mount
+  useEffect(() => {
+    if (isMobile && combinedMainMedia.length > 1) {
+      resetMainMediaUITimer()
+    }
+    
+    // Cleanup timer on unmount
+    return () => {
+      if (mainMediaUITimeoutRef.current) {
+        clearTimeout(mainMediaUITimeoutRef.current)
+      }
+    }
+  }, [isMobile, combinedMainMedia.length])
+
   // Combined main media from main_media table and fallback to project.image/thumbnail_url
   const combinedMainMedia = useMemo(() => {
     const media: MainMedia[] = []
@@ -345,6 +378,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
               onTouchStart={onTouchStart}
               onTouchMove={onTouchMove}
               onTouchEnd={onTouchEnd}
+              onClick={() => isMobile && resetMainMediaUITimer()}
             >
               {combinedMainMedia[currentMainMediaIndex]?.is_video && combinedMainMedia[currentMainMediaIndex]?.video_platform && combinedMainMedia[currentMainMediaIndex]?.video_id ? (
                 <VideoPlayer
@@ -359,7 +393,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                   src={combinedMainMedia[currentMainMediaIndex]?.image_url || "/placeholder.svg"}
                   alt={project.title}
                   fill
-                  className={isMobile ? "object-cover" : "object-contain"}
+                  className={isMobile ? "object-cover object-center" : "object-contain"}
                   priority
                   sizes="100vw"
                 />
@@ -389,17 +423,21 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                 </>
               )}
               
-              {/* Media counter - auto-hide */}
-              {combinedMainMedia.length > 1 && showControls && (
-                <div className="absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm transition-opacity">
+              {/* Media counter - auto-hide on mobile */}
+              {combinedMainMedia.length > 1 && (
+                <div className={`absolute top-4 left-4 bg-black/50 px-3 py-1 rounded-full text-white text-sm transition-opacity duration-300 ${
+                  isMobile ? (showMainMediaUI ? 'opacity-100' : 'opacity-0') : (showControls ? 'opacity-100' : 'opacity-0')
+                }`}>
                   {currentMainMediaIndex + 1} / {combinedMainMedia.length}
                 </div>
               )}
               
-              {/* Mobile swipe indicator */}
+              {/* Mobile swipe indicator - auto-hide and no counter */}
               {combinedMainMedia.length > 1 && isMobile && (
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-sm">
-                  ← Swipe to navigate → ({currentMainMediaIndex + 1}/{combinedMainMedia.length})
+                <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-sm transition-opacity duration-300 ${
+                  showMainMediaUI ? 'opacity-100' : 'opacity-0'
+                }`}>
+                  ← Swipe to navigate →
                 </div>
               )}
             </div>
