@@ -375,9 +375,11 @@ export default function UnifiedMediaLibrary({
         const formData = new FormData()
         formData.append("file", file)
 
-        // Upload the file directly with timeout
+        // Upload the file directly with extended timeout for large images
         const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30000) // 30 second timeout
+        const isLargeFile = file.size > 10 * 1024 * 1024 // 10MB+
+        const timeoutDuration = isLargeFile ? 180000 : 30000 // 3 minutes for large files, 30 seconds for others
+        const timeoutId = setTimeout(() => controller.abort(), timeoutDuration)
 
         const response = await fetch("/api/bulk-upload", {
           method: "POST",
@@ -423,9 +425,14 @@ export default function UnifiedMediaLibrary({
             toggleItemSelection(result.existingFile)
           }
         } else {
+          // Enhanced success message with compression details
+          const isLargeFile = file.size > 10 * 1024 * 1024 // 10MB+
+          const compressionMessage = result.convertedToWebP ? 
+            (isLargeFile ? " and optimized for web delivery" : " (converted to WebP)") : ""
+          
           toast({
             title: "Success",
-            description: `File uploaded successfully${result.convertedToWebP ? " (converted to WebP)" : ""}`,
+            description: `File uploaded successfully${compressionMessage}`,
           })
 
           // If in selection mode, select the new file
@@ -731,16 +738,26 @@ export default function UnifiedMediaLibrary({
     fetchMedia()
     setIsProcessingQueue(false)
 
-    // Count results
+    // Count results with enhanced feedback
     const successful = uploadQueue.filter((item) => item.status === "success").length
     const converted = uploadQueue.filter((item) => item.status === "success" && item.response?.convertedToWebP).length
     const failed = uploadQueue.filter((item) => item.status === "error").length
     const pending = uploadQueue.filter((item) => item.status === "pending").length
     const duplicateCount = duplicates.length
+    
+    // Check if any large images were processed
+    const largeImagesProcessed = uploadQueue.filter((item) => 
+      item.status === "success" && 
+      item.response?.convertedToWebP && 
+      item.file.size > 10 * 1024 * 1024
+    ).length
+
+    const compressionMessage = converted > 0 ? 
+      (largeImagesProcessed > 0 ? ` (${converted} optimized, ${largeImagesProcessed} large images compressed)` : ` (${converted} converted to WebP)`) : ""
 
     toast({
       title: "Bulk upload progress",
-      description: `${successful} files uploaded successfully${converted > 0 ? ` (${converted} converted to WebP)` : ""}${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ""}, ${failed} files failed, ${pending} files pending`,
+      description: `${successful} files uploaded successfully${compressionMessage}${duplicateCount > 0 ? `, ${duplicateCount} duplicates skipped` : ""}${failed > 0 ? `, ${failed} files failed` : ""}${pending > 0 ? `, ${pending} files pending` : ""}`,
       variant: successful > 0 ? "default" : "destructive",
     })
 
@@ -1725,6 +1742,9 @@ export default function UnifiedMediaLibrary({
             <div className="text-sm text-gray-400">
               <p>Upload files directly to the media library.</p>
               <p className="mt-1">Select multiple files or drag and drop a folder to upload in bulk.</p>
+              <p className="mt-1 text-xs">
+                <span className="text-blue-400">✓ Large images</span> (up to 50MB) are automatically compressed to WebP format for optimal performance.
+              </p>
             </div>
           </div>
         </div>
