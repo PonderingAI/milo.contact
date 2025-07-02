@@ -96,17 +96,35 @@ export default function MainMediaLightbox({
     [media.length, currentIndex, onNavigate],
   )
 
-  // Touch event handlers for mobile swiping
+  // Touch event handlers for mobile swiping - only when not playing video
   const handleTouchStart = (e: React.TouchEvent) => {
+    const currentMedia = media[currentIndex]
+    const isVideo = currentMedia?.is_video && currentMedia?.video_url
+    
+    // Don't handle touch events if video is playing to avoid interference
+    if (isVideo && isVideoPlaying) return
+    
     setTouchEnd(null)
     setTouchStart(e.targetTouches[0].clientX)
   }
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    const currentMedia = media[currentIndex]
+    const isVideo = currentMedia?.is_video && currentMedia?.video_url
+    
+    // Don't handle touch events if video is playing to avoid interference
+    if (isVideo && isVideoPlaying) return
+    
     setTouchEnd(e.targetTouches[0].clientX)
   }
 
   const handleTouchEnd = () => {
+    const currentMedia = media[currentIndex]
+    const isVideo = currentMedia?.is_video && currentMedia?.video_url
+    
+    // Don't handle touch events if video is playing to avoid interference
+    if (isVideo && isVideoPlaying) return
+    
     if (!touchStart || !touchEnd) return
 
     const distance = touchStart - touchEnd
@@ -224,14 +242,14 @@ export default function MainMediaLightbox({
         {currentMedia.is_video && <span className="ml-2">(Video)</span>}
       </div>
 
-      {/* Swipe instructions for mobile */}
-      {isMobile && media.length > 1 && (
+      {/* Swipe instructions for mobile - only show when not playing video */}
+      {isMobile && media.length > 1 && !(isVideo && isVideoPlaying) && (
         <div className="absolute bottom-20 left-0 right-0 text-center text-white text-sm opacity-70">
           Swipe left or right to navigate
         </div>
       )}
 
-      {/* Media container - improved mobile scaling */}
+      {/* Media container - main media should fill screen on mobile */}
       <div className={`relative ${isMobile ? 'w-full h-full' : 'w-full h-full max-w-[95vw] max-h-[95vh]'} flex items-center justify-center`}>
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
