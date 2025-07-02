@@ -365,7 +365,9 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
             <div 
               className={`w-full relative bg-black ${
                 isMobile 
-                  ? 'min-h-[50vh] max-h-[90vh] aspect-auto' 
+                  ? combinedMainMedia.length > 1 
+                    ? 'min-h-[50vh] max-h-[calc(100vh-120px)] aspect-auto' 
+                    : 'min-h-[50vh] max-h-[90vh] aspect-auto'
                   : 'aspect-video'
               }`}
               onMouseMove={handleMouseMove}
@@ -388,7 +390,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                   src={combinedMainMedia[currentMainMediaIndex]?.image_url || "/placeholder.svg"}
                   alt={project.title}
                   fill
-                  className={isMobile ? "object-cover object-center" : "object-contain"}
+                  className="object-contain"
                   priority
                   sizes="100vw"
                 />
@@ -429,7 +431,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
               
               {/* Mobile swipe indicator - auto-hide and no counter */}
               {combinedMainMedia.length > 1 && isMobile && (
-                <div className={`absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-sm transition-opacity duration-300 ${
+                <div className={`absolute ${combinedMainMedia.length > 1 ? 'bottom-32' : 'bottom-4'} left-1/2 -translate-x-1/2 bg-black/50 px-3 py-1 rounded-full text-white text-sm transition-opacity duration-300 ${
                   showMainMediaUI ? 'opacity-100' : 'opacity-0'
                 }`}>
                   ← Swipe to navigate →
@@ -439,17 +441,20 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
             
             {/* Thumbnail gallery for multiple main media - only show if there's enough space */}
             {combinedMainMedia.length > 1 && (
-              <div className="mt-6">
-                <div className="flex gap-3 justify-center overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
+              <div className={isMobile ? `fixed bottom-0 left-0 right-0 z-20 bg-black/80 backdrop-blur-sm transition-opacity duration-300 ${showMainMediaUI ? 'opacity-100' : 'opacity-0'}` : "mt-6"}>
+                <div className="flex gap-3 justify-center overflow-x-auto pb-3 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent p-4">
                   {combinedMainMedia.map((media, index) => (
                     <button
                       key={media.id || index}
-                      className={`flex-shrink-0 w-20 h-20 relative rounded-lg overflow-hidden border-2 transition-all duration-200 ${
+                      className={`flex-shrink-0 w-16 h-16 relative rounded-lg overflow-hidden border-2 transition-all duration-200 ${
                         index === currentMainMediaIndex 
                           ? 'border-blue-500 shadow-lg shadow-blue-500/25' 
                           : 'border-gray-700 hover:border-gray-500'
                       }`}
-                      onClick={() => setCurrentMainMediaIndex(index)}
+                      onClick={() => {
+                        setCurrentMainMediaIndex(index)
+                        if (isMobile) resetMainMediaUITimer()
+                      }}
                       aria-label={`View ${media.is_video ? 'video' : 'image'} ${index + 1}`}
                     >
                       <div className="relative w-full h-full">
@@ -458,7 +463,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
                           alt={`${project.title} ${index + 1}`}
                           fill
                           className="object-contain"
-                          sizes="80px"
+                          sizes="64px"
                         />
                         {media.is_video && (
                           <div className="absolute inset-0 flex items-center justify-center">
