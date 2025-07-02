@@ -10,8 +10,8 @@ const nextConfig = {
     unoptimized: true,
   },
   experimental: {
-    // Set body size limit for API routes (Vercel limit is 50MB for serverless functions)
-    bodySizeLimit: "50mb",
+    // Set body size limit for API routes (Vercel hobby plan limit is ~4.5MB)
+    bodySizeLimit: "4.5mb",
   },
 }
 

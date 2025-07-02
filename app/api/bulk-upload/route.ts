@@ -21,12 +21,12 @@ export async function POST(request: Request) {
     const filename = file.name
     const filesize = file.size
     
-    // Validate file size before processing - Vercel has a 50MB limit for serverless functions
-    const maxSize = 50 * 1024 * 1024 // 50MB limit for Vercel
+    // Validate file size before processing - Vercel has infrastructure limits
+    const maxSize = 4.5 * 1024 * 1024 // 4.5MB limit for Vercel hobby plan
     if (filesize > maxSize) {
-      const fileSizeMB = Math.round(filesize / 1024 / 1024)
+      const fileSizeMB = Math.round((filesize / 1024 / 1024) * 10) / 10 // Round to 1 decimal
       return NextResponse.json({ 
-        error: `File "${filename}" is ${fileSizeMB}MB, which exceeds the 50MB limit. Please compress or resize your file first.` 
+        error: `File "${filename}" is ${fileSizeMB}MB, which exceeds the 4.5MB limit. Please compress or resize your file first. Vercel has strict upload limits for the free plan.` 
       }, { status: 413 })
     }
 

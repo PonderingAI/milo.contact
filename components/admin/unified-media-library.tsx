@@ -310,19 +310,20 @@ export default function UnifiedMediaLibrary({
   const handleFileUpload = async (files: File[]) => {
     if (files.length === 0) return
 
-    // Check file sizes before processing - Vercel has a 50MB limit
-    const maxSize = 50 * 1024 * 1024 // 50MB
+    // Check file sizes before processing - Vercel has infrastructure limits
+    // Even though the function can handle 50MB, the request body limit is much lower
+    const maxSize = 4.5 * 1024 * 1024 // 4.5MB - safe limit for Vercel hobby plan
     const oversizedFiles = files.filter(file => file.size > maxSize)
     
     if (oversizedFiles.length > 0) {
       const fileList = oversizedFiles.map(file => {
-        const sizeMB = Math.round(file.size / 1024 / 1024)
+        const sizeMB = Math.round((file.size / 1024 / 1024) * 10) / 10 // Round to 1 decimal
         return `"${file.name}" (${sizeMB}MB)`
       }).join(', ')
       
       toast({
         title: "Files too large",
-        description: `The following files exceed the 50MB limit: ${fileList}. Please compress or resize them first.`,
+        description: `The following files exceed the 4.5MB limit: ${fileList}. Please compress or resize them first. Vercel has strict upload limits for the free plan.`,
         variant: "destructive",
       })
       
@@ -424,6 +425,13 @@ export default function UnifiedMediaLibrary({
         } catch (parseError) {
           console.error("Failed to parse server response as JSON:", parseError)
           console.error("Response status:", response.status, "Response headers:", Object.fromEntries(response.headers.entries()))
+          
+          // Special handling for Vercel infrastructure errors (413)
+          if (response.status === 413) {
+            const fileSizeMB = Math.round((file.size / 1024 / 1024) * 10) / 10
+            throw new Error(`File "${file.name}" (${fileSizeMB}MB) exceeds Vercel's upload limits. Please compress or resize to under 4.5MB.`)
+          }
+          
           throw new Error(`Server returned invalid response. Status: ${response.status}`)
         }
 
@@ -431,7 +439,8 @@ export default function UnifiedMediaLibrary({
           console.error("Upload error response:", result)
           // Provide specific error message for file size issues
           if (response.status === 413) {
-            throw new Error(result.error || `File "${file.name}" is too large. Maximum file size is 50MB.`)
+            const fileSizeMB = Math.round((file.size / 1024 / 1024) * 10) / 10
+            throw new Error(result.error || `File "${file.name}" (${fileSizeMB}MB) exceeds the upload limit. Please compress to under 4.5MB.`)
           }
           throw new Error("Failed to upload file: " + (result.error || response.statusText))
         }
@@ -708,14 +717,21 @@ export default function UnifiedMediaLibrary({
             } catch (parseError) {
               console.error("Failed to parse server response as JSON:", parseError)
               console.error("Response status:", response.status, "Response headers:", Object.fromEntries(response.headers.entries()))
+              
+              // Special handling for Vercel infrastructure errors (413)
+              if (response.status === 413) {
+                const fileSizeMB = Math.round((item.file.size / 1024 / 1024) * 10) / 10
+                throw new Error(`File "${item.file.name}" (${fileSizeMB}MB) exceeds Vercel's upload limits. Please compress to under 4.5MB.`)
+              }
+              
               throw new Error(`Server returned invalid response. Status: ${response.status}`)
             }
 
             if (!response.ok) {
               // Provide specific error message for file size issues
               if (response.status === 413) {
-                const fileSizeMB = Math.round(item.file.size / 1024 / 1024)
-                throw new Error(result.error || `File "${item.file.name}" (${fileSizeMB}MB) exceeds the 50MB limit`)
+                const fileSizeMB = Math.round((item.file.size / 1024 / 1024) * 10) / 10
+                throw new Error(result.error || `File "${item.file.name}" (${fileSizeMB}MB) exceeds the upload limit. Please compress to under 4.5MB.`)
               }
               throw new Error(result.error || `Upload failed with status ${response.status}`)
             }
