@@ -20,6 +20,14 @@ export async function POST(request: Request) {
     // Get file details
     const filename = file.name
     const filesize = file.size
+    
+    // Validate file size before processing (max 100MB)
+    if (filesize > 100 * 1024 * 1024) {
+      return NextResponse.json({ 
+        error: "File too large. Maximum file size is 100MB. Please compress your image first." 
+      }, { status: 413 })
+    }
+
     const fileBuffer = Buffer.from(await file.arrayBuffer())
 
     // Calculate file hash for duplicate detection using SHA-256 (same as client-side)
@@ -63,10 +71,22 @@ export async function POST(request: Request) {
         uploadPath = `media/${webpFilename}`
 
         // Get image metadata to determine processing strategy
-        const imageInfo = await sharp(fileBuffer).metadata()
+        let imageInfo
+        try {
+          imageInfo = await sharp(fileBuffer).metadata()
+        } catch (metadataError) {
+          console.error("Failed to read image metadata:", metadataError)
+          throw new Error("Invalid or corrupted image file")
+        }
+        
         const { width = 0, height = 0 } = imageInfo
         
         console.log(`Processing image: ${filename}, size: ${filesize} bytes, dimensions: ${width}x${height}`)
+
+        // Validate image dimensions
+        if (width * height > 268402689) { // ~16K x 16K pixels max
+          throw new Error("Image dimensions too large. Please resize your image before uploading.")
+        }
 
         // Determine compression settings based on file size and dimensions
         let quality = 85 // Default quality
@@ -97,11 +117,17 @@ export async function POST(request: Request) {
           console.log(`Massive file detected (${Math.round(filesize / 1024 / 1024)}MB), using extreme compression`)
         }
 
-        // Start with Sharp pipeline
-        let sharpPipeline = sharp(fileBuffer, {
-          // Optimize memory usage for large images
-          limitInputPixels: 268402689 // ~16K x 16K pixels max
-        })
+        // Start with Sharp pipeline with error handling
+        let sharpPipeline
+        try {
+          sharpPipeline = sharp(fileBuffer, {
+            // Optimize memory usage for large images
+            limitInputPixels: 268402689 // ~16K x 16K pixels max
+          })
+        } catch (sharpInitError) {
+          console.error("Failed to initialize Sharp:", sharpInitError)
+          throw new Error("Failed to process image. The image may be corrupted or in an unsupported format.")
+        }
 
         // Resize if image is larger than max dimensions
         if (width > maxWidth || height > maxHeight) {
@@ -113,18 +139,24 @@ export async function POST(request: Request) {
         }
 
         // Convert to WebP with optimized settings for large images
-        const webpBuffer = await sharpPipeline
-          .webp({
-            quality,
-            effort: 6, // Higher effort for better compression (0-6, 6 is best)
-            progressive: true, // Progressive loading for better UX
-            smartSubsample: true, // Better quality at low bitrates
-            reductionEffort: 6, // Maximum effort for file size reduction
-            alphaQuality: quality - 10, // Slightly lower quality for alpha channel
-            nearLossless: false, // Use lossy compression for better file size reduction
-            mixed: true // Allow mixed lossless/lossy compression
-          })
-          .toBuffer()
+        let webpBuffer
+        try {
+          webpBuffer = await sharpPipeline
+            .webp({
+              quality,
+              effort: 6, // Higher effort for better compression (0-6, 6 is best)
+              progressive: true, // Progressive loading for better UX
+              smartSubsample: true, // Better quality at low bitrates
+              reductionEffort: 6, // Maximum effort for file size reduction
+              alphaQuality: quality - 10, // Slightly lower quality for alpha channel
+              nearLossless: false, // Use lossy compression for better file size reduction
+              mixed: true // Allow mixed lossless/lossy compression
+            })
+            .toBuffer()
+        } catch (webpError) {
+          console.error("WebP conversion failed:", webpError)
+          throw new Error("Failed to convert image to WebP format. The image may be too complex or corrupted.")
+        }
 
         const compressionRatio = Math.round((1 - webpBuffer.length / filesize) * 100)
         console.log(`WebP conversion complete: ${Math.round(webpBuffer.length / 1024)}KB (${compressionRatio}% reduction from original)`)
@@ -138,7 +170,8 @@ export async function POST(request: Request) {
           })
 
         if (uploadError) {
-          throw new Error(`WebP upload failed: ${uploadError.message}`)
+          console.error("WebP upload error:", uploadError)
+          throw new Error(`Failed to upload processed image: ${uploadError.message}`)
         }
 
         // Get the public URL
@@ -149,32 +182,43 @@ export async function POST(request: Request) {
         publicUrl = url
         convertedToWebP = true
       } catch (error) {
-        console.error("WebP conversion failed:", error)
+        console.error("Image processing failed:", error)
 
         // For very large files, don't fallback to original - this would defeat the purpose
         if (filesize > 25 * 1024 * 1024) {
-          throw new Error(`Image too large and conversion failed: ${error instanceof Error ? error.message : 'Unknown error'}. Please try a smaller image or contact support.`)
+          const errorMessage = error instanceof Error ? error.message : 'Unknown processing error'
+          return NextResponse.json({ 
+            error: `Image too large and processing failed: ${errorMessage}. Please try a smaller image or compress it first.` 
+          }, { status: 413 })
         }
 
         // Fallback to original format only for smaller files if WebP conversion fails
-        uploadPath = `media/${uuidv4()}-${filename}`
+        try {
+          uploadPath = `media/${uuidv4()}-${filename}`
 
-        const { error: uploadError } = await createServerClient()
-          .storage.from("public")
-          .upload(uploadPath, fileBuffer, {
-            contentType: file.type,
-            upsert: false,
-          })
+          const { error: uploadError } = await createServerClient()
+            .storage.from("public")
+            .upload(uploadPath, fileBuffer, {
+              contentType: file.type,
+              upsert: false,
+            })
 
-        if (uploadError) {
-          throw new Error(`Original upload failed: ${uploadError.message}`)
+          if (uploadError) {
+            throw new Error(`Fallback upload failed: ${uploadError.message}`)
+          }
+
+          const {
+            data: { publicUrl: url },
+          } = createServerClient().storage.from("public").getPublicUrl(uploadPath)
+
+          publicUrl = url
+        } catch (fallbackError) {
+          console.error("Fallback upload failed:", fallbackError)
+          const errorMessage = fallbackError instanceof Error ? fallbackError.message : 'Unknown upload error'
+          return NextResponse.json({ 
+            error: `Image processing and fallback upload failed: ${errorMessage}` 
+          }, { status: 500 })
         }
-
-        const {
-          data: { publicUrl: url },
-        } = createServerClient().storage.from("public").getPublicUrl(uploadPath)
-
-        publicUrl = url
       }
     } else {
       // Handle other file types without conversion

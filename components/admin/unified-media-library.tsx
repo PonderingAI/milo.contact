@@ -389,13 +389,24 @@ export default function UnifiedMediaLibrary({
 
         clearTimeout(timeoutId)
 
-        if (!response.ok) {
-          const result = await response.text()
-          console.error("Upload error response:", result)
-          throw new Error("Failed to upload file: " + (result || response.statusText))
+        let result
+        try {
+          // Attempt to parse as JSON
+          const responseText = await response.text()
+          if (!responseText) {
+            throw new Error("Empty response from server")
+          }
+          result = JSON.parse(responseText)
+        } catch (parseError) {
+          console.error("Failed to parse server response as JSON:", parseError)
+          console.error("Response status:", response.status, "Response headers:", Object.fromEntries(response.headers.entries()))
+          throw new Error(`Server returned invalid response. Status: ${response.status}`)
         }
 
-        const result = await response.json()
+        if (!response.ok) {
+          console.error("Upload error response:", result)
+          throw new Error("Failed to upload file: " + (result.error || response.statusText))
+        }
 
         // Check if the file was a duplicate
         if (result.duplicate) {
@@ -658,10 +669,22 @@ export default function UnifiedMediaLibrary({
               return updated
             })
 
-            const result = await response.json()
+            let result
+            try {
+              // Attempt to parse as JSON
+              const responseText = await response.text()
+              if (!responseText) {
+                throw new Error("Empty response from server")
+              }
+              result = JSON.parse(responseText)
+            } catch (parseError) {
+              console.error("Failed to parse server response as JSON:", parseError)
+              console.error("Response status:", response.status, "Response headers:", Object.fromEntries(response.headers.entries()))
+              throw new Error(`Server returned invalid response. Status: ${response.status}`)
+            }
 
             if (!response.ok) {
-              throw new Error(result.error || "Upload failed")
+              throw new Error(result.error || `Upload failed with status ${response.status}`)
             }
 
             // Check if the file was a duplicate
@@ -793,11 +816,39 @@ export default function UnifiedMediaLibrary({
   const cancelUpload = (index: number) => {
     setUploadQueue((prev) => {
       const updated = [...prev]
-      // Only allow canceling pending uploads
+      // Allow canceling pending uploads or mark as cancelled if uploading
       if (updated[index].status === "pending") {
         updated[index] = { ...updated[index], status: "error", progress: 0, error: "Cancelled by user" }
+      } else if (updated[index].status === "uploading") {
+        updated[index] = { ...updated[index], status: "error", error: "Cancelled by user" }
       }
       return updated
+    })
+  }
+
+  const removeFromQueue = (index: number) => {
+    setUploadQueue((prev) => {
+      const updated = [...prev]
+      // Remove item from queue entirely
+      updated.splice(index, 1)
+      return updated
+    })
+  }
+
+  const stopAllUploads = () => {
+    setUploadQueue((prev) => {
+      return prev.map((item) => {
+        if (item.status === "pending" || item.status === "uploading") {
+          return { ...item, status: "error", error: "Stopped by user" }
+        }
+        return item
+      })
+    })
+    setIsProcessingQueue(false)
+    toast({
+      title: "All uploads stopped",
+      description: "All pending and active uploads have been cancelled",
+      variant: "default",
     })
   }
 
@@ -2043,7 +2094,18 @@ export default function UnifiedMediaLibrary({
                   <div className="truncate mr-2 text-sm" title={item.file.name}>
                     {item.file.name}
                   </div>
-                  <div className="text-xs whitespace-nowrap">{(item.file.size / 1024).toFixed(2)} KB</div>
+                  <div className="flex items-center gap-2">
+                    <div className="text-xs whitespace-nowrap">{(item.file.size / 1024).toFixed(2)} KB</div>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-6 w-6 p-0 hover:bg-red-600/20" 
+                      onClick={() => removeFromQueue(index)}
+                      title="Remove from queue"
+                    >
+                      <X className="h-4 w-4 text-red-400" />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="flex items-center gap-2 mb-1">
@@ -2053,11 +2115,18 @@ export default function UnifiedMediaLibrary({
                       <span className="flex items-center justify-end gap-1">
                         Pending
                         <Button variant="ghost" size="icon" className="h-4 w-4 p-0" onClick={() => cancelUpload(index)}>
-                          <AlertCircle className="h-3 w-3 text-red-400" />
+                          <AlertCircle className="h-3 w-3 text-yellow-400" />
                         </Button>
                       </span>
                     )}
-                    {item.status === "uploading" && `${item.progress}%`}
+                    {item.status === "uploading" && (
+                      <span className="flex items-center justify-end gap-1">
+                        {item.progress}%
+                        <Button variant="ghost" size="icon" className="h-4 w-4 p-0" onClick={() => cancelUpload(index)}>
+                          <AlertCircle className="h-3 w-3 text-yellow-400" />
+                        </Button>
+                      </span>
+                    )}
                     {item.status === "success" && "Complete"}
                     {item.status === "duplicate" && "Duplicate"}
                     {item.status === "error" && "Failed"}
@@ -2091,6 +2160,15 @@ export default function UnifiedMediaLibrary({
               </Button>
               <Button variant="outline" onClick={resetUploadQueue} disabled={isProcessingQueue}>
                 Reset All
+              </Button>
+              <Button 
+                variant="destructive" 
+                onClick={stopAllUploads} 
+                disabled={!isProcessingQueue && uploadQueue.filter(i => i.status === "pending").length === 0}
+                className="flex items-center gap-1"
+              >
+                <X className="h-4 w-4" />
+                Stop All
               </Button>
             </div>
 
