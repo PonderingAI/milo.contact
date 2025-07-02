@@ -122,26 +122,21 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
     resetMainMediaUITimer()
   }
 
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (mainMediaUITimeoutRef.current) {
+        clearTimeout(mainMediaUITimeoutRef.current)
+      }
+    }
+  }, [])
+
   // Process BTS media to ensure they have proper video info
   const [btsMedia, setBtsMedia] = useState<BTSMedia[]>([])
   
   // Process main media to ensure they have proper video info
   const [mainMedia, setMainMedia] = useState<MainMedia[]>([])
   
-  // Initialize UI timer on mount
-  useEffect(() => {
-    if (isMobile && combinedMainMedia.length > 1) {
-      resetMainMediaUITimer()
-    }
-    
-    // Cleanup timer on unmount
-    return () => {
-      if (mainMediaUITimeoutRef.current) {
-        clearTimeout(mainMediaUITimeoutRef.current)
-      }
-    }
-  }, [isMobile, combinedMainMedia.length])
-
   // Combined main media from main_media table and fallback to project.image/thumbnail_url
   const combinedMainMedia = useMemo(() => {
     const media: MainMedia[] = []
