@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import { useTouchDevice } from "@/hooks/use-touch-device";
 
 interface FilmSegment {
   id: number;
@@ -14,6 +15,13 @@ const TRAIL_AMOUNT = 25; // number of segments in the trail
 const EASING_FACTOR = 0.3; // easing factor for smooth following
 
 export default function CustomCursor() {
+  const isTouchDevice = useTouchDevice();
+  
+  // Don't render the custom cursor on touch devices
+  if (isTouchDevice) {
+    return null;
+  }
+
   const [position, setPosition] = useState({ x: -100, y: -100 });
   const [currentRotation, setCurrentRotation] = useState(0);
   const [isVisible, setIsVisible] = useState(false);

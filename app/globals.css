@@ -55,8 +55,8 @@ body,
   cursor: none !important;
 }
 
-/* But show default cursor on mobile devices */
-@media (max-width: 768px) {
+/* But show default cursor on mobile devices and touch devices */
+@media (max-width: 768px), (pointer: coarse) {
   html,
   body,
   * {
