@@ -2165,7 +2165,7 @@ export default function UnifiedMediaLibrary({
                 variant="destructive" 
                 onClick={stopAllUploads} 
                 disabled={!isProcessingQueue && uploadQueue.filter(i => i.status === "pending").length === 0}
-                className="flex items-center gap-1"
+                className="flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white border-red-600 hover:border-red-700 transition-all duration-200 shadow-sm hover:shadow-md"
               >
                 <X className="h-4 w-4" />
                 Stop All

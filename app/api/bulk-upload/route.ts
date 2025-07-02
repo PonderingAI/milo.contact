@@ -63,9 +63,28 @@ export async function POST(request: Request) {
     const thumbnailUrl = null
     let convertedToWebP = false
 
-    // Handle image files - convert to WebP for better performance with advanced compression for large images
-    // Skip processing for WebP files - upload them as-is
-    if (fileType === "image" && ["jpg", "jpeg", "png", "gif", "bmp", "tiff"].includes(fileExtension)) {
+    // Handle WebP files separately - upload them as-is without any processing
+    if (fileType === "image" && fileExtension === "webp") {
+      // Upload WebP files directly without any processing
+      uploadPath = `media/${uuidv4()}-${filename}`
+
+      const { error: uploadError } = await createServerClient().storage.from("public").upload(uploadPath, fileBuffer, {
+        contentType: file.type,
+        upsert: false,
+      })
+
+      if (uploadError) {
+        throw new Error(`WebP upload failed: ${uploadError.message}`)
+      }
+
+      const {
+        data: { publicUrl: url },
+      } = createServerClient().storage.from("public").getPublicUrl(uploadPath)
+
+      publicUrl = url
+    }
+    // Handle other image files - convert to WebP for better performance with advanced compression for large images
+    else if (fileType === "image" && ["jpg", "jpeg", "png", "gif", "bmp", "tiff"].includes(fileExtension)) {
       try {
         // Generate a unique filename for the WebP version
         const webpFilename = `${uuidv4()}.webp`
