@@ -35,6 +35,10 @@ export default function MainMediaLightbox({
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
+  // Touch handling for mobile swiping
+  const [touchStart, setTouchStart] = useState<number | null>(null)
+  const [touchEnd, setTouchEnd] = useState<number | null>(null)
+
   // Focus trap management
   useEffect(() => {
     if (isOpen) {
@@ -91,6 +95,30 @@ export default function MainMediaLightbox({
     },
     [media.length, currentIndex, onNavigate],
   )
+
+  // Touch event handlers for mobile swiping
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null)
+    setTouchStart(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX)
+  }
+
+  const handleTouchEnd = () => {
+    if (!touchStart || !touchEnd) return
+
+    const distance = touchStart - touchEnd
+    const isLeftSwipe = distance > 50
+    const isRightSwipe = distance < -50
+
+    if (isLeftSwipe && media.length > 1) {
+      navigate("next")
+    } else if (isRightSwipe && media.length > 1) {
+      navigate("prev")
+    }
+  }
 
   // Handle keyboard navigation
   useEffect(() => {
@@ -151,10 +179,13 @@ export default function MainMediaLightbox({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black"
       role="dialog"
       aria-modal="true"
       aria-labelledby="lightbox-title"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
     >
       {/* Close button */}
       <button
@@ -193,15 +224,8 @@ export default function MainMediaLightbox({
         {currentMedia.is_video && <span className="ml-2">(Video)</span>}
       </div>
 
-      {/* Swipe instructions for mobile */}
-      {isMobile && media.length > 1 && (
-        <div className="absolute bottom-20 left-0 right-0 text-center text-white text-sm opacity-70">
-          Swipe left or right to navigate
-        </div>
-      )}
-
-      {/* Media container - fullscreen approach */}
-      <div className="relative w-full h-full max-w-[95vw] max-h-[95vh] flex items-center justify-center">
+      {/* Media container - main media should fill screen on mobile */}
+      <div className={`relative ${isMobile ? 'w-full h-full' : 'w-full h-full max-w-[95vw] max-h-[95vh]'} flex items-center justify-center`}>
         {isLoading && (
           <div className="absolute inset-0 flex items-center justify-center">
             <div className="w-12 h-12 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
@@ -229,8 +253,9 @@ export default function MainMediaLightbox({
                     src={currentMedia.image_url || "/placeholder.svg"}
                     alt=""
                     fill
-                    className="object-cover"
-                    sizes="95vw"
+                    className={isMobile ? "object-cover" : "object-contain"}
+                    sizes={isMobile ? "100vw" : "95vw"}
+                    priority
                   />
                   <div className="absolute inset-0 flex items-center justify-center bg-black/30">
                     <div className="rounded-full bg-white/20 p-6 backdrop-blur-sm">
@@ -240,24 +265,42 @@ export default function MainMediaLightbox({
                 </div>
               </div>
             ) : (
-              <iframe
-                src={currentMedia.video_url}
-                className="w-full h-full min-h-[70vh]"
-                frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                allowFullScreen
-                title={currentMedia.caption || "Behind the scenes video"}
-              />
+              <div className="relative w-full h-full flex flex-col items-center justify-center">
+                {/* Top swipe area for mobile */}
+                {isMobile && media.length > 1 && (
+                  <div className="w-full h-16 flex items-center justify-center text-white/60 text-sm">
+                    ← Swipe here to navigate →
+                  </div>
+                )}
+                
+                {/* Video iframe - takes less height to leave room for swipe areas */}
+                <iframe
+                  src={currentMedia.video_url}
+                  className={`w-full ${isMobile && media.length > 1 ? 'h-[calc(100%-8rem)]' : 'h-full'} min-h-[50vh]`}
+                  frameBorder="0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  title={currentMedia.caption || "Main media video"}
+                  style={{ pointerEvents: 'auto' }}
+                />
+                
+                {/* Bottom swipe area for mobile */}
+                {isMobile && media.length > 1 && (
+                  <div className="w-full h-16 flex items-center justify-center text-white/60 text-sm">
+                    ← Swipe here to navigate →
+                  </div>
+                )}
+              </div>
             )}
           </div>
         ) : (
           <div className="relative w-full h-full">
             <Image
               src={currentMedia.image_url || "/placeholder.svg"}
-              alt={currentMedia.caption || `Behind the scenes ${currentIndex + 1}`}
+              alt={currentMedia.caption || `Main media ${currentIndex + 1}`}
               fill
-              className="object-cover"
-              sizes="95vw"
+              className={isMobile ? "object-cover" : "object-contain"}
+              sizes={isMobile ? "100vw" : "95vw"}
               priority
             />
           </div>
