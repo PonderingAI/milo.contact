@@ -55,6 +55,11 @@ body,
   cursor: none !important;
 }
 
+/* Show default cursor on iframe elements for video controls */
+iframe {
+  cursor: auto !important;
+}
+
 /* But show default cursor on mobile devices */
 @media (max-width: 768px) {
   html,
@@ -110,6 +115,7 @@ body,
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
   }
+  
   .dark {
     --background: 0 0% 3.9%;
     --foreground: 0 0% 98%;
@@ -155,148 +161,117 @@ body,
   }
 }
 
-/* Project grid styles */
+/* Project Grid Styles */
 .project-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  padding: 2rem 0;
 }
 
 .project-card {
-  position: relative;
-  border-radius: 0.5rem;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 12px;
   overflow: hidden;
-  aspect-ratio: 16 / 9;
-  transition: transform 0.3s ease;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
 .project-card:hover {
-  transform: translateY(-5px);
+  transform: translateY(-8px);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
 
-.project-role {
-  position: absolute;
-  bottom: 1rem;
-  left: 1rem;
-  background: rgba(0, 0, 0, 0.7);
-  padding: 0.25rem 0.75rem;
-  border-radius: 9999px;
-  font-size: 0.75rem;
-  z-index: 20;
-}
-
-/* BTS Gallery Cluster */
-.bts-gallery-cluster {
+/* BTS Gallery Styles */
+.bts-gallery {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  grid-auto-rows: 150px;
-  grid-auto-flow: dense;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 1rem;
-  max-width: 1200px;
-  margin: 0 auto;
+  margin: 2rem 0;
 }
 
 .bts-item {
   position: relative;
+  aspect-ratio: 16/9;
+  border-radius: 8px;
   overflow: hidden;
-  border-radius: 0.75rem;
   cursor: pointer;
-  transition: transform 0.3s ease;
+  transition: transform 0.2s ease;
 }
 
 .bts-item:hover {
-  transform: scale(1.03);
+  transform: scale(1.05);
 }
 
-.bts-item.small {
-  grid-column: span 1;
-  grid-row: span 1;
-}
-
-.bts-item.medium {
-  grid-column: span 2;
-  grid-row: span 1;
-}
-
-.bts-item.large {
-  grid-column: span 2;
-  grid-row: span 2;
-}
-
-.bts-item.square {
-  aspect-ratio: 1;
-}
-
-.bts-item.portrait {
-  aspect-ratio: 2 / 3;
-}
-
-.bts-item.landscape {
-  aspect-ratio: 16 / 9;
-}
-
-/* Category tabs */
+/* Category Tabs Styles */
 .category-tabs {
   display: flex;
   gap: 1rem;
-  margin-bottom: 2rem;
-  overflow-x: auto;
-  padding-bottom: 0.5rem;
+  margin: 2rem 0;
+  flex-wrap: wrap;
 }
 
 .category-tab {
-  padding: 0.5rem 1rem;
-  border-radius: 9999px;
-  white-space: nowrap;
-  transition: all 0.2s ease;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 25px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
 }
 
+.category-tab:hover,
 .category-tab.active {
-  background: white;
-  color: black;
+  background: rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.4);
+  transform: translateY(-2px);
 }
 
-/* Backend setup guide */
-.backend-guide {
+/* Backend Setup Guide Styles */
+.setup-guide {
   max-width: 800px;
   margin: 0 auto;
+  padding: 2rem;
 }
 
-.step-container {
-  margin-bottom: 2rem;
+.setup-step {
+  background: rgba(255, 255, 255, 0.05);
+  border-left: 4px solid #3b82f6;
   padding: 1.5rem;
-  border-radius: 0.5rem;
-  background-color: #111;
-  border: 1px solid #333;
-}
-
-.step-number {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2rem;
-  height: 2rem;
-  border-radius: 9999px;
-  background-color: white;
-  color: black;
-  font-weight: bold;
-  margin-right: 0.75rem;
-}
-
-.code-block {
-  background-color: #1a1a1a;
-  padding: 1rem;
-  border-radius: 0.25rem;
-  overflow-x: auto;
   margin: 1rem 0;
-  font-family: monospace;
+  border-radius: 0 8px 8px 0;
 }
 
-/* Check for any global CSS that might be creating this text */
-/* Look for ::before pseudo-elements that might be adding this text */
+.setup-step h3 {
+  color: #3b82f6;
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
 
-/* Remove this rule or similar that's creating the "Milo Presedo" text */
-/* .some-class::before {
-  content: "Milo Presedo";
-   other styles 
-} */
+.setup-code {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 6px;
+  padding: 1rem;
+  margin: 1rem 0;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9rem;
+  overflow-x: auto;
+}
+
+.setup-warning {
+  background: rgba(239, 68, 68, 0.1);
+  border-left: 4px solid #ef4444;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0 6px 6px 0;
+}
+
+.setup-success {
+  background: rgba(34, 197, 94, 0.1);
+  border-left: 4px solid #22c55e;
+  padding: 1rem;
+  margin: 1rem 0;
+  border-radius: 0 6px 6px 0;
+}
