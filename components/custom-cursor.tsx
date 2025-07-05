@@ -19,12 +19,14 @@ export default function CustomCursor() {
   const [currentRotation, setCurrentRotation] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [shouldFadeOut, setShouldFadeOut] = useState(false);
+  const [isOverIframe, setIsOverIframe] = useState(false);
   const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]);
 
   const requestRef = useRef<number>();
   const lastPositionRef = useRef({ x: -100, y: -100 });
   const fadeOutTimeoutRef = useRef<NodeJS.Timeout>();
   const lastMoveTimeRef = useRef<number>(0);
+  const iframeListenersRef = useRef<Set<HTMLIFrameElement>>(new Set());
 
   // initialise segments once on mount
   useEffect(() => {
@@ -38,20 +40,19 @@ export default function CustomCursor() {
     setFilmSegments(initial);
   }, []);
 
-  // mouse tracking + animation loop
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      const { clientX: x, clientY: y } = e;
-      const dx = x - lastPositionRef.current.x;
-      const dy = y - lastPositionRef.current.y;
-      const now = Date.now();
+  // Function to handle mouse movement
+  const handleMouseMovement = (x: number, y: number) => {
+    const dx = x - lastPositionRef.current.x;
+    const dy = y - lastPositionRef.current.y;
+    const now = Date.now();
 
-      // Only update if there's actual movement
-      if (dx !== 0 || dy !== 0) {
-        setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI));
-        lastMoveTimeRef.current = now;
-        
-        // Show cursor and cancel any fade out
+    // Only update if there's actual movement
+    if (dx !== 0 || dy !== 0) {
+      setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI));
+      lastMoveTimeRef.current = now;
+      
+      // Show cursor and cancel any fade out (but not if over iframe)
+      if (!isOverIframe) {
         setShouldFadeOut(false);
         if (fadeOutTimeoutRef.current) {
           clearTimeout(fadeOutTimeoutRef.current);
@@ -62,15 +63,91 @@ export default function CustomCursor() {
           setShouldFadeOut(true);
         }, FADE_OUT_DELAY);
       }
+    }
 
-      setPosition({ x, y });
+    setPosition({ x, y });
+    if (!isOverIframe) {
       setIsVisible(true);
-      lastPositionRef.current = { x, y };
+    }
+    lastPositionRef.current = { x, y };
+  };
+
+  // Function to add event listeners to iframes
+  const addIframeListeners = () => {
+    const iframes = document.querySelectorAll('iframe');
+    
+    iframes.forEach((iframe) => {
+      if (!iframeListenersRef.current.has(iframe)) {
+        // Add mouseenter listener - fade out custom cursor
+        const handleIframeEnter = () => {
+          setIsOverIframe(true);
+          setShouldFadeOut(false); // Clear any pending fade out
+          if (fadeOutTimeoutRef.current) {
+            clearTimeout(fadeOutTimeoutRef.current);
+          }
+        };
+
+        // Add mouseleave listener - fade in custom cursor from current position
+        const handleIframeLeave = (e: MouseEvent) => {
+          setIsOverIframe(false);
+          
+          // Reset cursor position to current mouse position (no momentum)
+          const currentX = e.clientX;
+          const currentY = e.clientY;
+          
+          // Reset all segments to current mouse position to avoid jumping
+          setPosition({ x: currentX, y: currentY });
+          lastPositionRef.current = { x: currentX, y: currentY };
+          
+          // Reset all film segments to current position (no trail initially)
+          setFilmSegments(prev => 
+            prev.map((seg) => ({
+              ...seg,
+              x: currentX,
+              y: currentY,
+              rotation: 0 // Reset rotation as well
+            }))
+          );
+          
+          setIsVisible(true); // Show cursor again
+        };
+
+        iframe.addEventListener('mouseenter', handleIframeEnter);
+        iframe.addEventListener('mouseleave', handleIframeLeave);
+        
+        iframeListenersRef.current.add(iframe);
+
+        // Store listeners for cleanup
+        (iframe as any)._cursorListeners = {
+          enter: handleIframeEnter,
+          leave: handleIframeLeave
+        };
+      }
+    });
+  };
+
+  // Function to remove iframe listeners
+  const removeIframeListeners = () => {
+    iframeListenersRef.current.forEach((iframe) => {
+      if ((iframe as any)._cursorListeners) {
+        iframe.removeEventListener('mouseenter', (iframe as any)._cursorListeners.enter);
+        iframe.removeEventListener('mouseleave', (iframe as any)._cursorListeners.leave);
+        delete (iframe as any)._cursorListeners;
+      }
+    });
+    iframeListenersRef.current.clear();
+  };
+
+  // mouse tracking + animation loop
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      handleMouseMovement(e.clientX, e.clientY);
     };
 
     const handleMouseLeave = () => {
       setIsVisible(false);
       setShouldFadeOut(false);
+      setIsOverIframe(false);
       if (fadeOutTimeoutRef.current) {
         clearTimeout(fadeOutTimeoutRef.current);
       }
@@ -107,6 +184,19 @@ export default function CustomCursor() {
       requestRef.current = requestAnimationFrame(animate);
     };
 
+    // Add initial iframe listeners
+    addIframeListeners();
+
+    // Set up a MutationObserver to watch for new iframes
+    const observer = new MutationObserver(() => {
+      addIframeListeners();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseleave", handleMouseLeave);
     requestRef.current = requestAnimationFrame(animate);
@@ -116,14 +206,17 @@ export default function CustomCursor() {
       window.removeEventListener("mouseleave", handleMouseLeave);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       if (fadeOutTimeoutRef.current) clearTimeout(fadeOutTimeoutRef.current);
+      
+      removeIframeListeners();
+      observer.disconnect();
     };
-  }, [position, currentRotation]);
+  }, [position, currentRotation, isOverIframe]);
 
-  // Calculate opacity based on visibility and fade out state
+  // Calculate opacity based on visibility, fade out state, and iframe state
   const getOpacity = () => {
-    if (!isVisible) return 0;
-    if (shouldFadeOut) return 0.2; // Subtle fade instead of complete hide
-    return 1;
+    if (!isVisible || isOverIframe) return 0; // Hide completely when over iframe
+    if (shouldFadeOut) return 0.2; // Subtle fade when inactive
+    return 1; // Full opacity when active
   };
 
   return (
@@ -158,7 +251,7 @@ export default function CustomCursor() {
           height: "100vh",
           pointerEvents: "none",
           zIndex: 9999,
-          transition: "opacity 0.5s ease", // Smooth fade transition
+          transition: "opacity 0.3s ease", // Smooth fade transition
         }}
       >
         {filmSegments.map((segment) => (
