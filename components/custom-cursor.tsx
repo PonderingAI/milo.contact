@@ -19,6 +19,7 @@ export default function CustomCursor() {
   const [currentRotation, setCurrentRotation] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
   const [shouldFadeOut, setShouldFadeOut] = useState(false);
+  const [isOverIframe, setIsOverIframe] = useState(false);
   const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]);
 
   const requestRef = useRef<number>();
@@ -39,7 +40,7 @@ export default function CustomCursor() {
     setFilmSegments(initial);
   }, []);
 
-  // Function to handle mouse movement (shared between document and iframe events)
+  // Function to handle mouse movement
   const handleMouseMovement = (x: number, y: number) => {
     const dx = x - lastPositionRef.current.x;
     const dy = y - lastPositionRef.current.y;
@@ -50,20 +51,24 @@ export default function CustomCursor() {
       setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI));
       lastMoveTimeRef.current = now;
       
-      // Show cursor and cancel any fade out
-      setShouldFadeOut(false);
-      if (fadeOutTimeoutRef.current) {
-        clearTimeout(fadeOutTimeoutRef.current);
-      }
+      // Show cursor and cancel any fade out (but not if over iframe)
+      if (!isOverIframe) {
+        setShouldFadeOut(false);
+        if (fadeOutTimeoutRef.current) {
+          clearTimeout(fadeOutTimeoutRef.current);
+        }
 
-      // Set new fade out timer
-      fadeOutTimeoutRef.current = setTimeout(() => {
-        setShouldFadeOut(true);
-      }, FADE_OUT_DELAY);
+        // Set new fade out timer
+        fadeOutTimeoutRef.current = setTimeout(() => {
+          setShouldFadeOut(true);
+        }, FADE_OUT_DELAY);
+      }
     }
 
     setPosition({ x, y });
-    setIsVisible(true);
+    if (!isOverIframe) {
+      setIsVisible(true);
+    }
     lastPositionRef.current = { x, y };
   };
 
@@ -73,17 +78,19 @@ export default function CustomCursor() {
     
     iframes.forEach((iframe) => {
       if (!iframeListenersRef.current.has(iframe)) {
-        // Add mouseenter listener to track when entering iframe
-        const handleIframeEnter = (e: MouseEvent) => {
-          const rect = iframe.getBoundingClientRect();
-          const x = rect.left + (rect.width / 2);
-          const y = rect.top + (rect.height / 2);
-          handleMouseMovement(x, y);
+        // Add mouseenter listener - fade out custom cursor
+        const handleIframeEnter = () => {
+          setIsOverIframe(true);
+          setShouldFadeOut(false); // Clear any pending fade out
+          if (fadeOutTimeoutRef.current) {
+            clearTimeout(fadeOutTimeoutRef.current);
+          }
         };
 
-        // Add mouseleave listener to track when leaving iframe
+        // Add mouseleave listener - fade in custom cursor
         const handleIframeLeave = () => {
-          // Don't hide immediately, let the fade timer handle it
+          setIsOverIframe(false);
+          setIsVisible(true); // Show cursor again
         };
 
         iframe.addEventListener('mouseenter', handleIframeEnter);
@@ -121,6 +128,7 @@ export default function CustomCursor() {
     const handleMouseLeave = () => {
       setIsVisible(false);
       setShouldFadeOut(false);
+      setIsOverIframe(false);
       if (fadeOutTimeoutRef.current) {
         clearTimeout(fadeOutTimeoutRef.current);
       }
@@ -183,13 +191,13 @@ export default function CustomCursor() {
       removeIframeListeners();
       observer.disconnect();
     };
-  }, [position, currentRotation]);
+  }, [position, currentRotation, isOverIframe]);
 
-  // Calculate opacity based on visibility and fade out state
+  // Calculate opacity based on visibility, fade out state, and iframe state
   const getOpacity = () => {
-    if (!isVisible) return 0;
-    if (shouldFadeOut) return 0.2; // Subtle fade instead of complete hide
-    return 1;
+    if (!isVisible || isOverIframe) return 0; // Hide completely when over iframe
+    if (shouldFadeOut) return 0.2; // Subtle fade when inactive
+    return 1; // Full opacity when active
   };
 
   return (
@@ -224,7 +232,7 @@ export default function CustomCursor() {
           height: "100vh",
           pointerEvents: "none",
           zIndex: 9999,
-          transition: "opacity 0.5s ease", // Smooth fade transition
+          transition: "opacity 0.3s ease", // Smooth fade transition
         }}
       >
         {filmSegments.map((segment) => (
