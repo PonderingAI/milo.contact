@@ -55,11 +55,6 @@ body,
   cursor: none !important;
 }
 
-/* Show default cursor on iframe elements for video controls */
-iframe {
-  cursor: auto !important;
-}
-
 /* But show default cursor on mobile devices */
 @media (max-width: 768px) {
   html,

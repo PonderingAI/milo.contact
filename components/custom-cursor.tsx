@@ -12,16 +12,19 @@ interface FilmSegment {
 
 const TRAIL_AMOUNT = 25; // number of segments in the trail
 const EASING_FACTOR = 0.3; // easing factor for smooth following
+const FADE_OUT_DELAY = 1500; // milliseconds before cursor fades out when no movement
 
 export default function CustomCursor() {
   const [position, setPosition] = useState({ x: -100, y: -100 });
   const [currentRotation, setCurrentRotation] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
-  const [isOverIframe, setIsOverIframe] = useState(false);
+  const [shouldFadeOut, setShouldFadeOut] = useState(false);
   const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]);
 
   const requestRef = useRef<number>();
   const lastPositionRef = useRef({ x: -100, y: -100 });
+  const fadeOutTimeoutRef = useRef<NodeJS.Timeout>();
+  const lastMoveTimeRef = useRef<number>(0);
 
   // initialise segments once on mount
   useEffect(() => {
@@ -41,25 +44,36 @@ export default function CustomCursor() {
       const { clientX: x, clientY: y } = e;
       const dx = x - lastPositionRef.current.x;
       const dy = y - lastPositionRef.current.y;
+      const now = Date.now();
 
-      if (dx || dy) {
+      // Only update if there's actual movement
+      if (dx !== 0 || dy !== 0) {
         setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI));
+        lastMoveTimeRef.current = now;
+        
+        // Show cursor and cancel any fade out
+        setShouldFadeOut(false);
+        if (fadeOutTimeoutRef.current) {
+          clearTimeout(fadeOutTimeoutRef.current);
+        }
+
+        // Set new fade out timer
+        fadeOutTimeoutRef.current = setTimeout(() => {
+          setShouldFadeOut(true);
+        }, FADE_OUT_DELAY);
       }
 
       setPosition({ x, y });
       setIsVisible(true);
       lastPositionRef.current = { x, y };
-
-      // Check if mouse is over an iframe
-      const elementUnderMouse = document.elementFromPoint(x, y);
-      const isOverIframeElement = elementUnderMouse?.tagName.toLowerCase() === 'iframe' ||
-                                  elementUnderMouse?.closest('iframe') !== null;
-      setIsOverIframe(isOverIframeElement);
     };
 
     const handleMouseLeave = () => {
       setIsVisible(false);
-      setIsOverIframe(false);
+      setShouldFadeOut(false);
+      if (fadeOutTimeoutRef.current) {
+        clearTimeout(fadeOutTimeoutRef.current);
+      }
     };
 
     const animate = () => {
@@ -101,8 +115,16 @@ export default function CustomCursor() {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseleave", handleMouseLeave);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      if (fadeOutTimeoutRef.current) clearTimeout(fadeOutTimeoutRef.current);
     };
   }, [position, currentRotation]);
+
+  // Calculate opacity based on visibility and fade out state
+  const getOpacity = () => {
+    if (!isVisible) return 0;
+    if (shouldFadeOut) return 0.2; // Subtle fade instead of complete hide
+    return 1;
+  };
 
   return (
     <>
@@ -126,7 +148,7 @@ export default function CustomCursor() {
       <div
         className="cursor-container"
         style={{
-          opacity: isVisible && !isOverIframe ? 1 : 0,
+          opacity: getOpacity(),
           filter: "url(#goo)",
           mixBlendMode: "difference",
           position: "fixed",
@@ -136,6 +158,7 @@ export default function CustomCursor() {
           height: "100vh",
           pointerEvents: "none",
           zIndex: 9999,
+          transition: "opacity 0.5s ease", // Smooth fade transition
         }}
       >
         {filmSegments.map((segment) => (
