@@ -6,8 +6,5 @@
     "app/api/process-video-url/route.ts": {
       "maxDuration": 60
     }
-  },
-  "limits": {
-    "maxRequestBodySize": "4.5mb"
   }
 }
