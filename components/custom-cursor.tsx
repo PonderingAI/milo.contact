@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 interface FilmSegment {
   id: number;
@@ -27,6 +27,7 @@ export default function CustomCursor() {
   const fadeOutTimeoutRef = useRef<NodeJS.Timeout>();
   const lastMoveTimeRef = useRef<number>(0);
   const iframeListenersRef = useRef<Set<HTMLIFrameElement>>(new Set());
+  const observerRef = useRef<MutationObserver>();
 
   // initialise segments once on mount
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function CustomCursor() {
   }, []);
 
   // Function to handle mouse movement
-  const handleMouseMovement = (x: number, y: number) => {
+  const handleMouseMovement = useCallback((x: number, y: number) => {
     const dx = x - lastPositionRef.current.x;
     const dy = y - lastPositionRef.current.y;
     const now = Date.now();
@@ -70,10 +71,34 @@ export default function CustomCursor() {
       setIsVisible(true);
     }
     lastPositionRef.current = { x, y };
-  };
+  }, [isOverIframe]);
+
+  // Function to clean up iframe listeners when iframes are removed
+  const cleanupRemovedIframes = useCallback(() => {
+    const currentIframes = new Set(document.querySelectorAll('iframe'));
+    const toRemove: HTMLIFrameElement[] = [];
+    
+    iframeListenersRef.current.forEach((iframe) => {
+      if (!currentIframes.has(iframe)) {
+        toRemove.push(iframe);
+      }
+    });
+    
+    toRemove.forEach((iframe) => {
+      if ((iframe as any)._cursorListeners) {
+        iframe.removeEventListener('mouseenter', (iframe as any)._cursorListeners.enter);
+        iframe.removeEventListener('mouseleave', (iframe as any)._cursorListeners.leave);
+        delete (iframe as any)._cursorListeners;
+      }
+      iframeListenersRef.current.delete(iframe);
+    });
+  }, []);
 
   // Function to add event listeners to iframes
-  const addIframeListeners = () => {
+  const addIframeListeners = useCallback(() => {
+    // First clean up any removed iframes
+    cleanupRemovedIframes();
+    
     const iframes = document.querySelectorAll('iframe');
     
     iframes.forEach((iframe) => {
@@ -124,10 +149,10 @@ export default function CustomCursor() {
         };
       }
     });
-  };
+  }, [cleanupRemovedIframes]);
 
   // Function to remove iframe listeners
-  const removeIframeListeners = () => {
+  const removeIframeListeners = useCallback(() => {
     iframeListenersRef.current.forEach((iframe) => {
       if ((iframe as any)._cursorListeners) {
         iframe.removeEventListener('mouseenter', (iframe as any)._cursorListeners.enter);
@@ -136,23 +161,10 @@ export default function CustomCursor() {
       }
     });
     iframeListenersRef.current.clear();
-  };
+  }, []);
 
-  // mouse tracking + animation loop
+  // Animation loop - separate from main useEffect to avoid re-renders
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      handleMouseMovement(e.clientX, e.clientY);
-    };
-
-    const handleMouseLeave = () => {
-      setIsVisible(false);
-      setShouldFadeOut(false);
-      setIsOverIframe(false);
-      if (fadeOutTimeoutRef.current) {
-        clearTimeout(fadeOutTimeoutRef.current);
-      }
-    };
-
     const animate = () => {
       let leaderX = position.x;
       let leaderY = position.y;
@@ -184,33 +196,82 @@ export default function CustomCursor() {
       requestRef.current = requestAnimationFrame(animate);
     };
 
+    requestRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+      }
+    };
+  }, [position.x, position.y, currentRotation]);
+
+  // Main setup effect - runs only once on mount
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      handleMouseMovement(e.clientX, e.clientY);
+    };
+
+    const handleMouseLeave = () => {
+      setIsVisible(false);
+      setShouldFadeOut(false);
+      setIsOverIframe(false);
+      if (fadeOutTimeoutRef.current) {
+        clearTimeout(fadeOutTimeoutRef.current);
+      }
+    };
+
     // Add initial iframe listeners
     addIframeListeners();
 
-    // Set up a MutationObserver to watch for new iframes
-    const observer = new MutationObserver(() => {
-      addIframeListeners();
+    // Set up a MutationObserver to watch for iframe changes
+    observerRef.current = new MutationObserver((mutations) => {
+      let shouldUpdate = false;
+      
+      mutations.forEach((mutation) => {
+        if (mutation.type === 'childList') {
+          // Check if any added or removed nodes are iframes or contain iframes
+          const hasIframeChanges = Array.from(mutation.addedNodes).some(node => 
+            node.nodeType === Node.ELEMENT_NODE && 
+            ((node as Element).tagName === 'IFRAME' || (node as Element).querySelector('iframe'))
+          ) || Array.from(mutation.removedNodes).some(node => 
+            node.nodeType === Node.ELEMENT_NODE && 
+            ((node as Element).tagName === 'IFRAME' || (node as Element).querySelector('iframe'))
+          );
+          
+          if (hasIframeChanges) {
+            shouldUpdate = true;
+          }
+        }
+      });
+      
+      if (shouldUpdate) {
+        addIframeListeners();
+      }
     });
 
-    observer.observe(document.body, {
+    observerRef.current.observe(document.body, {
       childList: true,
       subtree: true
     });
 
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseleave", handleMouseLeave);
-    requestRef.current = requestAnimationFrame(animate);
 
     return () => {
       window.removeEventListener("mousemove", handleMouseMove);
       window.removeEventListener("mouseleave", handleMouseLeave);
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
-      if (fadeOutTimeoutRef.current) clearTimeout(fadeOutTimeoutRef.current);
+      
+      if (fadeOutTimeoutRef.current) {
+        clearTimeout(fadeOutTimeoutRef.current);
+      }
       
       removeIframeListeners();
-      observer.disconnect();
+      
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
     };
-  }, [position, currentRotation, isOverIframe]);
+  }, []); // Empty dependency array - runs only once
 
   // Calculate opacity based on visibility, fade out state, and iframe state
   const getOpacity = () => {
