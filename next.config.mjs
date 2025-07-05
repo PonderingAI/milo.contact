@@ -9,10 +9,7 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
-  experimental: {
-    // Set body size limit for API routes (Vercel hobby plan limit is ~4.5MB)
-    bodySizeLimit: "4.5mb",
-  },
+  // Note: bodySizeLimit moved to vercel.json for Vercel deployments
 }
 
 export default nextConfig

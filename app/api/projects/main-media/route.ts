@@ -3,6 +3,108 @@ import { createClient } from "@supabase/supabase-js"
 import { checkAdminPermission } from "@/lib/auth-server"
 import { auth } from "@clerk/nextjs/server"
 
+// Unified video processing function
+async function processVideoUrl(url: string): Promise<{
+  platform: string
+  id: string
+  embedUrl: string
+  thumbnailUrl: string
+  title?: string
+} | null> {
+  try {
+    if (!url || typeof url !== "string") return null
+
+    // YouTube URL patterns
+    const youtubePatterns = [
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
+      /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
+      /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
+    ]
+
+    // Vimeo URL patterns
+    const vimeoPatterns = [
+      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
+      /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
+    ]
+
+    // LinkedIn URL patterns
+    const linkedinPatterns = [
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/posts\/.*-(\d+)-/i,
+      /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/feed\/update\/.*:(\d+)/i,
+    ]
+
+    // Check YouTube patterns
+    for (const pattern of youtubePatterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        const videoId = match[1]
+        return {
+          platform: "youtube",
+          id: videoId,
+          embedUrl: `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&mute=0`,
+          thumbnailUrl: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          title: `YouTube Video ${videoId}`
+        }
+      }
+    }
+
+    // Check Vimeo patterns
+    for (const pattern of vimeoPatterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        const videoId = match[1]
+        let thumbnailUrl = "/generic-icon.png"
+        let title = `Vimeo Video ${videoId}`
+        
+        // Try to fetch Vimeo thumbnail
+        try {
+          const response = await fetch(`https://vimeo.com/api/v2/video/${videoId}.json`)
+          if (response.ok) {
+            const videoData = await response.json()
+            const video = videoData[0]
+            if (video.thumbnail_large) {
+              thumbnailUrl = video.thumbnail_large
+            }
+            if (video.title) {
+              title = video.title
+            }
+          }
+        } catch (error) {
+          console.error("Error fetching Vimeo metadata:", error)
+        }
+        
+        return {
+          platform: "vimeo",
+          id: videoId,
+          embedUrl: `https://player.vimeo.com/video/${videoId}?autoplay=1&title=0&byline=0&portrait=0&muted=0`,
+          thumbnailUrl,
+          title
+        }
+      }
+    }
+
+    // Check LinkedIn patterns
+    for (const pattern of linkedinPatterns) {
+      const match = url.match(pattern)
+      if (match && match[1]) {
+        const videoId = match[1]
+        return {
+          platform: "linkedin",
+          id: videoId,
+          embedUrl: url, // LinkedIn doesn't have embeddable URLs like YouTube/Vimeo
+          thumbnailUrl: "/generic-icon.png",
+          title: `LinkedIn Post ${videoId}`
+        }
+      }
+    }
+
+    return null
+  } catch (error) {
+    console.error("Error processing video URL:", error)
+    return null
+  }
+}
+
 export async function POST(request: Request) {
   console.log("=== MAIN MEDIA API CALLED ===")
   
@@ -63,87 +165,55 @@ export async function POST(request: Request) {
       }
     }
 
-    // Helper function to extract video info from URL
-    function extractVideoInfo(url: string): { platform: string; id: string } | null {
-      try {
-        if (!url || typeof url !== "string") return null
+    // Process media items and create entries for both videos and thumbnails
+    const mainMediaData = []
+    let displayOrder = 0
 
-        // YouTube URL patterns
-        const youtubePatterns = [
-          /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([^&]+)/i,
-          /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([^?]+)/i,
-          /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
-        ]
-
-        // Vimeo URL patterns
-        const vimeoPatterns = [
-          /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
-          /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
-        ]
-
-        // Check YouTube patterns
-        for (const pattern of youtubePatterns) {
-          const match = url.match(pattern)
-          if (match && match[1]) {
-            return { platform: "youtube", id: match[1] }
-          }
-        }
-
-        // Check Vimeo patterns
-        for (const pattern of vimeoPatterns) {
-          const match = url.match(pattern)
-          if (match && match[1]) {
-            return { platform: "vimeo", id: match[1] }
-          }
-        }
-
-        return null
-      } catch (error) {
-        console.error("Error extracting video info:", error)
-        return null
-      }
-    }
-
-    // Prepare main media data with video detection and processing
-    const mainMediaData = media.map((mediaUrl, index) => {
-      const videoInfo = extractVideoInfo(mediaUrl)
+    for (const mediaUrl of media) {
+      const videoInfo = await processVideoUrl(mediaUrl)
       
       if (videoInfo) {
-        // This is a video URL - construct proper embed URL and metadata
-        let embedUrl = ""
-        let thumbnailUrl = mediaUrl // Use original URL as fallback thumbnail
-
-        if (videoInfo.platform === "youtube") {
-          embedUrl = `https://www.youtube.com/embed/${videoInfo.id}?autoplay=1&rel=0&modestbranding=1&mute=0`
-          thumbnailUrl = `https://img.youtube.com/vi/${videoInfo.id}/maxresdefault.jpg`
-        } else if (videoInfo.platform === "vimeo") {
-          embedUrl = `https://player.vimeo.com/video/${videoInfo.id}?autoplay=1&title=0&byline=0&portrait=0&muted=0`
-          // Keep original URL as thumbnail for Vimeo (more complex to get thumbnail)
-        }
-
-        return {
+        // This is a video URL - create both thumbnail and video entries
+        
+        // 1. Create thumbnail entry (hidden by default)
+        mainMediaData.push({
           project_id: projectId,
-          image_url: thumbnailUrl, // Store thumbnail URL for display
+          image_url: videoInfo.thumbnailUrl,
+          is_video: false,
+          video_url: null,
+          video_platform: null,
+          video_id: null,
+          display_order: displayOrder++,
+          caption: `${videoInfo.title} (Thumbnail)`,
+          is_thumbnail_hidden: true // Hidden by default
+        })
+
+        // 2. Create video entry
+        mainMediaData.push({
+          project_id: projectId,
+          image_url: videoInfo.thumbnailUrl, // Store thumbnail URL for video preview
           is_video: true,
-          video_url: embedUrl,
+          video_url: videoInfo.embedUrl,
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
-          display_order: index,
-          caption: mediaUrl, // Store original URL in caption field for reconstruction
-        }
+          display_order: displayOrder++,
+          caption: videoInfo.title,
+          is_thumbnail_hidden: false // Video is always visible
+        })
       } else {
         // Regular image
-        return {
+        mainMediaData.push({
           project_id: projectId,
           image_url: mediaUrl,
           is_video: false,
           video_url: null,
           video_platform: null,
           video_id: null,
-          display_order: index,
-        }
+          display_order: displayOrder++,
+          is_thumbnail_hidden: false // Regular images are visible by default
+        })
       }
-    })
+    }
 
     // Insert main media
     const { data, error } = await supabase.from("main_media").insert(mainMediaData).select()
