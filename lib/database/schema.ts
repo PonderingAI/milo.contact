@@ -346,6 +346,7 @@ CREATE TABLE IF NOT EXISTS main_media (
   video_platform TEXT,
   video_id TEXT,
   display_order INTEGER DEFAULT 0,
+  is_thumbnail_hidden BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -353,6 +354,7 @@ CREATE TABLE IF NOT EXISTS main_media (
 -- Create indexes for better performance
 CREATE INDEX IF NOT EXISTS idx_main_media_project_id ON main_media(project_id);
 CREATE INDEX IF NOT EXISTS idx_main_media_display_order ON main_media(project_id, display_order);
+CREATE INDEX IF NOT EXISTS idx_main_media_visibility ON main_media(project_id, is_thumbnail_hidden);
 
 -- Set up Row Level Security (RLS) policies
 ALTER TABLE main_media ENABLE ROW LEVEL SECURITY;
@@ -415,10 +417,11 @@ END $$;`,
       { name: "video_platform", type: "TEXT" },
       { name: "video_id", type: "TEXT" },
       { name: "display_order", type: "INTEGER", default: "0" },
+      { name: "is_thumbnail_hidden", type: "BOOLEAN", default: "TRUE" },
       { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
       { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
     ],
-    indexes: ["idx_main_media_project_id", "idx_main_media_display_order"],
+    indexes: ["idx_main_media_project_id", "idx_main_media_display_order", "idx_main_media_visibility"],
     policies: ["public_read_main_media", "admins_manage_main_media"]
   },
 

@@ -30,6 +30,7 @@ interface MainMedia {
   video_url?: string
   video_platform?: string
   video_id?: string
+  is_thumbnail_hidden?: boolean
 }
 
 interface ProjectDetailContentProps {
@@ -157,7 +158,10 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           }
         } else if (!item.is_video) {
           // For images, check if we've already seen this image URL
+          // Skip if this is a hidden thumbnail
           // Also skip if this image URL is already being used as a thumbnail for a video
+          const isHiddenThumbnail = (item as any).is_thumbnail_hidden === true
+          
           const isVideoThumbnail = project.main_media?.some(
             (videoItem) => {
               if (!videoItem.is_video) return false
@@ -175,7 +179,7 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
             }
           ) || false
           
-          if (!seenImageUrls.has(item.image_url) && !isVideoThumbnail) {
+          if (!seenImageUrls.has(item.image_url) && !isVideoThumbnail && !isHiddenThumbnail) {
             seenImageUrls.add(item.image_url)
             media.push(item)
           }

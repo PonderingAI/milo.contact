@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X } from "lucide-react"
+import MainMediaManager from "./main-media-manager"
 import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -713,6 +714,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
   const setCoverImage = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
+  }
+
+  const handleCoverImageSelect = (url: string) => {
+    setFormData((prev) => ({ ...prev, image: url }))
+    toast({
+      title: "Cover image updated",
+      description: "The project cover image has been updated."
+    })
   }
 
   const setMainVideo = (url: string) => {
@@ -1441,125 +1450,134 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         <h2 className="text-xl font-medium mb-4 text-gray-200">Media Overview</h2>
 
         <div className="space-y-6">
-          {/* Main Media Section */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-300 border-b border-gray-800 pb-2">Main Footage</h3>
+          {/* Main Media Section - Use new MainMediaManager for edit mode */}
+          {mode === "edit" && project?.id ? (
+            <MainMediaManager
+              projectId={project.id}
+              onCoverImageSelect={handleCoverImageSelect}
+              coverImageUrl={formData.image}
+            />
+          ) : (
+            /* Create mode - show legacy interface */
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium text-gray-300 border-b border-gray-800 pb-2">Main Footage</h3>
 
-            {/* Main Images */}
-            {mainImages.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 text-gray-400">Images</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {mainImages.map((image, index) => (
-                    <div key={`main-image-${index}`} className="relative group">
-                      <div
-                        className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden ${formData.image === image ? "ring-2 ring-blue-500" : ""}`}
-                      >
-                        <img
-                          src={image || "/placeholder.svg"}
-                          alt={`Main image ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setCoverImage(image)}
-                          className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
-                          title="Set as cover image"
+              {/* Main Images */}
+              {mainImages.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 text-gray-400">Images</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    {mainImages.map((image, index) => (
+                      <div key={`main-image-${index}`} className="relative group">
+                        <div
+                          className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden ${formData.image === image ? "ring-2 ring-blue-500" : ""}`}
                         >
-                          <ImageIcon size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeMainImage(index)}
-                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                          title="Remove image"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                      {formData.image === image && (
-                        <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
-                          Cover
+                          <img
+                            src={image || "/placeholder.svg"}
+                            alt={`Main image ${index + 1}`}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Main Videos */}
-            {mainVideos.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {mainVideos.map((video, index) => (
-                    <div key={`main-video-${index}`} className="relative group">
-                      <div
-                        className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${thumbnailUrl === video ? "ring-2 ring-blue-500" : ""}`}
-                      >
-                        {video.includes("youtube.com") ? (
-                          <img
-                            src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
-                            alt={`YouTube video ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : video.includes("youtu.be") ? (
-                          <img
-                            src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
-                            alt={`YouTube video ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : video.includes("vimeo.com") ? (
-                          <VimeoThumbnail
-                            url={video}
-                            alt={`Vimeo video ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="text-gray-400 flex flex-col items-center">
-                            <Film size={24} />
-                            <span className="text-xs mt-1">Video</span>
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setCoverImage(image)}
+                            className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
+                            title="Set as cover image"
+                          >
+                            <ImageIcon size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeMainImage(index)}
+                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                            title="Remove image"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {formData.image === image && (
+                          <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
+                            Cover
                           </div>
                         )}
                       </div>
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setMainVideo(video)}
-                          className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
-                          title="Set as main video"
-                        >
-                          <Film size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeMainVideo(index)}
-                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                          title="Remove video"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                      {thumbnailUrl === video && (
-                        <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
-                          Main
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {mainImages.length === 0 && mainVideos.length === 0 && (
-              <div className="text-center py-4 text-gray-400">
-                <p>No main media added yet</p>
-              </div>
-            )}
-          </div>
+              {/* Main Videos */}
+              {mainVideos.length > 0 && (
+                <div>
+                  <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {mainVideos.map((video, index) => (
+                      <div key={`main-video-${index}`} className="relative group">
+                        <div
+                          className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${thumbnailUrl === video ? "ring-2 ring-blue-500" : ""}`}
+                        >
+                          {video.includes("youtube.com") ? (
+                            <img
+                              src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
+                              alt={`YouTube video ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : video.includes("youtu.be") ? (
+                            <img
+                              src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
+                              alt={`YouTube video ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : video.includes("vimeo.com") ? (
+                            <VimeoThumbnail
+                              url={video}
+                              alt={`Vimeo video ${index + 1}`}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="text-gray-400 flex flex-col items-center">
+                              <Film size={24} />
+                              <span className="text-xs mt-1">Video</span>
+                            </div>
+                          )}
+                        </div>
+                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setMainVideo(video)}
+                            className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
+                            title="Set as main video"
+                          >
+                            <Film size={14} />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => removeMainVideo(index)}
+                            className="p-1 bg-red-600 rounded-full hover:bg-red-700"
+                            title="Remove video"
+                          >
+                            <X size={14} />
+                          </button>
+                        </div>
+                        {thumbnailUrl === video && (
+                          <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
+                            Main
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {mainImages.length === 0 && mainVideos.length === 0 && (
+                <div className="text-center py-4 text-gray-400">
+                  <p>No main media added yet</p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* BTS Media Section */}
           <div className="space-y-4 pt-4">
