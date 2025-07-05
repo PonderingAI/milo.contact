@@ -17,6 +17,7 @@ export default function CustomCursor() {
   const [position, setPosition] = useState({ x: -100, y: -100 });
   const [currentRotation, setCurrentRotation] = useState(0);
   const [isVisible, setIsVisible] = useState(false);
+  const [isOverIframe, setIsOverIframe] = useState(false);
   const [filmSegments, setFilmSegments] = useState<FilmSegment[]>([]);
 
   const requestRef = useRef<number>();
@@ -48,9 +49,18 @@ export default function CustomCursor() {
       setPosition({ x, y });
       setIsVisible(true);
       lastPositionRef.current = { x, y };
+
+      // Check if mouse is over an iframe
+      const elementUnderMouse = document.elementFromPoint(x, y);
+      const isOverIframeElement = elementUnderMouse?.tagName.toLowerCase() === 'iframe' ||
+                                  elementUnderMouse?.closest('iframe') !== null;
+      setIsOverIframe(isOverIframeElement);
     };
 
-    const handleMouseLeave = () => setIsVisible(false);
+    const handleMouseLeave = () => {
+      setIsVisible(false);
+      setIsOverIframe(false);
+    };
 
     const animate = () => {
       let leaderX = position.x;
@@ -116,7 +126,7 @@ export default function CustomCursor() {
       <div
         className="cursor-container"
         style={{
-          opacity: isVisible ? 1 : 0,
+          opacity: isVisible && !isOverIframe ? 1 : 0,
           filter: "url(#goo)",
           mixBlendMode: "difference",
           position: "fixed",
@@ -128,7 +138,7 @@ export default function CustomCursor() {
           zIndex: 9999,
         }}
       >
-        {filmSegments.map(segment => (
+        {filmSegments.map((segment) => (
           <div
             key={segment.id}
             style={{
