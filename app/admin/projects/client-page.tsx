@@ -89,7 +89,11 @@ export default function ClientProjectsPage() {
 
     // Apply role filter
     if (selectedRole) {
-      result = result.filter((project) => project.role?.toLowerCase().includes(selectedRole.toLowerCase()))
+      result = result.filter((project) => {
+        if (!project.role) return false
+        // Split the comma-separated roles and check if any match the selected role
+        return project.role.toLowerCase().split(',').some(role => role.trim() === selectedRole.toLowerCase())
+      })
     }
 
     // Apply privacy filter using both is_public and project_date

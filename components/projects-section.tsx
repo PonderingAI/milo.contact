@@ -36,7 +36,12 @@ export default function ProjectsSection({ projects }: ProjectsSectionProps) {
     const matchesTags =
       selectedTags.length === 0 ||
       selectedTags.some((tag) => {
-        return (project.category && project.category.includes(tag)) || (project.role && project.role.includes(tag))
+        const tagLower = tag.toLowerCase()
+        // Check if tag matches category exactly
+        const matchesCategory = project.category && project.category.toLowerCase() === tagLower
+        // Check if tag is contained in the comma-separated roles string
+        const matchesRole = project.role && project.role.toLowerCase().split(',').some(role => role.trim() === tagLower)
+        return matchesCategory || matchesRole
       })
 
     return matchesSearch && matchesTags

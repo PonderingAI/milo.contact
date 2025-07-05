@@ -59,10 +59,14 @@ export function OffsetProjectGrid({ projects, searchQuery = "", selectedTags = [
     // Filter by selected tags (match ALL of the selected tags)
     if (selectedTags && selectedTags.length > 0) {
       filtered = filtered.filter((project) => {
-        return selectedTags.every(
-          (tag) =>
-            project.category?.toLowerCase() === tag.toLowerCase() || project.role?.toLowerCase() === tag.toLowerCase(),
-        )
+        return selectedTags.every((tag) => {
+          const tagLower = tag.toLowerCase()
+          // Check if tag matches category exactly
+          const matchesCategory = project.category?.toLowerCase() === tagLower
+          // Check if tag is contained in the comma-separated roles string
+          const matchesRole = project.role && project.role.toLowerCase().split(',').some(role => role.trim() === tagLower)
+          return matchesCategory || matchesRole
+        })
       })
     }
 
