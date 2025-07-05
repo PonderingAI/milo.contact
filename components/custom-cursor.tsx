@@ -25,6 +25,7 @@ export default function CustomCursor() {
   const lastPositionRef = useRef({ x: -100, y: -100 });
   const fadeOutTimeoutRef = useRef<NodeJS.Timeout>();
   const lastMoveTimeRef = useRef<number>(0);
+  const iframeListenersRef = useRef<Set<HTMLIFrameElement>>(new Set());
 
   // initialise segments once on mount
   useEffect(() => {
@@ -38,34 +39,83 @@ export default function CustomCursor() {
     setFilmSegments(initial);
   }, []);
 
+  // Function to handle mouse movement (shared between document and iframe events)
+  const handleMouseMovement = (x: number, y: number) => {
+    const dx = x - lastPositionRef.current.x;
+    const dy = y - lastPositionRef.current.y;
+    const now = Date.now();
+
+    // Only update if there's actual movement
+    if (dx !== 0 || dy !== 0) {
+      setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI));
+      lastMoveTimeRef.current = now;
+      
+      // Show cursor and cancel any fade out
+      setShouldFadeOut(false);
+      if (fadeOutTimeoutRef.current) {
+        clearTimeout(fadeOutTimeoutRef.current);
+      }
+
+      // Set new fade out timer
+      fadeOutTimeoutRef.current = setTimeout(() => {
+        setShouldFadeOut(true);
+      }, FADE_OUT_DELAY);
+    }
+
+    setPosition({ x, y });
+    setIsVisible(true);
+    lastPositionRef.current = { x, y };
+  };
+
+  // Function to add event listeners to iframes
+  const addIframeListeners = () => {
+    const iframes = document.querySelectorAll('iframe');
+    
+    iframes.forEach((iframe) => {
+      if (!iframeListenersRef.current.has(iframe)) {
+        // Add mouseenter listener to track when entering iframe
+        const handleIframeEnter = (e: MouseEvent) => {
+          const rect = iframe.getBoundingClientRect();
+          const x = rect.left + (rect.width / 2);
+          const y = rect.top + (rect.height / 2);
+          handleMouseMovement(x, y);
+        };
+
+        // Add mouseleave listener to track when leaving iframe
+        const handleIframeLeave = () => {
+          // Don't hide immediately, let the fade timer handle it
+        };
+
+        iframe.addEventListener('mouseenter', handleIframeEnter);
+        iframe.addEventListener('mouseleave', handleIframeLeave);
+        
+        iframeListenersRef.current.add(iframe);
+
+        // Store listeners for cleanup
+        (iframe as any)._cursorListeners = {
+          enter: handleIframeEnter,
+          leave: handleIframeLeave
+        };
+      }
+    });
+  };
+
+  // Function to remove iframe listeners
+  const removeIframeListeners = () => {
+    iframeListenersRef.current.forEach((iframe) => {
+      if ((iframe as any)._cursorListeners) {
+        iframe.removeEventListener('mouseenter', (iframe as any)._cursorListeners.enter);
+        iframe.removeEventListener('mouseleave', (iframe as any)._cursorListeners.leave);
+        delete (iframe as any)._cursorListeners;
+      }
+    });
+    iframeListenersRef.current.clear();
+  };
+
   // mouse tracking + animation loop
   useEffect(() => {
     const handleMouseMove = (e: MouseEvent) => {
-      const { clientX: x, clientY: y } = e;
-      const dx = x - lastPositionRef.current.x;
-      const dy = y - lastPositionRef.current.y;
-      const now = Date.now();
-
-      // Only update if there's actual movement
-      if (dx !== 0 || dy !== 0) {
-        setCurrentRotation(Math.atan2(dy, dx) * (180 / Math.PI));
-        lastMoveTimeRef.current = now;
-        
-        // Show cursor and cancel any fade out
-        setShouldFadeOut(false);
-        if (fadeOutTimeoutRef.current) {
-          clearTimeout(fadeOutTimeoutRef.current);
-        }
-
-        // Set new fade out timer
-        fadeOutTimeoutRef.current = setTimeout(() => {
-          setShouldFadeOut(true);
-        }, FADE_OUT_DELAY);
-      }
-
-      setPosition({ x, y });
-      setIsVisible(true);
-      lastPositionRef.current = { x, y };
+      handleMouseMovement(e.clientX, e.clientY);
     };
 
     const handleMouseLeave = () => {
@@ -107,6 +157,19 @@ export default function CustomCursor() {
       requestRef.current = requestAnimationFrame(animate);
     };
 
+    // Add initial iframe listeners
+    addIframeListeners();
+
+    // Set up a MutationObserver to watch for new iframes
+    const observer = new MutationObserver(() => {
+      addIframeListeners();
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+
     window.addEventListener("mousemove", handleMouseMove);
     window.addEventListener("mouseleave", handleMouseLeave);
     requestRef.current = requestAnimationFrame(animate);
@@ -116,6 +179,9 @@ export default function CustomCursor() {
       window.removeEventListener("mouseleave", handleMouseLeave);
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
       if (fadeOutTimeoutRef.current) clearTimeout(fadeOutTimeoutRef.current);
+      
+      removeIframeListeners();
+      observer.disconnect();
     };
   }, [position, currentRotation]);
 
