@@ -28,6 +28,24 @@ export default function CustomCursor() {
   const lastMoveTimeRef = useRef<number>(0);
   const iframeListenersRef = useRef<Set<HTMLIFrameElement>>(new Set());
   const observerRef = useRef<MutationObserver>();
+  
+  // Use refs to avoid stale closures in event handlers
+  const isOverIframeRef = useRef(false);
+  const currentRotationRef = useRef(0);
+  const positionRef = useRef({ x: -100, y: -100 });
+
+  // Keep refs in sync with state
+  useEffect(() => {
+    isOverIframeRef.current = isOverIframe;
+  }, [isOverIframe]);
+
+  useEffect(() => {
+    currentRotationRef.current = currentRotation;
+  }, [currentRotation]);
+
+  useEffect(() => {
+    positionRef.current = position;
+  }, [position]);
 
   // initialise segments once on mount
   useEffect(() => {
@@ -41,7 +59,7 @@ export default function CustomCursor() {
     setFilmSegments(initial);
   }, []);
 
-  // Function to handle mouse movement
+  // Function to handle mouse movement - now uses refs to avoid stale closures
   const handleMouseMovement = useCallback((x: number, y: number) => {
     const dx = x - lastPositionRef.current.x;
     const dy = y - lastPositionRef.current.y;
@@ -53,7 +71,8 @@ export default function CustomCursor() {
       lastMoveTimeRef.current = now;
       
       // Show cursor and cancel any fade out (but not if over iframe)
-      if (!isOverIframe) {
+      // Use ref to avoid stale closure
+      if (!isOverIframeRef.current) {
         setShouldFadeOut(false);
         if (fadeOutTimeoutRef.current) {
           clearTimeout(fadeOutTimeoutRef.current);
@@ -67,11 +86,11 @@ export default function CustomCursor() {
     }
 
     setPosition({ x, y });
-    if (!isOverIframe) {
+    if (!isOverIframeRef.current) {
       setIsVisible(true);
     }
     lastPositionRef.current = { x, y };
-  }, [isOverIframe]);
+  }, []); // No dependencies - uses refs to avoid stale closures
 
   // Function to clean up iframe listeners when iframes are removed
   const cleanupRemovedIframes = useCallback(() => {
@@ -163,11 +182,12 @@ export default function CustomCursor() {
     iframeListenersRef.current.clear();
   }, []);
 
-  // Animation loop - separate from main useEffect to avoid re-renders
+  // Persistent animation loop - runs only once and never restarts
   useEffect(() => {
     const animate = () => {
-      let leaderX = position.x;
-      let leaderY = position.y;
+      // Use refs to get current values without causing re-renders
+      let leaderX = positionRef.current.x;
+      let leaderY = positionRef.current.y;
 
       setFilmSegments(prev =>
         prev.map((seg, index) => {
@@ -183,7 +203,7 @@ export default function CustomCursor() {
             Math.abs(movedX) > 0.01 || Math.abs(movedY) > 0.01
               ? Math.atan2(movedY, movedX) * (180 / Math.PI)
               : index === 0
-              ? currentRotation
+              ? currentRotationRef.current
               : seg.rotation;
 
           leaderX = newX;
@@ -196,6 +216,7 @@ export default function CustomCursor() {
       requestRef.current = requestAnimationFrame(animate);
     };
 
+    // Start the animation loop - only once
     requestRef.current = requestAnimationFrame(animate);
 
     return () => {
@@ -203,7 +224,7 @@ export default function CustomCursor() {
         cancelAnimationFrame(requestRef.current);
       }
     };
-  }, [position.x, position.y, currentRotation]);
+  }, []); // Empty dependency array - animation loop never restarts
 
   // Main setup effect - runs only once on mount
   useEffect(() => {
