@@ -158,9 +158,22 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
         } else if (!item.is_video) {
           // For images, check if we've already seen this image URL
           // Also skip if this image URL is already being used as a thumbnail for a video
-          const isVideoThumbnail = project.main_media.some(
-            (videoItem) => videoItem.is_video && videoItem.image_url === item.image_url
-          )
+          const isVideoThumbnail = project.main_media?.some(
+            (videoItem) => {
+              if (!videoItem.is_video) return false
+              
+              // Direct image URL match
+              if (videoItem.image_url === item.image_url) return true
+              
+              // For YouTube videos, also check if this matches the auto-generated thumbnail pattern
+              if (videoItem.video_platform?.toLowerCase() === 'youtube' && videoItem.video_id) {
+                const youtubeThumbUrl = `https://img.youtube.com/vi/${videoItem.video_id}/hqdefault.jpg`
+                if (item.image_url === youtubeThumbUrl) return true
+              }
+              
+              return false
+            }
+          ) || false
           
           if (!seenImageUrls.has(item.image_url) && !isVideoThumbnail) {
             seenImageUrls.add(item.image_url)
