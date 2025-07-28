@@ -8,82 +8,42 @@ export async function POST() {
     // Use admin client to bypass RLS
     const supabase = createAdminClient()
 
-    // Create main_media table similar to bts_images table
-    const createTableSQL = `
-      CREATE TABLE IF NOT EXISTS main_media (
-        id SERIAL PRIMARY KEY,
-        project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-        image_url TEXT NOT NULL,
-        caption TEXT,
-        is_video BOOLEAN DEFAULT FALSE,
-        video_url TEXT,
-        video_platform TEXT,
-        video_id TEXT,
-        display_order INTEGER DEFAULT 0,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-      );
-    `
+    // Check if main_media table already exists
+    const { data: existingTable, error: checkError } = await supabase
+      .from("main_media")
+      .select("id")
+      .limit(1)
 
-    const { error: tableError } = await supabase.rpc('exec_sql', { sql: createTableSQL })
-
-    if (tableError) {
-      console.error("Error creating main_media table:", tableError)
+    if (checkError && checkError.code !== 'PGRST116') {
+      // PGRST116 means table doesn't exist, which is expected
+      console.error("Error checking main_media table:", checkError)
       return NextResponse.json({
         success: false,
-        error: "Failed to create main_media table",
-        details: tableError.message
+        error: "Failed to check main_media table",
+        details: checkError.message
       }, { status: 500 })
     }
 
-    // Create indexes for better performance
-    const indexSQL = `
-      CREATE INDEX IF NOT EXISTS idx_main_media_project_id ON main_media(project_id);
-      CREATE INDEX IF NOT EXISTS idx_main_media_display_order ON main_media(project_id, display_order);
-    `
-
-    const { error: indexError } = await supabase.rpc('exec_sql', { sql: indexSQL })
-
-    if (indexError) {
-      console.error("Error creating indexes:", indexError)
-      // Don't fail on index errors, they're not critical
+    if (existingTable) {
+      console.log("Main media table already exists")
+      return NextResponse.json({
+        success: true,
+        message: "Main media table already exists",
+        tableExists: true
+      })
     }
 
-    // Set up RLS policy for main_media table
-    const rlsSQL = `
-      ALTER TABLE main_media ENABLE ROW LEVEL SECURITY;
-      
-      DROP POLICY IF EXISTS "Enable read access for all users" ON main_media;
-      CREATE POLICY "Enable read access for all users" ON main_media
-        FOR SELECT USING (true);
-      
-      DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON main_media;
-      CREATE POLICY "Enable insert for authenticated users only" ON main_media
-        FOR INSERT WITH CHECK (true);
-      
-      DROP POLICY IF EXISTS "Enable update for authenticated users only" ON main_media;
-      CREATE POLICY "Enable update for authenticated users only" ON main_media
-        FOR UPDATE USING (true);
-      
-      DROP POLICY IF EXISTS "Enable delete for authenticated users only" ON main_media;
-      CREATE POLICY "Enable delete for authenticated users only" ON main_media
-        FOR DELETE USING (true);
-    `
-
-    const { error: rlsError } = await supabase.rpc('exec_sql', { sql: rlsSQL })
-
-    if (rlsError) {
-      console.error("Error setting up RLS policies:", rlsError)
-      // Don't fail on RLS errors, table creation is more important
-    }
-
+    // Since we can't create tables via Supabase client, we'll return a message
+    // instructing the user to run the migration manually
+    console.log("Main media table does not exist - manual migration required")
+    
     return NextResponse.json({
-      success: true,
-      message: "Main media table created successfully",
-      tableCreated: true,
-      indexesCreated: !indexError,
-      rlsPoliciesCreated: !rlsError
-    })
+      success: false,
+      error: "Main media table does not exist",
+      message: "Please run the database migration manually using the SQL script in docs/migrations/",
+      manualMigrationRequired: true,
+      migrationScript: "docs/migrations/fix-thumbnail-visibility-default.sql"
+    }, { status: 400 })
 
   } catch (error) {
     console.error("Unexpected error setting up main media table:", error)

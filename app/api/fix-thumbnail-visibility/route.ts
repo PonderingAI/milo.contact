@@ -27,26 +27,13 @@ export async function POST() {
 
     console.log("Starting thumbnail visibility migration...")
 
-    // Step 1: Update the default value for the column
-    await supabase.rpc('exec_sql', {
-      sql: 'ALTER TABLE main_media ALTER COLUMN is_thumbnail_hidden SET DEFAULT FALSE;'
-    })
-
-    // Step 2: Update existing records that were set to TRUE due to the incorrect default
-    const { data: updateResult, error: updateError } = await supabase.rpc('exec_sql', {
-      sql: `
-        UPDATE main_media 
-        SET is_thumbnail_hidden = FALSE 
-        WHERE is_thumbnail_hidden = TRUE 
-          AND (
-            -- Regular images should be visible
-            (is_video = FALSE AND video_url IS NULL) 
-            OR 
-            -- Videos should be visible 
-            (is_video = TRUE AND video_url IS NOT NULL)
-          );
-      `
-    })
+    // Step 1: Update existing records that were set to TRUE due to the incorrect default
+    // We'll use standard Supabase update methods instead of raw SQL
+    const { data: updateResult, error: updateError } = await supabase
+      .from("main_media")
+      .update({ is_thumbnail_hidden: false })
+      .or('and(is_video.eq.false,video_url.is.null),and(is_video.eq.true,video_url.not.is.null)')
+      .eq('is_thumbnail_hidden', true)
 
     if (updateError) {
       console.error("Error updating visibility:", updateError)
@@ -56,30 +43,45 @@ export async function POST() {
       }, { status: 500 })
     }
 
-    // Step 3: Keep actual video thumbnail entries hidden
-    const { data: thumbnailResult, error: thumbnailError } = await supabase.rpc('exec_sql', {
-      sql: `
-        UPDATE main_media 
-        SET is_thumbnail_hidden = TRUE 
-        WHERE is_video = FALSE 
-          AND video_url IS NULL 
-          AND image_url IN (
-            -- Find images that are thumbnails for videos in the same project
-            SELECT m2.image_url 
-            FROM main_media m2 
-            WHERE m2.is_video = TRUE 
-              AND m2.project_id = main_media.project_id
-              AND m2.image_url = main_media.image_url
-          );
-      `
-    })
+    // Step 2: Handle video thumbnail entries that should remain hidden
+    // First, get all video entries to identify their thumbnails
+    const { data: videoEntries, error: videoError } = await supabase
+      .from("main_media")
+      .select("project_id, image_url")
+      .eq("is_video", true)
 
-    if (thumbnailError) {
-      console.error("Error updating thumbnail visibility:", thumbnailError)
+    if (videoError) {
+      console.error("Error fetching video entries:", videoError)
       return NextResponse.json({ 
-        error: "Failed to update thumbnail visibility",
-        details: thumbnailError.message
+        error: "Failed to fetch video entries",
+        details: videoError.message
       }, { status: 500 })
+    }
+
+    // Create a set of thumbnail URLs that should remain hidden
+    const thumbnailUrlsToHide = new Set<string>()
+    if (videoEntries) {
+      videoEntries.forEach(video => {
+        thumbnailUrlsToHide.add(video.image_url)
+      })
+    }
+
+    // Update non-video entries that are thumbnails for videos to be hidden
+    if (thumbnailUrlsToHide.size > 0) {
+      const { data: thumbnailResult, error: thumbnailError } = await supabase
+        .from("main_media")
+        .update({ is_thumbnail_hidden: true })
+        .eq("is_video", false)
+        .is("video_url", null)
+        .in("image_url", Array.from(thumbnailUrlsToHide))
+
+      if (thumbnailError) {
+        console.error("Error updating thumbnail visibility:", thumbnailError)
+        return NextResponse.json({ 
+          error: "Failed to update thumbnail visibility",
+          details: thumbnailError.message
+        }, { status: 500 })
+      }
     }
 
     // Get final count of visible vs hidden media
