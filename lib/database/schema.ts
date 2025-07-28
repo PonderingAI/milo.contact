@@ -346,7 +346,7 @@ CREATE TABLE IF NOT EXISTS main_media (
   video_platform TEXT,
   video_id TEXT,
   display_order INTEGER DEFAULT 0,
-  is_thumbnail_hidden BOOLEAN DEFAULT TRUE,
+  is_thumbnail_hidden BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
@@ -417,7 +417,7 @@ END $$;`,
       { name: "video_platform", type: "TEXT" },
       { name: "video_id", type: "TEXT" },
       { name: "display_order", type: "INTEGER", default: "0" },
-      { name: "is_thumbnail_hidden", type: "BOOLEAN", default: "TRUE" },
+      { name: "is_thumbnail_hidden", type: "BOOLEAN", default: "FALSE" },
       { name: "created_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" },
       { name: "updated_at", type: "TIMESTAMP WITH TIME ZONE", default: "NOW()" }
     ],

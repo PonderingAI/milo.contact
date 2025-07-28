@@ -56,21 +56,55 @@ async function processVideoUrl(url: string): Promise<{
         let thumbnailUrl = "/generic-icon.png"
         let title = `Vimeo Video ${videoId}`
         
-        // Try to fetch Vimeo thumbnail
+        // Try to fetch Vimeo thumbnail with improved error handling
         try {
-          const response = await fetch(`https://vimeo.com/api/v2/video/${videoId}.json`)
+          console.log(`Attempting to fetch Vimeo metadata for video ID: ${videoId}`)
+          const response = await fetch(`https://vimeo.com/api/v2/video/${videoId}.json`, {
+            headers: {
+              'User-Agent': 'milo.contact/1.0'
+            }
+          })
+          
           if (response.ok) {
             const videoData = await response.json()
-            const video = videoData[0]
-            if (video.thumbnail_large) {
-              thumbnailUrl = video.thumbnail_large
+            if (videoData && Array.isArray(videoData) && videoData.length > 0) {
+              const video = videoData[0]
+              if (video.thumbnail_large) {
+                thumbnailUrl = video.thumbnail_large
+                console.log(`Successfully fetched Vimeo thumbnail: ${thumbnailUrl}`)
+              }
+              if (video.title) {
+                title = video.title
+                console.log(`Successfully fetched Vimeo title: ${title}`)
+              }
+            } else {
+              console.warn(`Vimeo API returned empty or invalid data for video ${videoId}`)
             }
-            if (video.title) {
-              title = video.title
+          } else {
+            console.warn(`Failed to fetch Vimeo metadata: ${response.status} ${response.statusText}`)
+            // Try alternative thumbnail sizes if large fails
+            try {
+              const altResponse = await fetch(`https://vimeo.com/api/v2/video/${videoId}.json`)
+              if (altResponse.ok) {
+                const altData = await altResponse.json()
+                if (altData && altData[0] && altData[0].thumbnail_medium) {
+                  thumbnailUrl = altData[0].thumbnail_medium
+                  console.log(`Used fallback Vimeo thumbnail: ${thumbnailUrl}`)
+                }
+              }
+            } catch (altError) {
+              console.error("Fallback Vimeo API also failed:", altError)
             }
           }
         } catch (error) {
           console.error("Error fetching Vimeo metadata:", error)
+          // Additional fallback: construct thumbnail URL directly if possible
+          try {
+            thumbnailUrl = `https://i.vimeocdn.com/video/${videoId}_640x360.jpg`
+            console.log(`Using constructed Vimeo thumbnail URL: ${thumbnailUrl}`)
+          } catch (constructError) {
+            console.error("Could not construct fallback thumbnail URL:", constructError)
+          }
         }
         
         return {
@@ -165,7 +199,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // Process media items and create entries for both videos and thumbnails
+    // Process media items and create entries according to user requirements
     const mainMediaData = []
     let displayOrder = 0
 
@@ -173,32 +207,20 @@ export async function POST(request: Request) {
       const videoInfo = await processVideoUrl(mediaUrl)
       
       if (videoInfo) {
-        // This is a video URL - create both thumbnail and video entries
+        // This is a video URL - create a single video entry with thumbnail preview
+        // The thumbnail is stored as image_url for preview purposes
+        // No separate thumbnail entry is created to avoid duplication
         
-        // 1. Create thumbnail entry (hidden by default)
         mainMediaData.push({
           project_id: projectId,
-          image_url: videoInfo.thumbnailUrl,
-          is_video: false,
-          video_url: null,
-          video_platform: null,
-          video_id: null,
-          display_order: displayOrder++,
-          caption: `${videoInfo.title} (Thumbnail)`,
-          is_thumbnail_hidden: true // Hidden by default
-        })
-
-        // 2. Create video entry
-        mainMediaData.push({
-          project_id: projectId,
-          image_url: videoInfo.thumbnailUrl, // Store thumbnail URL for video preview
+          image_url: videoInfo.thumbnailUrl, // Thumbnail for video preview
           is_video: true,
           video_url: videoInfo.embedUrl,
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
           display_order: displayOrder++,
           caption: videoInfo.title,
-          is_thumbnail_hidden: false // Video is always visible
+          is_thumbnail_hidden: false // Video with thumbnail preview is always visible
         })
       } else {
         // Regular image

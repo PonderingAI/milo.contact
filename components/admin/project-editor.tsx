@@ -811,10 +811,8 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               // Use thumbnail if available
               if (mediaData.thumbnail_url && !formData.image) {
                 setFormData((prev) => ({ ...prev, image: mediaData.thumbnail_url }))
-                if (!mainImages.includes(mediaData.thumbnail_url)) {
-                  setMainImages((prev) => [...prev, mediaData.thumbnail_url])
-                  userHasModifiedMainMedia.current = true
-                }
+                // Note: Video thumbnails are handled by the main-media API automatically
+                // Do not add thumbnails to mainImages to prevent duplication
               }
 
               // Extract date if available
@@ -1052,10 +1050,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         const uploadDate = result.uploadDate
 
         // Use thumbnail if available and no image is set
-        if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+        if (thumbnailUrl && !formData.image) {
           setFormData(prev => ({ ...prev, image: thumbnailUrl }))
           setVideoThumbnail(thumbnailUrl)
-          setMainImages(prev => [...prev, thumbnailUrl])
+          // Note: Video thumbnails are handled by the main-media API automatically
+          // Do not add thumbnails to mainImages to prevent duplication
           userHasModifiedMainMedia.current = true
         }
 
