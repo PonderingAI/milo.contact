@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
-import { X, Volume2, VolumeX } from 'lucide-react';
+import { X } from 'lucide-react';
 
 interface FullScreenColorProps {
   color: string;
@@ -11,7 +11,6 @@ interface FullScreenColorProps {
 }
 
 export function FullScreenColor({ color, brightness, onExit }: FullScreenColorProps) {
-  const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
 
   // Get fullscreen element with vendor prefixes
@@ -45,7 +44,7 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
   };
 
   // Handle exit with compatibility
-  const handleExit = async () => {
+  const handleExit = useCallback(async () => {
     try {
       await exitFullscreen();
       onExit();
@@ -54,7 +53,7 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
       // Fallback: just call onExit
       onExit();
     }
-  };
+  }, [onExit]);
 
   // Hide controls after 3 seconds of inactivity
   useEffect(() => {
@@ -68,35 +67,27 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
   }, [showControls]);
 
   // Show controls on mouse move or touch
-  const handleInteraction = () => {
+  const handleInteraction = useCallback(() => {
     setShowControls(true);
-  };
+  }, []);
 
-  // Handle keyboard shortcuts
+  // Handle keyboard shortcuts with functional updates
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'Escape':
           handleExit();
           break;
-        case ' ':
-          e.preventDefault();
-          setIsMuted(!isMuted);
-          break;
-        case 'm':
-        case 'M':
-          setIsMuted(!isMuted);
-          break;
         case 'c':
         case 'C':
-          setShowControls(!showControls);
+          setShowControls(prev => !prev);
           break;
       }
     };
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onExit, isMuted, showControls]);
+  }, [handleExit]);
 
   return (
     <div
@@ -112,16 +103,6 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
       {/* Controls Overlay */}
       {showControls && (
         <div className="absolute top-4 right-4 flex gap-2 z-50">
-          <Button
-            variant="outline"
-            size="sm"
-            className="bg-black/50 border-white/20 text-white hover:bg-black/70 backdrop-blur-sm"
-            onClick={() => setIsMuted(!isMuted)}
-            title={isMuted ? 'Unmute (M)' : 'Mute (M)'}
-          >
-            {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-          </Button>
-          
           <Button
             variant="outline"
             size="sm"
@@ -150,9 +131,7 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
           <div className="text-sm space-y-2">
             <div><strong>Keyboard Shortcuts:</strong></div>
             <div>• <kbd className="px-2 py-1 bg-white/20 rounded text-xs">Esc</kbd> - Exit full screen</div>
-            <div>• <kbd className="px-2 py-1 bg-white/20 rounded text-xs">M</kbd> - Toggle mute</div>
             <div>• <kbd className="px-2 py-1 bg-white/20 rounded text-xs">C</kbd> - Toggle controls</div>
-            <div>• <kbd className="px-2 py-1 bg-white/20 rounded text-xs">Space</kbd> - Toggle mute</div>
           </div>
         </div>
       )}

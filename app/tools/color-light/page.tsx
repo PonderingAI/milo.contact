@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { FullScreenColor } from '@/components/tools/full-screen-color';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,10 @@ export default function ColorLightPage() {
   const [rgb, setRgb] = useState({ r: 255, g: 107, b: 107 });
   const [hex, setHex] = useState('#ff6b6b');
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
+  const [isUpdatingFromHex, setIsUpdatingFromHex] = useState(false);
+  const [isUpdatingFromRgb, setIsUpdatingFromRgb] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   // Check for fullscreen API support
   useEffect(() => {
@@ -82,42 +85,48 @@ export default function ColorLightPage() {
   };
 
   // Convert hex to RGB
-  const hexToRgb = (hex: string) => {
+  const hexToRgb = useCallback((hex: string) => {
     const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
     return result ? {
       r: parseInt(result[1], 16),
       g: parseInt(result[2], 16),
       b: parseInt(result[3], 16)
     } : { r: 0, g: 0, b: 0 };
-  };
+  }, []);
 
   // Convert RGB to hex
-  const rgbToHex = (r: number, g: number, b: number) => {
+  const rgbToHex = useCallback((r: number, g: number, b: number) => {
     return '#' + [r, g, b].map(x => {
       const hex = x.toString(16);
       return hex.length === 1 ? '0' + hex : hex;
     }).join('');
-  };
+  }, []);
 
-  // Update RGB when hex changes
+  // Update RGB when hex changes (only if not updating from RGB)
   useEffect(() => {
-    setRgb(hexToRgb(hex));
-  }, [hex]);
+    if (!isUpdatingFromRgb) {
+      const newRgb = hexToRgb(hex);
+      setRgb(newRgb);
+      setSelectedColor(hex);
+    }
+  }, [hex, hexToRgb, isUpdatingFromRgb]);
 
-  // Update hex when RGB changes
+  // Update hex when RGB changes (only if not updating from hex)
   useEffect(() => {
-    setHex(rgbToHex(rgb.r, rgb.g, rgb.b));
-  }, [rgb]);
-
-  // Update parent when color changes
-  useEffect(() => {
-    setSelectedColor(hex);
-  }, [hex]);
+    if (!isUpdatingFromHex) {
+      const newHex = rgbToHex(rgb.r, rgb.g, rgb.b);
+      setHex(newHex);
+      setSelectedColor(newHex);
+    }
+  }, [rgb, rgbToHex, isUpdatingFromHex]);
 
   // Handle hex input
   const handleHexChange = (value: string) => {
     if (value.match(/^#[0-9A-Fa-f]{6}$/)) {
+      setIsUpdatingFromHex(true);
       setHex(value);
+      // Reset flag after state update
+      setTimeout(() => setIsUpdatingFromHex(false), 0);
     }
   };
 
@@ -125,7 +134,10 @@ export default function ColorLightPage() {
   const handleRgbChange = (value: string, channel: 'r' | 'g' | 'b') => {
     const num = parseInt(value);
     if (!isNaN(num) && num >= 0 && num <= 255) {
+      setIsUpdatingFromRgb(true);
       setRgb(prev => ({ ...prev, [channel]: num }));
+      // Reset flag after state update
+      setTimeout(() => setIsUpdatingFromRgb(false), 0);
     }
   };
 
@@ -143,11 +155,13 @@ export default function ColorLightPage() {
 
     const imageData = ctx.getImageData(x, y, 1, 1).data;
     const newRgb = { r: imageData[0], g: imageData[1], b: imageData[2] };
+    setIsUpdatingFromRgb(true);
     setRgb(newRgb);
+    setTimeout(() => setIsUpdatingFromRgb(false), 0);
   };
 
   // Draw color wheel on canvas
-  useEffect(() => {
+  const drawColorWheel = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -155,11 +169,11 @@ export default function ColorLightPage() {
     if (!ctx) return;
 
     // Make canvas responsive to container size
-    const container = canvas.parentElement;
+    const container = containerRef.current;
     if (!container) return;
 
     const rect = container.getBoundingClientRect();
-    const size = Math.min(rect.width, rect.height) - 40; // Leave some padding
+    const size = Math.max(Math.min(rect.width, rect.height) - 40, 100); // Minimum size of 100px
     
     canvas.width = size;
     canvas.height = size;
@@ -188,6 +202,18 @@ export default function ColorLightPage() {
       }
     }
   }, []);
+
+  // Initial draw and resize handling
+  useEffect(() => {
+    drawColorWheel();
+
+    const handleResize = () => {
+      drawColorWheel();
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [drawColorWheel]);
 
   // Handle fullscreen toggle
   const toggleFullScreen = async () => {
@@ -272,21 +298,32 @@ export default function ColorLightPage() {
       <div className="h-full flex">
         {/* Left Side - Brightness Slider */}
         <div className="w-1/3 h-full flex flex-col justify-center items-center space-y-8 p-8">
-          {/* Vertical Brightness Slider */}
+          {/* Vertical Brightness Slider with Gradient Background */}
           <div className="flex flex-col items-center space-y-4">
-            <div className="text-white text-sm font-mono">Brightness</div>
-            <div className="h-64 w-8 relative">
-              <Slider
-                orientation="vertical"
-                value={[brightness]}
-                onValueChange={(value) => setBrightness(value[0])}
-                max={200}
-                min={10}
-                step={1}
-                className="h-full [&>span]:bg-white"
+            <div className="h-64 w-8 relative rounded-full overflow-hidden">
+              {/* Gradient Background */}
+              <div 
+                className="absolute inset-0 rounded-full"
+                style={{
+                  background: `linear-gradient(to top, 
+                    ${selectedColor} 0%, 
+                    ${selectedColor} 50%, 
+                    #000000 100%)`
+                }}
               />
+              {/* Slider */}
+              <div className="relative h-full">
+                <Slider
+                  orientation="vertical"
+                  value={[brightness]}
+                  onValueChange={(value) => setBrightness(value[0])}
+                  max={200}
+                  min={10}
+                  step={1}
+                  className="h-full [&>span]:bg-white [&>span]:w-1 [&>span]:rounded-none"
+                />
+              </div>
             </div>
-            <div className="text-white text-sm font-mono">{brightness}%</div>
           </div>
 
           {/* Input Fields */}
@@ -321,7 +358,7 @@ export default function ColorLightPage() {
         </div>
 
         {/* Right Side - Color Wheel */}
-        <div className="w-2/3 h-full flex items-center justify-center p-8">
+        <div ref={containerRef} className="w-2/3 h-full flex items-center justify-center p-8">
           <canvas
             ref={canvasRef}
             className="rounded-full cursor-crosshair border-2 border-white/20 shadow-lg"
