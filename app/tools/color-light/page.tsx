@@ -13,7 +13,73 @@ export default function ColorLightPage() {
   const [isFullScreen, setIsFullScreen] = useState(false);
   const [rgb, setRgb] = useState({ r: 255, g: 107, b: 107 });
   const [hex, setHex] = useState('#ff6b6b');
+  const [fullscreenSupported, setFullscreenSupported] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // Check for fullscreen API support
+  useEffect(() => {
+    const checkFullscreenSupport = () => {
+      const doc = document as any;
+      const isSupported = !!(
+        doc.fullscreenEnabled ||
+        doc.webkitFullscreenEnabled ||
+        doc.mozFullScreenEnabled ||
+        doc.msFullscreenEnabled
+      );
+      setFullscreenSupported(isSupported);
+    };
+
+    checkFullscreenSupport();
+  }, []);
+
+  // Get fullscreen element with vendor prefixes
+  const getFullscreenElement = () => {
+    const doc = document as any;
+    return (
+      doc.fullscreenElement ||
+      doc.webkitFullscreenElement ||
+      doc.mozFullScreenElement ||
+      doc.msFullscreenElement
+    );
+  };
+
+  // Request fullscreen with vendor prefixes
+  const requestFullscreen = (element: HTMLElement) => {
+    const el = element as any;
+    
+    if (el.requestFullscreen) {
+      return el.requestFullscreen();
+    } else if (el.webkitRequestFullscreen) {
+      return el.webkitRequestFullscreen();
+    } else if (el.mozRequestFullScreen) {
+      return el.mozRequestFullScreen();
+    } else if (el.msRequestFullscreen) {
+      return el.msRequestFullscreen();
+    }
+    
+    // Fallback: just set the state to true for older browsers
+    setIsFullScreen(true);
+    return Promise.resolve();
+  };
+
+  // Exit fullscreen with vendor prefixes
+  const exitFullscreen = () => {
+    const doc = document as any;
+    
+    if (doc.exitFullscreen) {
+      return doc.exitFullscreen();
+    } else if (doc.webkitExitFullscreen) {
+      return doc.webkitExitFullscreen();
+    } else if (doc.mozCancelFullScreen) {
+      return doc.mozCancelFullScreen();
+    } else if (doc.msExitFullscreen) {
+      return doc.msExitFullscreen();
+    }
+    
+    // Fallback: just set the state to false for older browsers
+    setIsFullScreen(false);
+    return Promise.resolve();
+  };
 
   // Convert hex to RGB
   const hexToRgb = (hex: string) => {
@@ -124,25 +190,47 @@ export default function ColorLightPage() {
   }, []);
 
   // Handle fullscreen toggle
-  const toggleFullScreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen();
-      setIsFullScreen(true);
-    } else {
-      document.exitFullscreen();
-      setIsFullScreen(false);
+  const toggleFullScreen = async () => {
+    try {
+      if (!getFullscreenElement()) {
+        await requestFullscreen(document.documentElement);
+        setIsFullScreen(true);
+      } else {
+        await exitFullscreen();
+        setIsFullScreen(false);
+      }
+    } catch (error) {
+      console.warn('Fullscreen API not supported or failed:', error);
+      // Fallback: toggle state manually for older browsers
+      setIsFullScreen(!isFullScreen);
     }
   };
 
-  // Listen for fullscreen changes
+  // Listen for fullscreen changes with vendor prefixes
   useEffect(() => {
     const handleFullscreenChange = () => {
-      setIsFullScreen(!!document.fullscreenElement);
+      const isFullscreen = !!getFullscreenElement();
+      setIsFullScreen(isFullscreen);
     };
 
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    const doc = document as any;
+    
+    // Add listeners for all vendor prefixes
+    const events = [
+      'fullscreenchange',
+      'webkitfullscreenchange',
+      'mozfullscreenchange',
+      'MSFullscreenChange'
+    ];
+
+    events.forEach(event => {
+      doc.addEventListener(event, handleFullscreenChange);
+    });
+
     return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      events.forEach(event => {
+        doc.removeEventListener(event, handleFullscreenChange);
+      });
     };
   }, []);
 
@@ -152,7 +240,7 @@ export default function ColorLightPage() {
         color={selectedColor} 
         brightness={brightness}
         onExit={() => {
-          document.exitFullscreen();
+          exitFullscreen();
           setIsFullScreen(false);
         }}
       />
@@ -173,6 +261,8 @@ export default function ColorLightPage() {
           onClick={toggleFullScreen}
           size="sm"
           className="bg-black/30 backdrop-blur-sm border-white/20 text-white hover:bg-black/50 transition-all duration-300"
+          disabled={!fullscreenSupported}
+          title={fullscreenSupported ? "Enter Full Screen" : "Full Screen Not Supported"}
         >
           <Maximize2 className="w-4 h-4" />
         </Button>

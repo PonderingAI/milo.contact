@@ -14,6 +14,48 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
   const [isMuted, setIsMuted] = useState(false);
   const [showControls, setShowControls] = useState(true);
 
+  // Get fullscreen element with vendor prefixes
+  const getFullscreenElement = () => {
+    const doc = document as any;
+    return (
+      doc.fullscreenElement ||
+      doc.webkitFullscreenElement ||
+      doc.mozFullScreenElement ||
+      doc.msFullscreenElement
+    );
+  };
+
+  // Exit fullscreen with vendor prefixes
+  const exitFullscreen = () => {
+    const doc = document as any;
+    
+    if (doc.exitFullscreen) {
+      return doc.exitFullscreen();
+    } else if (doc.webkitExitFullscreen) {
+      return doc.webkitExitFullscreen();
+    } else if (doc.mozCancelFullScreen) {
+      return doc.mozCancelFullScreen();
+    } else if (doc.msExitFullscreen) {
+      return doc.msExitFullscreen();
+    }
+    
+    // Fallback: just call onExit for older browsers
+    onExit();
+    return Promise.resolve();
+  };
+
+  // Handle exit with compatibility
+  const handleExit = async () => {
+    try {
+      await exitFullscreen();
+      onExit();
+    } catch (error) {
+      console.warn('Failed to exit fullscreen:', error);
+      // Fallback: just call onExit
+      onExit();
+    }
+  };
+
   // Hide controls after 3 seconds of inactivity
   useEffect(() => {
     if (!showControls) return;
@@ -35,7 +77,7 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
     const handleKeyDown = (e: KeyboardEvent) => {
       switch (e.key) {
         case 'Escape':
-          onExit();
+          handleExit();
           break;
         case ' ':
           e.preventDefault();
@@ -84,7 +126,7 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
             variant="outline"
             size="sm"
             className="bg-black/50 border-white/20 text-white hover:bg-black/70 backdrop-blur-sm"
-            onClick={onExit}
+            onClick={handleExit}
             title="Exit Full Screen (Esc)"
           >
             <X className="w-4 h-4" />
@@ -120,7 +162,7 @@ export function FullScreenColor({ color, brightness, onExit }: FullScreenColorPr
         <Button
           size="lg"
           className="bg-black/50 border-white/20 text-white hover:bg-black/70 backdrop-blur-sm rounded-full w-12 h-12 p-0"
-          onClick={onExit}
+          onClick={handleExit}
         >
           <X className="w-6 h-6" />
         </Button>
