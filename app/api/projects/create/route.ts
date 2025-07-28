@@ -96,13 +96,11 @@ export async function POST(request: Request) {
         // Combine all main media URLs
         const allMainMediaUrls = [...mainImages, ...mainVideos]
         
-        // Process each media URL through the unified video processing
-        for (const mediaUrl of allMainMediaUrls) {
-          if (!mediaUrl) continue
+        // Process all media URLs through the unified media processing API
+        if (allMainMediaUrls.length > 0) {
+          console.log("Processing main media URLs:", allMainMediaUrls)
           
-          console.log("Processing main media URL:", mediaUrl)
-          
-          // Call the unified main media processing API
+          // Call the unified main media processing API with correct parameters
           const mediaResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/projects/main-media`, {
             method: "POST",
             headers: {
@@ -110,14 +108,15 @@ export async function POST(request: Request) {
             },
             body: JSON.stringify({
               projectId: createdProject.id,
-              mediaUrl: mediaUrl
+              media: allMainMediaUrls, // Send as array, not individual mediaUrl
+              replaceExisting: false // Don't replace since this is a new project
             }),
           })
 
           if (!mediaResponse.ok) {
             const errorData = await mediaResponse.json()
             console.error("Error processing main media:", errorData)
-            // Continue with other media URLs even if one fails
+            // Continue - don't fail project creation if media processing fails
           } else {
             const mediaResult = await mediaResponse.json()
             console.log("Main media processed successfully:", mediaResult)

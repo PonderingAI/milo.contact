@@ -508,12 +508,9 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           const result = await response.json()
           console.log("DEBUG: Video processing result:", result)
 
-          // Add thumbnail to mainImages if we have one and it's not already there
-          if (result.thumbnailUrl && !mainImages.includes(result.thumbnailUrl)) {
-            console.log("Adding video thumbnail to mainImages:", result.thumbnailUrl)
-            setMainImages((prev) => [...prev, result.thumbnailUrl])
-          }
-
+          // Note: Video thumbnails are handled by the main-media API automatically
+          // Do not add thumbnails to mainImages to prevent duplication
+          
           // Set as cover image if none is set
           if (result.thumbnailUrl && !formData.image) {
             console.log("Setting video thumbnail as cover image:", result.thumbnailUrl)

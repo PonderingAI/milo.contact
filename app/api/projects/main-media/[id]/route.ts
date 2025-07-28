@@ -31,15 +31,31 @@ export async function GET(
 
     if (error) {
       console.error("Error fetching main media:", error)
+      
+      // Check if the error is due to missing table (graceful handling)
+      if (error.code === "42P01" || error.message.includes("relation") && error.message.includes("does not exist")) {
+        console.log("main_media table does not exist, returning empty response")
+        return NextResponse.json({
+          success: true,
+          media: [], // Legacy format for backward compatibility
+          fullData: [], // Legacy format for backward compatibility
+          data: [], // Current format
+          count: 0
+        })
+      }
+      
       return NextResponse.json({ 
         error: "Error fetching main media",
         details: error.message
       }, { status: 500 })
     }
 
+    // Return response with both legacy and current format for backward compatibility
     return NextResponse.json({
       success: true,
-      data: data || [],
+      media: data || [], // Legacy format for backward compatibility
+      fullData: data || [], // Legacy format for backward compatibility
+      data: data || [], // Current format
       count: data?.length || 0
     })
   } catch (error) {
