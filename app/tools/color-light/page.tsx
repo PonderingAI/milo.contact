@@ -14,8 +14,7 @@ export default function ColorLightPage() {
   const [rgb, setRgb] = useState({ r: 255, g: 107, b: 107 });
   const [hex, setHex] = useState('#ff6b6b');
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
-  const [isUpdatingFromHex, setIsUpdatingFromHex] = useState(false);
-  const [isUpdatingFromRgb, setIsUpdatingFromRgb] = useState(false);
+  const [updateSource, setUpdateSource] = useState<'hex' | 'rgb' | 'canvas' | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -104,29 +103,29 @@ export default function ColorLightPage() {
 
   // Update RGB when hex changes (only if not updating from RGB)
   useEffect(() => {
-    if (!isUpdatingFromRgb) {
+    if (updateSource !== 'rgb' && updateSource !== 'canvas') {
       const newRgb = hexToRgb(hex);
       setRgb(newRgb);
       setSelectedColor(hex);
     }
-  }, [hex, hexToRgb, isUpdatingFromRgb]);
+  }, [hex, hexToRgb, updateSource]);
 
   // Update hex when RGB changes (only if not updating from hex)
   useEffect(() => {
-    if (!isUpdatingFromHex) {
+    if (updateSource !== 'hex') {
       const newHex = rgbToHex(rgb.r, rgb.g, rgb.b);
       setHex(newHex);
       setSelectedColor(newHex);
     }
-  }, [rgb, rgbToHex, isUpdatingFromHex]);
+  }, [rgb, rgbToHex, updateSource]);
 
   // Handle hex input
   const handleHexChange = (value: string) => {
     if (value.match(/^#[0-9A-Fa-f]{6}$/)) {
-      setIsUpdatingFromHex(true);
+      setUpdateSource('hex');
       setHex(value);
-      // Reset flag after state update
-      setTimeout(() => setIsUpdatingFromHex(false), 0);
+      // Reset source after state update
+      setUpdateSource(null);
     }
   };
 
@@ -134,10 +133,10 @@ export default function ColorLightPage() {
   const handleRgbChange = (value: string, channel: 'r' | 'g' | 'b') => {
     const num = parseInt(value);
     if (!isNaN(num) && num >= 0 && num <= 255) {
-      setIsUpdatingFromRgb(true);
+      setUpdateSource('rgb');
       setRgb(prev => ({ ...prev, [channel]: num }));
-      // Reset flag after state update
-      setTimeout(() => setIsUpdatingFromRgb(false), 0);
+      // Reset source after state update
+      setUpdateSource(null);
     }
   };
 
@@ -155,9 +154,10 @@ export default function ColorLightPage() {
 
     const imageData = ctx.getImageData(x, y, 1, 1).data;
     const newRgb = { r: imageData[0], g: imageData[1], b: imageData[2] };
-    setIsUpdatingFromRgb(true);
+    setUpdateSource('canvas');
     setRgb(newRgb);
-    setTimeout(() => setIsUpdatingFromRgb(false), 0);
+    // Reset source after state update
+    setUpdateSource(null);
   };
 
   // Draw color wheel on canvas
@@ -260,15 +260,18 @@ export default function ColorLightPage() {
     };
   }, []);
 
+  // Handle exit from fullscreen
+  const handleExitFullscreen = useCallback(() => {
+    exitFullscreen();
+    setIsFullScreen(false);
+  }, []);
+
   if (isFullScreen) {
     return (
       <FullScreenColor 
         color={selectedColor} 
         brightness={brightness}
-        onExit={() => {
-          exitFullscreen();
-          setIsFullScreen(false);
-        }}
+        onExit={handleExitFullscreen}
       />
     );
   }
