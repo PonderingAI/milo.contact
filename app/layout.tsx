@@ -11,6 +11,7 @@ import { Analytics } from "@vercel/analytics/react"
 import { Suspense } from "react"
 import { initErrorTracking } from "@/lib/error-tracking"
 import { createAdminClient } from "@/lib/supabase-server"
+import { Toaster } from "@/components/ui/sonner"
 
 // Removed: import dynamic from 'next/dynamic'
 // Removed: const DynamicCustomCursor = dynamic(() => import('@/components/custom-cursor'), { ssr: false })
@@ -84,6 +85,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             <Suspense>{children}</Suspense>
             <Analytics />
             <CookieConsent />
+            <Toaster />
           </ThemeProvider>
           {/* Database setup popup - wrapped in error handling */}
           <ErrorBoundary fallback={<div className="hidden">Database setup error</div>}>
