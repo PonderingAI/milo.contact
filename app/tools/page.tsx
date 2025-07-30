@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { Sparkles, ArrowLeft, Search } from "lucide-react"
+import { Sparkles, ArrowLeft, Search, Monitor } from "lucide-react"
 import ToolsSearchBar from "@/components/tools-search-bar"
 import ToolsTagFilter from "@/components/tools-tag-filter"
 
@@ -14,6 +14,14 @@ const tools = [
     icon: Sparkles,
     status: "stable",
     tags: ["AI"],
+  },
+  {
+    id: "color-light",
+    name: "Color Light Tool",
+    description: "Professional film lighting color monitor with full-screen display and precise RGB controls.",
+    icon: Monitor,
+    status: "stable",
+    tags: ["Film", "Lighting", "Production"],
   },
 ]
 
