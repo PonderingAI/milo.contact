@@ -128,33 +128,21 @@ CREATE POLICY "authenticated_delete_settings"
 ON site_settings FOR DELETE TO authenticated USING (true);
     `.trim()
 
-    console.log("Executing SQL migration...")
-    const { data, error } = await supabase.rpc('exec_sql', { sql_query: migrationSql })
-
-    if (error) {
-      console.error("Error applying RLS fixes:", error)
-      return NextResponse.json({
-        success: false,
-        error: "Failed to apply RLS policy fixes",
-        details: error.message,
-        code: error.code,
-        debug_userIdFromAuth: userId,
-      }, { status: 500 })
-    }
-
-    console.log("RLS policy fixes applied successfully")
+    console.log("RLS policy fixes require manual migration")
     
     return NextResponse.json({
-      success: true,
-      message: "RLS policy fixes applied successfully",
-      details: "All tables now use authenticated user policies instead of user_roles table checks",
-      applied_fixes: [
-        "projects table - all CRUD operations for authenticated users",
-        "bts_images table - all CRUD operations for authenticated users", 
-        "media table - all CRUD operations for authenticated users",
-        "site_settings table - all CRUD operations for authenticated users"
-      ]
-    })
+      success: false,
+      error: "Manual migration required",
+      message: "RLS policy fixes require manual database migration. Please run the SQL script manually in your Supabase dashboard.",
+      manualMigrationRequired: true,
+      migrationSteps: [
+        "1. Go to your Supabase dashboard",
+        "2. Navigate to the SQL Editor",
+        "3. Run the RLS policy migration script",
+        "4. The script will update all table policies to use authenticated user access"
+      ],
+      note: "This is a one-time migration to fix RLS policy issues"
+    }, { status: 400 })
 
   } catch (error) {
     console.error("=== APPLY RLS FIX ERROR ===", error)
