@@ -1,0 +1,18 @@
+---
+description: Enable TypeScript strict mode across the project.
+globs: []
+alwaysApply: false
+---
+description: Implement proper error handling with try-catch in server and client code.
+globs: []
+alwaysApply: false
+---
+description: On the client, use 'createClientComponentClient()' for Supabase.
+globs: []
+alwaysApply: false
+---
+description: Prefer component composition over inheritance.
+globs: []
+alwaysApply: false
+---
+

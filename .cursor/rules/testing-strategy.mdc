@@ -1,0 +1,18 @@
+---
+description: Write unit tests for utilities.
+globs: []
+alwaysApply: false
+---
+description: Add integration tests for APIs.
+globs: []
+alwaysApply: false
+---
+description: Mock Supabase for testing.
+globs: []
+alwaysApply: false
+---
+description: Use test database configurations for safe testing.
+globs: []
+alwaysApply: false
+---
+

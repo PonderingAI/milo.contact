@@ -1,0 +1,14 @@
+---
+description: Use pnpm for local development.
+globs: []
+alwaysApply: false
+---
+description: For production and Vercel builds, run 'npm install --legacy-peer-deps' before 'npm run build'.
+globs: []
+alwaysApply: false
+---
+description: Never use yarn or plain 'npm install'.
+globs: []
+alwaysApply: false
+---
+

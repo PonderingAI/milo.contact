@@ -1,0 +1,14 @@
+---
+description: Quick setup — 'pnpm install && pnpm run dev'.
+globs: []
+alwaysApply: false
+---
+description: Database management — 'npm run db:validate', 'npm run db:generate basic', 'npm run db:test minimal'.
+globs: []
+alwaysApply: false
+---
+description: Health check — 'pnpm run build', 'pnpm run lint', 'git status --porcelain'.
+globs: []
+alwaysApply: false
+---
+

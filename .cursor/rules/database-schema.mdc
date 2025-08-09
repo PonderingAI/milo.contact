@@ -1,0 +1,14 @@
+---
+description: Database schema single source of truth is 'lib/database/schema.ts'.
+globs: []
+alwaysApply: false
+---
+description: Migration safety — add NOT NULL columns as nullable first, backfill, then set NOT NULL.
+globs: []
+alwaysApply: false
+---
+description: Use predefined testing configurations — minimal, basic, full, development.
+globs: []
+alwaysApply: false
+---
+

@@ -1,0 +1,6 @@
+---
+description: Portfolio website with Next.js 15, TypeScript, Tailwind CSS, and Supabase. Features a comprehensive database management system with centralized schema, validation, and testing.
+globs: []
+alwaysApply: false
+---
+

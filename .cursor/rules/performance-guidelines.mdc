@@ -1,0 +1,14 @@
+---
+description: Auto-refresh no more frequently than every 30 seconds.
+globs: []
+alwaysApply: false
+---
+description: Lazy load heavy components and use dynamic imports when appropriate.
+globs: []
+alwaysApply: false
+---
+description: Use React.memo for expensive renders and minimize API calls.
+globs: []
+alwaysApply: false
+---
+

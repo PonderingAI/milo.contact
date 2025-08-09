@@ -1,0 +1,18 @@
+---
+description: Do not add UI frameworks or routers other than Next/React — @remix-run/react, @sveltejs/kit, svelte, vue, vue-router are forbidden.
+globs: []
+alwaysApply: false
+---
+description: Do not import Node core modules in the app layer — fs, path, crypto, util, child_process are forbidden.
+globs: []
+alwaysApply: false
+---
+description: Do not use any dependency with version "latest".
+globs: []
+alwaysApply: false
+---
+description: Do not use React 19 or any package requiring React > 18.3.1.
+globs: []
+alwaysApply: false
+---
+
