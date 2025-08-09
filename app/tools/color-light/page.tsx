@@ -5,7 +5,9 @@ import { FullScreenColor } from '@/components/tools/full-screen-color';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Slider } from '@/components/ui/slider';
-import { Maximize2 } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Label } from '@/components/ui/label';
+import { Maximize2, Copy, Check } from 'lucide-react';
 
 export default function ColorLightPage() {
   const [selectedColor, setSelectedColor] = useState('#ff6b6b');
@@ -14,6 +16,7 @@ export default function ColorLightPage() {
   const [rgb, setRgb] = useState({ r: 255, g: 107, b: 107 });
   const [hex, setHex] = useState('#ff6b6b');
   const [fullscreenSupported, setFullscreenSupported] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<null | 'hex' | 'rgb'>(null);
   const updateSourceRef = useRef<'hex' | 'rgb' | 'canvas' | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -264,6 +267,17 @@ export default function ColorLightPage() {
     setIsFullScreen(false);
   }, []);
 
+  // Copy helpers
+  const copyToClipboard = useCallback(async (text: string, key: 'hex' | 'rgb') => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 1200);
+    } catch (e) {
+      // no-op
+    }
+  }, []);
+
   if (isFullScreen) {
     return (
       <FullScreenColor 
@@ -275,44 +289,66 @@ export default function ColorLightPage() {
   }
 
   return (
-    <div 
-      className="h-screen w-screen overflow-hidden transition-all duration-300"
-      style={{ 
+    <div
+      className="relative h-screen w-screen overflow-hidden transition-all duration-500"
+      style={{
         backgroundColor: selectedColor,
         filter: `brightness(${brightness}%)`
       }}
     >
-      {/* Full Screen Button */}
-      <div className="absolute top-4 right-4 z-50">
-        <Button
-          onClick={toggleFullScreen}
-          size="sm"
-          className="bg-black/30 backdrop-blur-sm border-white/20 text-white hover:bg-black/50 transition-all duration-300"
-          disabled={!fullscreenSupported}
-          title={fullscreenSupported ? "Enter Full Screen" : "Full Screen Not Supported"}
-        >
-          <Maximize2 className="w-4 h-4" />
-        </Button>
+      {/* Decorative backgrounds */}
+      <div className="pointer-events-none absolute inset-0 opacity-40 mix-blend-screen" aria-hidden>
+        <div className="absolute -top-32 -left-24 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.45),transparent_60%)] blur-2xl" />
+        <div className="absolute -bottom-40 -right-32 h-[28rem] w-[28rem] rounded-full bg-[conic-gradient(from_180deg_at_50%_50%,rgba(255,255,255,0.35),transparent_60%)] blur-3xl animate-pulse" />
       </div>
 
+      {/* Header */}
+      <header className="absolute inset-x-0 top-0 z-50">
+        <div className="mx-auto flex max-w-6xl items-start justify-between gap-4 px-6 py-6">
+          <div>
+            <h1 className="font-serif text-2xl md:text-3xl font-bold tracking-tight drop-shadow-[0_1px_8px_rgba(0,0,0,0.35)]">Color Light</h1>
+            <p className="mt-1 text-xs md:text-sm text-white/70">From artist to artist — turn your screen into a soft light, pick with precision, and perform full screen.</p>
+          </div>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    onClick={toggleFullScreen}
+                    size="sm"
+                    className="bg-black/30 backdrop-blur-sm border-white/20 text-white hover:bg-black/50 transition-all duration-300"
+                    disabled={!fullscreenSupported}
+                  >
+                    <Maximize2 className="h-4 w-4" />
+                    <span className="sr-only">Toggle full screen</span>
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>Full screen for uninterrupted light</TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      </header>
+
       {/* Main Content */}
-      <div className="h-full flex">
-        {/* Left Side - Brightness Slider */}
-        <div className="w-1/3 h-full flex flex-col justify-center items-center space-y-8 p-8">
-          {/* Vertical Brightness Slider with Gradient Background */}
-          <div className="flex flex-col items-center space-y-4">
-            <div className="h-64 w-8 relative rounded-full overflow-hidden">
-              {/* Gradient Background */}
-              <div 
-                className="absolute inset-0 rounded-full"
+      <div className="relative z-10 flex h-full">
+        {/* Left controls */}
+        <div className="flex h-full w-full flex-col items-center justify-center gap-8 p-6 md:w-5/12 md:p-10">
+          {/* Glass card */}
+          <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-black/30 p-6 backdrop-blur-md shadow-[0_10px_40px_rgba(0,0,0,0.35)]">
+            <div className="mb-6 flex items-center justify-between">
+              <div className="text-sm text-white/70">Brightness</div>
+              <div className="text-xs text-white/60">{brightness}%</div>
+            </div>
+
+            <div className="mx-auto mb-8 h-64 w-8 overflow-hidden rounded-full border border-white/15 bg-black/20">
+              <div
+                className="absolute h-64 w-8 rounded-full"
                 style={{
-                  background: `linear-gradient(to top, 
-                    ${selectedColor} 0%, 
-                    ${selectedColor} 50%, 
-                    #000000 100%)`
+                  background: `linear-gradient(to top, ${selectedColor} 0%, ${selectedColor} 50%, #000000 100%)`
                 }}
               />
-              {/* Slider */}
               <div className="relative h-full">
                 <Slider
                   orientation="vertical"
@@ -325,48 +361,99 @@ export default function ColorLightPage() {
                 />
               </div>
             </div>
-          </div>
 
-          {/* Input Fields */}
-          <div className="flex flex-col space-y-2 w-full max-w-xs">
-            <Input
-              value={hex}
-              onChange={(e) => handleHexChange(e.target.value)}
-              className="bg-black/30 border-white/20 text-white placeholder:text-white/50 text-sm font-mono"
-              placeholder="#000000"
-            />
-            <div className="flex space-x-2">
-              <Input
-                value={rgb.r}
-                onChange={(e) => handleRgbChange(e.target.value, 'r')}
-                className="bg-black/30 border-white/20 text-white placeholder:text-white/50 text-sm font-mono w-16"
-                placeholder="R"
-              />
-              <Input
-                value={rgb.g}
-                onChange={(e) => handleRgbChange(e.target.value, 'g')}
-                className="bg-black/30 border-white/20 text-white placeholder:text-white/50 text-sm font-mono w-16"
-                placeholder="G"
-              />
-              <Input
-                value={rgb.b}
-                onChange={(e) => handleRgbChange(e.target.value, 'b')}
-                className="bg-black/30 border-white/20 text-white placeholder:text-white/50 text-sm font-mono w-16"
-                placeholder="B"
-              />
+            {/* Color swatch */}
+            <div className="mb-6 rounded-xl border border-white/15 bg-white/10 p-3">
+              <div className="flex items-center gap-3">
+                <div
+                  className="h-10 w-10 flex-shrink-0 rounded-lg border border-white/20 shadow-inner"
+                  style={{ backgroundColor: hex }}
+                />
+                <div className="text-xs text-white/70">Live preview</div>
+              </div>
+            </div>
+
+            {/* Inputs */}
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label className="text-white/80">HEX</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    value={hex}
+                    onChange={(e) => handleHexChange(e.target.value)}
+                    className="font-mono text-sm text-white placeholder:text-white/50 bg-black/30 border-white/20"
+                    placeholder="#000000"
+                  />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="border-white/20 bg-black/30 text-white hover:bg-black/50"
+                    onClick={() => copyToClipboard(hex.toUpperCase(), 'hex')}
+                    aria-label="Copy HEX"
+                  >
+                    {copiedKey === 'hex' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-white/80">RGB</Label>
+                <div className="flex items-center gap-2">
+                  <div className="flex gap-2">
+                    <Input
+                      value={rgb.r}
+                      onChange={(e) => handleRgbChange(e.target.value, 'r')}
+                      className="w-16 font-mono text-sm text-white placeholder:text-white/50 bg-black/30 border-white/20"
+                      placeholder="R"
+                    />
+                    <Input
+                      value={rgb.g}
+                      onChange={(e) => handleRgbChange(e.target.value, 'g')}
+                      className="w-16 font-mono text-sm text-white placeholder:text-white/50 bg-black/30 border-white/20"
+                      placeholder="G"
+                    />
+                    <Input
+                      value={rgb.b}
+                      onChange={(e) => handleRgbChange(e.target.value, 'b')}
+                      className="w-16 font-mono text-sm text-white placeholder:text-white/50 bg-black/30 border-white/20"
+                      placeholder="B"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="border-white/20 bg-black/30 text-white hover:bg-black/50"
+                    onClick={() => copyToClipboard(`rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`, 'rgb')}
+                    aria-label="Copy RGB"
+                  >
+                    {copiedKey === 'rgb' ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
+
+          {/* Helper */}
+          <p className="text-center text-xs text-white/70">Tip: Press Esc to exit full screen. C to toggle controls.</p>
         </div>
 
-        {/* Right Side - Color Wheel */}
-        <div ref={containerRef} className="w-2/3 h-full flex items-center justify-center p-8">
-          <canvas
-            ref={canvasRef}
-            className="rounded-full cursor-crosshair border-2 border-white/20 shadow-lg"
-            onClick={handleCanvasClick}
-          />
+        {/* Right - Color wheel */}
+        <div ref={containerRef} className="flex h-full w-full items-center justify-center p-6 md:w-7/12 md:p-16">
+          <div className="relative">
+            <div className="pointer-events-none absolute inset-0 -m-6 rounded-full bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.35),transparent_60%)] blur-2xl" aria-hidden />
+            <div className="relative rounded-full border border-white/20 bg-white/5 p-4 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-md">
+              <canvas
+                ref={canvasRef}
+                className="rounded-full cursor-crosshair border border-white/20 shadow-2xl"
+                onClick={handleCanvasClick}
+              />
+            </div>
+            <div className="mt-4 text-center text-xs text-white/70">Tap anywhere on the wheel to sample a color</div>
+          </div>
         </div>
       </div>
     </div>
   );
-} 
+}
