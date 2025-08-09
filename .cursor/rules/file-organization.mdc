@@ -1,0 +1,6 @@
+---
+description: Keep files organized — 'lib/database' (database management), 'components/admin' (admin UI), 'app/api/database' (database API routes), 'tests' (tests), 'docs' (documentation).
+globs: []
+alwaysApply: false
+---
+

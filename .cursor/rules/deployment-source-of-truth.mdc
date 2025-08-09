@@ -1,0 +1,21 @@
+---
+description: Use Vercel as the single source of truth for production and preview builds.
+globs: []
+alwaysApply: false
+---
+description: Never run production builds locally on Windows; use `pnpm run dev` only.
+globs: []
+alwaysApply: false
+---
+description: Create a new Git branch per change; pushing the branch must trigger a Vercel preview URL for review.
+globs: []
+alwaysApply: false
+---
+description: Assume Vercel runs `npm install --legacy-peer-deps && npm run build` for all builds.
+globs: []
+alwaysApply: false
+---
+description: Do not push broken builds; only push when the change is complete enough to validate in a Vercel preview.
+globs: []
+alwaysApply: false
+---

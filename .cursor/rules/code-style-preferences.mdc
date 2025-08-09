@@ -1,0 +1,18 @@
+---
+description: Prefer functional components with hooks.
+globs: []
+alwaysApply: false
+---
+description: Prefer TypeScript interfaces over types.
+globs: []
+alwaysApply: false
+---
+description: Use Tailwind CSS utility classes.
+globs: []
+alwaysApply: false
+---
+description: Write clear error messages and minimize prop drilling.
+globs: []
+alwaysApply: false
+---
+

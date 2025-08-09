@@ -1,0 +1,14 @@
+---
+description: Development commands — 'pnpm install', 'pnpm run dev', 'pnpm run build'.
+globs: []
+alwaysApply: false
+---
+description: Production/Vercel build command — 'npm install --legacy-peer-deps && npm run build'.
+globs: []
+alwaysApply: false
+---
+description: Testing commands — 'pnpm run lint', 'pnpm run test'.
+globs: []
+alwaysApply: false
+---
+

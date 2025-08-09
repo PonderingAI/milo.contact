@@ -1,0 +1,26 @@
+---
+description: React version conflicts — always use exact React 18.3.1; never upgrade to React 19.
+globs: []
+alwaysApply: false
+---
+description: Vercel build failures — use 'npm install --legacy-peer-deps && npm run build'.
+globs: []
+alwaysApply: false
+---
+description: Missing .bin directory — clean install with 'rm -rf node_modules *.lock && pnpm install'.
+globs: []
+alwaysApply: false
+---
+description: NOT NULL migration errors — add column as nullable first, then set NOT NULL.
+globs: []
+alwaysApply: false
+---
+description: Font loading blocks — use Tailwind fallback fonts.
+globs: []
+alwaysApply: false
+---
+description: Dependency conflicts — remove conflicting packages (@remix-run/react, svelte, vue, etc.).
+globs: []
+alwaysApply: false
+---
+
