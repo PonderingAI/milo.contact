@@ -742,6 +742,35 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         }
       }
 
+      // Also attempt to derive a thumbnail for display if none is set yet
+      if (!formData.image) {
+        const info = extractVideoInfo(mediaUrl)
+        if (info) {
+          let derivedThumb: string | null = null
+          if (info.platform === "youtube") {
+            derivedThumb = `https://img.youtube.com/vi/${info.id}/hqdefault.jpg`
+          } else if (info.platform === "vimeo") {
+            try {
+              const res = await fetch(`https://vimeo.com/api/v2/video/${info.id}.json`)
+              if (res.ok) {
+                const data = await res.json()
+                derivedThumb = Array.isArray(data) && data[0]?.thumbnail_large ? data[0].thumbnail_large : null
+              }
+            } catch {
+              // ignore
+            }
+          } else if (info.platform === "linkedin") {
+            derivedThumb = "/generic-icon.png"
+          }
+
+          if (derivedThumb) {
+            setVideoThumbnail(derivedThumb)
+            setFormData((prev) => ({ ...prev, image: derivedThumb }))
+            setIsUsingVideoThumbnail(true)
+          }
+        }
+      }
+
       toast({
         id: toastId,
         title: "Video processed",
@@ -811,10 +840,13 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
               // Use thumbnail if available
               if (mediaData.thumbnail_url && !formData.image) {
                 setFormData((prev) => ({ ...prev, image: mediaData.thumbnail_url }))
-                if (!mainImages.includes(mediaData.thumbnail_url)) {
-                  setMainImages((prev) => [...prev, mediaData.thumbnail_url])
-                  userHasModifiedMainMedia.current = true
-                }
+                // Note: Video thumbnails are handled by the main-media API automatically
+                // Do not add thumbnails to mainImages to prevent duplication
+              }
+
+              // Fallback: if the library item has no stored thumbnail, derive it
+              if (!mediaData.thumbnail_url && !formData.image) {
+                await processExternalVideo(mediaUrl)
               }
 
               // Extract date if available
@@ -829,6 +861,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
           } catch (error) {
             console.error("Error processing video from media library:", error)
             // Fall back to regular processing
+            await processExternalVideo(mediaUrl)
+          }
+        } else {
+          // Even if schemaColumns doesn't include thumbnail_url, still try to derive a display thumbnail
+          if (!formData.image) {
             await processExternalVideo(mediaUrl)
           }
         }
@@ -1052,10 +1089,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
         const uploadDate = result.uploadDate
 
         // Use thumbnail if available and no image is set
-        if (thumbnailUrl && !formData.image && !mainImages.includes(thumbnailUrl)) {
+        if (thumbnailUrl && !formData.image) {
           setFormData(prev => ({ ...prev, image: thumbnailUrl }))
           setVideoThumbnail(thumbnailUrl)
-          setMainImages(prev => [...prev, thumbnailUrl])
+          // Note: Video thumbnails are handled by the main-media API automatically
+          // Do not add thumbnails to mainImages to prevent duplication
           userHasModifiedMainMedia.current = true
         }
 

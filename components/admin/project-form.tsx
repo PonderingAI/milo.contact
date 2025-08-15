@@ -12,6 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { extractVideoInfo } from "@/lib/project-data"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, Calendar, Film, ImageIcon, X } from "lucide-react"
+import MainMediaManager from "./main-media-manager"
+import LocalMainMediaManager from "./local-main-media-manager"
 import { toast } from "@/components/ui/use-toast"
 import { SimpleAutocomplete } from "@/components/ui/simple-autocomplete"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -506,12 +508,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
           const result = await response.json()
           console.log("DEBUG: Video processing result:", result)
 
-          // If we have a thumbnail and no image is set, use the thumbnail
-          if (result.thumbnailUrl && !formData.image && !mainImages.includes(result.thumbnailUrl)) {
-            console.log("DEBUG: Setting thumbnail as main image:", result.thumbnailUrl)
+          // Note: Video thumbnails are handled by the main-media API automatically
+          // Do not add thumbnails to mainImages to prevent duplication
+          
+          // Set as cover image if none is set
+          if (result.thumbnailUrl && !formData.image) {
+            console.log("Setting video thumbnail as cover image:", result.thumbnailUrl)
             setFormData((prev) => ({ ...prev, image: result.thumbnailUrl }))
             setVideoThumbnail(result.thumbnailUrl)
-            setMainImages((prev) => [...prev, result.thumbnailUrl])
           }
 
           // If project title is empty, use video title
@@ -548,69 +552,21 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
       }
 
       if (isVideo) {
-        console.log("DEBUG: Processing video:", mediaUrl)
+        console.log("Processing video:", mediaUrl)
+        
+        // Add video to mainVideos if not already there
         if (!mainVideos.includes(mediaUrl)) {
           setMainVideos((prev) => [...prev, mediaUrl])
-          console.log("DEBUG: Added video to mainVideos:", mediaUrl)
-        } else {
-          console.log("DEBUG: Video already in mainVideos:", mediaUrl)
+          console.log("Added video to mainVideos:", mediaUrl)
         }
+        
+        // Process video to extract thumbnail and metadata using unified processing
+        await processVideoUrl(mediaUrl)
         
         // Store video URL in thumbnail_url if that column exists
         if (schemaColumns.includes("thumbnail_url")) {
-          console.log("DEBUG: Setting thumbnailUrl and formData.thumbnail_url")
           setThumbnailUrl(mediaUrl)
           setFormData((prev) => ({ ...prev, thumbnail_url: mediaUrl }))
-
-          // Process video to extract metadata
-          try {
-            console.log("DEBUG: Checking if video exists in media library")
-            // For videos from media library, try to get metadata from the library
-            const supabase = getSupabaseBrowserClient()
-            const { data: mediaData } = await supabase
-              .from("media")
-              .select("filename, metadata, thumbnail_url")
-              .eq("public_url", mediaUrl)
-              .maybeSingle()
-
-            if (mediaData) {
-              // If we have media data, use it
-              console.log("DEBUG: Found video in media library:", mediaData)
-
-              // Set title if empty
-              if (!formData.title && mediaData.filename) {
-                console.log("DEBUG: Setting title from media library:", mediaData.filename)
-                setFormData((prev) => ({ ...prev, title: mediaData.filename }))
-              }
-
-              // Use thumbnail if available
-              if (mediaData.thumbnail_url && !formData.image) {
-                console.log("DEBUG: Setting thumbnail from media library:", mediaData.thumbnail_url)
-                setFormData((prev) => ({ ...prev, image: mediaData.thumbnail_url }))
-                if (!mainImages.includes(mediaData.thumbnail_url)) {
-                  setMainImages((prev) => [...prev, mediaData.thumbnail_url])
-                }
-              }
-
-              // Extract date if available
-              if (mediaData.metadata?.uploadDate && !formData.project_date) {
-                console.log("DEBUG: Setting date from media library:", mediaData.metadata.uploadDate)
-                const date = new Date(mediaData.metadata.uploadDate)
-                setFormData((prev) => ({ ...prev, project_date: formatDateForInput(date) }))
-              }
-            } else {
-              // If not in media library, process as external video
-              console.log("DEBUG: Video not in media library, processing as external video")
-              await processVideoUrl(mediaUrl)
-            }
-          } catch (error) {
-            console.error("DEBUG: Error processing video from media library:", error)
-            // Fall back to regular processing
-            console.log("DEBUG: Falling back to regular video processing")
-            await processVideoUrl(mediaUrl)
-          }
-        } else {
-          console.log("DEBUG: thumbnail_url column not available in schema")
         }
       } else {
         if (!mainImages.includes(mediaUrl)) {
@@ -713,6 +669,14 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
 
   const setCoverImage = (url: string) => {
     setFormData((prev) => ({ ...prev, image: url }))
+  }
+
+  const handleCoverImageSelect = (url: string) => {
+    setFormData((prev) => ({ ...prev, image: url }))
+    toast({
+      title: "Cover image updated",
+      description: "The project cover image has been updated."
+    })
   }
 
   const setMainVideo = (url: string) => {
@@ -1014,6 +978,9 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         project_date: formData.project_date,
         is_public: formData.is_public,
         thumbnail_url: formData.thumbnail_url || thumbnailUrl || null,
+        // Include main media arrays for processing
+        mainImages: mainImages,
+        mainVideos: mainVideos,
       }
 
       console.log("Form data before submission:", formData)
@@ -1441,125 +1408,24 @@ export default function ProjectForm({ project, mode }: ProjectFormProps) {
         <h2 className="text-xl font-medium mb-4 text-gray-200">Media Overview</h2>
 
         <div className="space-y-6">
-          {/* Main Media Section */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-medium text-gray-300 border-b border-gray-800 pb-2">Main Footage</h3>
-
-            {/* Main Images */}
-            {mainImages.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 text-gray-400">Images</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                  {mainImages.map((image, index) => (
-                    <div key={`main-image-${index}`} className="relative group">
-                      <div
-                        className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden ${formData.image === image ? "ring-2 ring-blue-500" : ""}`}
-                      >
-                        <img
-                          src={image || "/placeholder.svg"}
-                          alt={`Main image ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                      </div>
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setCoverImage(image)}
-                          className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
-                          title="Set as cover image"
-                        >
-                          <ImageIcon size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeMainImage(index)}
-                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                          title="Remove image"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                      {formData.image === image && (
-                        <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
-                          Cover
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Main Videos */}
-            {mainVideos.length > 0 && (
-              <div>
-                <h4 className="text-sm font-medium mb-2 text-gray-400">Videos</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {mainVideos.map((video, index) => (
-                    <div key={`main-video-${index}`} className="relative group">
-                      <div
-                        className={`aspect-video bg-[#0f1520] rounded-md overflow-hidden flex items-center justify-center ${thumbnailUrl === video ? "ring-2 ring-blue-500" : ""}`}
-                      >
-                        {video.includes("youtube.com") ? (
-                          <img
-                            src={`https://img.youtube.com/vi/${video.split("v=")[1]?.split("&")[0]}/hqdefault.jpg`}
-                            alt={`YouTube video ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : video.includes("youtu.be") ? (
-                          <img
-                            src={`https://img.youtube.com/vi/${video.split("youtu.be/")[1]?.split("?")[0]}/hqdefault.jpg`}
-                            alt={`YouTube video ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : video.includes("vimeo.com") ? (
-                          <VimeoThumbnail
-                            url={video}
-                            alt={`Vimeo video ${index + 1}`}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="text-gray-400 flex flex-col items-center">
-                            <Film size={24} />
-                            <span className="text-xs mt-1">Video</span>
-                          </div>
-                        )}
-                      </div>
-                      <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setMainVideo(video)}
-                          className="p-1 bg-blue-600 rounded-full hover:bg-blue-700"
-                          title="Set as main video"
-                        >
-                          <Film size={14} />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => removeMainVideo(index)}
-                          className="p-1 bg-red-600 rounded-full hover:bg-red-700"
-                          title="Remove video"
-                        >
-                          <X size={14} />
-                        </button>
-                      </div>
-                      {thumbnailUrl === video && (
-                        <div className="absolute top-1 left-1 bg-blue-600 text-white text-xs px-1.5 py-0.5 rounded-sm">
-                          Main
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {mainImages.length === 0 && mainVideos.length === 0 && (
-              <div className="text-center py-4 text-gray-400">
-                <p>No main media added yet</p>
-              </div>
-            )}
-          </div>
+          {/* Main Media Section - Use appropriate manager for each mode */}
+          {mode === "edit" && project?.id ? (
+            <MainMediaManager
+              projectId={project.id}
+              onCoverImageSelect={handleCoverImageSelect}
+              coverImageUrl={formData.image}
+            />
+          ) : (
+            /* Create mode - use LocalMainMediaManager for consistent functionality */
+            <LocalMainMediaManager
+              mainImages={mainImages}
+              mainVideos={mainVideos}
+              onCoverImageSelect={handleCoverImageSelect}
+              onRemoveImage={removeMainImage}
+              onRemoveVideo={removeMainVideo}
+              coverImageUrl={formData.image}
+            />
+          )}
 
           {/* BTS Media Section */}
           <div className="space-y-4 pt-4">

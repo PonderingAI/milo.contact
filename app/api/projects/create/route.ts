@@ -38,16 +38,19 @@ export async function POST(request: Request) {
 
     console.log("Received project data:", projectData)
 
+    // Extract main media arrays from project data
+    const { mainImages = [], mainVideos = [], ...projectDataWithoutMedia } = projectData
+
     // Validate required fields
     const requiredFields = ["title", "image", "category", "role"]
     const missingFields = requiredFields.filter((field) => {
-      const value = projectData[field]
+      const value = projectDataWithoutMedia[field]
       return value === undefined || value === null || value === ""
     })
 
     if (missingFields.length > 0) {
       console.error(`Missing required fields: ${missingFields.join(", ")}`, {
-        receivedData: projectData,
+        receivedData: projectDataWithoutMedia,
       })
 
       return NextResponse.json(
@@ -55,7 +58,7 @@ export async function POST(request: Request) {
           success: false,
           error: `Missing required fields: ${missingFields.join(", ")}`,
           details: "Please fill in all required fields before submitting.",
-          receivedData: projectData,
+          receivedData: projectDataWithoutMedia,
           debug_userIdFromAuth: userId
         },
         { status: 400 },
@@ -63,7 +66,7 @@ export async function POST(request: Request) {
     }
 
     // Insert the project using the service role client (bypasses RLS)
-    const { data, error } = await supabase.from("projects").insert([projectData]).select()
+    const { data, error } = await supabase.from("projects").insert([projectDataWithoutMedia]).select()
 
     if (error) {
       console.error("Error creating project:", error)
@@ -80,6 +83,49 @@ export async function POST(request: Request) {
         },
         { status: 500 },
       )
+    }
+
+    const createdProject = data[0]
+    console.log("Project created successfully:", createdProject.id)
+
+    // Process main media if provided
+    if ((mainImages.length > 0 || mainVideos.length > 0) && createdProject?.id) {
+      console.log("Processing main media for project:", createdProject.id)
+      
+      try {
+        // Combine all main media URLs
+        const allMainMediaUrls = [...mainImages, ...mainVideos]
+        
+        // Process all media URLs through the unified media processing API
+        if (allMainMediaUrls.length > 0) {
+          console.log("Processing main media URLs:", allMainMediaUrls)
+          
+          // Call the unified main media processing API with correct parameters
+          const mediaResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/projects/main-media`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              projectId: createdProject.id,
+              media: allMainMediaUrls, // Send as array, not individual mediaUrl
+              replaceExisting: false // Don't replace since this is a new project
+            }),
+          })
+
+          if (!mediaResponse.ok) {
+            const errorData = await mediaResponse.json()
+            console.error("Error processing main media:", errorData)
+            // Continue - don't fail project creation if media processing fails
+          } else {
+            const mediaResult = await mediaResponse.json()
+            console.log("Main media processed successfully:", mediaResult)
+          }
+        }
+      } catch (mediaError) {
+        console.error("Error processing main media:", mediaError)
+        // Don't fail the entire project creation if media processing fails
+      }
     }
 
     return NextResponse.json({
