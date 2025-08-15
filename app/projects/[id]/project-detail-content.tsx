@@ -196,8 +196,11 @@ export default function ProjectDetailContent({ project }: ProjectDetailContentPr
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
         })
-      } else if (project.image) {
-        // Only add cover image if there's no video
+      }
+
+      // If there is also a cover image but we already have a video, ensure cover is not shown here
+      if (!project.thumbnail_url && project.image) {
+        // Only add cover image if there's no video fallback
         media.push({
           id: 'cover-image',
           image_url: project.image,
