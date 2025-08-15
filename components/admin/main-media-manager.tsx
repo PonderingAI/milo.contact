@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { X, Eye, EyeOff, ImageIcon, Film } from 'lucide-react'
+import MediaSelector from './media-selector'
 import { toast } from '@/hooks/use-toast'
 
 interface MainMediaItem {
@@ -29,6 +30,7 @@ export default function MainMediaManager({
 }: MainMediaManagerProps) {
   const [mainMedia, setMainMedia] = useState<MainMediaItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [isSelectingThumbnailFor, setIsSelectingThumbnailFor] = useState<string | null>(null)
 
   // Fetch main media from database
   useEffect(() => {
@@ -120,6 +122,38 @@ export default function MainMediaManager({
     }
   }
 
+  const handleSelectCustomThumbnail = async (videoMediaId: string, urlOrUrls: string | string[]) => {
+    const url = Array.isArray(urlOrUrls) ? urlOrUrls[0] : urlOrUrls
+    if (!url) return
+
+    try {
+      const response = await fetch('/api/projects/main-media/set-thumbnail', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId, videoMediaId, imageUrl: url })
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error(err.error || 'Failed to set custom thumbnail')
+      }
+
+      const result = await response.json()
+      const updatedVideo = result?.data?.video
+      
+      if (updatedVideo) {
+        setMainMedia(prev => prev.map(item => item.id === updatedVideo.id ? { ...item, image_url: updatedVideo.image_url } : item))
+      }
+
+      toast({ title: 'Thumbnail updated', description: 'Custom thumbnail applied to video.' })
+    } catch (error) {
+      console.error('Error setting custom thumbnail:', error)
+      toast({ title: 'Error', description: 'Could not set custom thumbnail.', variant: 'destructive' })
+    } finally {
+      setIsSelectingThumbnailFor(null)
+    }
+  }
+
   if (loading) {
     return (
       <div className="space-y-4">
@@ -156,6 +190,7 @@ export default function MainMediaManager({
                 onToggleVisibility={toggleThumbnailVisibility}
                 onRemove={removeMediaItem}
                 onSelectAsCover={onCoverImageSelect}
+                onChangeThumbnail={() => setIsSelectingThumbnailFor(item.id)}
               />
             ))}
           </div>
@@ -190,6 +225,15 @@ export default function MainMediaManager({
           <p>No main media added yet</p>
         </div>
       )}
+
+      {/* Dialog to select a custom thumbnail for a specific video */}
+      {isSelectingThumbnailFor && (
+        <VideoThumbnailSelector
+          open={Boolean(isSelectingThumbnailFor)}
+          onOpenChange={(open) => { if (!open) setIsSelectingThumbnailFor(null) }}
+          onSelect={(url) => handleSelectCustomThumbnail(isSelectingThumbnailFor, url)}
+        />
+      )}
     </div>
   )
 }
@@ -201,6 +245,7 @@ interface MediaItemCardProps {
   onRemove: (mediaId: string) => void
   onSelectAsCover: (url: string) => void
   isHidden?: boolean
+  onChangeThumbnail?: () => void
 }
 
 function MediaItemCard({ 
@@ -209,7 +254,8 @@ function MediaItemCard({
   onToggleVisibility, 
   onRemove, 
   onSelectAsCover,
-  isHidden = false
+  isHidden = false,
+  onChangeThumbnail
 }: MediaItemCardProps) {
   return (
     <div className={`relative group ${isHidden ? 'opacity-60' : ''}`}>
@@ -263,6 +309,18 @@ function MediaItemCard({
           <ImageIcon size={12} />
         </button>
         
+        {/* Change thumbnail for videos */}
+        {item.is_video && onChangeThumbnail && (
+          <button
+            type="button"
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onChangeThumbnail() }}
+            className="p-1 bg-gray-600 rounded-full hover:bg-gray-700"
+            title="Change video thumbnail"
+          >
+            <ImageIcon size={12} />
+          </button>
+        )}
+
         {/* Remove button */}
         <button
           type="button"
@@ -288,3 +346,14 @@ function MediaItemCard({
     </div>
   )
 } 
+
+// Inline media selector dialog to pick a thumbnail image for a given video
+function VideoThumbnailSelector({
+  open,
+  onOpenChange,
+  onSelect,
+}: { open: boolean; onOpenChange: (open: boolean) => void; onSelect: (url: string | string[]) => void }) {
+  return (
+    <MediaSelector open={open} onOpenChange={onOpenChange} onSelect={onSelect} showVideos={false} multiple={false} />
+  )
+}

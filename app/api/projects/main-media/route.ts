@@ -201,26 +201,41 @@ export async function POST(request: Request) {
 
     // Process media items and create entries according to user requirements
     const mainMediaData = []
+    const addedHiddenThumbnailUrls = new Set<string>()
     let displayOrder = 0
 
     for (const mediaUrl of media) {
       const videoInfo = await processVideoUrl(mediaUrl)
       
       if (videoInfo) {
-        // This is a video URL - create a single video entry with thumbnail preview
-        // The thumbnail is stored as image_url for preview purposes
-        // No separate thumbnail entry is created to avoid duplication
-        
+        // This is a video URL - create both a hidden thumbnail entry and a video entry
+        // 1) Hidden thumbnail entry (used only as preview image, not shown on project page)
+        if (!addedHiddenThumbnailUrls.has(videoInfo.thumbnailUrl)) {
+          mainMediaData.push({
+            project_id: projectId,
+            image_url: videoInfo.thumbnailUrl,
+            is_video: false,
+            video_url: null,
+            video_platform: null,
+            video_id: null,
+            display_order: displayOrder++,
+            caption: `${videoInfo.title || "Video"} (Thumbnail)`,
+            is_thumbnail_hidden: true
+          })
+          addedHiddenThumbnailUrls.add(videoInfo.thumbnailUrl)
+        }
+
+        // 2) Visible video entry (uses the same thumbnail for preview)
         mainMediaData.push({
           project_id: projectId,
-          image_url: videoInfo.thumbnailUrl, // Thumbnail for video preview
+          image_url: videoInfo.thumbnailUrl,
           is_video: true,
           video_url: videoInfo.embedUrl,
           video_platform: videoInfo.platform,
           video_id: videoInfo.id,
           display_order: displayOrder++,
           caption: videoInfo.title,
-          is_thumbnail_hidden: false // Video with thumbnail preview is always visible
+          is_thumbnail_hidden: false
         })
       } else {
         // Regular image
