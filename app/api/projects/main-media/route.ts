@@ -21,10 +21,10 @@ async function processVideoUrl(url: string): Promise<{
       /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([^?]+)/i,
     ]
 
-    // Vimeo URL patterns
+    // Vimeo URL patterns (handle query params and variants)
     const vimeoPatterns = [
-      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)/i,
-      /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)/i,
+      /(?:https?:\/\/)?(?:www\.)?vimeo\.com\/(\d+)(?:[\/?].*)?$/i,
+      /(?:https?:\/\/)?(?:www\.)?player\.vimeo\.com\/video\/(\d+)(?:\?.*)?$/i,
     ]
 
     // LinkedIn URL patterns
@@ -184,6 +184,19 @@ export async function POST(request: Request) {
       }, { status: 403 })
     }
 
+    // Fetch current project to know the selected cover image
+    const { data: projectRow, error: projectError } = await supabase
+      .from("projects")
+      .select("id, image")
+      .eq("id", projectId)
+      .maybeSingle()
+
+    if (projectError) {
+      console.error("Error fetching project for cover image:", projectError)
+    }
+
+    const coverImageUrl: string | null = projectRow?.image || null
+
     // Delete existing main media if requested
     if (replaceExisting) {
       const { error: deleteError } = await supabase.from("main_media").delete().eq("project_id", projectId)
@@ -203,11 +216,13 @@ export async function POST(request: Request) {
     const mainMediaData = []
     const addedHiddenThumbnailUrls = new Set<string>()
     let displayOrder = 0
+    let hasAnyVideo = false
 
     for (const mediaUrl of media) {
       const videoInfo = await processVideoUrl(mediaUrl)
       
       if (videoInfo) {
+        hasAnyVideo = true
         // This is a video URL - create both a hidden thumbnail entry and a video entry
         // 1) Hidden thumbnail entry (used only as preview image, not shown on project page)
         if (!addedHiddenThumbnailUrls.has(videoInfo.thumbnailUrl)) {
@@ -249,6 +264,16 @@ export async function POST(request: Request) {
           display_order: displayOrder++,
           is_thumbnail_hidden: false // Regular images are visible by default
         })
+      }
+    }
+
+    // If a cover image is set on the project and we have at least one video,
+    // hide the cover image from the public gallery by marking it as a hidden thumbnail.
+    if (coverImageUrl && hasAnyVideo) {
+      for (const item of mainMediaData) {
+        if (!item.is_video && item.image_url === coverImageUrl) {
+          item.is_thumbnail_hidden = true
+        }
       }
     }
 

@@ -863,6 +863,11 @@ function ProjectEditorComponent({ project, mode }: ProjectEditorProps) {
             // Fall back to regular processing
             await processExternalVideo(mediaUrl)
           }
+        } else {
+          // Even if schemaColumns doesn't include thumbnail_url, still try to derive a display thumbnail
+          if (!formData.image) {
+            await processExternalVideo(mediaUrl)
+          }
         }
       } else {
         if (!mainImages.includes(mediaUrl)) {

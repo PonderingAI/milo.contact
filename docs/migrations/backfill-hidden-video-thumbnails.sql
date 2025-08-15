@@ -42,4 +42,15 @@ WHERE is_video = FALSE
     SELECT v.image_url FROM main_media v WHERE v.is_video = TRUE AND v.project_id = main_media.project_id
   );
 
+-- 4) If a project has at least one video, hide the project's cover image in main_media (if present)
+UPDATE main_media i
+SET is_thumbnail_hidden = TRUE
+FROM projects p
+WHERE i.project_id = p.id
+  AND i.is_video = FALSE
+  AND i.image_url = p.image
+  AND EXISTS (
+    SELECT 1 FROM main_media v WHERE v.project_id = p.id AND v.is_video = TRUE
+  );
+
 
